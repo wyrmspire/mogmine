@@ -54,19 +54,37 @@ flowchart TD
 
 Read the planning documents in order for the complete technical and product specification:
 
-0. **[AGENTS.md — Coding Agent & Subagent Guide](file:///c:/mogmine/AGENTS.md)**  
+0. **[AGENTS.md — Coding Agent & Subagent Guide](AGENTS.md)**  
    Start here if you are an AI coding agent or subagent: fast doc routing, the 7 non-negotiable architectural invariants, and the mobile verification checklist.
-1. **[01 — Architecture, Stack Brainstorm & Growth Pattern](file:///c:/mogmine/docs/01-architecture-and-stack.md)**  
+1. **[01 — Architecture, Stack Brainstorm & Growth Pattern](docs/01-architecture-and-stack.md)**  
    Frontend/backend comparisons, why Vercel + Supabase + Google Cloud Run fit together, trade lifecycle sequence diagram, and the pluggable adapter interfaces (`MarketDataProvider`, `TradeIngestionAdapter`, `ReviewContextPlugin`).
-2. **[02 — Charting, Translucent Position Boxes & Divergence](file:///c:/mogmine/docs/02-charting-position-boxes-and-divergence.md)**  
+2. **[02 — Charting, Translucent Position Boxes & Divergence](docs/02-charting-position-boxes-and-divergence.md)**  
    Why `lightweight-charts` v4+ beats raw Canvas, custom Canvas primitive specs for Position Boxes, Scalp/90m/Investment logic, Yahoo Finance caching rules, `MES` & companion chart SMT divergence workflows, and automated Session Key Levels.
-3. **[03 — One-Click Trade Cards & Note-Taking](file:///c:/mogmine/docs/03-trade-cards-and-note-taking.md)**  
+3. **[03 — One-Click Trade Cards & Note-Taking](docs/03-trade-cards-and-note-taking.md)**  
    Anatomy and export pipeline for the Quality Trade Card, plus the `< 10s` Simple Mode (1-tap + Voice Memo) and post-market Advanced Mode journaling system.
-4. **[04 — Multimodal AI Review Engine](file:///c:/mogmine/docs/04-ai-review-engine.md)**  
+4. **[04 — Multimodal AI Review Engine](docs/04-ai-review-engine.md)**  
    How the 6 context inputs (including Vision AI chart snapshots and Economic Calendar checks) feed the AI coach, and the strict TypeScript/JSON review schema.
-5. **[05 — Mobile UX & Adjustable Gold Design System](file:///c:/mogmine/docs/05-mobile-ux-and-gold-design-system.md)**  
+5. **[05 — Mobile UX & Adjustable Gold Design System](docs/05-mobile-ux-and-gold-design-system.md)**  
    Mobile-first navigation, thumb-zone ergonomics, progressive disclosure, Obsidian color palette, and CSS-variable architecture for Gold Gradient Presets & Position Box Opacity.
-6. **[06 — Supabase Data Model & Build Roadmap](file:///c:/mogmine/docs/06-data-model-and-roadmap.md)**  
+6. **[06 — Supabase Data Model & Build Roadmap](docs/06-data-model-and-roadmap.md)**  
    Full Postgres ER diagram, table specifications (single-user first, multi-user ready), and the 5-phase build roadmap from MVP UI to live TopstepX Cloud Run ingestion.
-7. **[07 — Agent Guardrails & Smart Notes](file:///c:/mogmine/docs/07-agent-guardrails-and-smart-notes.md)**  
+7. **[07 — Agent Guardrails & Smart Notes](docs/07-agent-guardrails-and-smart-notes.md)**  
    Copy-paste "Wrong vs. Right" recipes for `ISeriesPrimitive` Position Boxes, chart time-sync loop guards, Yahoo padding windows, futures multiplier math (`MES` vs `ES`), and subagent task slicing.
+8. **[08 — UX Notes: Viewing Trades & Journaling](docs/08-ux-notes-viewing-and-journaling.md)**  
+   Measurable experience budgets, the state matrix for every screen (loading, empty, late data, offline), the gesture conflict map, notes that are never lost, notification etiquette, accessibility, and number and time formatting.
+9. **[09 — Backend Risk Register](docs/09-backend-risk-register.md)**  
+   What breaks if the blueprint is built as written, with fixes: Topstep's read-only server rule, the fill ledger, candle enrichment passes, session and money math, Supabase security, Vercel limits, the AI pipeline, proposed schema changes, and a log of what was verified against vendor docs.
+10. **[10 — Yahoo-First Build Plan](docs/10-yahoo-first-build-plan.md)**  
+   **Start here to build.** There is no broker account yet, so this covers Yahoo's measured limits (`1m` bars go back 30 days), the daily candle archive to start first, how to get trades without a broker, and a build order in six milestones with a list of what is parked.
+
+---
+
+## 5. Working in This Repo
+
+| File | What it is for |
+| :--- | :--- |
+| [AGENTS.md](AGENTS.md) | Rules that must not be broken, and which spec to read. Every AI agent starts here. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How people and agents work together: lanes, branches, handoffs, fixtures, environments. |
+| [DECISIONS.md](DECISIONS.md) | What is decided, what is open, and which name is canonical when specs disagree. |
+| [NOTES.md](NOTES.md) | The current state, who is working on what, and the latest handoff. |
+| [mogprompt.md](mogprompt.md) | The whole system in one long read. Where it differs from `docs/`, see `DECISIONS.md`. |

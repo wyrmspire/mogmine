@@ -89,6 +89,13 @@ class PositionBoxRenderer implements IPrimitivePaneRenderer {
 ```
 *Agent Note:* Always check that `timeScale().timeToCoordinate()` and `series.priceToCoordinate()` return non-null values before rendering (bars slightly outside the visible viewport can return `null`; clamp to canvas edges if the trade spans partially offscreen).
 
+*Agent Notes added 2026-11-14 (verified against the v5.3 docs, see [09](09-backend-risk-register.md) §10):*
+- **Snap times to bars first.** `timeToCoordinate()` returns `null` for any time that is not on the time scale. A fill at 09:48:37 is not a bar time, so an unsnapped box is never drawn. Convert `entryTime` and `exitTime` to their bar's open time for the active timeframe, and redo it on every timeframe switch (B-23).
+- **These type names are v5.** `IPrimitivePaneView` and `IPrimitivePaneRenderer` were `ISeriesPrimitivePaneView` and `ISeriesPrimitivePaneRenderer` in v4. Build against v5: `chart.addSeries(CandlestickSeries, options)`, and `createSeriesMarkers(series, markers)` in place of `series.setMarkers()`.
+- **Do not call `getComputedStyle()` inside `draw()`.** It runs on every frame of a pinch. Read `--position-box-opacity`, `--gold-mid` and the profit and risk colours into a small store, update it when a slider or preset changes, then call `requestUpdate()`. The values still come from the CSS variables (Invariant 5).
+- **Read the profit and risk colours from tokens too** (`--profit-emerald`, `--risk-crimson`). The literal `rgba(16, 185, 129, …)` above blocks a colour-blind preset ([08](08-ux-notes-viewing-and-journaling.md) UX-80).
+- **Chart times are shifted for display only.** The library has no time-zone support. Pass every bar, marker and primitive time through one `toChartTime()` helper, and never let a shifted time reach the database or the AI (B-22).
+
 ---
 
 ### Recipe 2: Time-Syncing Primary (`MES`) & Companion (`NQ=F`) Charts Without Infinite Loops
@@ -126,6 +133,8 @@ export function syncChartTimeScales(
 }
 ```
 *Agent Note:* When syncing crosshairs across `ES=F` and `NQ=F`, match on `param.time` (Unix timestamp) because prices are on completely different scales (`~5950` vs `~20800`).
+
+*Agent Note added 2026-11-14:* Prefer one chart with two panes. In v5, `chart.addSeries(LineSeries, options, 1)` puts the companion in a second pane on the same time axis, so there is nothing to sync and one screenshot captures both. Use this two-chart recipe only when two separate chart instances are really needed ([08](08-ux-notes-viewing-and-journaling.md) UX-27). On touch screens also set `handleScroll: { vertTouchDrag: false }` so a vertical swipe that starts on the chart scrolls the page (UX-41).
 
 ---
 
@@ -175,6 +184,12 @@ export function classifyAndWindowTrade(entryTime: Date, exitTime: Date) {
 ```
 *Agent Note:* Whenever ingesting a trade, also fetch and cache `1m`, `5m`, and `15m` bars into `trade_candles` immediately so switching timeframes on mobile works offline/instantly even months later.
 
+*Agent Notes added 2026-11-14 ([09](09-backend-risk-register.md) §2):*
+- **`windowEnd` is in the future when the trade closes.** A single fetch at ingestion never gets the post-exit bars. Fetch what exists, then schedule a top-up in the `enrichment_jobs` table. Never use `setTimeout` in a process that can restart (B-10).
+- **Record coverage.** Yahoo returns an empty result, not an error, for ranges it no longer serves. Store the requested and received range per timeframe, and fall back to a coarser timeframe for old imports (B-11).
+- **Session levels need whole sessions,** not this window. VWAP, `ONH/ONL` and `PDH/PDL` cannot be computed from 45 minutes of bars (B-13).
+- **The third bucket is under review.** Topstep accounts cannot hold across days, so do not build multi-day window logic yet (`OD-9` in [DECISIONS.md](../DECISIONS.md)).
+
 ---
 
 ### Recipe 4: Capturing Chart + Overlay Image for Trade Card & Vision AI
@@ -182,6 +197,12 @@ export function classifyAndWindowTrade(entryTime: Date, exitTime: Date) {
 **❌ WRONG:** Using `html2canvas` on a complex page expecting it to capture external WebGL/Canvas overlays reliably, or sending raw JSON candles to the LLM without the rendered chart image.
 
 **✅ RIGHT:** Use `lightweight-charts`'s built-in `chart.takeScreenshot()` (which returns an `HTMLCanvasElement` containing candlesticks, gridlines, **and** `PositionBoxPrimitive` Canvas layers), convert it to a Blob/DataURL, and compose it inside the Trade Card export or upload it to Supabase Storage (`trade-snapshots/`) for Vision AI.
+
+*Agent Notes added 2026-11-14:*
+- **Call `takeScreenshot(true)`.** The first argument, `addTopLayer`, defaults to `false` and is what includes the top layer and primitives. Add a test that samples a pixel inside the Position Box ([09](09-backend-risk-register.md) B-61).
+- **The AI snapshot is a standard render, not the user's view.** Use an off-screen chart at a fixed size, fitted to the trade, with a fixed theme and opacity, after `document.fonts.ready`. Otherwise the model sees whatever zoom the user left.
+- **Upload from the browser straight to Storage** with a signed upload URL, and store the bucket path. A Vercel route cannot carry more than 4.5 MB (B-46, B-50).
+- **In privacy mode, re-render the chart** so the P&L pill shows R only ([08](08-ux-notes-viewing-and-journaling.md) UX-71).
 
 ---
 
@@ -219,6 +240,13 @@ export const FUTURES_SPECS: Record<string, FuturesContractSpec> = {
 - `rewardPoints = direction === 'LONG' ? (exitPrice - entryPrice) : (entryPrice - exitPrice)`
 - `rMultiple = riskPoints > 0 ? rewardPoints / riskPoints : null`
 
+*Agent Notes added 2026-11-14 ([09](09-backend-risk-register.md) §4):*
+- **The formulas above only hold for one entry fill and one exit fill.** With scale-ins or partial exits, compute gross P&L from the fills: the sum of signed `quantity × price` over every fill, times `pointValueUsd`. Average prices are for display only (B-30).
+- **Do the arithmetic in integer ticks:** `Math.round(price / tickSize)`. Tick sizes `0.1` and `0.01` are not exact in floating point (B-31).
+- **R with scaling is an open decision** (`OD-10`). The recommendation is `P&L ÷ initial risk in dollars`. Without a stop, R is `null`, never `0`.
+- **Cross-check against the broker.** Closing fills from TopstepX carry the broker's own `profitAndLoss`. Flag a mismatch. Do not hide it (B-34).
+- **`YM`, `RTY`, `GC` and `CL` are missing from the table above.** The full matrix is in `mogprompt.md` §3.1.
+
 ---
 
 ## 2. Subagent Task Slicing & Handoff Protocol
@@ -238,3 +266,6 @@ Every subagent finishing a task must report:
 1. Exact files created/modified.
 2. Verification run (typecheck, lint, unit test, or mobile viewport check) and exact output.
 3. Any stubbed dependencies or follow-up assumptions (for example, if `DEFAULT_OWNER_USER_ID` is mocked pending Supabase project keys).
+4. A handoff entry in [NOTES.md](../NOTES.md), and an open item in [DECISIONS.md](../DECISIONS.md) for any spec conflict or uncovered choice it met. Subagents do not resolve spec conflicts themselves.
+
+Every slice above also reads [08 — UX Notes](08-ux-notes-viewing-and-journaling.md) (UI slices) or [09 — Backend Risk Register](09-backend-risk-register.md) (adapter, database, ingestion and AI slices), and the additional guardrails in `AGENTS.md` §3b. Team workflow is in [CONTRIBUTING.md](../CONTRIBUTING.md).

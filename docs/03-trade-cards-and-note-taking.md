@@ -32,6 +32,13 @@ From any trade view, tapping the **`Trade Card`** button generates a high-craft,
 +---------------------------------------------------------------+
 ```
 
+> [!WARNING]
+> **Export rules from the 2026-11-14 review** ([08 — UX Notes](08-ux-notes-viewing-and-journaling.md) §11):
+> - Build the image **before** the Share tap. The share sheet must open directly from the tap or the browser may refuse it (UX-70).
+> - Privacy mode must re-render the chart. The chart itself draws a dollar pill, so hiding a text row is not enough (UX-71).
+> - Upload files straight to Storage, never through a Vercel route. Bodies are capped at 4.5 MB ([09](09-backend-risk-register.md) B-50).
+> - Call `takeScreenshot(true)` so primitives are included (B-61).
+
 ### How the Card Is Built & Exported
 1. **Live Interactive Preview:** A dedicated React component styled with the active **Obsidian + Gold Gradient** theme tokens and tabular monospace pricing (`tabular-nums`).
 2. **Chart + Overlay Merge:** Calls `lightweight-charts`'s `takeScreenshot()` (which includes the custom Canvas **translucent Position Boxes** and key levels) and embeds that crisp canvas bitmap inside the card layout. If a time-synced companion chart (`NQ=F`) is attached, the user can toggle **Single Chart** or **Dual Stacked Chart** layout on the card.
@@ -48,6 +55,9 @@ From any trade view, tapping the **`Trade Card`** button generates a high-craft,
 ## 2. Simple vs. Advanced Note-Taking
 
 If journaling takes 5 minutes per trade during a volatile morning session, traders stop doing it. MogMine separates **In-Session Capture (Simple Mode)** from **Post-Market Review (Advanced Mode)**.
+
+> [!NOTE]
+> The rules that make this hold up in practice are in [08 — UX Notes §7](08-ux-notes-viewing-and-journaling.md#7-notes-and-journaling): no Save button, local-first saving, AI tags offered as suggestions that never overwrite the trader's choices, a no-permission fallback for voice, one-tap risk entry when no stop was recorded, and a review status for every trade.
 
 ### A. Simple Mode (Mobile / In-Session — Target: Under 10 Seconds)
 Designed for one-handed thumb use right after closing a trade:

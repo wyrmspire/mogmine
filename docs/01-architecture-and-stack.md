@@ -41,6 +41,11 @@ MogMine launches as a **single-user personal trading workbench** so we skip onbo
 
 Zero schema rewrites are needed.
 
+> [!WARNING]
+> **Skipping auth leaves the database public.** The app is served from a public URL and the Supabase anon key ships in every page load. Without RLS anyone holding that key can read and write every table. The review of 2026-11-14 recommends enabling Supabase Auth for one allow-listed user and RLS on every table from the first migration. See [09 — Backend Risk Register](09-backend-risk-register.md) B-40 and `OD-2` in [DECISIONS.md](../DECISIONS.md).
+>
+> **The listener must be read-only.** Topstep allows a server to watch and record and forbids it to trade (B-01).
+
 ---
 
 ## 3. End-to-End Trade Lifecycle

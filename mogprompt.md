@@ -6,6 +6,14 @@
 > **Market Data & Context Pipeline:** Yahoo Finance Continuous Futures (`ES=F`, `NQ=F`, `YM=F`, `RTY=F`, `^VIX`, `DX-Y.NYB`) with Permanent PostgreSQL Intraday Candle Caching + Automated Session Key Levels + High-Impact USD Economic Calendar Hazard Detector + Vision-Capable Multimodal AI Review Engine  
 > **Design Philosophy & Aesthetic:** Deep Carbon Obsidian (`#07080C` / `#0D0F17`) + Dynamic Adjustable Liquid Gold Gradient Matrix + Custom HTML5 Canvas 2D Series Primitives with Translucent Position Boxes for TradingView `lightweight-charts` v4+
 
+> [!IMPORTANT]
+> **Read with its companions (review of 2026-11-14).** This file is the one-read narrative. It is not the last word on names or schema.
+> - Names here differ from `docs/` in many places. Until `OD-1` closes, `docs/` names win. The full list is the [drift register in DECISIONS.md](DECISIONS.md#3-spec-drift-register).
+> - Several designs below break as written: a publicly writable database, fills lost on restart, candles requested before they exist, and a server rule from Topstep that limits what the listener may do. Fixes are in [docs/09 — Backend Risk Register](docs/09-backend-risk-register.md).
+> - Screen states, gesture conflicts and note-taking rules are in [docs/08 — UX Notes](docs/08-ux-notes-viewing-and-journaling.md).
+> - The code samples use `lightweight-charts` v5 type names. Build against v5 (`OD-6`).
+> - There is no broker account yet. What to build first, on Yahoo data alone, is in [docs/10 — Yahoo-First Build Plan](docs/10-yahoo-first-build-plan.md).
+
 ---
 
 ## 1. Executive Summary & Vision Statement
@@ -225,6 +233,12 @@ The Position Box must dynamically render:
 3. **Execution Path:** A dashed diagonal connector line tracing the transaction path from entry to exit.
 4. **Dynamic CSS Variable Integration:** The alpha transparency of all boxes is read dynamically from the `--position-box-opacity` CSS variable, while accent colors pull from `--gold-mid`.
 
+> [!WARNING]
+> **Three corrections to the sample below** (details in [docs/09](docs/09-backend-risk-register.md) B-23, B-61 and [docs/08](docs/08-ux-notes-viewing-and-journaling.md) §2):
+> - `timeToCoordinate()` returns `null` for any time that is not a bar time. A fill at 09:48:37 is not one, so this sample draws nothing. Snap `entryTime` and `exitTime` to their bar's open time for the active timeframe first.
+> - `takeScreenshot()` needs `addTopLayer = true` to be sure primitives are included: call `takeScreenshot(true)`.
+> - Do not call `getComputedStyle()` inside `draw()`. It runs on every frame of a pinch. Read the variables into a small store and update it when a slider or preset changes.
+
 ```typescript
 import {
   ISeriesPrimitive,
@@ -412,6 +426,9 @@ export class PositionBoxPrimitive implements ISeriesPrimitive {
 > **Architectural Invariant:** Yahoo Finance discards 1-minute intraday bars older than 7–30 days and 5-minute bars older than 60 days. An application that queries Yahoo Finance dynamically upon trade viewing will fail to render charts for historical trades.  
 > **Solution:** MogMine persists full OHLCV candlestick windows into PostgreSQL (`trade_candles`) at the moment of trade ingestion. Subsequent viewings read directly from the database cache.
 
+> [!WARNING]
+> **One fetch at ingestion is not enough.** The post-exit part of the window is in the future when the trade closes, so it must be topped up later by a durable job ([docs/09](docs/09-backend-risk-register.md) B-10). Measured on 2026-11-14, Yahoo serves `1m` bars for the last 30 days at no more than 8 days per request, `5m` and `15m` for 60 days, and `1h` for 730 days (B-11). The dependable fix is a daily archive of every session ([docs/10](docs/10-yahoo-first-build-plan.md) §3). `ES=F` is also not the contract that was traded (B-12).
+
 ### 5.2 Trade Duration Classifier & Window Slicing Specification
 
 ```typescript
@@ -426,11 +443,12 @@ export interface WindowPaddingConfig {
 }
 
 export function evaluateTradeArchetype(entryTime: Date, exitTime: Date): WindowPaddingConfig {
-  const durationMs = exitTime.getTime() - entryTime.getTime();
-  const durationMinutes = Math.max(1, Math.round(durationMs / (60 * 1000)));
+  // Compare seconds, never rounded minutes: rounding turned a 14m 40s trade into 15 minutes
+  // and misclassified it as session_90m.
+  const durationSeconds = Math.max(1, Math.round((exitTime.getTime() - entryTime.getTime()) / 1000));
 
   // SCALP ARCHETYPE: Sub-15 minute executions
-  if (durationMinutes < 15) {
+  if (durationSeconds < 15 * 60) {
     return {
       archetype: 'scalp',
       primaryTimeframe: '1m',
@@ -441,7 +459,7 @@ export function evaluateTradeArchetype(entryTime: Date, exitTime: Date): WindowP
   }
 
   // 90-MINUTE SESSION TRADE: 15 minutes to 2 hours
-  if (durationMinutes <= 120) {
+  if (durationSeconds <= 2 * 60 * 60) {
     return {
       archetype: 'session_90m',
       primaryTimeframe: '5m',
@@ -732,6 +750,16 @@ export interface AITradeReviewSchema {
 
 ## 12. Complete PostgreSQL Database Schema (Supabase)
 
+> [!WARNING]
+> **Do not run this DDL as written.** Known problems, with fixes in [docs/09 §5 and §8](docs/09-backend-risk-register.md#8-proposed-schema-changes):
+> - No RLS and no auth: the data is publicly readable and writable through the anon key (B-40).
+> - `executions.trade_id NOT NULL` and `trades.exit_time NOT NULL` mean a fill cannot be saved until the trade is over, so a restart mid-position loses it (B-05). A reversal fill belongs to two trades (B-06).
+> - `external_fill_id` must be the broker's leg id scoped by account. The broker's `fillId` is null on simulated accounts (B-04).
+> - `session_levels` requires values that do not exist yet for early trades (B-14).
+> - `ON DELETE CASCADE` from `accounts` can erase the whole journal (B-44).
+> - `ai_reviews.trade_id UNIQUE` blocks re-analysis history, and `chart_snapshot_url NOT NULL` blocks reviews without an image (B-45).
+> - No indexes or `CHECK` constraints (B-43). Column names differ from `docs/06` ([drift register](DECISIONS.md#3-spec-drift-register)).
+
 ```sql
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -906,6 +934,13 @@ CREATE TABLE user_preferences (
 ## 13. TopstepX Google Cloud Run Listener Architecture
 
 Google Cloud Run hosts the long-lived ingestion listener to eliminate serverless execution timeouts and ensure uninterrupted WebSocket connections.
+
+> [!WARNING]
+> **Read [docs/09 §1](docs/09-backend-risk-register.md#1-broker-access-and-the-listener-b-01--b-09) before building this.**
+> - **Read-only, always.** Topstep permits a server to watch and record and forbids it to trade. No order endpoint may ever be called from server code (B-01).
+> - **"Uninterrupted" is not achievable.** Instances restart and missed events are not replayed. Save each fill on arrival and reconcile through `Trade/search` after every reconnect and on a timer (B-03, B-05).
+> - **A REST pull can ship first.** The reconciliation call is also a complete, stateless way to ingest trades, so the socket can follow as a latency upgrade (`OD-3`).
+> - "Broadcasts event on Supabase Realtime" reaches only an app that is open in the foreground. A lock-screen notification needs Web Push (B-41).
 
 ```
 +---------------------------------------------------------------------------------------------------+

@@ -28,3 +28,25 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
+
+# --- Added by the 2026-11-14 docs review (entries above are unchanged) ---
+
+# Secrets beyond .env files
+*.pem
+service-account*.json
+
+# Hosting and tooling state
+.vercel/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+supabase/.temp/
+supabase/.branches/
+
+# Tests and coverage
+coverage/
+playwright-report/
+test-results/
+
+# Per-developer AI tool settings
+.claude/settings.local.json

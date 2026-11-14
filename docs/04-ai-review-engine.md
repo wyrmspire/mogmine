@@ -52,6 +52,13 @@ The AI adjusts its prompt rubric based on `trade_style`:
 
 Every AI review returns strict JSON validated by Zod before saving to `ai_reviews`, guaranteeing clean rendering in the mobile UI and on the **One-Click Trade Card**.
 
+> [!WARNING]
+> **Changes recommended by the 2026-11-14 review** ([09 — Backend Risk Register](09-backend-risk-register.md) §7, `OD-12` in [DECISIONS.md](../DECISIONS.md)):
+> - **Facts come from code, judgments from the model.** `playbook_adherence_score`, the event name, `minutes_from_event` and the nearest levels are already known to the code. If the model also outputs them it can contradict the checklist or invent an event (B-62).
+> - **Separate decision-time assessment from hindsight.** Post-exit candles belong in a labelled "what happened next" section, not in the process grade (B-63).
+> - **The chart image only exists in a browser.** Run a data-only review on the server and add vision once a client has uploaded a standardised snapshot (B-60, B-61).
+> - **Queue the review** and keep a history of re-runs (B-45, B-51).
+
 ```typescript
 export interface AITradeReviewOutput {
   grade: 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C' | 'D' | 'F';

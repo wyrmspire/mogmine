@@ -74,6 +74,15 @@ Because **TopstepX** trades futures symbols like `MES` or `MNQ`, the `YahooFinan
 > Yahoo Finance only retains `1m` intraday bars for the trailing **7 to 30 days** (and `5m` bars for ~60 days). If we fetched charts on-demand when opening old reviews, every chart older than a month would fail to load.  
 > **Rule:** As soon as a trade is logged, the backend fetches `1m`, `5m`, and `15m` (plus `1h` for swings) candle windows around the trade for both the primary ticker (`ES=F`) and default companion (`NQ=F`), and **persists them permanently** in Supabase's `trade_candles` table.
 
+> [!WARNING]
+> **Additions from the 2026-11-14 review** ([09 — Backend Risk Register](09-backend-risk-register.md) §2):
+> - **The post-exit window does not exist when the trade closes.** Fetch what exists, then top up with a durable job (B-10).
+> - **Yahoo limits, measured 2026-11-14:** `1m` goes back 30 days at no more than 8 days per request. `5m`, `15m` and `30m` go back 60 days. `1h` goes back 730 days. Archive every session daily so nothing expires ([10 — Yahoo-First Build Plan](10-yahoo-first-build-plan.md) §2–3, B-11).
+> - **`ES=F` is not the traded contract.** In roll weeks the boxes are offset from the candles. Store the broker contract id and check that fills sit inside their bars (B-12).
+> - **Yahoo does serve `MES=F` and `MNQ=F`** as separate series that differ from the minis bar by bar. Whether to chart micros on them is `OD-15` in [DECISIONS.md](../DECISIONS.md). Archive both in the meantime.
+> - **Fill times must be snapped to bar times** before `timeToCoordinate()`, or the Position Box disappears (B-23).
+> - **Levels must be point-in-time.** An opening range that had not formed at entry must not be shown or sent to the AI as if it had (B-14).
+
 ---
 
 ## 5. Companion Charts: Demonstrating SMT Divergence & Pushes
@@ -81,6 +90,9 @@ Because **TopstepX** trades futures symbols like `MES` or `MNQ`, the `YahooFinan
 Futures traders—especially `MES` traders—rarely look at S&P 500 price action in isolation. Seeing **`NQ` make a lower low while `ES` holds a higher low (SMT Divergence)**, or watching `NQ` lead an aggressive push through a level, is often the entire reason a trade was taken.
 
 MogMine supports **two ways** to attach other charts to any trade:
+
+> [!NOTE]
+> `lightweight-charts` v5 supports panes natively: `chart.addSeries(LineSeries, options, 1)` places the companion in a second pane on one shared time axis. That gives the 65/35 split with one chart, one screenshot and no sync loop. Build that mode first. See [08 — UX Notes](08-ux-notes-viewing-and-journaling.md) UX-27 and §15, and `OD-6` in [DECISIONS.md](../DECISIONS.md).
 
 ### Mode A: Time-Synced Interactive Companion Chart (Yahoo Finance)
 - Tap **`+ Add Companion Chart`** and pick `NQ=F`, `YM=F`, `RTY=F`, `^VIX`, or `DX-Y.NYB` (defaults to `NQ=F` for `MES` trades).

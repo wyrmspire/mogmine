@@ -140,6 +140,9 @@ erDiagram
 
 ---
 
+> [!WARNING]
+> **This model has gaps that lose or expose data.** Fills cannot be saved before a trade closes, a reversal fill belongs to two trades, there is no RLS, deletes cascade through the whole journal, and candles are stored per trade although session levels need whole sessions. Proposed changes are in [09 — Backend Risk Register §8](09-backend-risk-register.md#8-proposed-schema-changes), tracked as `OD-2`, `OD-4` and `OD-5` in [DECISIONS.md](../DECISIONS.md). Column names here are the interim canonical set where they differ from `mogprompt.md` (`OD-1`).
+
 ## 2. Core Table Specifications
 
 | Table | Purpose & Key Columns |
@@ -159,6 +162,9 @@ erDiagram
 ---
 
 ## 3. Phased Build Roadmap
+
+> [!NOTE]
+> Each phase has gate items in [09 — Backend Risk Register §9](09-backend-risk-register.md#9-phase-gates). Two roadmap changes are proposed in [DECISIONS.md](../DECISIONS.md): a stateless **Sync from TopstepX** pull in Phase 1, ahead of the Cloud Run listener (`OD-3`), and a narrower first version of the experience (`OD-14`, [08 §15](08-ux-notes-viewing-and-journaling.md#15-build-order-for-the-experience)).
 
 ### Phase 1: Vercel App, Obsidian/Gold Theme & Core Chart Engine
 - Scaffold Next.js (App Router, TypeScript, Tailwind CSS, PWA manifest) in the workspace and deploy preview to **Vercel**.

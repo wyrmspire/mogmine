@@ -1,7 +1,9 @@
 # AGENTS.md — AI Coding Agent & Subagent Guide for MogMine
 
-> **Read this file FIRST before planning, scaffolding, or editing any code in `c:\mogmine`.**  
+> **Read this file FIRST before planning, scaffolding, or editing any code in this repository.**  
 > This guide protects smaller/faster models and specialized subagents from common charting, market-data, futures-math, and architecture pitfalls.
+>
+> **Then read [NOTES.md](NOTES.md)** for the current state and the last handoff, and check [DECISIONS.md](DECISIONS.md) before choosing a name or re-opening a settled choice. Workflow for people and agents is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -14,6 +16,8 @@
 - **Market Data (Initial):** **Yahoo Finance** (`ES=F`, `NQ=F`, `^VIX`, `DX-Y.NYB`) via `MarketDataProvider` adapter, permanently cached in Postgres.
 - **Charts:** TradingView **`lightweight-charts` v4+** with custom HTML5 Canvas **`ISeriesPrimitive`** plugins for translucent Position Boxes and synced Companion Divergence charts.
 
+> **Current mode (owner decision `D-009`, 2026-11-14): there is no TopstepX account yet.** Build and test against Yahoo data only. Trades come from manual entry, the test-trade tool and fixtures. Do not build the broker listener, the pull sync or the CSV importer yet. The first task is the daily candle archive. See [10 — Yahoo-First Build Plan](docs/10-yahoo-first-build-plan.md).
+
 ---
 
 ## 2. Fast Documentation Routing Table
@@ -22,13 +26,26 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 
 | If You Are Working On... | Read First |
 | :--- | :--- |
-| Stack decisions, Adapter interfaces (`MarketDataProvider`, `TradeIngestionAdapter`, `ReviewContextPlugin`), or Cloud Run ↔ Vercel boundaries | [01 — Architecture & Stack](file:///c:/mogmine/docs/01-architecture-and-stack.md) |
-| Candlestick charts, translucent Position Boxes, Scalp/90m/Investment logic, Yahoo ticker mapping, `NQ=F` companion divergence, or Session Levels | [02 — Charting, Position Boxes & Divergence](file:///c:/mogmine/docs/02-charting-position-boxes-and-divergence.md) |
-| One-Click Quality Trade Cards, PNG export, Simple `<10s` tagging + Voice Memo, or Advanced Note-Taking | [03 — Trade Cards & Note-Taking](file:///c:/mogmine/docs/03-trade-cards-and-note-taking.md) |
-| AI Trade Review prompts, 6-input context pipeline, Vision AI snapshot evaluation, or `AITradeReviewOutput` Zod schema | [04 — Multimodal AI Review Engine](file:///c:/mogmine/docs/04-ai-review-engine.md) |
-| Mobile layout (`390x844`), bottom dock, Obsidian palette, Gold Gradient presets, or Position Box Opacity slider | [05 — Mobile UX & Gold Design System](file:///c:/mogmine/docs/05-mobile-ux-and-gold-design-system.md) |
-| Supabase Postgres tables, columns, enums, ER relationships, or build phase scope | [06 — Data Model & Roadmap](file:///c:/mogmine/docs/06-data-model-and-roadmap.md) |
-| Copy-paste code recipes ("Wrong vs. Right"), futures point-value math, chart sync loop guards, and subagent task slicing | [07 — Agent Guardrails & Smart Notes](file:///c:/mogmine/docs/07-agent-guardrails-and-smart-notes.md) |
+| Stack decisions, Adapter interfaces (`MarketDataProvider`, `TradeIngestionAdapter`, `ReviewContextPlugin`), or Cloud Run ↔ Vercel boundaries | [01 — Architecture & Stack](docs/01-architecture-and-stack.md) |
+| Candlestick charts, translucent Position Boxes, Scalp/90m/Investment logic, Yahoo ticker mapping, `NQ=F` companion divergence, or Session Levels | [02 — Charting, Position Boxes & Divergence](docs/02-charting-position-boxes-and-divergence.md) |
+| One-Click Quality Trade Cards, PNG export, Simple `<10s` tagging + Voice Memo, or Advanced Note-Taking | [03 — Trade Cards & Note-Taking](docs/03-trade-cards-and-note-taking.md) |
+| AI Trade Review prompts, 6-input context pipeline, Vision AI snapshot evaluation, or `AITradeReviewOutput` Zod schema | [04 — Multimodal AI Review Engine](docs/04-ai-review-engine.md) |
+| Mobile layout (`390x844`), bottom dock, Obsidian palette, Gold Gradient presets, or Position Box Opacity slider | [05 — Mobile UX & Gold Design System](docs/05-mobile-ux-and-gold-design-system.md) |
+| Supabase Postgres tables, columns, enums, ER relationships, or build phase scope | [06 — Data Model & Roadmap](docs/06-data-model-and-roadmap.md) |
+| Copy-paste code recipes ("Wrong vs. Right"), futures point-value math, chart sync loop guards, and subagent task slicing | [07 — Agent Guardrails & Smart Notes](docs/07-agent-guardrails-and-smart-notes.md) |
+| Any screen: loading/empty/error states, gesture conflicts, notes that must never be lost, notifications, accessibility, number and time formatting | [08 — UX Notes: Viewing Trades & Journaling](docs/08-ux-notes-viewing-and-journaling.md) |
+| Ingestion, the listener, candles and enrichment, session and money math, Supabase security, API routes, or the AI pipeline | [09 — Backend Risk Register](docs/09-backend-risk-register.md) |
+| What to build first, the candle archive, Yahoo's measured limits and response quirks, or getting trades without a broker account | [10 — Yahoo-First Build Plan](docs/10-yahoo-first-build-plan.md) |
+| A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
+| Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |
+
+### When specs disagree
+
+`mogprompt.md` and `docs/` use different names for many of the same things. Until `OD-1` in [DECISIONS.md](DECISIONS.md) is closed:
+
+1. These invariants and guardrails win over everything.
+2. Then `DECISIONS.md`, then `docs/`, then `mogprompt.md`.
+3. **Never invent a third name or behaviour.** If the conflict is not in the drift register, add it and stop.
 
 ---
 
@@ -63,6 +80,26 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 
 ---
 
+## 3b. Additional Guardrails (2026-11-14 review)
+
+Binding alongside the seven invariants. Each links to its evidence in [docs/09](docs/09-backend-risk-register.md) or [docs/08](docs/08-ux-notes-viewing-and-journaling.md). The first is a hard safety rule. The rest stay in force unless the owner rejects the linked decision.
+
+1. **Server code is READ-ONLY against the broker.** Topstep allows a server to watch and record and forbids it to trade. No file may reference an order place, modify or cancel endpoint. A violation can cost the trader's funded account. (B-01)
+2. **No table without RLS, no public bucket.** The anon key ships to every browser. The service-role key never leaves server code. (B-40)
+3. **Save every fill before deriving a trade.** Fills go to the ledger on arrival. Trades are rebuilt from the ledger by one pure function. Every write is idempotent. (B-04, B-05, B-08)
+4. **Compute money from fills, in integer ticks.** Never from average prices, never in floating-point prices. `R` is `null` without a stop, never `0`. (B-30 – B-32)
+5. **Session math uses `America/New_York`, never a fixed offset.** Store UTC. Shift times only inside the chart layer. (B-20, B-22)
+6. **Snap fill times to bar times before `timeToCoordinate()`.** It returns `null` for a time that is not a bar, and the box disappears. (B-23)
+7. **Write chart code against `lightweight-charts` v5.** The recipes already use v5 type names. Call `takeScreenshot(true)` so primitives are included. Do not call `getComputedStyle()` per frame. (B-61, UX-27, docs/08 §2)
+8. **Never fetch candles once at close and stop.** Post-exit bars do not exist yet. Archive every session daily and record coverage. Measured Yahoo limits: `1m` goes back 30 days at 8 days per request, `5m`/`15m` 60 days, `1h` 730 days. (B-10, B-11, docs/10 §2–3)
+   - **Clean every Yahoo response before saving it:** drop rows with null prices and rows outside the requested window. An empty `200` for a weekend is normal, not missing data.
+9. **List queries never select `bars`.** (B-42)
+10. **Files go straight to Storage.** Never through a Vercel route. Store bucket paths, not URLs. (B-46, B-50)
+11. **The model never outputs a number the code can compute**, and AI suggestions never overwrite what the user entered. (B-62, UX-33)
+12. **Build every state, not only the happy path.** See the state matrix in docs/08 §4.
+
+---
+
 ## 4. Mobile-First Verification Checklist
 
 Before marking any UI or chart task complete, verify against a mobile viewport (**`390×844`**, iPhone 14/15/16 class):
@@ -72,3 +109,16 @@ Before marking any UI or chart task complete, verify against a mobile viewport (
 - [ ] **Visual Tuning sliders verified:** Changing `--gold-intensity` and `--position-box-opacity` updates cards and chart Canvas boxes smoothly without losing zoom state.
 - [ ] **Tabular monospace financials:** All prices, PnL, ticks, R-multiples, and timestamps enforce `tabular-nums` monospace typography (`font-variant-numeric: tabular-nums`) so digits never jitter while scrubbing charts.
 - [ ] **Specular `1px` gold lighting restraint:** Standard cards use subtle `1px` top-edge gold highlight fading into dark carbon hairlines—never heavy full-perimeter yellow borders.
+
+More UI checks (states, gestures, offline notes, colour-blind safety, wide screens) are in [docs/08 §16](docs/08-ux-notes-viewing-and-journaling.md#16-acceptance-checklist-adds-to-agentsmd-4).
+
+---
+
+## 5. Before You Finish a Session
+
+1. Report the exact files changed and the commands run with their real output. A claim without output counts as not verified.
+2. Add a handoff entry to [NOTES.md](NOTES.md) and update your lane claim.
+3. If you met a spec conflict or made a choice the specs do not cover, record it in [DECISIONS.md](DECISIONS.md) as an open item. Agents propose. The project owner decides.
+4. If behaviour now differs from a spec, update the spec in the same change.
+
+**One agent guide.** This file is the only agent instruction file. A tool-specific file (`CLAUDE.md`, `GEMINI.md`, `.cursorrules`, Copilot instructions) must be a one-line pointer here, never a copy.

@@ -46,6 +46,9 @@ A day-trading journal only works if opening it right after a trade feels **effor
 
 ## 2. High-Craft Mobile Chart Gestures & Layout Modes
 
+> [!WARNING]
+> **Several gestures in this document are claimed twice.** Swiping between trades collides with chart panning. X-Ray Hold collides with the chart library's built-in long-press crosshair. A vertical drag that starts on the chart is captured by the library by default and stops the page from scrolling. The resolutions are in [08 — UX Notes §6](08-ux-notes-viewing-and-journaling.md#6-gesture-conflict-map). The same file replaces the "under 100ms" claim above with measured budgets (§2), specifies every loading, empty and late-data state (§4), and separates in-app Realtime from lock-screen push (§8).
+
 ### A. Chart Touch Gestures & Ergonomics
 1. **`[ 🎯 Fit Trade ]` Double-Tap / Floating Pill:**
    - When a trader pinches or scrolls across the session to check overnight structure, a subtle floating **`Fit Trade`** pill appears in the top-right corner of the chart (or triggers via double-tap). One tap smoothly animates and snaps the viewport back to the exact padded trade window (`entry - padding` to `exit + padding`).
