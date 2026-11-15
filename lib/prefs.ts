@@ -79,6 +79,10 @@ export function hydratePrefs() {
   listeners.forEach((listener) => listener());
 }
 
+export function getPrefs(): Prefs {
+  return prefs;
+}
+
 export function setPrefs(patch: Partial<Prefs>) {
   prefs = sanitize({ ...prefs, ...patch });
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* still applies for this session */ }

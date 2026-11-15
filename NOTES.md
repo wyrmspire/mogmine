@@ -45,6 +45,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-14 (late CT) — agent (Antigravity) — App shell and notes, branch `feat/18-journal-backup`
+Did:      Phase 5 journal backup on `/tune` (#18): added `buildBackup` and `parseBackupFile` in `lib/store.ts`, `getPrefs` in `lib/prefs.ts`, Download backup and Restore from file with confirmation and validation in `components/TuneScreen.tsx`, and unit tests in `lib/__tests__/core.test.ts`.
+Verified: `npm run typecheck` clean; `npm run lint` 0 errors (1 pre-existing warning in `postcss.config.mjs`); `npm test` 12/12 pass; `npm run build` passes.
+Left:     Sibling Tune controls (box opacity, gold preset/intensity, palette, risk budget, show/hide samples) belong to their sibling Phase 5 issue.
+Watch:    Backups store trades and preferences only (`includesCandles: false`); charts re-fetch Yahoo Finance candles on open and samples keep their fixture bars.
+
 ### 2026-11-14 (night CT) — agent (Claude Code) — Chart + App shell and notes, branch `ui/phased-improvements`
 Did:      UI phases 1–3, three local commits (`c74bbae`, `685319b`, `5a9f8c6`): routes and a real Today/Feed on phones, device store without inline candles, Position Box rewrite and in-place timeframe switch, Pit Stop, checklist, review queue. Plan and open questions in `docs/14`; `OD-24`–`OD-26` opened.
 Verified: `npx tsc --noEmit` clean; `npm run lint` 0 errors, 1 old warning; `npm test` 10/10; `npm run build` passes. Headless Chrome at 390×844 and 1280×900: no overflow, no console errors; touch swipe on the chart scrolls the page. No real phone, no iOS, share sheet untested.

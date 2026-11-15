@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
+import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
 import { adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import type { Candle } from "../trades.ts";
@@ -122,4 +123,119 @@ test("process read: rules and violation tags decide, never the outcome", () => {
   assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Level Sweep"] }), "clean");
   assert.equal(processRead({ checklist_state: [rule(true), rule(false)], quick_tags: [] }), "broken");
   assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Revenge"] }), "broken");
+});
+
+test("journal backup round-trips trades (notes, prices, tags, checklist, playbook) and preserves sample labels", () => {
+  const realTrade = normalizeTrade({
+    id: "real-trade-1",
+    symbol: "MES",
+    direction: "LONG",
+    quantity: 2,
+    entry_time: "2026-11-12T15:35:00.000Z",
+    exit_time: "2026-11-12T15:52:00.000Z",
+    entry_price: 6840.25,
+    exit_price: 6846.75,
+    stop_loss_price: 6836.25,
+    planned_target_price: 6848.25,
+    key_level_price: 6838.5,
+    note: "Held reclaim cleanly.",
+    playbook_id: "orb-reclaim",
+    quick_tags: ["Opening Drive", "A+ Patience"],
+    checklist_state: [
+      { id: "r1", label: "Wait for close", checked: true },
+      { id: "r2", label: "Stop in place", checked: false },
+    ],
+    pre_trade_thesis: "Above ONH",
+    management_notes: "Kept initial stop",
+    post_exit_notes: "Ran 2 more points",
+    flagged: true,
+    review_status: "reviewed",
+    is_sample: false,
+  });
+  const sampleTrade = normalizeTrade({
+    id: "mes-opening-scalp",
+    symbol: "MES",
+    direction: "LONG",
+    quantity: 1,
+    entry_time: "2026-11-10T15:43:00.000Z",
+    exit_time: "2026-11-10T15:45:00.000Z",
+    entry_price: 6844.25,
+    exit_price: 6849,
+    is_sample: true,
+  });
+
+  const backup = buildBackup([realTrade, sampleTrade], {
+    shield: true,
+    goldPreset: "champagne",
+    goldIntensity: 0.6,
+    boxOpacity: 0.35,
+    palette: "blue-orange",
+    timeZone: "America/New_York",
+    showSamples: false,
+    blindReview: true,
+    riskBudgetUsd: 300,
+  });
+
+  assert.equal(backup.app, "mogmine");
+  assert.equal(backup.includesCandles, false);
+
+  const parsed = parseBackupFile(JSON.stringify(backup));
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+
+  assert.equal(parsed.realCount, 1);
+  assert.equal(parsed.sampleCount, 1);
+  assert.equal(parsed.prefs?.goldPreset, "champagne");
+  assert.equal(parsed.prefs?.timeZone, "America/New_York");
+
+  const restoredReal = parsed.trades.find((t) => t.id === "real-trade-1")!;
+  assert.equal(restoredReal.is_sample, false);
+  assert.equal(restoredReal.note, "Held reclaim cleanly.");
+  assert.equal(restoredReal.entry_price, 6840.25);
+  assert.equal(restoredReal.exit_price, 6846.75);
+  assert.equal(restoredReal.stop_loss_price, 6836.25);
+  assert.equal(restoredReal.planned_target_price, 6848.25);
+  assert.equal(restoredReal.key_level_price, 6838.5);
+  assert.equal(restoredReal.playbook_id, "orb-reclaim");
+  assert.deepEqual(restoredReal.quick_tags, ["Opening Drive", "A+ Patience"]);
+  assert.deepEqual(restoredReal.checklist_state, [
+    { id: "r1", label: "Wait for close", checked: true },
+    { id: "r2", label: "Stop in place", checked: false },
+  ]);
+  assert.equal(restoredReal.pre_trade_thesis, "Above ONH");
+  assert.equal(restoredReal.management_notes, "Kept initial stop");
+  assert.equal(restoredReal.post_exit_notes, "Ran 2 more points");
+  assert.equal(restoredReal.flagged, true);
+  assert.equal(restoredReal.review_status, "reviewed");
+
+  const restoredSample = parsed.trades.find((t) => t.id === "mes-opening-scalp")!;
+  assert.equal(restoredSample.is_sample, true);
+});
+
+test("parseBackupFile accepts legacy raw trade arrays, strips inline candles, and rejects invalid files", () => {
+  // Legacy v1/v2 array without explicit is_sample still labels known demo IDs as samples
+  const legacyRaw = JSON.stringify([
+    {
+      id: "mes-opening-scalp",
+      symbol: "MES",
+      direction: "LONG",
+      entry_time: "2026-11-10T15:43:00.000Z",
+      exit_time: "2026-11-10T15:45:00.000Z",
+      entry_price: 6844.25,
+      exit_price: 6849,
+      candles: [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }],
+    },
+  ]);
+  const legacyParsed = parseBackupFile(legacyRaw);
+  assert.equal(legacyParsed.ok, true);
+  if (legacyParsed.ok) {
+    assert.equal(legacyParsed.trades[0].is_sample, true);
+    assert.equal("candles" in legacyParsed.trades[0], false);
+  }
+
+  assert.equal(parseBackupFile("").ok, false);
+  assert.equal(parseBackupFile("{not json").ok, false);
+  assert.equal(parseBackupFile(JSON.stringify({ app: "other", trades: [] })).ok, false);
+  assert.equal(parseBackupFile(JSON.stringify({ app: "mogmine", trades: [] })).ok, false);
+  assert.equal(parseBackupFile(JSON.stringify({ app: "mogmine", trades: [{ id: "bad-trade" }] })).ok, false);
 });
