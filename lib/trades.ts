@@ -342,39 +342,47 @@ export function fitWindow(entryTime: string, exitTime: string, timeframe: Timefr
   };
 }
 
+export type ExcursionCoverage = "complete" | "partial";
+
 export interface Excursions {
   /** Worst price against the position during the hold. */
   maePrice: number;
   /** Best price in favour of the position during the hold. */
   mfePrice: number;
+  /**
+   * `complete` when every expected fully-inside bar is present and contiguous.
+   * `partial` when at least two inside bars exist but the hold has gaps.
+   * Unavailable (fewer than two inside bars) is represented by a null return.
+   */
+  coverage: ExcursionCoverage;
 }
 
-function pricesMatch(a: number, b: number, tickSize: number) {
-  return Math.round(a / tickSize) === Math.round(b / tickSize);
-}
-
-/** High/low of an entry bar, or null when the wicks are not provably after the fill. */
-function provableEntryRange(bar: Candle, fillPrice: number, tickSize: number): { high: number; low: number } | null {
-  const atOpen = pricesMatch(fillPrice, bar.open, tickSize);
-  const atClose = pricesMatch(fillPrice, bar.close, tickSize);
-  // A fill at the close cannot have a later high or low in this bar. Mid-bar fills are unprovable.
-  return atOpen && !atClose ? { high: bar.high, low: bar.low } : null;
-}
-
-/** High/low of an exit bar, or null when the wicks are not provably before the fill. */
-function provableExitRange(bar: Candle, fillPrice: number, tickSize: number): { high: number; low: number } | null {
-  const atOpen = pricesMatch(fillPrice, bar.open, tickSize);
-  const atClose = pricesMatch(fillPrice, bar.close, tickSize);
-  return atClose && !atOpen ? { high: bar.high, low: bar.low } : null;
+/** Open times of bars that are entirely inside the hold, using execution timestamps only. */
+export function expectedInsideBarTimes(entry: number, exit: number, barMs: number): number[] {
+  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMs <= 0) return [];
+  const times: number[] = [];
+  let time = Math.ceil(entry / barMs) * barMs;
+  if (time < entry) time += barMs;
+  while (time + barMs <= exit) {
+    times.push(time);
+    time += barMs;
+  }
+  return times;
 }
 
 /**
- * MAE and MFE from bars in the hold.
+ * MAE and MFE from bars that are fully inside the hold.
  *
- * Only completed bars (the same rule as the bar validator) and the provable side of the
- * entry and exit bars are counted. A long filled at a bar's close does not inherit that
- * bar's earlier high as profit. When fewer than two completed bars remain, this returns
- * null so callers can show "—" rather than a misleading number (B-33, issue #30).
+ * A candle establishes its OHLC, not the order of its prices or the timing of a
+ * fill inside that candle (issue #47). Fill timing comes from the execution
+ * timestamps: a bar is counted only when `bar.time >= entry` and
+ * `bar.time + barMs <= exit`. Matching the fill price to the bar's open or
+ * close is never used as evidence that the fill happened at that instant.
+ *
+ * When fewer than two fully-inside bars exist, this returns null so callers
+ * can show "—". When two or more exist but an expected bar is missing, the
+ * result is still computed from what is present and marked `coverage: "partial"`
+ * so the UI can show ≈ / partial rather than a complete measurement.
  */
 export function excursions(
   trade: Pick<TradeRecord, "direction" | "entry_time" | "exit_time" | "entry_price"> & Partial<Pick<TradeRecord, "exit_price" | "symbol">>,
@@ -385,16 +393,18 @@ export function excursions(
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) return null;
   const barMs = barMinutes * 60_000;
-  const tickSize = trade.symbol ? specFor(trade.symbol)?.tickSize : 1e-8;
-  if (!tickSize) return null;
-  const entryBarTime = Math.floor(entry / barMs) * barMs;
-  const exitBarTime = Math.floor(exit / barMs) * barMs;
+  const expected = expectedInsideBarTimes(entry, exit, barMs);
 
-  const complete: Candle[] = [];
+  const byTime = new Map<number, Candle>();
   for (const bar of candles) {
-    if (bar.time >= entry && bar.time + barMs <= exit) complete.push(bar);
+    if (bar.time >= entry && bar.time + barMs <= exit && !byTime.has(bar.time)) byTime.set(bar.time, bar);
   }
+  const complete = expected.flatMap((time) => {
+    const bar = byTime.get(time);
+    return bar ? [bar] : [];
+  });
   if (complete.length < 2) return null;
+  const coverage: ExcursionCoverage = complete.length === expected.length ? "complete" : "partial";
 
   let high = trade.entry_price;
   let low = trade.entry_price;
@@ -402,29 +412,12 @@ export function excursions(
     high = Math.max(high, trade.exit_price);
     low = Math.min(low, trade.exit_price);
   }
-
-  const include = (range: { high: number; low: number } | null) => {
-    if (!range) return;
-    high = Math.max(high, range.high);
-    low = Math.min(low, range.low);
-  };
-
-  for (const bar of candles) {
-    const isEntryBar = bar.time === entryBarTime;
-    const isExitBar = bar.time === exitBarTime;
-    const isComplete = bar.time >= entry && bar.time + barMs <= exit;
-    if (isEntryBar) {
-      include(provableEntryRange(bar, trade.entry_price, tickSize));
-      continue;
-    }
-    if (isExitBar) {
-      if (trade.exit_price != null) include(provableExitRange(bar, trade.exit_price, tickSize));
-      continue;
-    }
-    if (isComplete) include(bar);
+  for (const bar of complete) {
+    high = Math.max(high, bar.high);
+    low = Math.min(low, bar.low);
   }
 
-  return trade.direction === "LONG" ? { maePrice: low, mfePrice: high } : { maePrice: high, mfePrice: low };
+  return trade.direction === "LONG" ? { maePrice: low, mfePrice: high, coverage } : { maePrice: high, mfePrice: low, coverage };
 }
 
 /** Planned reward ÷ initial risk, or null without a stop and target. */
