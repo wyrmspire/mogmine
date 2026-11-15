@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TradeChart } from "./TradeChart";
 import { demoTrades, generateCandles } from "@/lib/fixtures";
 import {
@@ -114,6 +114,11 @@ export function TradeJournal() {
 
   const selectedIndex = Math.max(0, trades.findIndex((trade) => trade.id === selectedId));
   const trade = trades[selectedIndex] ?? trades[0];
+  const chartTradeRef = useRef(trade);
+  if (chartTradeRef.current.id !== trade.id) chartTradeRef.current = trade;
+  const chartTrade = chartTradeRef.current;
+  const tradeRef = useRef(trade);
+  tradeRef.current = trade;
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
   const wins = trades.filter((item) => tradePnl(item) > 0).length;
@@ -131,9 +136,8 @@ export function TradeJournal() {
 
   const onSnapshot = useCallback((snapshot: HTMLCanvasElement) => {
     setShareBlob(null);
-    const current = trades.find((item) => item.id === selectedId);
-    if (current) void buildShareCard(snapshot, current).then(setShareBlob).catch(() => setShareBlob(null));
-  }, [selectedId, trades]);
+    void buildShareCard(snapshot, tradeRef.current).then(setShareBlob).catch(() => setShareBlob(null));
+  }, []);
 
   const shareCard = async () => {
     if (!shareBlob) return;
@@ -215,7 +219,7 @@ export function TradeJournal() {
 
         <div className="chart-card specular-card">
           <div className="chart-toolbar"><div className="timeframes">{timeframes.map((value) => <button key={value} className={value === timeframe ? "active" : ""} onClick={() => { setTimeframe(value); setShareBlob(null); }}>{value}</button>)}</div><button className="fit-button" onClick={() => document.querySelector(".chart-host")?.dispatchEvent(new Event("mogmine-fit"))}>⌖ Fit</button></div>
-          <TradeChart trade={trade} timeframe={timeframe} onSnapshot={onSnapshot} />
+          <TradeChart trade={chartTrade} timeframe={timeframe} onSnapshot={onSnapshot} />
           <div className="chart-source">{trade.yahoo_ticker} · Demo fixture · {timeframe} <span>Trade locked in view</span></div>
           <div className="levels"><div><small>ENTRY</small><b>{price(trade.entry_price)}</b></div><div><small>EXIT</small><b>{price(trade.exit_price)}</b></div><div><small>STOP</small><b className={!trade.stop_loss_price ? "empty" : ""}>{trade.stop_loss_price ? price(trade.stop_loss_price) : "Not recorded"}</b></div><div><small>TARGET</small><b className={!trade.planned_target_price ? "empty" : ""}>{trade.planned_target_price ? price(trade.planned_target_price) : "Not recorded"}</b></div></div>
         </div>
