@@ -1,0 +1,19 @@
+{
+  "schema": "mogmine.trade.v1",
+  "doc": "docs/15-trade-document-and-render-grammar.md",
+  "id": "ex-be",
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "revision": 1,
+  "instrument": { "symbol": "MES", "contract": null },
+  "side": "long",
+  "source": { "kind": "manual", "provider": null, "imported_at": null },
+  "is_sample": true,
+  "events": [
+    { "seq": 1, "t": "2026-11-12T15:34:00Z", "type": "plan", "basis": "stated", "qty": 2,
+      "entry": { "order": "market", "price": 7600.00 }, "stop": 7595.00,
+      "targets": [ { "key": "t1", "price": 7610.00, "qty": 2 } ] },
+    { "seq": 2, "t": "2026-11-12T15:34:00Z", "type": "fill", "basis": "stated", "role": "entry", "qty": 2, "price": 7600.00 },
+    { "seq": 3, "t": "2026-11-12T15:44:00Z", "type": "modify", "basis": "stated", "order": "stop", "price": 7600.00 },
+    { "seq": 4, "t": "2026-11-12T15:49:00Z", "type": "fill", "basis": "stated", "role": "exit", "qty": 2, "price": 7600.00, "reason": "stop" }
+  ]
+}

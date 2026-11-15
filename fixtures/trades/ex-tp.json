@@ -1,0 +1,22 @@
+{
+  "schema": "mogmine.trade.v1",
+  "doc": "docs/15-trade-document-and-render-grammar.md",
+  "id": "ex-tp",
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "revision": 1,
+  "instrument": { "symbol": "MES", "contract": null },
+  "side": "long",
+  "source": { "kind": "broker", "provider": "topstepx", "imported_at": null },
+  "is_sample": true,
+  "events": [
+    { "seq": 1, "t": "2026-11-12T15:31:05Z", "type": "plan", "basis": "stated", "qty": 2,
+      "entry": { "order": "limit", "price": 7600.00 }, "stop": 7595.00,
+      "targets": [ { "key": "t1", "price": 7610.00, "qty": 2 } ] },
+    { "seq": 2, "t": "2026-11-12T15:31:10Z", "type": "order", "basis": "broker", "order": "o1", "role": "entry", "kind": "limit", "qty": 2, "price": 7600.00 },
+    { "seq": 3, "t": "2026-11-12T15:34:42Z", "type": "fill", "basis": "broker", "order": "o1", "role": "entry", "qty": 2, "price": 7600.00 },
+    { "seq": 4, "t": "2026-11-12T15:34:42Z", "type": "order", "basis": "broker", "order": "o2", "role": "stop", "kind": "stop", "qty": 2, "price": 7595.00 },
+    { "seq": 5, "t": "2026-11-12T15:34:42Z", "type": "order", "basis": "broker", "order": "o3", "role": "target", "kind": "limit", "qty": 2, "price": 7610.00, "target": "t1" },
+    { "seq": 6, "t": "2026-11-12T15:52:18Z", "type": "fill", "basis": "broker", "order": "o3", "role": "exit", "qty": 2, "price": 7610.00, "reason": "target" },
+    { "seq": 7, "t": "2026-11-12T15:52:18Z", "type": "cancel", "basis": "broker", "order": "o2", "reason": "oco" }
+  ]
+}
