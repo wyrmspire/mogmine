@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
+import { TradeCardSheet } from "./TradeCardSheet";
 import { TradeChart } from "./TradeChart";
 import type { TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
@@ -13,7 +14,7 @@ import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR
 import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
-import { buildShareCard, shareCardFileName } from "@/lib/shareCard";
+import { buildShareCard } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -61,11 +62,14 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     return fromUrl && TIMEFRAMES.includes(fromUrl) ? fromUrl : defaultTimeframe(holdSeconds(trade));
   });
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
+  const [cardOpen, setCardOpen] = useState(false);
+  const [cardPrivacy, setCardPrivacy] = useState(prefs.shield);
   const [fitted, setFitted] = useState(true);
   const [xray, setXray] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const candles = useCandles(trade.id);
   const chartRef = useRef<TradeChartHandle>(null);
+  const cardBuild = useRef(0);
   const readoutRef = useRef<HTMLSpanElement>(null);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -80,8 +84,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   // A timeframe finer than what was captured cannot be drawn; show the best available one and say so (B-11).
   const base = candles?.baseTimeframe ?? "1m";
   const timeframe = TIMEFRAME_MINUTES[chosen] < TIMEFRAME_MINUTES[base] ? base : chosen;
+  const renderPrivacy = cardOpen ? cardPrivacy : prefs.shield;
   const setTimeframe = (value: Timeframe) => {
     setChosen(value);
+    cardBuild.current += 1;
     setShareBlob(null);
     window.history.replaceState(null, "", `${pathname}?tf=${value}`);
   };
@@ -90,23 +96,33 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const onRendered = useCallback(() => {
     const snapshot = chartRef.current?.screenshot();
-    if (snapshot) void buildShareCard(snapshot, trade, zone).then(setShareBlob).catch(() => setShareBlob(null));
-  }, [trade, zone]);
+    if (!snapshot) return;
+    const build = ++cardBuild.current;
+    setShareBlob(null);
+    void buildShareCard(snapshot, trade, zone, renderPrivacy)
+      .then((blob) => { if (cardBuild.current === build) setShareBlob(blob); })
+      .catch(() => { if (cardBuild.current === build) setShareBlob(null); });
+  }, [renderPrivacy, trade, zone]);
 
-  const shareCard = useCallback(async () => {
+  const openCard = useCallback(() => {
     if (!shareBlob) return;
-    const file = new File([shareBlob], shareCardFileName(trade), { type: "image/png" });
-    try {
-      if (navigator.share && navigator.canShare?.({ files: [file] })) await navigator.share({ title: `${trade.symbol} trade review`, files: [file] });
-      else {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(shareBlob);
-        link.download = file.name;
-        link.click();
-        showToast("Trade card downloaded");
-      }
-    } catch (error) { if ((error as DOMException).name !== "AbortError") showToast("Share failed"); }
-  }, [shareBlob, trade]);
+    setCardPrivacy(prefs.shield);
+    setCardOpen(true);
+  }, [prefs.shield, shareBlob]);
+
+  const closeCard = useCallback(() => {
+    if (cardPrivacy !== prefs.shield) {
+      cardBuild.current += 1;
+      setShareBlob(null);
+    }
+    setCardOpen(false);
+  }, [cardPrivacy, prefs.shield]);
+
+  const changeCardPrivacy = useCallback((privacy: boolean) => {
+    cardBuild.current += 1;
+    setShareBlob(null);
+    setCardPrivacy(privacy);
+  }, []);
 
   // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card. X (hold for X-Ray) lives in the chart.
   useEffect(() => {
@@ -119,12 +135,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       if (key === "j") go(next);
       else if (key === "k") go(previous);
       else if (key === "f") chartRef.current?.fit();
-      else if (key === "c") void shareCard();
+      else if (key === "c") openCard();
       else if (key === "n") { event.preventDefault(); document.getElementById("review-note")?.focus(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, next, previous, shareCard]);
+  }, [go, next, openCard, previous]);
 
   // Trade-to-trade swipe lives on the header strip only, never on the chart (UX-40).
   const onSwipeEnd = (event: React.PointerEvent) => {
@@ -176,7 +192,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
   const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
 
-  return (
+  return <>
     <div className="detail-layout">
       <aside className="detail-rail" aria-label={`Trades: ${listLabel}`}>
         <h2>{listLabel}</h2>
@@ -215,7 +231,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
           <div className="chart-frame">
             {ready ? (
-              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={prefs.shield} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} />
+              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} />
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
             )}
@@ -246,7 +262,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
 
           <div className="detail-actions">
-            <button type="button" className="btn-primary" disabled={!shareBlob} onClick={shareCard}>{shareBlob ? "Share Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
+            <button type="button" className="btn-primary" disabled={!shareBlob} onClick={openCard}>{shareBlob ? "Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
           </div>
         </>}
 
@@ -272,5 +288,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         {!trade.is_sample && <button type="button" className="btn-danger-ghost" onClick={removeThis}>Remove this trade</button>}
       </aside>
     </div>
-  );
+    {cardOpen && <TradeCardSheet trade={trade} blob={shareBlob} privacy={cardPrivacy} onPrivacyChange={changeCardPrivacy} onClose={closeCard} />}
+  </>;
 }
