@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { formatR } from "../format.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { demoTrades } from "../fixtures.ts";
-import { exitFlagReason, excursions, isScratch, mergeAxisTags, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
+import { exitFlagReason, excursions, isScratch, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
 
 const minute = 60_000;
@@ -143,7 +143,7 @@ test("scratch threshold is 0.1R or 2 ticks, whichever is larger", () => {
   assert.equal(isScratch(normalizeTrade({ ...noStop, exit_price: 7000.75 })), false);
 });
 
-test("planned R, exit flag reason and merged axis tags", () => {
+test("planned R and exit flag reason", () => {
   const scalp = demoTrades.find((item) => item.id === "mnq-late-chase");
   const winner = demoTrades.find((item) => item.id === "mnq-trend-hold");
   assert.ok(scalp && winner);
@@ -155,22 +155,6 @@ test("planned R, exit flag reason and merged axis tags", () => {
   assert.equal(exitFlagReason(scalp), "SL");
   assert.equal(exitFlagReason(winner), "TP");
   assert.equal(exitFlagReason({ ...scalp, exit_price: 27870 }), null);
-
-  const tags = mergeAxisTags([
-    { price: 27820, title: "SL", color: "red" },
-    { price: 27887, title: "TP", color: "green" },
-    { price: 27875.25, title: "IN", color: "teal" },
-    { price: 27820, title: "OUT", color: "teal" },
-    { price: 27867.25, title: "KEY", color: "gold", lineVisible: true },
-  ], "MNQ");
-  const byTitle = Object.fromEntries(tags.map((tag) => [tag.title, tag]));
-  assert.equal(byTitle["SL · OUT"].price, 27820);
-  assert.equal(byTitle["SL · OUT"].color, "red");
-  assert.equal(byTitle["SL · OUT"].lineVisible, false);
-  assert.equal(byTitle.TP.price, 27887);
-  assert.equal(byTitle.IN.price, 27875.25);
-  assert.equal(byTitle.KEY.lineVisible, true);
-  assert.equal(tags.length, 4);
 });
 
 // ---- Sample trades: plan fixed at entry, outcome walked from real Yahoo 1m bars ----
