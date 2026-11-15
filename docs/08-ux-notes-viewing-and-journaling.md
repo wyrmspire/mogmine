@@ -88,6 +88,7 @@ Every screen is specified for more than the happy path. If a state is not in thi
 | A timeframe was never captured (B-11) | The best available timeframe, with a line: "1m data was not captured for this trade — showing 15m". |
 | No candles at all | No chart area, generated candles, price ladder or placeholder graphic. The trade header, details and notes remain usable. |
 | Chart data may not line up (B-12) | A small amber chip: "Candles are from the ES continuous contract. Your fills may sit slightly off the bars." |
+| Planned SL/TP passed before a real trade's exit | A short neutral fact below the chart. Never change the recorded trade. A passed stop links to issue #24 for stop-move recording. |
 | No stop recorded | R shows `—R` with an **Add stop** affordance. Never `0.0R`. |
 | No planned target recorded | Target shows “No target set”. No TP zone is invented. |
 | MAE/MFE estimated (B-33) | Values prefixed with `≈`. |

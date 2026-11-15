@@ -6,6 +6,7 @@ import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR
 import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
 import { demoTrades } from "../fixtures.ts";
+import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
 import { MIN_FITTED_BARS, adherence, aggregateCandles, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
@@ -111,14 +112,14 @@ test("coarser timeframes show wider clock-time context", () => {
 test("all ten sample trades have deterministic fitted-window goldens", () => {
   const expected: Record<string, { timeframe: string; share: number }> = {
     "mes-opening-scalp": { timeframe: "1m", share: 2 / 30 },
-    "mnq-trend-hold": { timeframe: "5m", share: 0.5 },
-    "mes-failed-reclaim": { timeframe: "1m", share: 0.5 },
-    "mes-orb-fakeout": { timeframe: "1m", share: 7 / 30 },
+    "mnq-trend-hold": { timeframe: "5m", share: 14 / 30 },
+    "mes-failed-reclaim": { timeframe: "1m", share: 14 / 30 },
+    "mes-orb-fakeout": { timeframe: "1m", share: 2 / 30 },
     "mnq-vwap-reclaim": { timeframe: "1m", share: 0.5 },
     "mes-lunch-chop": { timeframe: "1m", share: 0.5 },
     "mnq-breakdown-scalp": { timeframe: "1m", share: 5 / 30 },
-    "mes-premarket-reversal": { timeframe: "1m", share: 0.5 },
-    "mnq-late-chase": { timeframe: "1m", share: 13 / 30 },
+    "mes-premarket-reversal": { timeframe: "5m", share: 10.8 / 30 },
+    "mnq-late-chase": { timeframe: "1m", share: 10 / 30 },
     "mes-afternoon-hold": { timeframe: "5m", share: 0.5 },
   };
   assert.equal(demoTrades.length, 10);
@@ -139,6 +140,51 @@ test("chart autoscale includes candles, planned stop, planned target and actual 
   assert.deepEqual(includeInPriceRange({ minValue: 100, maxValue: 110 }, [104, 116, 96, 114]), { minValue: 96, maxValue: 116 });
   assert.deepEqual(includeInPriceRange(null, [104, 116, 96, 114]), { minValue: 96, maxValue: 116 });
   assert.deepEqual(includeInPriceRange({ minValue: 100, maxValue: 110 }, [null, undefined, Number.NaN]), { minValue: 100, maxValue: 110 });
+});
+
+test("bar validator reports crossed plans and an exit outside its bar without changing the trade", () => {
+  const minute = 60_000;
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const candles: Candle[] = [
+    { time: start, open: 100, high: 102, low: 99, close: 101, volume: 1 },
+    { time: start + minute, open: 101, high: 111, low: 94, close: 105, volume: 1 },
+    { time: start + 2 * minute, open: 105, high: 108, low: 103, close: 106, volume: 1 },
+    { time: start + 3 * minute, open: 106, high: 107, low: 104, close: 105, volume: 1 },
+  ];
+  const trade = normalizeTrade({
+    id: "bar-check", symbol: "MES", direction: "LONG",
+    entry_time: new Date(start).toISOString(), exit_time: new Date(start + 3 * minute).toISOString(),
+    entry_price: 100, exit_price: 108, stop_loss_price: 95, planned_target_price: 110,
+  });
+  const before = structuredClone(trade);
+  assert.deepEqual(validateTradeAgainstBars(trade, candles), [
+    { code: "stop_crossed_before_exit", barTime: start + minute, price: 95 },
+    { code: "target_crossed_before_exit", barTime: start + minute, price: 110 },
+    { code: "exit_outside_bar", barTime: start + 3 * minute, price: 108 },
+  ]);
+  assert.deepEqual(trade, before);
+});
+
+test("bar validator handles shorts and does not infer order inside the exit bar", () => {
+  const minute = 60_000;
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const candles: Candle[] = [
+    { time: start, open: 100, high: 101, low: 99, close: 100, volume: 1 },
+    { time: start + minute, open: 100, high: 106, low: 89, close: 94, volume: 1 },
+    { time: start + 2 * minute, open: 94, high: 95, low: 88, close: 90, volume: 1 },
+  ];
+  const exitsAtTarget = normalizeTrade({
+    id: "short-target", symbol: "MNQ", direction: "SHORT",
+    entry_time: new Date(start).toISOString(), exit_time: new Date(start + minute).toISOString(),
+    entry_price: 100, exit_price: 90, stop_loss_price: 105, planned_target_price: 90,
+  });
+  assert.deepEqual(validateTradeAgainstBars(exitsAtTarget, candles), []);
+
+  const exitsLaterAndWorse = { ...exitsAtTarget, exit_time: new Date(start + 2 * minute).toISOString(), exit_price: 94 };
+  assert.deepEqual(validateTradeAgainstBars(exitsLaterAndWorse, candles).map((issue) => issue.code), [
+    "stop_crossed_before_exit",
+    "target_crossed_before_exit",
+  ]);
 });
 
 test("formatting follows docs/08 §13", () => {

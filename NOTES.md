@@ -36,7 +36,7 @@ Claim a lane before starting. Clear the claim when you stop.
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
 | Core math | — | | |
-| Chart | — | | |
+| Chart | Codex | 2026-11-15 | Issue #29 sample/bar coherence and exit validation |
 | App shell and notes | — | | |
 | Data | — | | |
 | Market data | — | | |

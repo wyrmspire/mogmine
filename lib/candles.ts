@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { idbGet, idbSet } from "./idb.ts";
 import { candleSignature, getTrade, updateTrade } from "./store.ts";
-import { buildSparkline, snapToTick } from "./trades.ts";
+import { buildSparkline } from "./trades.ts";
 import type { Candle, CandleSource, Timeframe, TradeRecord } from "./trades.ts";
 
 export interface CandleEntry {
@@ -36,28 +36,9 @@ function put(id: string, entry: CandleEntry) {
   listeners.forEach((listener) => listener());
 }
 
-function nearest(candles: Candle[], instant: number) {
-  return candles.reduce((best, candle) => Math.abs(candle.time - instant) < Math.abs(best.time - instant) ? candle : best, candles[0]);
-}
-
-/** Move a sample trade onto real candles: keep its shape, take its prices from the bars it sits on. */
-function repriceSample(trade: TradeRecord, candles: Candle[]): Partial<TradeRecord> {
-  const entryPrice = snapToTick(nearest(candles, Date.parse(trade.entry_time)).close, trade.symbol);
-  const shift = entryPrice - trade.entry_price;
-  const move = (value: number | null) => value == null ? null : snapToTick(value + shift, trade.symbol);
-  return {
-    entry_price: entryPrice,
-    exit_price: snapToTick(nearest(candles, Date.parse(trade.exit_time)).close, trade.symbol),
-    stop_loss_price: move(trade.stop_loss_price),
-    planned_target_price: move(trade.planned_target_price),
-    key_level_price: move(trade.key_level_price),
-  };
-}
-
 function adopt(trade: TradeRecord, stored: StoredCandles) {
   const live = getTrade(trade.id) ?? trade;
   const patch: Partial<TradeRecord> = { candle_source: stored.source };
-  if (live.is_sample && live.candle_source !== "Yahoo Finance") Object.assign(patch, repriceSample(live, stored.candles));
   patch.sparkline = buildSparkline({ ...live, ...patch }, stored.candles);
   updateTrade(trade.id, patch);
   put(trade.id, { status: "ready", candles: stored.candles, source: stored.source, baseTimeframe: stored.baseTimeframe, fetching: false, signature: stored.signature });

@@ -17,6 +17,7 @@ import { buildShareCard } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
+import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
@@ -161,6 +162,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     const barAt = (iso: string) => { const time = Math.floor(Date.parse(iso) / barMs) * barMs; return candles.candles.find((bar) => bar.time === time); };
     return !fillInsideBar(trade.entry_price, barAt(trade.entry_time), trade.symbol) || !fillInsideBar(trade.exit_price, barAt(trade.exit_time), trade.symbol);
   }, [ready, candles, trade, baseMinutes]);
+  const barIssues = useMemo(() => {
+    if (!ready || trade.is_sample) return [];
+    return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
+  }, [ready, candles, trade, baseMinutes]);
   const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
 
   return (
@@ -212,6 +217,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
           {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
           {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
+          {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
+          {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
+          {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
           <div className="levels">
             <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
             <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
