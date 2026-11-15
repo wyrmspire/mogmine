@@ -59,6 +59,7 @@ function sanitize(raw: Partial<Prefs>): Prefs {
 }
 
 function apply() {
+  if (typeof document === "undefined") return;
   const root = document.documentElement;
   root.dataset.goldPreset = prefs.goldPreset;
   root.dataset.palette = prefs.palette;
