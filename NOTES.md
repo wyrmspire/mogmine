@@ -11,7 +11,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ## Current state (2026-11-15)
 
-- **Branch `feat/phase4-chart-windows` (local, not pushed) holds UI Phase 4 and the #28 follow-up**: duration-fitted chart windows, a 30-bar floor, duration-derived timeframes, TP/SL/exit-aware price autoscale, and no generated candle fallback. `main` and the deployed site are unchanged.
+- **`main` holds UI Phases 1–4, accessibility (#19), Shield mode (#15), backup (#18), and the honest-box cleanup (#30, #31)**: duration-fitted chart windows, a 45-bar floor (`MIN_FITTED_BARS = 45`), duration-derived timeframes, TP/SL/exit autoscale, fill-only position boxes with path lines and KEY levels, no on-chart P&L pill or axis tags, and real Yahoo Finance market bars only.
 - **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use real Yahoo Finance candles only; without market bars they show no chart.
 - **Which build is where.** `mogmine.vercel.app` served a bundle containing `America/Chicago` (`lib/time.ts`) at 21:28 CT on 2026-11-14, so it is serving `main` at or after PR #2 (CT). The Vercel preview for branch `app/first-trade-review` (`aaed7af`) predates PR #2 and still shows ET. Vercel reports successful builds for both heads. Which branch Vercel calls Production was not read from Vercel's settings: unverified.
 - **Phone behaviour is not verified.** Builds and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a phone (`AC-11`).
@@ -20,7 +20,6 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - Open decisions in [DECISIONS.md](DECISIONS.md) include `OD-24`–`OD-27` from the UI branches; `OD-27` records the mathematical conflict between the bar floor (now 45 bars, owner 2026-11-15; was 30) and a 35% minimum box width for very short fixtures. `OD-15` (`MES` → `MES=F`, `MNQ` → `MNQ=F`, no mini fallback, levels match chart instrument) is Decided and implemented. `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals; they do not expand approved scope.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
-- The development machine had neither Node nor Python installed on 2026-11-14. Node is needed before anything can be scaffolded.
 
 ## Next up
 
@@ -39,15 +38,22 @@ Claim a lane before starting. Clear the claim when you stop.
 
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
-| Core math | — | | |
-| Chart | Codex | 2026-11-15 | Issue #29 sample/bar coherence and exit validation |
-| App shell and notes | — | | |
+| Core math | Antigravity | 2026-11-15 | Issues #53 and #54: dead helper cleanup, classify/review honesty |
+| Chart | — | | |
+| App shell and notes | Antigravity | 2026-11-15 | Issues #53 and #54: dead helper cleanup, classify/review honesty |
 | Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-15 — agent (Antigravity) — Core math + App shell and notes, branch `feat/53-54-cleanup-review-status`
+Did:      Issues #53 and #54: removed dead mergeAxisTags, AxisTag, axis title helpers and tests; removed orphaned .style-pill CSS; committed package-lock.json; fixed classifyTrade to compare raw elapsed ms (<15m scalp boundary) with tests; updated deriveReviewStatus to count pre_trade_thesis, management_notes, post_exit_notes, checklist_state, and take_again as review evidence; tightened stale bullets in NOTES.md.
+Files:    `lib/trades.ts`, `app/globals.css`, `lib/__tests__/core.test.ts`, `lib/__tests__/honest-box.test.ts`, `NOTES.md`, `package-lock.json`.
+Verified: `npm test` (33/33 pass), `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing PostCSS warning), `npm run build` (8/8 static pages).
+Left:     Ready for review; PR opened to main referencing #53 and #54.
+Watch:    holdSeconds() display rounding is untouched; only classifyTrade compares raw milliseconds.
 
 ### 2026-11-15 — agent (Codex) — Chart, branch `feat/phase4-chart-windows`
 Did:      Fixed #28: series + primitive autoscale include planned TP/SL and exit; Fit restores price autoscale; every sample has a target; generated sample candles/sparklines are removed; missing data renders no chart.

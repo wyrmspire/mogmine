@@ -169,9 +169,9 @@ export function holdSeconds(trade: Pick<TradeRecord, "entry_time" | "exit_time">
 }
 
 export function classifyTrade(entry: string, exit: string): TradeStyle {
-  const seconds = Math.max(1, Math.round((Date.parse(exit) - Date.parse(entry)) / 1000));
-  if (seconds < 15 * 60) return "scalp";
-  if (seconds <= 2 * 60 * 60) return "session_90m";
+  const elapsedMs = Date.parse(exit) - Date.parse(entry);
+  if (elapsedMs < 15 * 60 * 1000) return "scalp";
+  if (elapsedMs <= 2 * 60 * 60 * 1000) return "session_90m";
   return "investment";
 }
 
@@ -369,49 +369,6 @@ export function exitFlagReason(trade: Pick<TradeRecord, "symbol" | "exit_price" 
   return null;
 }
 
-export interface AxisTag {
-  price: number;
-  title: string;
-  color: string;
-  lineVisible: boolean;
-}
-
-const AXIS_TITLE_ORDER = ["SL", "TP", "IN", "OUT", "KEY"];
-
-function axisTitleRank(title: string) {
-  const index = AXIS_TITLE_ORDER.indexOf(title);
-  return index === -1 ? AXIS_TITLE_ORDER.length : index;
-}
-
-/** Merge axis tags that share a price (`SL · OUT`). */
-export function mergeAxisTags(
-  tags: Array<{ price: number | null | undefined; title: string; color: string; lineVisible?: boolean }>,
-  symbol: string,
-): AxisTag[] {
-  const groups = new Map<number, AxisTag & { rank: number }>();
-  for (const tag of tags) {
-    if (tag.price == null || !Number.isFinite(tag.price)) continue;
-    const key = toTicks(tag.price, symbol);
-    const rank = axisTitleRank(tag.title);
-    const existing = groups.get(key);
-    if (!existing) {
-      groups.set(key, { price: tag.price, title: tag.title, color: tag.color, lineVisible: !!tag.lineVisible, rank });
-      continue;
-    }
-    const titles = existing.title.split(" · ");
-    if (!titles.includes(tag.title)) titles.push(tag.title);
-    titles.sort((a, b) => axisTitleRank(a) - axisTitleRank(b));
-    existing.title = titles.join(" · ");
-    existing.lineVisible = existing.lineVisible || !!tag.lineVisible;
-    if (rank < existing.rank) {
-      existing.price = tag.price;
-      existing.color = tag.color;
-      existing.rank = rank;
-    }
-  }
-  return [...groups.values()].map(({ price, title, color, lineVisible }) => ({ price, title, color, lineVisible }));
-}
-
 /** ~`points` closes from just before the entry to just after the exit. */
 export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_time">, candles: Candle[], points = 40) {
   const entry = Date.parse(trade.entry_time);
@@ -442,10 +399,35 @@ export function adherence(trade: Pick<TradeRecord, "checklist_state">) {
   return { followed, total, ratio: followed / total };
 }
 
-/** `new`: nothing captured. `tagged`: a playbook, a tag or a note. `reviewed` is only ever set by the trader. */
-export function deriveReviewStatus(trade: Pick<TradeRecord, "review_status" | "playbook_id" | "quick_tags" | "note">): ReviewStatus {
+/** `new`: nothing captured. `tagged`: a playbook, tags, notes, checklist or blind review. `reviewed` is set by the trader. */
+export function deriveReviewStatus(
+  trade: Pick<TradeRecord, "review_status"> &
+    Partial<
+      Pick<
+        TradeRecord,
+        | "playbook_id"
+        | "quick_tags"
+        | "note"
+        | "pre_trade_thesis"
+        | "management_notes"
+        | "post_exit_notes"
+        | "checklist_state"
+        | "take_again"
+      >
+    >,
+): ReviewStatus {
   if (trade.review_status === "reviewed") return "reviewed";
-  return trade.playbook_id || trade.quick_tags.length || trade.note.trim() ? "tagged" : "new";
+  const hasEvidence = Boolean(
+    trade.playbook_id ||
+      trade.quick_tags?.length ||
+      trade.note?.trim() ||
+      trade.pre_trade_thesis?.trim() ||
+      trade.management_notes?.trim() ||
+      trade.post_exit_notes?.trim() ||
+      trade.checklist_state?.length ||
+      trade.take_again != null,
+  );
+  return hasEvidence ? "tagged" : "new";
 }
 
 export function candleCacheKey(trade: Pick<TradeRecord, "id" | "symbol"> & Partial<Pick<TradeRecord, "yahoo_ticker">>) {

@@ -52,9 +52,14 @@ test("R is null without a stop, never zero", () => {
   assert.equal(formatR(rMultiple({ ...withStop, exit_price: 6841.25 })), "−1.0R");
 });
 
-test("classification compares seconds, not rounded minutes", () => {
+test("classification compares raw elapsed milliseconds at thresholds", () => {
+  // 14m 59.600s is a scalp (< 15m threshold in raw milliseconds, #54)
+  assert.equal(classifyTrade("2026-11-10T15:00:00.000Z", "2026-11-10T15:14:59.600Z"), "scalp");
   assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T15:14:40Z"), "scalp");
-  assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T15:15:00Z"), "session_90m");
+  // Exactly 15m is session_90m
+  assert.equal(classifyTrade("2026-11-10T15:00:00.000Z", "2026-11-10T15:15:00.000Z"), "session_90m");
+  assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T17:00:00.000Z"), "session_90m");
+  assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T17:00:00.001Z"), "investment");
   assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T17:00:01Z"), "investment");
 });
 
@@ -257,6 +262,20 @@ test("review status and adherence", () => {
   assert.equal(trade.review_status, "new");
   assert.equal(deriveReviewStatus({ ...trade, quick_tags: ["Level Sweep"] }), "tagged");
   assert.equal(deriveReviewStatus({ ...trade, review_status: "reviewed" }), "reviewed");
+
+  // Deeper notes, checklist, and blind review count as review evidence (#54)
+  assert.equal(deriveReviewStatus({ ...trade, post_exit_notes: "Clean exit at target." }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, management_notes: "Trailing stop behind 1m swing." }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, pre_trade_thesis: "Premarket high reclaim." }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, checklist_state: [{ id: "r1", label: "Rule 1", checked: false }] }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, take_again: "yes" }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, take_again: "pass" }), "tagged");
+
+  // Trade with only post_exit_notes is not "new"; trade with none of those fields is "new"
+  assert.equal(deriveReviewStatus({ review_status: "new", post_exit_notes: "Detailed review notes." }), "tagged");
+  assert.equal(deriveReviewStatus({ review_status: "new" }), "new");
+  assert.equal(deriveReviewStatus(trade), "new");
+
   assert.equal(adherence(trade), null);
   assert.deepEqual(adherence({ checklist_state: [{ id: "a", label: "a", checked: true }, { id: "b", label: "b", checked: false }] }), { followed: 1, total: 2, ratio: 0.5 });
 });

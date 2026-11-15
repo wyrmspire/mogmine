@@ -276,7 +276,6 @@ h1, h2, h3, p { margin: 0; }
 .trade-header .head-main { min-width: 0; }
 .title-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .title-line h1 { font-size: 1.4375rem; line-height: 1; letter-spacing: -0.04em; }
-.style-pill { font-size: 0.5625rem; font-weight: 900; letter-spacing: 0.07em; padding: 3px 6px; border-radius: 6px; color: var(--gold-light); background: color-mix(in srgb, var(--gold-mid) 12%, transparent); text-transform: uppercase; }
 .trade-header .when { color: var(--text-muted); font: 500 0.6875rem/1.4 var(--font-mono); font-variant-numeric: tabular-nums; margin-top: 6px; }
 .headline-result { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; padding-right: 4px; }
 .headline-result b { display: block; font-size: 1.1875rem; line-height: 1.15; white-space: nowrap; }
