@@ -46,7 +46,7 @@ The owner's chart conventions: `15m` for the markup, `1m` for trade review, exte
 
 - **LV-01 — Holidays and short days use the exchange calendar** (B-21). A holiday with no RTH session has no `rth_*` levels, and the engine must not fail on it.
 - **LV-02 — Yahoo `1d` bars are labelled by the Globex start date.** The `MES=F` `1d` bar dated 2026-11-10 is the session that settles on Wed 2026-11-11. Build daily highs and lows from archived intraday bars by `session_date`, or shift the Yahoo label by one session. Getting this wrong puts the ADR window one day early. Globex sessions start and end on the hour, so session highs and lows from Yahoo's `1h` backfill (730 days, [10 §2](10-yahoo-first-build-plan.md#2-what-yahoo-serves-measured-2026-11-14)) are exact. ADR can therefore be computed on the archive's first day.
-- **LV-03 — Display zone is a preference, and the owner's is `America/Chicago`** (UX-86). TradingView's fixed `UTC-6` setting matches CT only while Standard Time is in effect, so the app must never copy it. The M1 "ET axis" in [10 §7](10-yahoo-first-build-plan.md#build-order) is the default. The owner switches to CT.
+- **LV-03 — Display zone is a preference, and the owner's is `America/Chicago`** (UX-86). TradingView's fixed `UTC-6` setting matches CT only while Standard Time is in effect, so the app must never copy it. The M1 "ET axis" in [10 §7](10-yahoo-first-build-plan.md#build-order) is the product default. Until the preference exists the app displays CT for the owner (`lib/time.ts`, 2026-11-14); session math stays in `America/New_York`.
 
 ---
 

@@ -3,7 +3,7 @@
 Interface ideas that go past the current notes. Each one changes how the app is used, not how it is decorated. They build on [08 — UX Notes](08-ux-notes-viewing-and-journaling.md), [11 — Mobile Workflows](11-product-workflows-and-api-context.md) and [12 — Levels, Zones & the Daily Markup](12-levels-zones-and-daily-markup.md), and they are shaped by how the owner trades: a daily markup of about 13 zones, a written plan, a few trades a day at about $250 risk, review on a `1m` chart.
 
 > [!NOTE]
-> **These are bets, not scope.** None is approved. `OD-14` and `OD-16` still control the first release. Thirteen documents exist and no screen does, so adopt at most three now (§9) and leave the rest written down. IDs (`BET-nn`) are stable.
+> **These are bets, not scope.** None is approved. `OD-14` and `OD-16` still control the first release. Thirteen documents exist and only the first demo screens do (PR #1), so adopt at most three now (§9) and leave the rest written down. IDs (`BET-nn`) are stable.
 
 ---
 

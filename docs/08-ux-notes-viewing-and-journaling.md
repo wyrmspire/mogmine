@@ -278,7 +278,7 @@ One formatting module. No component formats a number on its own.
 | Time on detail | With seconds and zone | `09:48:12 ET` |
 | Approximate values | Prefix | `≈ −1.25 pts` |
 
-- **UX-86 — Display time zone is a preference.** Exchange time (ET) is the default. A trader in Chicago or London can switch, and the zone label always shows.
+- **UX-86 — Display time zone is a preference.** Exchange time (ET) is the default. A trader in Chicago or London can switch, and the zone label always shows. Until `/tune` exists the app uses the owner's choice, `America/Chicago`, from one constant in `lib/time.ts` ([12 LV-03](12-levels-zones-and-daily-markup.md#2-sessions)).
 - **UX-87 — Session logic never uses the display zone.** Sessions are computed in `America/New_York` (B-20).
 
 ---

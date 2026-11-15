@@ -27,7 +27,7 @@ One place for what has been decided, what is still open, and where the specs dis
 
 ## 2. Open
 
-Raised by the 2026-11-14 reviews and product discussion. Evidence and detail are in [docs/09](docs/09-backend-risk-register.md) (`B-nn`), [docs/08](docs/08-ux-notes-viewing-and-journaling.md) (`UX-nn`), [docs/10](docs/10-yahoo-first-build-plan.md) and [docs/11](docs/11-product-workflows-and-api-context.md).
+Raised by the 2026-11-14 reviews and product discussion. Evidence and detail are in [docs/09](docs/09-backend-risk-register.md) (`B-nn`), [docs/08](docs/08-ux-notes-viewing-and-journaling.md) (`UX-nn`), [docs/10](docs/10-yahoo-first-build-plan.md), [docs/11](docs/11-product-workflows-and-api-context.md) and [docs/12](docs/12-levels-zones-and-daily-markup.md).
 
 | ID | Question | Recommendation | Interim rule | Changes |
 | :--- | :--- | :--- | :--- | :--- |

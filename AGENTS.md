@@ -38,6 +38,7 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 | What to build first, the candle archive, Yahoo's measured limits and response quirks, or getting trades without a broker account | [10 — Yahoo-First Build Plan](docs/10-yahoo-first-build-plan.md) |
 | Daily planning, unassigned capture, detail/full-chart controls, anchored comments, indicator definitions, or custom GPT/API context | [11 — Mobile Workflows, Chart Context & Assistant API](docs/11-product-workflows-and-api-context.md) (proposals `OD-17`–`OD-19`) |
 | Daily levels and zones, ADR, pivots, level colours and labels, risk-sized box defaults, planned/actual/archived box styles, missed moves | [12 — Levels, Zones & the Daily Markup](docs/12-levels-zones-and-daily-markup.md) (proposals `OD-20`–`OD-23`) |
+| Interface ideas beyond the current notes: Zone Ladder, day-as-unit feed, blind review, draw-the-trade entry, desk mode, execution diff | [13 — Bold UI Bets](docs/13-bold-ui-bets.md) (bets, not scope) |
 | A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
 | Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
