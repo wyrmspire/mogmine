@@ -1,6 +1,9 @@
-import { DEFAULT_OWNER_USER_ID, FUTURES_SPECS, TradeRecord, classifyTrade } from "./trades";
+import { buildSparkline, normalizeTrade } from "./trades.ts";
+import type { Candle, TradeRecord } from "./trades.ts";
+import { checklistFor } from "./playbooks.ts";
 
-type SeedTrade = Omit<TradeRecord, "trade_style" | "candles" | "user_id" | "yahoo_ticker" | "review_status">;
+type SeedTrade = Pick<TradeRecord, "id" | "symbol" | "direction" | "quantity" | "entry_time" | "exit_time" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price" | "key_level_price" | "note">
+  & { playbook_id?: string; quick_tags?: string[]; followed?: number };
 
 function hash(value: string) {
   let result = 2166136261;
@@ -19,7 +22,8 @@ function random(seed: number) {
   };
 }
 
-export function generateCandles(trade: Pick<TradeRecord, "id" | "symbol" | "entry_time" | "exit_time" | "entry_price" | "exit_price">) {
+/** Deterministic synthetic 1m candles around a trade. Only ever used for sample trades. */
+export function generateCandles(trade: Pick<TradeRecord, "id" | "symbol" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): Candle[] {
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
   const start = entry - 900 * 60_000;
@@ -49,15 +53,10 @@ export function generateCandles(trade: Pick<TradeRecord, "id" | "symbol" | "entr
   });
 }
 
-function makeTrade(seed: SeedTrade): TradeRecord {
-  const base = {
-    ...seed,
-    user_id: DEFAULT_OWNER_USER_ID,
-    yahoo_ticker: FUTURES_SPECS[seed.symbol]?.yahooTicker ?? seed.symbol,
-    trade_style: classifyTrade(seed.entry_time, seed.exit_time),
-    review_status: seed.note ? "tagged" as const : "new" as const,
-  };
-  return { ...base, candle_source: "Demo fixture" as const, candles: generateCandles(base) };
+function makeTrade({ followed, ...seed }: SeedTrade): TradeRecord {
+  const checklist = checklistFor(seed.playbook_id ?? null).map((item, index) => ({ ...item, checked: index < (followed ?? 0) }));
+  const trade = normalizeTrade({ ...seed, is_sample: true, candle_source: "Demo fixture", checklist_state: checklist });
+  return { ...trade, sparkline: buildSparkline(trade, generateCandles(trade)) };
 }
 
 export const demoTrades: TradeRecord[] = [
@@ -66,6 +65,7 @@ export const demoTrades: TradeRecord[] = [
     entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z",
     entry_price: 6844.25, exit_price: 6849, stop_loss_price: 6841.25,
     planned_target_price: 6850.25, key_level_price: 6839.5,
+    playbook_id: "orb-reclaim", quick_tags: ["Opening Drive", "A+ Patience"], followed: 4,
     note: "Opening pullback held above the first impulse. Took the reclaim with buyers stepping back in. Next time: enter on the candle close instead of anticipating it.",
   }),
   makeTrade({
@@ -73,6 +73,7 @@ export const demoTrades: TradeRecord[] = [
     entry_time: "2026-11-12T16:12:00.000Z", exit_time: "2026-11-12T17:42:00.000Z",
     entry_price: 25784, exit_price: 25714, stop_loss_price: 25811,
     planned_target_price: 25690, key_level_price: 25750,
+    playbook_id: "vwap-trend-push", quick_tags: ["Pushed w/ NQ", "Cut Early"], followed: 4,
     note: "Failed reclaim after the morning breakdown. Held through two pullbacks because lower highs stayed intact. I managed the stop well but took profit before the planned target.",
   }),
   makeTrade({
@@ -80,6 +81,7 @@ export const demoTrades: TradeRecord[] = [
     entry_time: "2026-11-13T15:51:00.000Z", exit_time: "2026-11-13T16:08:00.000Z",
     entry_price: 6827.5, exit_price: 6822.25, stop_loss_price: 6821.5,
     planned_target_price: null, key_level_price: 6832,
+    playbook_id: "orb-reclaim", quick_tags: ["Chased Entry"], followed: 2,
     note: "Bought a reclaim before it was confirmed while volume was fading. The level never held. Next time: wait for a close above 6832 and a successful retest.",
   }),
   makeTrade({
@@ -94,27 +96,29 @@ export const demoTrades: TradeRecord[] = [
     entry_time: "2026-11-12T15:47:00.000Z", exit_time: "2026-11-12T16:19:00.000Z",
     entry_price: 25736, exit_price: 25782, stop_loss_price: 25716,
     planned_target_price: 25800, key_level_price: 25740,
+    playbook_id: "vwap-trend-push", quick_tags: ["VWAP Hold"], followed: 4,
     note: "VWAP reclaimed after the flush and held on the retest. I followed the plan, but could have left a small runner after the first push.",
   }),
   makeTrade({
     id: "mes-lunch-chop", symbol: "MES", direction: "LONG", quantity: 2,
     entry_time: "2026-11-11T17:18:00.000Z", exit_time: "2026-11-11T17:42:00.000Z",
-    entry_price: 6819.75, exit_price: 6817.5, stop_loss_price: 6815.75,
+    entry_price: 6819.75, exit_price: 6817.5, stop_loss_price: null,
     planned_target_price: null, key_level_price: 6820,
-    note: "Tried to force a reclaim during thin lunch trade. Price never accepted above the level. Next time: skip the middle of the range when volume dries up.",
+    note: "",
   }),
   makeTrade({
     id: "mnq-breakdown-scalp", symbol: "MNQ", direction: "SHORT", quantity: 1,
     entry_time: "2026-11-11T16:03:00.000Z", exit_time: "2026-11-11T16:08:00.000Z",
     entry_price: 25692, exit_price: 25654, stop_loss_price: 25708,
     planned_target_price: 25648, key_level_price: 25680,
-    note: "Lower high formed under the broken support and sellers accelerated. Good entry, clean exit, no need to add after the move was already underway.",
+    note: "",
   }),
   makeTrade({
     id: "mes-premarket-reversal", symbol: "MES", direction: "LONG", quantity: 2,
     entry_time: "2026-11-10T14:51:00.000Z", exit_time: "2026-11-10T15:28:00.000Z",
     entry_price: 6831.5, exit_price: 6838.25, stop_loss_price: 6827.5,
     planned_target_price: 6841.5, key_level_price: 6830,
+    playbook_id: "onl-sweep-smt", quick_tags: ["Level Sweep", "SMT Divergence"], followed: 3,
     note: "Premarket low swept and immediately reclaimed. I reduced into the first resistance and kept risk controlled through the open.",
   }),
   makeTrade({
@@ -122,6 +126,7 @@ export const demoTrades: TradeRecord[] = [
     entry_time: "2026-11-09T16:26:00.000Z", exit_time: "2026-11-09T16:39:00.000Z",
     entry_price: 25588, exit_price: 25561, stop_loss_price: 25558,
     planned_target_price: null, key_level_price: 25580,
+    playbook_id: "no-setup", quick_tags: ["Chased Entry", "Revenge"],
     note: "Chased the third push after the clean entry was gone. The pullback was normal, but my location made it unmanageable. Next time: let it go.",
   }),
   makeTrade({

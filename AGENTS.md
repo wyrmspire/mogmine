@@ -39,6 +39,7 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 | Daily planning, unassigned capture, detail/full-chart controls, anchored comments, indicator definitions, or custom GPT/API context | [11 — Mobile Workflows, Chart Context & Assistant API](docs/11-product-workflows-and-api-context.md) (proposals `OD-17`–`OD-19`) |
 | Daily levels and zones, ADR, pivots, level colours and labels, risk-sized box defaults, planned/actual/archived box styles, missed moves | [12 — Levels, Zones & the Daily Markup](docs/12-levels-zones-and-daily-markup.md) (proposals `OD-20`–`OD-23`) |
 | Interface ideas beyond the current notes: Zone Ladder, day-as-unit feed, blind review, draw-the-trade entry, desk mode, execution diff | [13 — Bold UI Bets](docs/13-bold-ui-bets.md) (bets, not scope) |
+| The UI branch: what phases 1–3 built, what is proposed next, what waits for the owner | [14 — UI & Experience: Phased Plan](docs/14-ui-phased-plan.md) |
 | A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
 | Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |
 

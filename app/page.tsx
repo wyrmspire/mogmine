@@ -1,5 +1,5 @@
-import { TradeJournal } from "@/components/TradeJournal";
+import { TodayScreen } from "@/components/TodayScreen";
 
-export default function Home() {
-  return <TradeJournal />;
+export default function TodayPage() {
+  return <TodayScreen />;
 }

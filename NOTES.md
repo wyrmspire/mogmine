@@ -11,12 +11,13 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ## Current state (2026-11-15)
 
+- **Branch `ui/phased-improvements` (local, not pushed) holds UI phases 1–3.** Work is paused for the owner to approve [docs/14](docs/14-ui-phased-plan.md) before Phase 4. `main` and the deployed site are unchanged.
 - **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use Yahoo Finance 1m candles when available and deterministic fixture candles offline.
 - **Which build is where.** `mogmine.vercel.app` served a bundle containing `America/Chicago` (`lib/time.ts`) at 21:28 CT on 2026-11-14, so it is serving `main` at or after PR #2 (CT). The Vercel preview for branch `app/first-trade-review` (`aaed7af`) predates PR #2 and still shows ET. Vercel reports successful builds for both heads. Which branch Vercel calls Production was not read from Vercel's settings: unverified.
 - **Phone behaviour is not verified.** Builds and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08` (UX notes), `docs/09` (backend risk register), `docs/10` (Yahoo-first build plan), `docs/11` (mobile workflow and assistant API proposals), `docs/12` (levels, zones and the daily markup), `docs/13` (bold UI bets).
-- 23 entries under Open in [DECISIONS.md](DECISIONS.md); `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals; they do not expand approved scope.
+- 26 entries under Open in [DECISIONS.md](DECISIONS.md) (`OD-24`–`OD-26` come from the UI branch); `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals; they do not expand approved scope.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 - The development machine had neither Node nor Python installed on 2026-11-14. Node is needed before anything can be scaffolded.
@@ -39,14 +40,20 @@ Claim a lane before starting. Clear the claim when you stop.
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
 | Core math | — | | |
-| Chart | — | | |
-| App shell and notes | — | | |
+| Chart | agent (Claude Code) | 2026-11-14 | Paused on `ui/phased-improvements`, waiting for approval of docs/14 Phase 4 |
+| App shell and notes | agent (Claude Code) | 2026-11-14 | Same branch. Phases 1–3 committed locally |
 | Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-14 (night CT) — agent (Claude Code) — Chart + App shell and notes, branch `ui/phased-improvements`
+Did:      UI phases 1–3, three local commits (`c74bbae`, `685319b`, `5a9f8c6`): routes and a real Today/Feed on phones, device store without inline candles, Position Box rewrite and in-place timeframe switch, Pit Stop, checklist, review queue. Plan and open questions in `docs/14`; `OD-24`–`OD-26` opened.
+Verified: `npx tsc --noEmit` clean; `npm run lint` 0 errors, 1 old warning; `npm test` 10/10; `npm run build` passes. Headless Chrome at 390×844 and 1280×900: no overflow, no console errors; touch swipe on the chart scrolls the page. No real phone, no iOS, share sheet untested.
+Left:     Stopped on the owner's instruction. Phase 4 (chart window from each trade's duration, `OD-24`) is specified in docs/14 §3 and not started. Tune is a placeholder; the Trade Card is still the old one-button version. Specs not yet updated for the differences listed in docs/14 §7.
+Watch:    Known fault: short trades draw as tiny boxes because the window uses three fixed buckets (`fitPadding`). Nothing is pushed. Commits are authored "Claude Code" because the machine has no git identity. Old `v1`/`v2` localStorage is left in place on purpose.
 
 ### 2026-11-14 (late evening CT) — agent (Grok Bot) — M0/M1 acceptance from owner review
 Did:      Added `AC-01`–`AC-11` to `docs/10` §7 (M0: repeatable upserts, bounded backfill, coverage per symbol/session, retries and visible failure, recovery test; M1: per-trade coverage and refresh, gaps and incomplete candles, safe writes, gross P&L and tick validation, Trade Card follows the view, phone E2E). Linked them from the M0/M1 rows, `docs/09` (B-10, B-47, B-61, M0/M1 list) and `docs/08` (§4 state row, §16 checklist). Annotated the 2026-11-15 Codex entry.
