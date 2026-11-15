@@ -38,9 +38,9 @@ Claim a lane before starting. Clear the claim when you stop.
 
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
-| Core math | Antigravity | 2026-11-15 | Issues #53 and #54: dead helper cleanup, classify/review honesty |
+| Core math | — | | |
 | Chart | — | | |
-| App shell and notes | Antigravity | 2026-11-15 | Issues #53 and #54: dead helper cleanup, classify/review honesty |
+| App shell and notes | — | | |
 | Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |
@@ -59,6 +59,12 @@ Watch:    `DayStats.net` was renamed to `gross`. Callers must use the new field.
 Did:      Samples carry `fixture_version` (`DEMO_FIXTURE_VERSION = 1`) and `annotations_modified`. `updateTrade` sets the flag when an annotation value changes. `applyFixtureRefresh` takes an optional `previous` fixture and refreshes untouched default annotations, keeping edited ones. Open edge case: `OD-29`.
 Verified: `npm test` 57/57 (new `lib/__tests__/fixture-version.test.ts`), typecheck, build pass. Lint has one warning in `postcss.config.mjs`, unchanged from main.
 Left:     Lane claims not changed. Legacy samples whose default changed in an older build are kept until a snapshot is supplied (`OD-29`).
+
+### 2026-11-15 — agent (Antigravity) — Core math + Chart, branch `feat/batch3-calc-alignment`
+Did:      Issues #63 & #64: plannedR rejects wrong-side target and target at entry; tradeTicks returns null for invalid quantity; isScratch returns false when quantity is invalid or trade cannot be priced; alignTradeToBars / TradeChart preserves alignment kind and marks nearby (OD-28 cap kept) as approximate with quiet chart cue (softened fill, thinner/dotted path, tiny ≈).
+Files:    `lib/trades.ts`, `components/PositionBoxPrimitive.ts`, `components/TradeChart.tsx`, `lib/__tests__/validation.test.ts`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` (51/51 pass), `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning), `npm run build` (8/8 static pages).
+Left:     Ready for review; PR against main opened referencing #63 and #64; do-not-merge-without-Chris.
 
 ### 2026-11-15 — agent (Antigravity) — Core math + App shell and notes, branch `feat/53-54-cleanup-review-status`
 Did:      Issues #53 and #54: removed dead mergeAxisTags, AxisTag, axis title helpers and tests; removed orphaned .style-pill CSS; committed package-lock.json; fixed classifyTrade to compare raw elapsed ms (<15m scalp boundary) with tests; updated deriveReviewStatus to count pre_trade_thesis, management_notes, post_exit_notes, checklist_state, and take_again as review evidence; tightened stale bullets in NOTES.md.
