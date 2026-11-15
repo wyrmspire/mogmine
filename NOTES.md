@@ -48,6 +48,16 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — integration/batch4
+Did:      Draft integration of PRs #72 (after-the-exit), #73 (trade document spec, no-purple docs fix), #74 (Tune screen), and #75 (Trade Card sheet). Kept #71 (M0 archive) out. Resolved TradeDetail so hindsight (‹30/30›, Medium continuation, off-chart later-touch text) and the Trade Card sheet (privacy re-render, Share/Save/Copy) both land. NOTES handoffs from all four branches kept.
+Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy until Chris says so.
+
+### 2026-11-15 — agent (Codex) — Chart + App shell, branch `feat/16-trade-card-sheet`
+Did:      Issue #16: preview sheet, Shield re-render, prepared Share/Save/Copy, zoned entry/exit, playbook/tags/frozen-rules card copy.
+Files:    `lib/shareCard.ts`, `components/{TradeCardSheet,TradeDetail}.tsx`, `app/globals.css`, `lib/__tests__/core.test.ts`, `NOTES.md`.
+Verified: `npm test` 64/64; typecheck/build pass; lint 0 errors/1 existing PostCSS warning; 390×844 Chrome had 390px scroll width and working preview/privacy/actions.
+Left:     Native iOS share-sheet remains untested, as allowed by issue #16. No publish, deployment or primitive rebuild.
+
 ### 2026-11-15 — agent (Antigravity) — App shell and notes, branch `feat/17-tune-screen`
 Did:      Issue #17 (Phase 5: Real Tune screen). Wired controls on `/tune` for Position Box opacity (Invariant 5), gold preset and intensity (`GOLD_PRESETS`: bullion, champagne, amber, platinum), blue/orange palette (UX-80), risk budget ($10–$100,000, default $250 with quick chips), show/hide samples, and Shield mode toggle; kept time zone and backup intact.
 Files:    `components/TuneScreen.tsx`, `lib/prefs.ts`, `app/globals.css`, `lib/__tests__/tune-prefs.test.ts`, `NOTES.md`.
@@ -66,6 +76,7 @@ Did:      Added `docs/15-trade-document-and-render-grammar.md` (design §2 and �
 Verified: `npm test` 64/64; `typecheck` and `build` exit 0; `lint` 0 errors, 1 pre-existing warning (`postcss.config.mjs`).
 Left:     PR against main, do-not-merge-without-Chris. `OD-30`–`OD-34` await the owner. No code. `deriveTrade` and `buildMarks` are #33 and #34.
 Watch:    The design file on the box is `trades-on-chart-design-and-plan.md`, not the `position-box-answer.md` the issue cites. Its §2.3 dollar figures assumed five contracts; doc 15 uses the two-contract examples.
+
 
 
 ### 2026-11-15 — agent (Grok Bot) — Core math + App shell, branch `feat/batch3-coverage-daystats`
