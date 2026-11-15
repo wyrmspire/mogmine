@@ -13,7 +13,7 @@
 - **Frontend / API Hosting:** Next.js (App Router, TypeScript, Tailwind CSS, PWA) on **Vercel**.
 - **Database / Realtime / Storage:** **Supabase** (PostgreSQL + Realtime push to mobile + Storage for chart snapshots & Trade Cards). Starts **single-user**, structured for multi-user expansion.
 - **Broker Listener:** Standalone Node.js/TypeScript service on **Google Cloud Run** listening to the **TopstepX (ProjectX Gateway)** SignalR/WebSocket feed.
-- **Market Data (Initial):** **Yahoo Finance** (`ES=F`, `NQ=F`, `^VIX`, `DX-Y.NYB`) via `MarketDataProvider` adapter, permanently cached in Postgres.
+- **Market Data (Initial):** **Yahoo Finance** (`MES=F`, `MNQ=F`, `ES=F`, `NQ=F`, `^VIX`, `DX-Y.NYB`) via `MarketDataProvider` adapter, permanently cached in Postgres.
 - **Charts:** TradingView **`lightweight-charts` v4+** with custom HTML5 Canvas **`ISeriesPrimitive`** plugins for translucent Position Boxes and synced Companion Divergence charts.
 
 > **Current mode (owner decision `D-009`, 2026-11-14): there is no TopstepX account yet.** Build and test against Yahoo data only. Trades come from manual entry, the test-trade tool and fixtures. Do not build the broker listener, the pull sync or the CSV importer yet. The first task is the daily candle archive. See [10 — Yahoo-First Build Plan](docs/10-yahoo-first-build-plan.md).
@@ -63,9 +63,9 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
    - Yahoo Finance deletes or stops serving `1m` intraday bars older than **7–30 days** (`5m` after ~60 days).
    - **MUST** persist OHLCV candle windows (`1m`, `5m`, `15m`) into Supabase `trade_candles` when a trade is logged, and always read from `trade_candles` first.
 
-3. **ALWAYS Map Micro Futures Tickers Properly**
-   - Yahoo Finance does **not** return reliable data for `"MES"` or `"MNQ"`.
-   - **MUST** map `MES`/`ES` → `ES=F`, `MNQ`/`NQ` → `NQ=F`, `MYM`/`YM` → `YM=F`, `M2K`/`RTY` → `RTY=F` for candles, while keeping the contract's true point-value multiplier (`MES` = `$5/pt`, `ES` = `$50/pt`, `MNQ` = `$2/pt`) in trade PnL math.
+3. **ALWAYS Map Micro Futures Tickers Properly (`OD-15`)**
+   - Yahoo Finance does **not** return reliable data for bare symbols `"MES"` or `"MNQ"`, and micro contracts must be charted on their own continuous tickers without falling back to the minis.
+   - **MUST** map `MES` → `MES=F`, `ES` → `ES=F`, `MNQ` → `MNQ=F`, `NQ` → `NQ=F`, `MYM`/`YM` → `YM=F`, `M2K`/`RTY` → `RTY=F` for candles (with **no** `ES=F`/`NQ=F` fallback for `MES`/`MNQ`), compute and draw levels from the same instrument as the chart, and keep the contract's true point-value multiplier (`MES` = `$5/pt`, `ES` = `$50/pt`, `MNQ` = `$2/pt`) in trade PnL math.
 
 4. **NEVER Put Persistent WebSockets or SignalR Listeners in Vercel**
    - Vercel serverless/edge functions are stateless and time out.

@@ -107,7 +107,7 @@ Like indicators in [11 §4](11-product-workflows-and-api-context.md#4-indicator-
 Authored levels carry a free-text `formula` ("4h lower high, Nov 10 14:00 bar") so the source is never lost. A level may be a single price or a range (`price_low`, `price_high`).
 
 - **LV-05 — ONH and ONL are point-in-time.** They hold only up to `computed_at`. Thursday's ONL of 7572.50 printed at 07:17, minutes before the markup. If the overnight session extends after `computed_at`, the set gets a new revision (LV-11). It is not edited in place.
-- **LV-06 — One series for levels and candles.** Levels are computed from the series the chart draws. Under the `OD-15` interim rule, that is `ES=F` for `MES`. The owner's markup and the fixture below use `MES=F`, which differs by up to a point per bar ([10 §4](10-yahoo-first-build-plan.md#4-finding-yahoo-has-separate-mesf-and-mnqf-series)). Record the provider and series on every set. Never draw `ES=F` levels on `MES=F` candles or the reverse.
+- **LV-06 — One series for levels and candles.** Levels are computed from the series the chart draws. Under `OD-15` (decided 2026-11-14), `MES` charts on `MES=F` and `MNQ` on `MNQ=F` with no `ES=F`/`NQ=F` fallback, matching the owner's markup and the fixture below ([10 §4](10-yahoo-first-build-plan.md#4-finding-yahoo-has-separate-mesf-and-mnqf-series-od-15-decided)). Record the provider and series on every set. Never draw `ES=F` levels on `MES=F` candles or the reverse.
 
 ---
 
@@ -503,7 +503,7 @@ The milestones are from [10 §7](10-yahoo-first-build-plan.md#build-order) (`OD-
 
 | Milestone | Levels work |
 | :--- | :--- |
-| **M0 — Archive** | None beyond the archive. Archive `MES=F` as well as `ES=F` (already in docs/10), so either `OD-15` outcome can compute levels. Recommended outcome: chart and compute levels on `MES=F`, so the app matches the owner's TradingView levels. |
+| **M0 — Archive** | None beyond the archive. Archive `MES=F` as well as `ES=F` (already in docs/10). Under `OD-15` (decided 2026-11-14), `MES` charts and computes levels on `MES=F`, matching the owner's TradingView levels. |
 | **M1 — One trade on one chart** | LV-17 sizing defaults in manual entry. The Actual box style. |
 | **M3 — Context** | Level sets (§6), `SessionLevelsPrimitive` with LV-08/LV-09, the `levels_at_entry` snapshot, the Planned and Archived box styles. The engine computes §3A from the archive. |
 | **M4 — AI** | The levels block in the data-only review (§10). |

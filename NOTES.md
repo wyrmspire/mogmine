@@ -17,7 +17,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08` (UX notes), `docs/09` (backend risk register), `docs/10` (Yahoo-first build plan), `docs/11` (mobile workflow and assistant API proposals), `docs/12` (levels, zones and the daily markup), `docs/13` (bold UI bets).
-- 27 entries under Open in [DECISIONS.md](DECISIONS.md) (`OD-24`–`OD-27` come from the UI branches); `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-27` records the mathematical conflict between the 30-bar floor and a 35% minimum box width for very short fixtures.
+- Open decisions in [DECISIONS.md](DECISIONS.md) include `OD-24`–`OD-27` from the UI branches; `OD-27` records the mathematical conflict between the 30-bar floor and a 35% minimum box width for very short fixtures. `OD-15` (`MES` → `MES=F`, `MNQ` → `MNQ=F`, no mini fallback, levels match chart instrument) is Decided and implemented. `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals; they do not expand approved scope.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 - The development machine had neither Node nor Python installed on 2026-11-14. Node is needed before anything can be scaffolded.
@@ -65,6 +65,13 @@ Verified: 390×844 Chrome pass across all 10 samples: zero overflow/errors/remov
 Artifacts: `/workspace/phase4-scalp.png` (13-minute hold, 43.3%) and `/workspace/phase4-90min.png` (90-minute hold, 50%).
 Left:     Nothing pushed. Owner should decide `OD-27`; 2-, 5- and 7-minute floor-bound fixtures are truthfully 7%, 17% and 23% of 30 bars rather than the issue's impossible 35% minimum.
 Watch:    `package-lock.json` remains untracked and uncommitted as requested. No real-phone/iOS Safari pass was performed.
+
+### 2026-11-14 (night CT) — agent (Antigravity) — Market data + Chart, branch `feat/27-mes-feed`
+Did:      Implemented `#27` (`OD-15` decided): mapped `MES` → `MES=F` and `MNQ` → `MNQ=F` in `lib/trades.ts` (`FUTURES_SPECS` + `normalizeTrade` ticker migration), updated `lib/market-data/yahoo.ts` Invariant 3 comment (no `ES=F`/`NQ=F` fallback), scoped IndexedDB candle cache keys and signatures by Yahoo ticker in `lib/store.ts` and `lib/candles.ts`, added unit tests in `lib/__tests__/core.test.ts`, and updated `DECISIONS.md`, `AGENTS.md`, `docs/02`, `docs/07`, `docs/09`, `docs/10`, `docs/12`, `docs/14`, `mogprompt.md`, and `fixtures/levelsets/MES-2026-11-12.json`.
+Verified: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` all pass.
+Left:     Unblocks drawing daily levels (`#26`) since chart and fixture both use `MES=F`.
+Watch:    Existing stored trades with `yahoo_ticker: "ES=F"` for `MES` migrate to `"MES=F"` on load, and old `ES=F` IndexedDB cache entries are ignored because cache keys and signatures now include the Yahoo ticker.
+
 
 ### 2026-11-14 (night CT) — agent (Claude Code) — Chart + App shell and notes, branch `ui/phased-improvements`
 Did:      UI phases 1–3, three local commits (`c74bbae`, `685319b`, `5a9f8c6`): routes and a real Today/Feed on phones, device store without inline candles, Position Box rewrite and in-place timeframe switch, Pit Stop, checklist, review queue. Plan and open questions in `docs/14`; `OD-24`–`OD-26` opened.

@@ -9,7 +9,8 @@ import { demoTrades } from "../fixtures.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
-import { MIN_FITTED_BARS, adherence, aggregateCandles, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import type { Candle } from "../trades.ts";
 
 const base = { id: "t", entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z" };
@@ -260,4 +261,21 @@ test("process read: rules and violation tags decide, never the outcome", () => {
   assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Level Sweep"] }), "clean");
   assert.equal(processRead({ checklist_state: [rule(true), rule(false)], quick_tags: [] }), "broken");
   assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Revenge"] }), "broken");
+});
+
+test("OD-15: MES charts on MES=F and MNQ on MNQ=F, with ticker-scoped cache keys", () => {
+  const provider = new YahooFinanceProvider();
+  assert.equal(FUTURES_SPECS.MES.yahooTicker, "MES=F");
+  assert.equal(FUTURES_SPECS.MNQ.yahooTicker, "MNQ=F");
+  assert.equal(FUTURES_SPECS.ES.yahooTicker, "ES=F");
+  assert.equal(FUTURES_SPECS.NQ.yahooTicker, "NQ=F");
+  assert.equal(provider.resolveProviderSymbol("MES"), "MES=F");
+  assert.equal(provider.resolveProviderSymbol("MNQ"), "MNQ=F");
+
+  // Stored trades from before OD-15 that carried yahoo_ticker: "ES=F" are migrated to "MES=F".
+  const migrated = normalizeTrade({ ...base, symbol: "MES", yahoo_ticker: "ES=F", direction: "LONG", entry_price: 6844.25, exit_price: 6849 });
+  assert.equal(migrated.yahoo_ticker, "MES=F");
+  assert.equal(candleCacheKey(migrated), "t:MES=F");
+  assert.ok(candleSignature(migrated).includes("MES=F"));
+  assert.ok(!candleSignature(migrated).includes("|ES=F|"));
 });

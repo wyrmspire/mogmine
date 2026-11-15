@@ -4,8 +4,9 @@
 import { useSyncExternalStore } from "react";
 import { DEMO_TRADE_IDS, demoTrades } from "./fixtures.ts";
 import { idbSet } from "./idb.ts";
-import { deriveReviewStatus, normalizeTrade } from "./trades.ts";
+import { candleCacheKey, candleSignature, deriveReviewStatus, normalizeTrade } from "./trades.ts";
 import type { Candle, TradeRecord } from "./trades.ts";
+export { candleCacheKey, candleSignature };
 
 const STORAGE_KEY = "mogmine-trades-v3";
 const demoById = new Map(demoTrades.map((trade) => [trade.id, trade]));
@@ -79,16 +80,13 @@ function readStored(): TradeRecord[] | null {
       candle_source: undefined,
       sparkline: [],
     };
-    // Yahoo candles from an older build are real market data: keep them (they expire at the source).
-    if (!current && candles?.length && rest.candle_source === "Yahoo Finance") {
-      void idbSet(trade.id, { signature: candleSignature(trade), candles, source: "Yahoo Finance", baseTimeframe: "1m", fetchedAt: Date.now() });
+    // Yahoo candles from an older build are real market data: keep them only when their ticker
+    // matches the current spec (OD-15). Skip samples so stale bars are not cached under the #29 signature.
+    if (!current && candles?.length && rest.candle_source === "Yahoo Finance" && rest.yahoo_ticker === trade.yahoo_ticker && !trade.is_sample) {
+      void idbSet(candleCacheKey(trade), { signature: candleSignature(trade), candles, source: "Yahoo Finance", baseTimeframe: "1m", fetchedAt: Date.now() });
     }
     return [trade];
   });
-}
-
-export function candleSignature(trade: Pick<TradeRecord, "symbol" | "entry_time" | "exit_time">) {
-  return `${trade.symbol}|${trade.entry_time}|${trade.exit_time}`;
 }
 
 /** Read device storage once. Safe to call repeatedly. */

@@ -1,6 +1,6 @@
-import { FUTURES_SPECS } from "@/lib/trades";
-import type { Candle } from "@/lib/trades";
-import type { MarketDataProvider, MarketDataQuery } from "./types";
+import { FUTURES_SPECS } from "../trades.ts";
+import type { Candle } from "../trades.ts";
+import type { MarketDataProvider, MarketDataQuery } from "./types.ts";
 
 interface YahooChartResponse {
   chart?: {
@@ -25,7 +25,7 @@ const INTERVAL = { "1m": "1m", "5m": "5m", "15m": "15m", "1h": "60m" } as const;
 export class YahooFinanceProvider implements MarketDataProvider {
   readonly name = "yahoo_finance";
 
-  /** Invariant 3: never the bare micro symbol. `MES` charts on `ES=F` until OD-15 is decided. */
+  /** Invariant 3 (OD-15): never the bare symbol. `MES` charts on `MES=F` and `MNQ` on `MNQ=F`, with no mini fallback. */
   resolveProviderSymbol(canonicalSymbol: string) {
     const spec = FUTURES_SPECS[canonicalSymbol.toUpperCase()];
     if (!spec) throw new Error(`Unsupported symbol ${canonicalSymbol}`);
