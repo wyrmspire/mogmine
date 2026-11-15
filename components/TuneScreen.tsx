@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { setPrefs, usePrefs } from "@/lib/prefs";
 import { buildBackup, parseBackupFile, replaceTrades, useJournal } from "@/lib/store";
 import type { ParseBackupResult } from "@/lib/store";
@@ -8,6 +8,64 @@ import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 
 type PendingRestore = Extract<ParseBackupResult, { ok: true }> & { fileName: string };
+
+interface ArchiveStatusPayload {
+  configured: boolean;
+  error?: string;
+  lastJob?: {
+    kind: string;
+    symbol: string | null;
+    status: string;
+    started_at: string;
+    finished_at: string | null;
+    bars_upserted: number;
+    last_error: string | null;
+  } | null;
+  recentFailures?: Array<{ status: string; last_error: string | null; started_at: string }>;
+}
+
+function ArchiveStatusCard({ timeZone }: { timeZone: string }) {
+  const [payload, setPayload] = useState<ArchiveStatusPayload | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/archive-status")
+      .then(async (response) => {
+        const body = await response.json() as ArchiveStatusPayload;
+        if (!cancelled) setPayload(body);
+      })
+      .catch(() => {
+        if (!cancelled) setPayload({ configured: false, error: "Could not read archive status." });
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const last = payload?.lastJob;
+  const failed = payload?.recentFailures?.length ?? 0;
+  return (
+    <>
+      <div className="section-title"><h2>Candle archive</h2><span>Supabase, when configured</span></div>
+      <section className="specular-card card-pad" aria-label="Candle archive">
+        {!payload && <p className="muted" style={{ fontSize: 13 }}>Checking archive status…</p>}
+        {payload && !payload.configured && (
+          <p className="muted" style={{ fontSize: 13 }}>
+            The candle archive is off. Charts still use Yahoo Finance. To turn it on, create a Supabase project and put the keys in <code>.env.local</code> yourself — see the README.
+          </p>
+        )}
+        {payload?.configured && payload.error && (
+          <p className="muted" style={{ fontSize: 13 }}>Archive is configured, but status could not be read: {payload.error}</p>
+        )}
+        {payload?.configured && !payload.error && (
+          <p className="muted" style={{ fontSize: 13 }}>
+            {last
+              ? `Last ingest (${last.kind}${last.symbol ? `, ${last.symbol}` : ""}): ${last.status}, ${last.bars_upserted} bars, ${formatDateTime(last.finished_at ?? last.started_at, timeZone)}.`
+              : "Archive is configured. No ingest jobs have been recorded yet. Run npm run archive:ingest once keys are in .env.local."}
+            {failed > 0 && last?.last_error ? ` Latest failure: ${last.last_error}.` : failed > 0 ? ` ${failed} recent failed ${failed === 1 ? "run" : "runs"}.` : ""}
+          </p>
+        )}
+      </section>
+    </>
+  );
+}
 
 export function TuneScreen() {
   const prefs = usePrefs();
@@ -82,7 +140,7 @@ export function TuneScreen() {
           Your journal lives in this browser&apos;s storage ({realCount} {realCount === 1 ? "trade" : "trades"}
           {sampleCount > 0 ? ` + ${sampleCount} ${sampleCount === 1 ? "sample" : "samples"}` : ""}); clearing site data deletes it.
           Backups save your trades (notes, prices, tags, checklist, playbook) and preferences to a local JSON file with no network upload.
-          Candle caches stay in IndexedDB and are not inside the file—charts re-fetch candles from Yahoo Finance when opened (and samples keep their offline fixture bars).
+          Candle caches stay in IndexedDB and are not inside the file—charts re-fetch from the archive when it is on, otherwise Yahoo Finance (and samples keep their offline fixture bars).
         </p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
@@ -135,6 +193,8 @@ export function TuneScreen() {
           </div>
         )}
       </section>
+
+      <ArchiveStatusCard timeZone={prefs.timeZone} />
     </div>
   );
 }

@@ -54,10 +54,10 @@ async function load(trade: TradeRecord, signature: string) {
     const params = new URLSearchParams({ symbol: trade.symbol, entry: trade.entry_time, exit: trade.exit_time });
     const response = await fetch(`/api/market-data?${params}`);
     if (!response.ok) throw new Error("unavailable");
-    const body = await response.json() as { candles?: Candle[]; baseTimeframe?: Timeframe };
+    const body = await response.json() as { candles?: Candle[]; baseTimeframe?: Timeframe; source?: CandleSource };
     if (!Array.isArray(body.candles) || body.candles.length < 4) throw new Error("incomplete");
     if (entries.get(trade.id)?.signature !== signature) return;
-    const stored: StoredCandles = { signature, candles: body.candles, source: "Yahoo Finance", baseTimeframe: body.baseTimeframe ?? "1m", fetchedAt: Date.now() };
+    const stored: StoredCandles = { signature, candles: body.candles, source: body.source === "Archive" ? "Archive" : "Yahoo Finance", baseTimeframe: body.baseTimeframe ?? "1m", fetchedAt: Date.now() };
     void idbSet(key, stored);
     adopt(trade, stored);
   } catch {
@@ -72,7 +72,7 @@ export function ensureCandles(trade: TradeRecord, force = false) {
   if (typeof window === "undefined") return;
   const signature = candleSignature(trade);
   const existing = entries.get(trade.id);
-  if (existing && existing.signature === signature && !(force && !existing.fetching && existing.source !== "Yahoo Finance")) return;
+  if (existing && existing.signature === signature && !(force && !existing.fetching && existing.source !== "Yahoo Finance" && existing.source !== "Archive")) return;
   put(trade.id, { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: true, signature });
   void load(trade, signature);
 }

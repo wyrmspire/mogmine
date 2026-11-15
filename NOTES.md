@@ -15,7 +15,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use real Yahoo Finance candles only; without market bars they show no chart.
 - **Which build is where.** `mogmine.vercel.app` served a bundle containing `America/Chicago` (`lib/time.ts`) at 21:28 CT on 2026-11-14, so it is serving `main` at or after PR #2 (CT). The Vercel preview for branch `app/first-trade-review` (`aaed7af`) predates PR #2 and still shows ET. Vercel reports successful builds for both heads. Which branch Vercel calls Production was not read from Vercel's settings: unverified.
 - **Phone behaviour is not verified.** Builds and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a phone (`AC-11`).
-- **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
+- **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md). The M0 candle archive is implemented on `feat/m0-candle-archive` (issue #70) but is off until the owner creates a Supabase project and puts keys in `.env.local`.
 - Specs: `docs/01`–`07` (original), `docs/08` (UX notes), `docs/09` (backend risk register), `docs/10` (Yahoo-first build plan), `docs/11` (mobile workflow and assistant API proposals), `docs/12` (levels, zones and the daily markup), `docs/13` (bold UI bets).
 - Open decisions in [DECISIONS.md](DECISIONS.md) include `OD-24`–`OD-27` from the UI branches; `OD-27` records the mathematical conflict between the bar floor (now 45 bars, owner 2026-11-15; was 30) and a 35% minimum box width for very short fixtures. `OD-15` (`MES` → `MES=F`, `MNQ` → `MNQ=F`, no mini fallback, levels match chart instrument) is Decided and implemented. `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals; they do not expand approved scope.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
@@ -25,9 +25,9 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 M0 and M1 are done only when their acceptance criteria hold: `AC-01` – `AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1).
 
-1. **Start the candle archive** ([docs/10 §3](docs/10-yahoo-first-build-plan.md#3-start-the-candle-archive-first)). It is the only task that loses data by waiting: `1m` bars older than 30 days cannot be fetched.
-2. Owner decides `OD-16` (build order) and `OD-2` (auth and RLS from the first migration).
-3. Scaffold one Next.js app with a Supabase project, RLS on, and `market_candles` (M0).
+1. **Owner turns on the candle archive** (issue #70 / README §6): create a Supabase project, apply `supabase/migrations/`, put keys in `.env.local`, and run `npm run archive:ingest -- --backfill`. The code is on `feat/m0-candle-archive` and is not merged to `main`.
+2. Owner decides `OD-16` (build order). `OD-2` is followed in the M0 migration (RLS on, authenticated read, service-role write). `OD-4` is implemented as bar-level `market_candles` but stays open for confirmation.
+3. Live `AC-05` recovery against the real project, and issue #65 (session calendar / holiday coverage), after the archive is on.
 4. Build the `core` money and session math with golden tests, then one trade on one chart (M1).
 5. Owner decides `OD-1`, then freeze or reconcile `mogprompt.md` using the drift register.
 6. When a TopstepX account exists: ask Topstep to confirm in writing that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
@@ -47,6 +47,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-15 — agent (Grok Bot) — Data, branch `feat/m0-candle-archive` (#70)
+Did:      M0 Supabase candle archive. Bar-level `market_candles` (unique symbol, timeframe, ts), `market_coverage`, `market_archive_jobs`, RLS. Typed `lib/candle-archive.ts`. Chart prefers the archive and falls back to Yahoo; empty env is unchanged. Idempotent `npm run archive:ingest` (Yahoo 1m, 8-day batches, coverage report, no-op without keys). Planned trades/notes/annotations SQL is documented and not applied. Tune shows last ingest status.
+Files:    `supabase/migrations/`, `supabase/planned/`, `lib/candle-archive.ts`, `lib/archive-*.ts`, `lib/market-data/resolve.ts`, `scripts/ingest-yahoo-archive.ts`, `app/api/{market-data,archive-status}/`, `components/TuneScreen.tsx`, `lib/{candles,trades,store}.ts`, `lib/__tests__/candle-archive.test.ts`, README, DECISIONS, NOTES, `.env.example`.
+Verified: see the PR description for command output.
+Left:     Do not merge without Chris. No keys, no Vercel changes, no push to main. Local `supabase start` was not run: the box has the CLI (3.1.0) but no Docker and no Postgres server. Live AC-05 waits on the owner's project. #65 remains open. OD-4 stays open.
+Watch:    Service role is server-only. Never fill or commit `.env` values.
 
 ### 2026-11-15 — agent (Grok Bot) — Core math + App shell, branch `feat/batch3-coverage-daystats`
 Did:      Issues #60 and #61. `validateTradeAgainstBars` now requires both entry and exit candles for `complete` coverage, and reports `chronology` separately (`unresolved` when entry and exit fall in the same bar). `fillInsideBar` returns false when the bar is missing. `dayStats` exposes `gross` (not `net`), priced/unpriceable counts, an `incomplete` flag, and a win rate over priced trades only. Today and the day header label the total "gross" and show a quiet incomplete cue.
