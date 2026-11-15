@@ -9,9 +9,9 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ---
 
-## Current state (2026-11-14)
+## Current state (2026-11-15)
 
-- **Planning only. No application code exists.**
+- **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use Yahoo Finance 1m candles when available and deterministic fixture candles offline.
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08` (UX notes), `docs/09` (backend risk register), `docs/10` (Yahoo-first build plan).
 - 16 open decisions in [DECISIONS.md](DECISIONS.md). `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account.
@@ -42,6 +42,18 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-15 — agent (Codex Work) — Market data + demo set
+Did:      Added a server-side Yahoo Finance adapter/API, ten seeded MES/MNQ trades, existing-storage migration, source labels and offline fixture fallback.
+Verified: Vercel build READY at commit e4a5857; production page returned 200 with 10 trades; Yahoo route returned 1,810 NQ=F candles; runtime error scan was clean.
+Left:     Yahoo candles are fetched per opened trade and cached only on-device. The Supabase daily archive from M0 is still pending.
+Watch:    Yahoo may throttle hosted requests, so every trade retains its complete fixture chart.
+
+### 2026-11-14 — agent (Codex Work) — Chart + app shell and notes
+Did:      Scaffolded the first Next.js frontend; added offline fixtures, adaptive trade review, v5 Canvas PositionBoxPrimitive, manual entry, local-first notes, and private Trade Card sharing.
+Verified: Local source checks passed before publication; npm install was blocked by the executor network (403), so Vercel preview build is the package/type/build verification.
+Left:     Supabase, Yahoo archive and owner auth are not wired; the preview deliberately uses fixture candles and localStorage. No Topstep work was added.
+Watch:    Trade Card generation uses takeScreenshot(true). Re-check iOS share/copy and the 390×844 acceptance flow on the deployed preview.
 
 Format:
 
