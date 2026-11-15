@@ -162,10 +162,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     const barAt = (iso: string) => { const time = Math.floor(Date.parse(iso) / barMs) * barMs; return candles.candles.find((bar) => bar.time === time); };
     return !fillInsideBar(trade.entry_price, barAt(trade.entry_time), trade.symbol) || !fillInsideBar(trade.exit_price, barAt(trade.exit_time), trade.symbol);
   }, [ready, candles, trade, baseMinutes]);
-  const barIssues = useMemo(() => {
-    if (!ready || trade.is_sample) return [];
+  const barCheck = useMemo(() => {
+    if (!ready || trade.is_sample) return null;
     return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
   }, [ready, candles, trade, baseMinutes]);
+  const barIssues = barCheck?.issues ?? [];
+  const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
   const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
 
   return (
@@ -189,6 +191,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
+        {candles?.status === "none" && !trade.is_sample && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
         {candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
@@ -217,6 +220,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
           {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
           {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
+          {barCoverage === "missing" && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
+          {barCoverage === "partial" && <div className="chart-note"><span>Bar coverage is partial — some candles in the hold are missing, so this is not a complete check.</span></div>}
           {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
           {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
           {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
