@@ -78,6 +78,17 @@ export interface TradeRecord {
   sparkline: number[];
   /** Where the candles last came from. The candle cache is the live truth; this is a hint for lists. */
   candle_source?: CandleSource;
+  /**
+   * Version of the sample fixture this record was built from (issue #62). Undefined on records stored
+   * before this field existed. Real trades never set it.
+   */
+  fixture_version?: number;
+  /**
+   * True once a trader changes an annotation (note, checklist, tags, playbook, thesis, management or
+   * post-exit notes). A later fixture refresh keeps such annotations (issue #62). Undefined on records
+   * stored before this field existed.
+   */
+  annotations_modified?: boolean;
 }
 
 export const DEFAULT_OWNER_USER_ID = "demo-owner";
@@ -523,6 +534,22 @@ export function candleCacheKey(trade: Pick<TradeRecord, "id" | "symbol"> & Parti
 export function candleSignature(trade: Pick<TradeRecord, "symbol" | "entry_time" | "exit_time"> & Partial<Pick<TradeRecord, "yahoo_ticker">>) {
   const ticker = specFor(trade.symbol)?.yahooTicker || trade.yahoo_ticker || trade.symbol;
   return `${trade.symbol}|${ticker}|${trade.entry_time}|${trade.exit_time}`;
+}
+
+/**
+ * Stable text for the trader-written annotations (issue #62). Two records with the same key show the
+ * same notes, tags, playbook and checklist ticks. Checklist rows compare by id, label and checked state.
+ */
+export function annotationKey(trade: Partial<Pick<TradeRecord, "note" | "quick_tags" | "checklist_state" | "playbook_id" | "pre_trade_thesis" | "management_notes" | "post_exit_notes">>) {
+  return JSON.stringify([
+    trade.note ?? "",
+    trade.quick_tags ?? [],
+    (trade.checklist_state ?? []).map((item) => [item.id, item.label, item.checked === true]),
+    trade.playbook_id ?? null,
+    trade.pre_trade_thesis ?? "",
+    trade.management_notes ?? "",
+    trade.post_exit_notes ?? "",
+  ]);
 }
 
 /** Fill in fields added after a record was stored, so old device data keeps loading. */
