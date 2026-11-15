@@ -202,10 +202,36 @@ export function snapToBar(times: number[], instant: number, timeframe: Timeframe
   return Math.abs(before - open) <= Math.abs(after - open) ? before : after;
 }
 
-/** Duration-derived context in minutes. Replaced by the fitted-window helper in Phase 4 issue #10. */
-export function fitPadding(holdDurationSeconds: number) {
-  const holdMinutes = Math.max(1 / 60, holdDurationSeconds / 60);
-  return { before: holdMinutes * 0.6, after: holdMinutes * 0.4 };
+export interface FittedWindow {
+  /** UTC milliseconds. */
+  start: number;
+  /** UTC milliseconds. */
+  end: number;
+  beforeBars: number;
+  holdBars: number;
+  afterBars: number;
+  visibleBars: number;
+}
+
+/**
+ * Fit a trade from its own duration: 30% of the view before entry, 50% in the
+ * trade, and 20% after exit. This is continuous; stored style never affects it.
+ */
+export function fitWindow(entryTime: string, exitTime: string, timeframe: Timeframe): FittedWindow {
+  const entry = Date.parse(entryTime);
+  const holdMs = Math.max(1000, Date.parse(exitTime) - entry);
+  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
+  const beforeMs = holdMs * 0.6;
+  const afterMs = holdMs * 0.4;
+  const holdBars = holdMs / barMs;
+  return {
+    start: entry - beforeMs,
+    end: entry + holdMs + afterMs,
+    beforeBars: beforeMs / barMs,
+    holdBars,
+    afterBars: afterMs / barMs,
+    visibleBars: (holdMs + beforeMs + afterMs) / barMs,
+  };
 }
 
 export interface Excursions {

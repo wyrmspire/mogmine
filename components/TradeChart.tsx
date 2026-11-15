@@ -9,7 +9,7 @@ import { formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, excursions, fitPadding, holdSeconds, rMultiple, snapToBar, specFor, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, aggregateCandles, excursions, fitWindow, rMultiple, snapToBar, specFor, tradePnl, tradePoints } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 type LWC = typeof import("lightweight-charts");
@@ -149,12 +149,11 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     tag(tr.planned_target_price, t.profit, "", false);
     tag(tr.key_level_price, t.goldMid, "KEY", true);
 
-    // The fitted view: the trade with its context, never fewer than a readable number of bars.
-    const minutes = TIMEFRAME_MINUTES[barTimeframe];
-    const pad = fitPadding(holdSeconds(tr));
+    // The fitted view is a continuous function of the hold: 30% before, 50% in-trade, 20% after.
+    const fittedWindow = fitWindow(tr.entry_time, tr.exit_time, barTimeframe);
     const entryIndex = times.indexOf(entryBar);
     const exitIndex = times.indexOf(exitBar);
-    l.fitRange = { from: entryIndex - Math.max(18, Math.ceil(pad.before / minutes)) - 0.5, to: exitIndex + Math.max(10, Math.ceil(pad.after / minutes)) + 2.5 };
+    l.fitRange = { from: entryIndex - fittedWindow.beforeBars, to: exitIndex + fittedWindow.afterBars };
     if (refit || dataChanged) l.chart.timeScale().setVisibleLogicalRange(l.fitRange);
 
     window.clearTimeout(renderTimer.current);

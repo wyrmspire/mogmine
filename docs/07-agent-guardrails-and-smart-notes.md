@@ -138,47 +138,18 @@ export function syncChartTimeScales(
 
 ---
 
-### Recipe 3: Trade Style Auto-Classification & Yahoo Window Padding
+### Recipe 3: Duration-derived Yahoo window
 
 **❌ WRONG:** Fetching only `[entryTime, exitTime]` candles from Yahoo Finance. That produces a 3-candle chart where you cannot see the trend, Overnight Low sweep, or post-exit follow-through.
 
-**✅ RIGHT:** Classify the trade first, select the timeframe, and pad **before entry** and **after exit** so the chart tells the full story.
+**✅ RIGHT:** Size the fitted view continuously from the trade's own hold time. The trade occupies half the base span, with 30% of the view before entry and 20% after exit. Stored classification data does not control the chart.
 
 ```typescript
-export type TradeStyle = 'scalp' | 'session_90m' | 'investment';
-
-export function classifyAndWindowTrade(entryTime: Date, exitTime: Date) {
-  const holdSeconds = Math.max(
-    1,
-    Math.round((exitTime.getTime() - entryTime.getTime()) / 1000)
-  );
-
-  if (holdSeconds < 15 * 60) {
-    return {
-      style: 'scalp' as TradeStyle,
-      defaultTimeframe: '1m' as const,
-      // 45 mins prior + 25 mins after exit for micro-structure & post-exit check
-      windowStart: new Date(entryTime.getTime() - 45 * 60 * 1000),
-      windowEnd: new Date(exitTime.getTime() + 25 * 60 * 1000),
-    };
-  }
-
-  if (holdSeconds <= 2 * 60 * 60) {
-    return {
-      style: 'session_90m' as TradeStyle,
-      defaultTimeframe: '5m' as const,
-      // 3 hours prior (captures ONH/ONL/ORB) + 60 mins after exit
-      windowStart: new Date(entryTime.getTime() - 3 * 60 * 60 * 1000),
-      windowEnd: new Date(exitTime.getTime() + 60 * 60 * 1000),
-    };
-  }
-
+export function fitWindow(entryTime: Date, exitTime: Date) {
+  const holdMs = Math.max(1000, exitTime.getTime() - entryTime.getTime());
   return {
-    style: 'investment' as TradeStyle,
-    defaultTimeframe: '1h' as const,
-    // 7 days prior + 2 days after exit
-    windowStart: new Date(entryTime.getTime() - 7 * 24 * 60 * 60 * 1000),
-    windowEnd: new Date(exitTime.getTime() + 2 * 24 * 60 * 60 * 1000),
+    windowStart: new Date(entryTime.getTime() - holdMs * 0.6),
+    windowEnd: new Date(exitTime.getTime() + holdMs * 0.4),
   };
 }
 ```
@@ -188,7 +159,7 @@ export function classifyAndWindowTrade(entryTime: Date, exitTime: Date) {
 - **`windowEnd` is in the future when the trade closes.** A single fetch at ingestion never gets the post-exit bars. Fetch what exists, then schedule a top-up in the `enrichment_jobs` table. Never use `setTimeout` in a process that can restart (B-10).
 - **Record coverage.** Yahoo returns an empty result, not an error, for ranges it no longer serves. Store the requested and received range per timeframe, and fall back to a coarser timeframe for old imports (B-11).
 - **Session levels need whole sessions,** not this window. VWAP, `ONH/ONL` and `PDH/PDL` cannot be computed from 45 minutes of bars (B-13).
-- **The third bucket is under review.** Topstep accounts cannot hold across days, so do not build multi-day window logic yet (`OD-9` in [DECISIONS.md](../DECISIONS.md)).
+- **The bar floor is separate from the duration rule.** Apply it in bars for the selected timeframe, never as another clock-time bucket.
 
 ---
 

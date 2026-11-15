@@ -39,17 +39,11 @@ Every trade automatically renders a TradingView-style **Position Box** directly 
 
 ---
 
-## 3. Automatic Trade Classification (`Scalp` vs. `90-Min` vs. `Investment`)
+## 3. Duration-derived chart window
 
-When a trade closes (or is imported), the classifier inspects `hold_duration_seconds = exit_time - entry_time` and session boundaries to configure both the **default chart view** and the **AI coaching lens**:
+The fitted chart view comes directly from `hold_duration_seconds = exit_time - entry_time`; it never comes from a duration category. The base span is twice the hold: 30% of the view before entry, 50% in the trade and 20% after exit. A 90-minute hold therefore fits into roughly three hours of price action, while a five-minute hold gets a tight view. The rule is continuous, with no session-length label or bucket in the interface.
 
-| Classification | Hold Duration Rule | Default Chart Timeframe | Default Context Window | What the Chart & AI Focus On |
-| :--- | :--- | :--- | :--- | :--- |
-| **`scalp`** | `< 15 minutes` | `1m` candles | `35 bars` before entry → `20 bars` after exit | Micro-structure, candle wicks, entry chasing, slippage, immediate reaction off `VWAP`/`ONH`/`ONL`. |
-| **`session_90m`** | `15 minutes` to `2 hours` (or single intraday macro window) | `5m` candles (toggleable to `1m` / `15m`) | Full active session open (e.g., 1.5h before entry → 30m after exit) | Session structure, Opening Range (`ORB`), Initial Balance (`IB`), patience through pullbacks, target management. |
-| **`investment`** (Swing / Extended) | `> 2 hours` / held across multiple sessions | `1h` or `1d` candles (toggleable to `15m`) | `5–20 sessions` prior → post-exit follow-through | Higher-timeframe trend alignment, multi-day levels (`PDH/PDL`, weekly highs/lows), macro catalyst thesis. |
-
-*Note:* The trader can always override the classification manually on a trade if a trade intended as a `90-Min Trade` got stopped out in 4 minutes, or a scalp turned into a runner.
+The stored `trade_style` field and `classifyTrade` remain for data compatibility while the later AI coaching lens is decided. Neither controls the chart window. The minimum bar count and timeframe-specific context are layered onto this duration window in Phase 4.
 
 ---
 

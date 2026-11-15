@@ -7,7 +7,7 @@ import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
-import { adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, fitWindow, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 
 const base = { id: "t", entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z" };
@@ -59,6 +59,21 @@ test("feed ignores the removed style query and filters only by review status", (
   const scalp = normalizeTrade({ ...base, id: "scalp", symbol: "MES", direction: "LONG", entry_price: 1, exit_price: 2 });
   const longer = normalizeTrade({ ...base, id: "longer", symbol: "MES", direction: "LONG", entry_price: 1, exit_price: 2, entry_time: "2026-11-10T15:00:00Z", exit_time: "2026-11-10T16:30:00Z" });
   assert.deepEqual(applyFilters([scalp, longer], filters).map((trade) => trade.id), ["scalp", "longer"]);
+});
+
+test("fitted chart window is continuously derived from hold duration", () => {
+  const entry = "2026-11-10T15:00:00.000Z";
+  for (const seconds of [40, 5 * 60, 16 * 60, 90 * 60, 4 * 60 * 60]) {
+    const exit = new Date(Date.parse(entry) + seconds * 1000).toISOString();
+    const window = fitWindow(entry, exit, "1m");
+    const holdMs = seconds * 1000;
+    assert.equal(window.end - window.start, holdMs * 2);
+    assert.ok(Math.abs(holdMs / (window.end - window.start) - 0.5) < 1e-12);
+    assert.ok(Math.abs((Date.parse(entry) - window.start) / (window.end - window.start) - 0.3) < 1e-12);
+    assert.ok(Math.abs((window.end - Date.parse(exit)) / (window.end - window.start) - 0.2) < 1e-12);
+  }
+  const ninety = fitWindow(entry, "2026-11-10T16:30:00.000Z", "5m");
+  assert.equal(ninety.end - ninety.start, 3 * 60 * 60 * 1000);
 });
 
 test("formatting follows docs/08 §13", () => {
