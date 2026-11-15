@@ -1,14 +1,12 @@
 // Candles per trade, on the device. Completed candle sets never change, so they are cached in
 // IndexedDB and old trades open instantly and offline (docs/08 §2). Lists never touch this module (B-42).
 //
-// Sample trades always have a deterministic fixture chart, and are re-priced onto real Yahoo candles
-// when those are available. A real (manual) trade is never drawn on invented candles: without market
-// data it shows the price ladder instead (docs/08 §4, principle 5).
+// Samples and real trades follow the same rule: only market candles can produce a chart. A missing
+// Yahoo response leaves the trade details usable but renders no chart (docs/08 §4, issue #28).
 import { useSyncExternalStore } from "react";
-import { generateCandles } from "./fixtures.ts";
 import { idbGet, idbSet } from "./idb.ts";
 import { candleSignature, getTrade, updateTrade } from "./store.ts";
-import { buildSparkline, snapToTick } from "./trades.ts";
+import { buildSparkline } from "./trades.ts";
 import type { Candle, CandleSource, Timeframe, TradeRecord } from "./trades.ts";
 
 export interface CandleEntry {
@@ -38,28 +36,9 @@ function put(id: string, entry: CandleEntry) {
   listeners.forEach((listener) => listener());
 }
 
-function nearest(candles: Candle[], instant: number) {
-  return candles.reduce((best, candle) => Math.abs(candle.time - instant) < Math.abs(best.time - instant) ? candle : best, candles[0]);
-}
-
-/** Move a sample trade onto real candles: keep its shape, take its prices from the bars it sits on. */
-function repriceSample(trade: TradeRecord, candles: Candle[]): Partial<TradeRecord> {
-  const entryPrice = snapToTick(nearest(candles, Date.parse(trade.entry_time)).close, trade.symbol);
-  const shift = entryPrice - trade.entry_price;
-  const move = (value: number | null) => value == null ? null : snapToTick(value + shift, trade.symbol);
-  return {
-    entry_price: entryPrice,
-    exit_price: snapToTick(nearest(candles, Date.parse(trade.exit_time)).close, trade.symbol),
-    stop_loss_price: move(trade.stop_loss_price),
-    planned_target_price: move(trade.planned_target_price),
-    key_level_price: move(trade.key_level_price),
-  };
-}
-
 function adopt(trade: TradeRecord, stored: StoredCandles) {
   const live = getTrade(trade.id) ?? trade;
   const patch: Partial<TradeRecord> = { candle_source: stored.source };
-  if (live.is_sample && live.candle_source !== "Yahoo Finance") Object.assign(patch, repriceSample(live, stored.candles));
   patch.sparkline = buildSparkline({ ...live, ...patch }, stored.candles);
   updateTrade(trade.id, patch);
   put(trade.id, { status: "ready", candles: stored.candles, source: stored.source, baseTimeframe: stored.baseTimeframe, fetching: false, signature: stored.signature });
@@ -93,9 +72,7 @@ export function ensureCandles(trade: TradeRecord, force = false) {
   const signature = candleSignature(trade);
   const existing = entries.get(trade.id);
   if (existing && existing.signature === signature && !(force && !existing.fetching && existing.source !== "Yahoo Finance")) return;
-  put(trade.id, trade.is_sample
-    ? { status: "ready", candles: generateCandles(trade), source: "Demo fixture", baseTimeframe: "1m", fetching: true, signature }
-    : { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: true, signature });
+  put(trade.id, { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: true, signature });
   void load(trade, signature);
 }
 

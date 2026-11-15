@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PitStop } from "./PitStop";
-import { PriceLadder } from "./PriceLadder";
 import { RiskChips } from "./RiskChips";
 import { TradeChart } from "./TradeChart";
 import type { TradeChartHandle } from "./TradeChart";
@@ -18,7 +17,8 @@ import { buildShareCard } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { STYLE_LABEL, TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
 
@@ -57,7 +57,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const zone = prefs.timeZone;
   const [chosen, setChosen] = useState<Timeframe>(() => {
     const fromUrl = searchParams.get("tf") as Timeframe | null;
-    return fromUrl && TIMEFRAMES.includes(fromUrl) ? fromUrl : defaultTimeframe(trade.trade_style);
+    return fromUrl && TIMEFRAMES.includes(fromUrl) ? fromUrl : defaultTimeframe(holdSeconds(trade));
   });
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [fitted, setFitted] = useState(true);
@@ -162,7 +162,11 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     const barAt = (iso: string) => { const time = Math.floor(Date.parse(iso) / barMs) * barMs; return candles.candles.find((bar) => bar.time === time); };
     return !fillInsideBar(trade.entry_price, barAt(trade.entry_time), trade.symbol) || !fillInsideBar(trade.exit_price, barAt(trade.exit_time), trade.symbol);
   }, [ready, candles, trade, baseMinutes]);
-  const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Sample candles, not market data" : "No candles"} · ${ready ? timeframe : "—"}`;
+  const barIssues = useMemo(() => {
+    if (!ready || trade.is_sample) return [];
+    return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
+  }, [ready, candles, trade, baseMinutes]);
+  const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
 
   return (
     <div className="detail-layout">
@@ -178,7 +182,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div className="title-line">
               <h1>{trade.symbol}</h1>
               <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}>{trade.direction === "LONG" ? "▲ LONG" : "▼ SHORT"}</span>
-              <span className="style-pill">{STYLE_LABEL[trade.trade_style]}</span>
               {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
             </div>
             <p className="when">{formatSessionDate(sessionDate(trade.entry_time))} · {formatDetailTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}{prefs.shield ? "" : ` · ${trade.quantity}×`}</p>
@@ -186,7 +189,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
-        <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
+        {candles?.status === "none" ? null : <>
+          <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
             <div className="timeframes" role="group" aria-label="Timeframe">
               {TIMEFRAMES.map((value) => <button key={value} aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
@@ -202,12 +206,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="chart-frame">
             {ready ? (
               <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={prefs.shield} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} />
-            ) : candles?.status === "none" ? (
-              <div className="ladder-state">
-                <PriceLadder trade={trade} />
-                <p>No candles for this trade yet. Yahoo did not return data for {trade.yahoo_ticker} around these times.</p>
-                <div className="actions"><button className="btn-secondary" onClick={() => ensureCandles(trade, true)}>Try again</button></div>
-              </div>
             ) : (
               <div className="chart-skeleton"><div className="skeleton" /><span>Loading candles…</span></div>
             )}
@@ -218,22 +216,25 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <span className="source-text">{candles?.fetching ? "Checking Yahoo…" : ""}</span>
           </div>
           {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
-          {ready && candles.source === "Demo fixture" && !candles.fetching && <div className="chart-note"><span>Sample candles. Real market data was not available.</span><button onClick={() => ensureCandles(trade, true)}>Retry</button></div>}
           {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
+          {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
+          {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
+          {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
           <div className="levels">
             <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
             <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
             <div><small>STOP</small><b className={trade.stop_loss_price == null ? "empty" : ""}>{formatPrice(trade.stop_loss_price, trade.symbol)}</b></div>
-            <div><small>TARGET</small><b className={trade.planned_target_price == null ? "empty" : ""}>{formatPrice(trade.planned_target_price, trade.symbol)}</b></div>
+            <div><small>TARGET</small><b className={trade.planned_target_price == null ? "empty" : ""}>{trade.planned_target_price == null ? "No target set" : formatPrice(trade.planned_target_price, trade.symbol)}</b></div>
             <div title="Worst price against you during the hold, estimated from bars"><small>HEAT (MAE)</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
             <div title="Best price in your favour during the hold, estimated from bars"><small>BEST (MFE)</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
           </div>
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} />}
-        </div>
+          </div>
 
-        <div className="detail-actions">
-          <button className="btn-primary" disabled={!shareBlob} onClick={shareCard}>{shareBlob ? "Share Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
-        </div>
+          <div className="detail-actions">
+            <button className="btn-primary" disabled={!shareBlob} onClick={shareCard}>{shareBlob ? "Share Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
+          </div>
+        </>}
 
         <div className="pager">
           <button aria-label="Previous trade (K)" disabled={!previous} onClick={() => go(previous)}>‹ Prev</button>

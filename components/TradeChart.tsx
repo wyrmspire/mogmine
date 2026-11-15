@@ -9,7 +9,7 @@ import { formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, excursions, fitPadding, rMultiple, snapToBar, specFor, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, aggregateCandles, excursions, fitWindow, includeInPriceRange, rMultiple, snapToBar, specFor, tradePnl, tradePoints } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 type LWC = typeof import("lightweight-charts");
@@ -18,6 +18,7 @@ type CandleSeries = import("lightweight-charts").ISeriesApi<"Candlestick">;
 type UTCTimestamp = import("lightweight-charts").UTCTimestamp;
 type Time = import("lightweight-charts").Time;
 type IPriceLine = import("lightweight-charts").IPriceLine;
+type AutoscaleInfoProvider = import("lightweight-charts").AutoscaleInfoProvider;
 type SeriesMarker = import("lightweight-charts").SeriesMarker<Time>;
 type MarkersApi = import("lightweight-charts").ISeriesMarkersPluginApi<Time>;
 
@@ -69,11 +70,13 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
   const latest = useRef({ trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange });
   const renderTimer = useRef<number | undefined>(undefined);
+  const diagnosticTimeframe = TIMEFRAME_MINUTES[timeframe] <= TIMEFRAME_MINUTES[baseTimeframe] ? baseTimeframe : timeframe;
+  const diagnosticWindow = fitWindow(trade.entry_time, trade.exit_time, diagnosticTimeframe);
 
   useEffect(() => { latest.current = { trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange }; });
 
   useImperativeHandle(ref, () => ({
-    fit: () => { const l = live.current; if (l?.fitRange) l.chart.timeScale().setVisibleLogicalRange(l.fitRange); },
+    fit: () => { const l = live.current; if (l?.fitRange) { l.chart.priceScale("right").applyOptions({ autoScale: true }); l.chart.timeScale().setVisibleLogicalRange(l.fitRange); } },
     screenshot: () => live.current?.chart.takeScreenshot(true, false) ?? null,
     setXray: (on: boolean) => { const l = live.current; if (l) { l.xrayPinned = on; l.primitive.setXray(on || l.touchTracking || l.xrayKey); } },
   }), []);
@@ -99,7 +102,19 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       localization: { timeFormatter: (time: Time) => chartCrosshairLabel(time as number, p.zone) },
       crosshair: { vertLine: { color: t.crosshair, labelBackgroundColor: t.elevated }, horzLine: { color: t.crosshair, labelBackgroundColor: t.elevated } },
     });
-    l.series.applyOptions({ upColor: t.candleUp, downColor: t.candleDown, wickUpColor: t.candleUp, wickDownColor: t.candleDown });
+    l.series.applyOptions({
+      upColor: t.candleUp,
+      downColor: t.candleDown,
+      wickUpColor: t.candleUp,
+      wickDownColor: t.candleDown,
+      // The series owns autoscale, so merge these trade prices into the candle range as well as
+      // exposing them from the primitive. Planned TP, SL and the actual exit must never be clipped.
+      autoscaleInfoProvider: ((baseImplementation) => {
+        const base = baseImplementation();
+        const priceRange = includeInPriceRange(base?.priceRange ?? null, [tr.entry_price, tr.exit_price, tr.stop_loss_price, tr.planned_target_price]);
+        return priceRange ? { ...(base ?? {}), priceRange } : base;
+      }) satisfies AutoscaleInfoProvider,
+    });
 
     const dataKey = `${p.timeframe}|${bars.length}|${bars[0].time}|${bars[bars.length - 1].time}`;
     const dataChanged = dataKey !== l.renderedKey;
@@ -149,12 +164,11 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     tag(tr.planned_target_price, t.profit, "", false);
     tag(tr.key_level_price, t.goldMid, "KEY", true);
 
-    // The fitted view: the trade with its context, never fewer than a readable number of bars.
-    const minutes = TIMEFRAME_MINUTES[barTimeframe];
-    const pad = fitPadding(tr.trade_style);
+    // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
+    const fittedWindow = fitWindow(tr.entry_time, tr.exit_time, barTimeframe);
     const entryIndex = times.indexOf(entryBar);
-    const exitIndex = times.indexOf(exitBar);
-    l.fitRange = { from: entryIndex - Math.max(18, Math.ceil(pad.before / minutes)) - 0.5, to: exitIndex + Math.max(10, Math.ceil(pad.after / minutes)) + 2.5 };
+    const fitFrom = entryIndex - fittedWindow.beforeBars;
+    l.fitRange = { from: fitFrom, to: fitFrom + fittedWindow.visibleBars };
     if (refit || dataChanged) l.chart.timeScale().setVisibleLogicalRange(l.fitRange);
 
     window.clearTimeout(renderTimer.current);
@@ -252,5 +266,13 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     draw.current(refit);
   }, [trade, timeframe, zone, privacy, theme, baseTimeframe]);
 
-  return <div ref={hostRef} className="chart-host" role="img" aria-label={`${describeTrade(trade, zone, privacy)} Candlestick chart with the position box.`} />;
+  return <div
+    ref={hostRef}
+    className="chart-host"
+    role="img"
+    aria-label={`${describeTrade(trade, zone, privacy)} Candlestick chart with the position box.`}
+    data-timeframe={diagnosticTimeframe}
+    data-visible-bars={diagnosticWindow.visibleBars.toFixed(3)}
+    data-trade-share={(diagnosticWindow.holdBars / diagnosticWindow.visibleBars).toFixed(4)}
+  />;
 }

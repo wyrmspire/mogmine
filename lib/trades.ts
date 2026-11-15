@@ -5,10 +5,11 @@ export type TradeDirection = "LONG" | "SHORT";
 export type TradeStyle = "scalp" | "session_90m" | "investment";
 export type Timeframe = "1m" | "5m" | "15m" | "1h";
 export type ReviewStatus = "new" | "tagged" | "reviewed";
-export type CandleSource = "Yahoo Finance" | "Demo fixture";
+export type CandleSource = "Yahoo Finance";
 
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 export const TIMEFRAME_MINUTES: Record<Timeframe, number> = { "1m": 1, "5m": 5, "15m": 15, "1h": 60 };
+export const MIN_FITTED_BARS = 30;
 
 export interface Candle {
   /** Bar open time, UTC milliseconds. */
@@ -18,6 +19,21 @@ export interface Candle {
   low: number;
   close: number;
   volume: number;
+}
+
+export interface PriceRange {
+  minValue: number;
+  maxValue: number;
+}
+
+/** Extend an autoscale range with every finite required price. */
+export function includeInPriceRange(base: PriceRange | null, required: Array<number | null | undefined>): PriceRange | null {
+  const prices = required.filter((value): value is number => value != null && Number.isFinite(value));
+  if (!prices.length) return base;
+  return {
+    minValue: Math.min(base?.minValue ?? Infinity, ...prices),
+    maxValue: Math.max(base?.maxValue ?? -Infinity, ...prices),
+  };
 }
 
 /** One checklist rule, frozen on the trade when the playbook is chosen (UX-50). */
@@ -158,15 +174,13 @@ export function classifyTrade(entry: string, exit: string): TradeStyle {
   return "investment";
 }
 
-export function defaultTimeframe(style: TradeStyle): Timeframe {
-  return style === "scalp" ? "1m" : style === "session_90m" ? "5m" : "1h";
+/** Pick an initial timeframe that puts ordinary intraday holds in roughly 8–40 trade bars. */
+export function defaultTimeframe(holdDurationSeconds: number): Timeframe {
+  if (holdDurationSeconds <= 40 * 60) return "1m";
+  if (holdDurationSeconds <= 3 * 60 * 60) return "5m";
+  if (holdDurationSeconds <= 10 * 60 * 60) return "15m";
+  return "1h";
 }
-
-export const STYLE_LABEL: Record<TradeStyle, string> = {
-  scalp: "Scalp",
-  session_90m: "90m session",
-  investment: "Extended",
-};
 
 export function aggregateCandles(candles: Candle[], timeframe: Timeframe): Candle[] {
   const minutes = TIMEFRAME_MINUTES[timeframe];
@@ -205,11 +219,38 @@ export function snapToBar(times: number[], instant: number, timeframe: Timeframe
   return Math.abs(before - open) <= Math.abs(after - open) ? before : after;
 }
 
-/** Minutes of context shown before the entry and after the exit when the chart fits the trade. */
-export function fitPadding(style: TradeStyle) {
-  if (style === "scalp") return { before: 35, after: 20 };
-  if (style === "session_90m") return { before: 90, after: 30 };
-  return { before: 480, after: 240 };
+export interface FittedWindow {
+  /** UTC milliseconds. */
+  start: number;
+  /** UTC milliseconds. */
+  end: number;
+  beforeBars: number;
+  holdBars: number;
+  afterBars: number;
+  visibleBars: number;
+}
+
+/**
+ * Fit a trade from its own duration: 30% of the view before entry, 50% in the
+ * trade, and 20% after exit. This is continuous; stored style never affects it.
+ */
+export function fitWindow(entryTime: string, exitTime: string, timeframe: Timeframe, minimumBars = MIN_FITTED_BARS): FittedWindow {
+  const entry = Date.parse(entryTime);
+  const holdMs = Math.max(1000, Date.parse(exitTime) - entry);
+  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
+  const holdBars = holdMs / barMs;
+  const visibleBars = Math.max(holdBars * 2, minimumBars);
+  const contextBars = visibleBars - holdBars;
+  const beforeBars = contextBars * 0.6;
+  const afterBars = contextBars * 0.4;
+  return {
+    start: entry - beforeBars * barMs,
+    end: entry + holdMs + afterBars * barMs,
+    beforeBars,
+    holdBars,
+    afterBars,
+    visibleBars,
+  };
 }
 
 export interface Excursions {
@@ -240,7 +281,7 @@ export function excursions(trade: Pick<TradeRecord, "direction" | "entry_time" |
 }
 
 /** ~`points` closes from just before the entry to just after the exit. */
-export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_time" | "trade_style">, candles: Candle[], points = 40) {
+export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_time">, candles: Candle[], points = 40) {
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
   const pad = Math.max(10 * 60_000, (exit - entry) * 0.6);
@@ -277,6 +318,7 @@ export function deriveReviewStatus(trade: Pick<TradeRecord, "review_status" | "p
 
 /** Fill in fields added after a record was stored, so old device data keeps loading. */
 export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id" | "symbol" | "direction" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): TradeRecord {
+  const hadNonMarketCandles = raw.candle_source != null && raw.candle_source !== "Yahoo Finance";
   const trade: TradeRecord = {
     user_id: DEFAULT_OWNER_USER_ID,
     yahoo_ticker: specFor(raw.symbol).yahooTicker || raw.symbol,
@@ -301,6 +343,8 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     ...raw,
   };
   if (!(trade.quantity > 0)) trade.quantity = 1;
+  if (trade.candle_source !== "Yahoo Finance") trade.candle_source = undefined;
+  if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
   return trade;
 }

@@ -11,7 +11,7 @@ import { formatSessionDate, sessionDate } from "@/lib/session";
 import { updateTrade, useJournal } from "@/lib/store";
 import { formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { STYLE_LABEL, holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
 import { rememberList } from "@/lib/ui";
 
@@ -83,7 +83,7 @@ function Queue() {
               {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
             </span>
             <span className="row-meta" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>
-              {formatSessionDate(sessionDate(trade.entry_time))} · {formatListTime(trade.entry_time, prefs.timeZone)} · {STYLE_LABEL[trade.trade_style]} · in at {formatPrice(trade.entry_price, trade.symbol)}{sealed ? "" : ` · ${formatDuration(holdSeconds(trade))}`}
+              {formatSessionDate(sessionDate(trade.entry_time))} · {formatListTime(trade.entry_time, prefs.timeZone)} · in at {formatPrice(trade.entry_price, trade.symbol)}{sealed ? "" : ` · ${formatDuration(holdSeconds(trade))}`}
             </span>
           </span>
           <span className={sealed ? "sealed" : ""} aria-hidden={sealed}><Sparkline points={trade.sparkline} /></span>

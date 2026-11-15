@@ -95,6 +95,8 @@ class PositionBoxRenderer implements IPrimitivePaneRenderer {
 - **Do not call `getComputedStyle()` inside `draw()`.** It runs on every frame of a pinch. Read `--position-box-opacity`, `--gold-mid` and the profit and risk colours into a small store, update it when a slider or preset changes, then call `requestUpdate()`. The values still come from the CSS variables (Invariant 5).
 - **Read the profit and risk colours from tokens too** (`--profit-emerald`, `--risk-crimson`). The literal `rgba(16, 185, 129, …)` above blocks a colour-blind preset ([08](08-ux-notes-viewing-and-journaling.md) UX-80).
 - **Chart times are shifted for display only.** The library has no time-zone support. Pass every bar, marker and primitive time through one `toChartTime()` helper, and never let a shifted time reach the database or the AI (B-22).
+- **Extend the series autoscale, not only the drawing.** Merge `entry_price`, `exit_price`, `stop_loss_price` and `planned_target_price` into the candlestick series' `autoscaleInfoProvider`, and return the same bounds from the primitive's `autoscaleInfo()`. Fit must restore automatic price scaling so TP, SL and exit remain visible.
+- **Never generate sample candles.** A sample may point at real archived/fetched bars, but if those bars are unavailable it has no chart, exactly like a real trade. Give seeded sample trades an explicit planned target; do not infer one in the chart.
 
 ---
 
@@ -138,57 +140,34 @@ export function syncChartTimeScales(
 
 ---
 
-### Recipe 3: Trade Style Auto-Classification & Yahoo Window Padding
+### Recipe 3: Duration-derived Yahoo window
 
 **❌ WRONG:** Fetching only `[entryTime, exitTime]` candles from Yahoo Finance. That produces a 3-candle chart where you cannot see the trend, Overnight Low sweep, or post-exit follow-through.
 
-**✅ RIGHT:** Classify the trade first, select the timeframe, and pad **before entry** and **after exit** so the chart tells the full story.
+**✅ RIGHT:** Size the fitted view continuously from the trade's own hold time. The trade occupies half the base span, with 30% of the view before entry and 20% after exit. Stored classification data does not control the chart.
 
 ```typescript
-export type TradeStyle = 'scalp' | 'session_90m' | 'investment';
-
-export function classifyAndWindowTrade(entryTime: Date, exitTime: Date) {
-  const holdSeconds = Math.max(
-    1,
-    Math.round((exitTime.getTime() - entryTime.getTime()) / 1000)
-  );
-
-  if (holdSeconds < 15 * 60) {
-    return {
-      style: 'scalp' as TradeStyle,
-      defaultTimeframe: '1m' as const,
-      // 45 mins prior + 25 mins after exit for micro-structure & post-exit check
-      windowStart: new Date(entryTime.getTime() - 45 * 60 * 1000),
-      windowEnd: new Date(exitTime.getTime() + 25 * 60 * 1000),
-    };
-  }
-
-  if (holdSeconds <= 2 * 60 * 60) {
-    return {
-      style: 'session_90m' as TradeStyle,
-      defaultTimeframe: '5m' as const,
-      // 3 hours prior (captures ONH/ONL/ORB) + 60 mins after exit
-      windowStart: new Date(entryTime.getTime() - 3 * 60 * 60 * 1000),
-      windowEnd: new Date(exitTime.getTime() + 60 * 60 * 1000),
-    };
-  }
-
+export function fitWindow(entryTime: Date, exitTime: Date) {
+  const holdMs = Math.max(1000, exitTime.getTime() - entryTime.getTime());
+  const holdBars = holdMs / 60_000; // selected timeframe in production
+  const visibleBars = Math.max(holdBars * 2, 30);
+  const extraBars = visibleBars - holdBars;
   return {
-    style: 'investment' as TradeStyle,
-    defaultTimeframe: '1h' as const,
-    // 7 days prior + 2 days after exit
-    windowStart: new Date(entryTime.getTime() - 7 * 24 * 60 * 60 * 1000),
-    windowEnd: new Date(exitTime.getTime() + 2 * 24 * 60 * 60 * 1000),
+    beforeBars: extraBars * 0.6,
+    holdBars,
+    afterBars: extraBars * 0.4,
   };
 }
 ```
 *Agent Note:* Whenever ingesting a trade, also fetch and cache `1m`, `5m`, and `15m` bars into `trade_candles` immediately so switching timeframes on mobile works offline/instantly even months later.
 
+Pick the initial timeframe from the hold duration, not stored style: `1m` through 40 minutes, `5m` through 3 hours, `15m` through 10 hours, then `1h`. Reapply the bar-count rule after every timeframe switch so coarser views show wider clock-time context.
+
 *Agent Notes added 2026-11-14 ([09](09-backend-risk-register.md) §2):*
 - **`windowEnd` is in the future when the trade closes.** A single fetch at ingestion never gets the post-exit bars. Fetch what exists, then schedule a top-up in the `enrichment_jobs` table. Never use `setTimeout` in a process that can restart (B-10).
 - **Record coverage.** Yahoo returns an empty result, not an error, for ranges it no longer serves. Store the requested and received range per timeframe, and fall back to a coarser timeframe for old imports (B-11).
 - **Session levels need whole sessions,** not this window. VWAP, `ONH/ONL` and `PDH/PDL` cannot be computed from 45 minutes of bars (B-13).
-- **The third bucket is under review.** Topstep accounts cannot hold across days, so do not build multi-day window logic yet (`OD-9` in [DECISIONS.md](../DECISIONS.md)).
+- **The bar floor is separate from the duration rule.** Apply it in bars for the selected timeframe, never as another clock-time bucket.
 
 ---
 

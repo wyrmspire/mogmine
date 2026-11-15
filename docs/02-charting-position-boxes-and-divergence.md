@@ -37,19 +37,21 @@ Every trade automatically renders a TradingView-style **Position Box** directly 
    - **MAE & MFE Inner Watermarks:** Inside the Risk Box, a darker inner shade marks the actual **MAE (Heat Taken)** relative to the full hard Stop Loss; inside the Profit Box, a subtle tick line marks the **MFE Peak** so you immediately see how much heat you absorbed and how much open profit existed before exit.
    - **Post-Exit "Ghost Box" Toggle (`[ 👻 +15m Ghost ]`):** Extends a faint, dotted projection of your Entry, Stop, and Target levels `15–30 bars` past `exit_time`. One tap shows whether exiting early saved you from a reversal or left `+2R` on the table.
 
+The price autoscale always includes the planned target, planned stop and actual exit in addition to the visible candles. The primitive exposes those bounds and the candlestick series merges them into its own autoscale range; **Fit** restores price autoscale as well as the duration-derived time window. A missing planned target is labelled “No target set” and does not invent a profit zone.
+
 ---
 
-## 3. Automatic Trade Classification (`Scalp` vs. `90-Min` vs. `Investment`)
+## 3. Duration-derived chart window
 
-When a trade closes (or is imported), the classifier inspects `hold_duration_seconds = exit_time - entry_time` and session boundaries to configure both the **default chart view** and the **AI coaching lens**:
+The fitted chart view comes directly from `hold_duration_seconds = exit_time - entry_time`; it never comes from a duration category. The base span is twice the hold: 30% of the view before entry, 50% in the trade and 20% after exit. A 90-minute hold therefore fits into roughly three hours of price action, while a five-minute hold gets a tight view. The rule is continuous, with no session-length label or bucket in the interface.
 
-| Classification | Hold Duration Rule | Default Chart Timeframe | Default Context Window | What the Chart & AI Focus On |
-| :--- | :--- | :--- | :--- | :--- |
-| **`scalp`** | `< 15 minutes` | `1m` candles | `35 bars` before entry → `20 bars` after exit | Micro-structure, candle wicks, entry chasing, slippage, immediate reaction off `VWAP`/`ONH`/`ONL`. |
-| **`session_90m`** | `15 minutes` to `2 hours` (or single intraday macro window) | `5m` candles (toggleable to `1m` / `15m`) | Full active session open (e.g., 1.5h before entry → 30m after exit) | Session structure, Opening Range (`ORB`), Initial Balance (`IB`), patience through pullbacks, target management. |
-| **`investment`** (Swing / Extended) | `> 2 hours` / held across multiple sessions | `1h` or `1d` candles (toggleable to `15m`) | `5–20 sessions` prior → post-exit follow-through | Higher-timeframe trend alignment, multi-day levels (`PDH/PDL`, weekly highs/lows), macro catalyst thesis. |
+The fitted view never contains fewer than 30 bars on the selected timeframe. When that floor widens a very short hold, the added context keeps the same before/after bias. The initial timeframe comes from duration: `1m` through 40 minutes, `5m` through 3 hours, `15m` through 10 hours, then `1h`. Switching timeframe recomputes the bar-based window, so a `15m` view shows materially more clock-time context than `1m` instead of preserving the same minutes.
 
-*Note:* The trader can always override the classification manually on a trade if a trade intended as a `90-Min Trade` got stopped out in 4 minutes, or a scalp turned into a runner.
+The stored `trade_style` field and `classifyTrade` remain for data compatibility while the later AI coaching lens is decided; neither controls the chart window or initial timeframe.
+
+Samples follow the same market-data rule as real trades. They use cached or fetched Yahoo bars and have a planned target so both zones can be reviewed. Their entry comes from the real entry bar; stop, target and exit are derived from real bar extrema. The sample exits at the first bar that touches either planned level, so MAE never passes its stop and MFE never passes its target. Synthetic sample candles are forbidden; when market bars are unavailable, no chart is rendered.
+
+Real trades are never rewritten to fit the bars. A pure validator checks completed bars before the recorded exit for a passed planned stop, or a passed target followed by a worse exit, and checks that the exit sits inside its bar. Trade Detail reports those as neutral facts. A same-bar touch is not called “before exit” because OHLC cannot prove event order within one candle; stop-move recording remains tracked in issue #24.
 
 ---
 

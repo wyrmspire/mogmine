@@ -1,7 +1,7 @@
 // Pure list logic: grouping, filtering and day statistics. Lists never see candles (B-42).
 import { sessionDate } from "./session.ts";
 import { adherence, rMultiple, tradePnl } from "./trades.ts";
-import type { TradeRecord, TradeStyle } from "./trades.ts";
+import type { TradeRecord } from "./trades.ts";
 
 export interface DayStats {
   count: number;
@@ -54,26 +54,21 @@ export function groupByDay(trades: TradeRecord[]): DayGroup[] {
   });
 }
 
-export type StyleFilter = "all" | TradeStyle;
 export type StatusFilter = "all" | "unreviewed" | "flagged";
 
 export interface FeedFilters {
-  style: StyleFilter;
   status: StatusFilter;
 }
 
 export function parseFilters(params: { get(name: string): string | null }): FeedFilters {
-  const style = params.get("style");
   const status = params.get("status");
   return {
-    style: style === "scalp" || style === "session_90m" || style === "investment" ? style : "all",
     status: status === "unreviewed" || status === "flagged" ? status : "all",
   };
 }
 
 export function filtersToQuery(filters: FeedFilters) {
   const params = new URLSearchParams();
-  if (filters.style !== "all") params.set("style", filters.style);
   if (filters.status !== "all") params.set("status", filters.status);
   const query = params.toString();
   return query ? `?${query}` : "";
@@ -81,17 +76,14 @@ export function filtersToQuery(filters: FeedFilters) {
 
 export function applyFilters(trades: TradeRecord[], filters: FeedFilters) {
   return trades.filter((trade) =>
-    (filters.style === "all" || trade.trade_style === filters.style) &&
     (filters.status === "all" || (filters.status === "flagged" ? trade.flagged : trade.review_status !== "reviewed")));
 }
 
-const STYLE_NAMES: Record<StyleFilter, string> = { all: "All styles", scalp: "Scalps", session_90m: "90m session", investment: "Extended" };
 const STATUS_NAMES: Record<StatusFilter, string> = { all: "Any status", unreviewed: "Needs review", flagged: "Flagged" };
 
 /** Plain-language name of the active filters, for the empty state and the pager. */
 export function describeFilters(filters: FeedFilters) {
-  const parts = [filters.style !== "all" ? STYLE_NAMES[filters.style] : "", filters.status !== "all" ? STATUS_NAMES[filters.status] : ""].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "All trades";
+  return filters.status !== "all" ? STATUS_NAMES[filters.status] : "All trades";
 }
 
 export function withSamples(trades: TradeRecord[], showSamples: boolean) {

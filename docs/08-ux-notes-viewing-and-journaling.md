@@ -87,9 +87,11 @@ Every screen is specified for more than the happy path. If a state is not in thi
 | Post-exit candles not yet available (B-10) | The chart and box as normal. The area after the exit is marked "Post-exit candles arrive ~10:55 ET". The Ghost toggle is disabled and says why. |
 | Bars missing inside the window (B-11, `AC-07`) | Gaps drawn as gaps, never bridged, with a line: "6 bars missing 09:41–09:46". A higher-timeframe candle built from missing minutes is marked incomplete. |
 | A timeframe was never captured (B-11) | The best available timeframe, with a line: "1m data was not captured for this trade — showing 15m". |
-| No candles at all | A price ladder instead of a blank chart: entry, exit and stop on a price axis, plus the fills table. |
+| No candles at all | No chart area, generated candles, price ladder or placeholder graphic. The trade header, details and notes remain usable. |
 | Chart data may not line up (B-12) | A small amber chip: "Candles are from the ES continuous contract. Your fills may sit slightly off the bars." |
+| Planned SL/TP passed before a real trade's exit | A short neutral fact below the chart. Never change the recorded trade. A passed stop links to issue #24 for stop-move recording. |
 | No stop recorded | R shows `—R` with an **Add stop** affordance. Never `0.0R`. |
+| No planned target recorded | Target shows “No target set”. No TP zone is invented. |
 | MAE/MFE estimated (B-33) | Values prefixed with `≈`. |
 | Broker corrected or voided a fill later (B-04) | "Updated by broker 11:02" on the trade. Notes are kept. |
 | P&L disagrees with the broker (B-34) | Both numbers, with the broker's labelled. |
