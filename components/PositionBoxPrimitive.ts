@@ -1,10 +1,11 @@
 // The Position Box: a Canvas series primitive, never HTML over the chart (Invariant 1).
-// Three layers that never share a look (issue #31):
-//   PLAN — purple outline, faint green (TP) / faint red (SL) fills, PLAN tag, TP/SL labels.
-//   ACTUAL — teal frame, entry fill to exit fill. Green or red solid fill only here; gray line for a scratch.
-//   EXCURSION — a thin MFE/MAE bracket beside the box, never a rectangle or a full-width line.
+// Drawn like TradingView's long/short position tool: fills only, no outline or frame on any box,
+// and no text on the box (the price-axis tags and the P&L pill carry the numbers).
+//   PLAN — faint red fill entry→stop, faint green fill entry→target.
+//   ACTUAL — a stronger fill entry→exit in the result colour: green win, red loss, gray scratch.
+//   EXCURSION — a thin unlabelled MFE/MAE bracket beside the box (numbers live in the stats grid).
 //
-// Fills are drawn under the candles and strokes above them, so candles stay crisp at any opacity.
+// Fills are drawn under the candles, so candles stay crisp at any opacity.
 // Colours and opacity arrive in the config from the theme store; draw() never reads CSS (AGENTS §3b-7).
 import type { CanvasRenderingTarget2D } from "fancy-canvas";
 import type {
@@ -34,7 +35,7 @@ export interface PositionBoxConfig {
   maePrice: number | null;
   mfePrice: number | null;
   isLong: boolean;
-  /** Result is within the scratch threshold: a gray line at entry, no actual band. */
+  /** Result is within the scratch threshold: the actual band is gray instead of green or red. */
   scratch: boolean;
   /** Result label drawn on the chart, e.g. `+1.6R · +$47.50`. R only in Shield mode (UX-71). */
   pill: string;
@@ -43,18 +44,10 @@ export interface PositionBoxConfig {
   riskColor: string;
   profitTextColor?: string;
   riskTextColor?: string;
-  frameColor: string;
-  planColor: string;
   mutedColor: string;
   pillBackground: string;
   textColor: string;
   opacity: number;
-  /** Right-edge plan labels, e.g. `SL (initial)` and `TP +2.0R`. Empty when that level is missing. */
-  stopLabel: string;
-  targetLabel: string;
-  exitReason: "TP" | "SL" | null;
-  maeLabel: string | null;
-  mfeLabel: string | null;
 }
 
 interface Geometry {
@@ -73,9 +66,7 @@ interface Geometry {
 const XRAY_OPACITY = 0.05;
 /** Plan fills stay clearly weaker than the actual band so they cannot be read as P&L. */
 const PLAN_FILL_RATIO = 0.28;
-const LABEL_FONT = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
 const PILL_FONT = "600 11px ui-monospace, SFMono-Regular, Menlo, monospace";
-const TAG_FONT = "700 9px ui-monospace, SFMono-Regular, Menlo, monospace";
 
 class FillRenderer implements IPrimitivePaneRenderer {
   constructor(private g: Geometry | null, private c: PositionBoxConfig, private opacity: number) {}
@@ -95,11 +86,14 @@ class FillRenderer implements IPrimitivePaneRenderer {
       // PLAN fills first, faint, so the actual band (if any) paints over them.
       if (g.yTarget != null) rect(g.yEntry, g.yTarget, c.profitColor, planAlpha);
       if (g.yStop != null) rect(g.yEntry, g.yStop, c.riskColor, planAlpha);
-      if (!c.scratch) {
-        const made = (c.exitPrice - c.entryPrice) * (c.isLong ? 1 : -1);
-        if (made > 0) rect(g.yEntry, g.yExit, c.profitColor, this.opacity);
-        else if (made < 0) rect(g.yEntry, g.yExit, c.riskColor, this.opacity);
-      }
+      // ACTUAL: one stronger fill in the result colour. A scratch is gray, and at least 2px tall
+      // so a flat exit is still visible. Nothing outlines it.
+      const made = (c.exitPrice - c.entryPrice) * (c.isLong ? 1 : -1);
+      const actual = c.scratch || made === 0 ? c.mutedColor : made > 0 ? c.profitColor : c.riskColor;
+      const minHalf = 1;
+      const yA = Math.abs(g.yExit - g.yEntry) < 2 * minHalf ? (g.yEntry + g.yExit) / 2 - minHalf : g.yEntry;
+      const yB = Math.abs(g.yExit - g.yEntry) < 2 * minHalf ? (g.yEntry + g.yExit) / 2 + minHalf : g.yExit;
+      rect(yA, yB, actual, this.opacity);
       ctx.globalAlpha = 1;
     });
   }
@@ -112,44 +106,14 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
     const { g, c } = this;
     if (!g) return;
     const strength = this.xray ? 0.35 : 1;
+    const made = (c.exitPrice - c.entryPrice) * (c.isLong ? 1 : -1);
+    const resultColor = c.scratch || made === 0 ? c.mutedColor : made > 0 ? c.profitColor : c.riskColor;
     target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: sx, verticalPixelRatio: sy }) => {
-      const left = Math.round(g.left * sx) + 0.5;
-      const right = Math.round(g.right * sx) - 0.5;
       const y = (value: number) => Math.round(value * sy) + 0.5;
       const line = Math.max(1, Math.floor(sx));
-      const box = (yA: number, yB: number, color: string, widthPx: number) => {
-        ctx.globalAlpha = strength;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = Math.max(line, Math.round(widthPx * sx));
-        ctx.setLineDash([]);
-        ctx.strokeRect(left, y(Math.min(yA, yB)), right - left, y(Math.max(yA, yB)) - y(Math.min(yA, yB)));
-      };
-      const horizontal = (yValue: number, color: string, widthPx: number) => {
-        ctx.globalAlpha = strength;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = Math.max(line, Math.round(widthPx * sx));
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.moveTo(left, y(yValue));
-        ctx.lineTo(right, y(yValue));
-        ctx.stroke();
-      };
 
-      // PLAN outline: one purple rectangle around the planned stop and target.
-      const planYs = [g.yEntry, g.yStop, g.yTarget].filter((value): value is number => value != null);
-      if (planYs.length > 1) box(Math.min(...planYs), Math.max(...planYs), c.planColor, 1);
-      else if (g.yStop != null) box(g.yEntry, g.yStop, c.planColor, 1);
-      else if (g.yTarget != null) box(g.yEntry, g.yTarget, c.planColor, 1);
-
-      if (c.scratch) {
-        horizontal(g.yEntry, c.mutedColor, 1);
-      } else {
-        box(g.yEntry, g.yExit, c.frameColor, 1.5);
-        horizontal(g.yEntry, c.frameColor, 1);
-      }
-
-      // Entry and exit flags at the fill prices — never floating above or below the bar.
-      const flag = (x: number, yValue: number, pointUp: boolean, solid: boolean, color: string) => {
+      // Entry and exit flags at the fill prices. Entry is neutral; the exit takes the result colour.
+      const flag = (x: number, yValue: number, pointUp: boolean, color: string) => {
         const size = 6 * sx;
         const px = x * sx;
         const py = yValue * sy;
@@ -165,24 +129,13 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
         }
         ctx.closePath();
         ctx.globalAlpha = strength;
-        ctx.lineWidth = line;
-        ctx.setLineDash([]);
-        if (solid) {
-          ctx.fillStyle = color;
-          ctx.fill();
-          ctx.strokeStyle = c.pillBackground;
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = c.pillBackground;
-          ctx.fill();
-          ctx.strokeStyle = color;
-          ctx.stroke();
-        }
+        ctx.fillStyle = color;
+        ctx.fill();
       };
-      flag(g.x1, g.yEntry, c.isLong, true, c.frameColor);
-      flag(g.x2, g.yExit, !c.isLong, false, c.frameColor);
+      flag(g.x1, g.yEntry, c.isLong, c.textColor);
+      flag(g.x2, g.yExit, !c.isLong, resultColor);
 
-      // Excursion bracket in the gap right of the exit bar — never a rectangle or a full-width line.
+      // Excursion bracket in the gap right of the exit bar — no text, never a rectangle or a full-width line.
       const capLow = g.yMae ?? g.yEntry;
       const capHigh = g.yMfe ?? g.yEntry;
       if (g.yMae != null || g.yMfe != null) {
@@ -207,126 +160,30 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
     });
 
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      ctx.globalAlpha = this.xray ? 0.5 : 1;
-      const planTop = Math.min(...[g.yEntry, g.yStop, g.yTarget].filter((value): value is number => value != null));
-
-      // PLAN tag, top-left of the plan outline. The top edge label sits on the same row
-      // so a thin reward zone (like the scalp) still has a readable TP label.
-      let planTagRight = g.left;
-      let planTagY = planTop - 15;
-      if (g.yStop != null || g.yTarget != null) {
-        ctx.font = TAG_FONT;
-        const tag = "PLAN";
-        const width = Math.ceil(ctx.measureText(tag).width) + 8;
-        const height = 12;
-        const xTag = Math.max(2, g.left + 2);
-        const yTag = Math.max(2, planTop - height - 3);
-        planTagRight = xTag + width;
-        planTagY = yTag + height / 2;
-        ctx.beginPath();
-        ctx.roundRect(xTag, yTag, width, height, 3);
-        ctx.fillStyle = c.pillBackground;
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = c.planColor;
-        ctx.setLineDash([]);
-        ctx.stroke();
-        ctx.fillStyle = c.planColor;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(tag, xTag + width / 2, yTag + height / 2 + 0.5);
-      }
-
-      ctx.font = LABEL_FONT;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      const place = (text: string, x: number, yText: number) => {
-        if (!text) return;
-        const w = ctx.measureText(text).width + 4;
-        ctx.fillStyle = c.pillBackground;
-        ctx.globalAlpha = (this.xray ? 0.5 : 1) * 0.82;
-        ctx.fillRect(x - 2, yText - 7, w, 14);
-        ctx.globalAlpha = this.xray ? 0.5 : 1;
-        ctx.fillStyle = c.planColor;
-        ctx.fillText(text, x, yText);
-      };
-      const planBottom = Math.max(...[g.yEntry, g.yStop, g.yTarget].filter((value): value is number => value != null));
-      const topIsTarget = g.yTarget != null && (g.yStop == null || g.yTarget < g.yStop);
-      if (c.targetLabel && g.yTarget != null) {
-        if (topIsTarget) place(c.targetLabel, planTagRight + 6, planTagY);
-        else place(c.targetLabel, g.left + 6, Math.min(mediaSize.height - 8, planBottom + 10));
-      }
-      if (c.stopLabel && g.yStop != null) {
-        if (!topIsTarget) place(c.stopLabel, planTagRight + 6, planTagY);
-        else place(c.stopLabel, g.left + 6, Math.min(mediaSize.height - 8, planBottom + 10));
-      }
-
-      if (c.exitReason) {
-        ctx.font = LABEL_FONT;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        const reasonX = g.x2 + 8;
-        const reasonY = g.yExit + (c.isLong ? -10 : 10);
-        const w = ctx.measureText(c.exitReason).width + 6;
-        ctx.fillStyle = c.pillBackground;
-        ctx.globalAlpha = (this.xray ? 0.5 : 1) * 0.86;
-        ctx.fillRect(reasonX - 2, reasonY - 7, w, 14);
-        ctx.globalAlpha = this.xray ? 0.5 : 1;
-        ctx.fillStyle = c.textColor;
-        ctx.fillText(c.exitReason, reasonX, reasonY);
-      }
-
+      if (!c.pill) return;
+      ctx.font = PILL_FONT;
+      const width = Math.ceil(ctx.measureText(c.pill).width) + 16;
+      const height = 22;
+      // Attach the pill to the exit flag, above it when there is room.
+      let yPill = g.yExit - height - 14;
+      if (yPill < 4) yPill = Math.min(mediaSize.height - height - 4, g.yExit + 14);
+      let xPill = Math.max(4, Math.min(mediaSize.width - width - 4, g.x2 - width / 2));
+      // Keep it clear of the excursion bracket on the right.
       if (g.yMae != null || g.yMfe != null) {
-        const bx = g.right + 8;
-        ctx.font = LABEL_FONT;
-        ctx.textBaseline = "middle";
-        const axisPad = 56;
-        const caption = (text: string, yValue: number, bias: number) => {
-          const yText = yValue + bias;
-          const w = ctx.measureText(text).width + 4;
-          const fitsRight = bx + 8 + w < mediaSize.width - axisPad;
-          const xText = fitsRight ? bx + 8 : bx - 8;
-          ctx.textAlign = fitsRight ? "left" : "right";
-          ctx.fillStyle = c.pillBackground;
-          ctx.globalAlpha = (this.xray ? 0.5 : 1) * 0.86;
-          ctx.fillRect(fitsRight ? xText - 2 : xText - w + 2, yText - 7, w, 14);
-          ctx.globalAlpha = this.xray ? 0.5 : 1;
-          ctx.fillStyle = c.mutedColor;
-          ctx.fillText(text, xText, yText);
-        };
-        if (c.mfeLabel && g.yMfe != null) caption(c.mfeLabel, g.yMfe, g.yMfe <= g.yEntry ? -9 : 9);
-        if (c.maeLabel && g.yMae != null) caption(c.maeLabel, g.yMae, g.yMae >= g.yEntry ? 9 : -9);
+        const rightLimit = g.right - 4;
+        if (xPill + width > rightLimit) xPill = Math.max(4, rightLimit - width);
       }
-
-      if (c.pill) {
-        ctx.font = PILL_FONT;
-        const width = Math.ceil(ctx.measureText(c.pill).width) + 16;
-        const height = 22;
-        // Attach the pill to the exit flag, above it when there is room.
-        let yPill = g.yExit - height - 14;
-        if (yPill < 4) yPill = Math.min(mediaSize.height - height - 4, g.yExit + 14);
-        let xPill = Math.max(4, Math.min(mediaSize.width - width - 4, g.x2 - width / 2));
-        // Keep it clear of the excursion labels on the right.
-        if (g.yMae != null || g.yMfe != null) {
-          const rightLimit = g.right - 4;
-          if (xPill + width > rightLimit) xPill = Math.max(4, rightLimit - width);
-        }
-        ctx.globalAlpha = this.xray ? 0.5 : 1;
-        ctx.beginPath();
-        ctx.roundRect(xPill, yPill, width, height, 7);
-        ctx.fillStyle = c.pillBackground;
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = c.mutedColor;
-        ctx.setLineDash([]);
-        ctx.stroke();
-        const profitText = c.profitTextColor || c.profitColor;
-        const riskText = c.riskTextColor || c.riskColor;
-        ctx.fillStyle = c.pillTone === "profit" ? profitText : c.pillTone === "risk" ? riskText : c.textColor;
-        ctx.textBaseline = "middle";
-        ctx.textAlign = "center";
-        ctx.fillText(c.pill, xPill + width / 2, yPill + height / 2 + 0.5);
-      }
+      ctx.globalAlpha = this.xray ? 0.5 : 1;
+      ctx.beginPath();
+      ctx.roundRect(xPill, yPill, width, height, 7);
+      ctx.fillStyle = c.pillBackground;
+      ctx.fill();
+      const profitText = c.profitTextColor || c.profitColor;
+      const riskText = c.riskTextColor || c.riskColor;
+      ctx.fillStyle = c.pillTone === "profit" ? profitText : c.pillTone === "risk" ? riskText : c.textColor;
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+      ctx.fillText(c.pill, xPill + width / 2, yPill + height / 2 + 0.5);
       ctx.globalAlpha = 1;
     });
   }

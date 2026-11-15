@@ -117,16 +117,16 @@ test("coarser timeframes show wider clock-time context", () => {
 
 test("all ten sample trades have deterministic fitted-window goldens", () => {
   const expected: Record<string, { timeframe: string; share: number }> = {
-    "mes-opening-scalp": { timeframe: "1m", share: 2 / 30 },
-    "mnq-trend-hold": { timeframe: "5m", share: 14 / 30 },
-    "mes-failed-reclaim": { timeframe: "1m", share: 14 / 30 },
-    "mes-orb-fakeout": { timeframe: "1m", share: 2 / 30 },
-    "mnq-vwap-reclaim": { timeframe: "1m", share: 0.5 },
-    "mes-lunch-chop": { timeframe: "1m", share: 0.5 },
-    "mnq-breakdown-scalp": { timeframe: "1m", share: 5 / 30 },
-    "mes-premarket-reversal": { timeframe: "5m", share: 10.8 / 30 },
-    "mnq-late-chase": { timeframe: "1m", share: 10 / 30 },
-    "mes-afternoon-hold": { timeframe: "5m", share: 0.5 },
+    "mes-opening-scalp": { timeframe: "1m", share: (479 / 60) / 30 },
+    "mnq-trend-hold": { timeframe: "5m", share: 13.9 / 30 },
+    "mes-failed-reclaim": { timeframe: "1m", share: 3.5 / 30 },
+    "mes-orb-fakeout": { timeframe: "1m", share: 0.5 },
+    "mnq-vwap-reclaim": { timeframe: "1m", share: 10.5 / 30 },
+    "mes-lunch-chop": { timeframe: "5m", share: (4199 / 300) / 30 },
+    "mnq-breakdown-scalp": { timeframe: "1m", share: 5.5 / 30 },
+    "mes-premarket-reversal": { timeframe: "1m", share: 7.5 / 30 },
+    "mnq-late-chase": { timeframe: "1m", share: 2.5 / 30 },
+    "mes-afternoon-hold": { timeframe: "1m", share: 0.5 },
   };
   assert.equal(demoTrades.length, 10);
   for (const trade of demoTrades) {

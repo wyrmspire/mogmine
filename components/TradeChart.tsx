@@ -5,11 +5,11 @@ import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
 import type { PositionBoxConfig } from "./PositionBoxPrimitive";
 import { describeTrade } from "@/lib/describe";
-import { approx, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
+import { formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, exitFlagReason, excursions, fitWindow, includeInPriceRange, isScratch, mergeAxisTags, plannedR, rMultiple, snapToBar, specFor, tickDecimals, toTicks, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, aggregateCandles, excursions, fitWindow, includeInPriceRange, isScratch, mergeAxisTags, rMultiple, snapToBar, specFor, tradePnl, tradePoints } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 type LWC = typeof import("lightweight-charts");
@@ -63,10 +63,6 @@ interface Live {
 
 const toTime = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
 
-function signedLevel(points: number, symbol: string) {
-  const decimals = Math.max(2, tickDecimals(specFor(symbol).tickSize));
-  return `${points < 0 ? "−" : "+"}${Math.abs(points).toFixed(decimals)}`;
-}
 
 
 export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone, privacy, readout, onRendered, onFitChange, onXrayChange }: Props) {
@@ -145,10 +141,6 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     const mfePoints = ex ? (ex.mfePrice - tr.entry_price) * sign : null;
     const maePrice = maePoints != null && maePoints < 0 ? ex!.maePrice : null;
     const mfePrice = mfePoints != null && mfePoints > 0 ? ex!.mfePrice : null;
-    const near = (price: number | null, level: number | null) => (
-      price != null && level != null && Math.abs(toTicks(price, tr.symbol) - toTicks(level, tr.symbol)) <= 2
-    );
-    const plan = plannedR(tr);
     const config: PositionBoxConfig = {
       entryTime: toTime(entryBar), exitTime: toTime(exitBar),
       entryPrice: tr.entry_price, exitPrice: tr.exit_price,
@@ -157,13 +149,8 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       pill: p.privacy ? (r != null ? `${formatR(r)} · ${points}` : points) : (r != null ? `${formatR(r)} · ${formatMoney(pnl)}` : formatMoney(pnl)),
       pillTone: scratch ? "neutral" : pnl > 0 ? "profit" : pnl < 0 ? "risk" : "neutral",
       profitColor: t.profit, riskColor: t.risk, profitTextColor: t.profitText, riskTextColor: t.lossText,
-      frameColor: t.boxActual, planColor: t.boxPlanned, mutedColor: t.textMuted,
+      mutedColor: t.textMuted,
       pillBackground: t.surface, textColor: t.textPrimary, opacity: t.boxOpacity,
-      stopLabel: tr.stop_loss_price != null ? "SL (initial)" : "",
-      targetLabel: tr.planned_target_price != null ? (plan != null ? `TP ${formatR(plan)}` : "TP") : "",
-      exitReason: exitFlagReason(tr),
-      maeLabel: maePrice != null && !near(maePrice, tr.stop_loss_price) && !near(maePrice, tr.exit_price) ? `MAE ${approx(signedLevel(maePoints!, tr.symbol))}` : null,
-      mfeLabel: mfePrice != null && !near(mfePrice, tr.planned_target_price) && !near(mfePrice, tr.exit_price) ? `MFE ${approx(signedLevel(mfePoints!, tr.symbol))}` : null,
     };
     l.primitive.update(config);
 
@@ -173,8 +160,8 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     for (const tag of mergeAxisTags([
       { price: tr.stop_loss_price, color: t.risk, title: "SL" },
       { price: tr.planned_target_price, color: t.profit, title: "TP" },
-      { price: tr.entry_price, color: t.boxActual, title: "IN" },
-      { price: tr.exit_price, color: t.boxActual, title: "OUT" },
+      { price: tr.entry_price, color: t.textMuted, title: "IN" },
+      { price: tr.exit_price, color: scratch ? t.textMuted : pnl > 0 ? t.profit : pnl < 0 ? t.risk : t.textMuted, title: "OUT" },
       { price: tr.key_level_price, color: t.goldMid, title: "KEY", lineVisible: true },
     ], tr.symbol)) {
       l.lines.push(l.series.createPriceLine({
@@ -220,8 +207,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       const primitive = new PositionBoxPrimitive({
         entryTime: 0 as UTCTimestamp, exitTime: 0 as UTCTimestamp, entryPrice: trade.entry_price, exitPrice: trade.exit_price,
         stopPrice: null, targetPrice: null, maePrice: null, mfePrice: null, isLong: true, scratch: false, pill: "", pillTone: "neutral",
-        profitColor: "", riskColor: "", frameColor: "", planColor: "", mutedColor: "", pillBackground: "", textColor: "", opacity: 0,
-        stopLabel: "", targetLabel: "", exitReason: null, maeLabel: null, mfeLabel: null,
+        profitColor: "", riskColor: "", mutedColor: "", pillBackground: "", textColor: "", opacity: 0,
       });
       series.attachPrimitive(primitive);
       const state: Live = { lwc, chart, series, primitive, lines: [], fitRange: null, renderedKey: "", touchTracking: false, xrayPinned: false, xrayKey: false };

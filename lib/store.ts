@@ -226,11 +226,14 @@ function readStored(): TradeRecord[] | null {
     if (!item?.id || !item.symbol || !item.entry_time || !item.exit_time || item.entry_price == null || item.exit_price == null || !item.direction) return [];
     const { candles, ...rest } = item;
     let trade = normalizeTrade({ ...(rest as TradeRecord), is_sample: rest.is_sample ?? DEMO_TRADE_IDS.has(item.id) });
-    // Refresh only fixture-owned market facts. Issue #29 re-derived every sample from Yahoo bars;
+    // Refresh fixture-owned facts. Samples now carry a plan fixed at entry and an outcome walked from Yahoo bars;
     // stale device copies must not preserve the old impossible exits. Real trades are never changed.
     const currentDemo = demoById.get(trade.id);
-    if (currentDemo && trade.is_sample) trade = {
+    if (currentDemo && trade.is_sample) trade = normalizeTrade({
       ...trade,
+      symbol: currentDemo.symbol,
+      direction: currentDemo.direction,
+      quantity: currentDemo.quantity,
       entry_time: currentDemo.entry_time,
       exit_time: currentDemo.exit_time,
       entry_price: currentDemo.entry_price,
@@ -238,11 +241,14 @@ function readStored(): TradeRecord[] | null {
       stop_loss_price: currentDemo.stop_loss_price,
       planned_target_price: currentDemo.planned_target_price,
       key_level_price: currentDemo.key_level_price,
+      trade_style: currentDemo.trade_style,
+      playbook_id: currentDemo.playbook_id,
+      checklist_state: currentDemo.checklist_state,
       note: currentDemo.note,
       quick_tags: currentDemo.quick_tags,
       candle_source: undefined,
       sparkline: [],
-    };
+    });
     // Yahoo candles from an older build are real market data: keep them only when their ticker
     // matches the current spec (OD-15). Skip samples so stale bars are not cached under the #29 signature.
     if (!current && candles?.length && rest.candle_source === "Yahoo Finance" && rest.yahoo_ticker === trade.yahoo_ticker && !trade.is_sample) {
