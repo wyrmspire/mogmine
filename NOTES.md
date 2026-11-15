@@ -55,6 +55,12 @@ Verified: see the PR description for command output.
 Left:     Do not merge without Chris. #34 (buildMarks) can later absorb the continuation segments. Extra candles are not fetched when a tap runs out; the button says "No more candles". Optional post-exit excursion bracket stays off.
 Watch:    Dotted continuation is on by default at Medium, per the owner's 2026-11-15 decision on #37. No purple, no end labels, no 'after exit' chart text; later-touch times live in the hindsight block.
 
+### 2026-11-15 — agent (Claude Haiku 5.5) — Trade document spec (docs only), branch `feat/32-trade-document-spec` (#32)
+Did:      Added `docs/15-trade-document-and-render-grammar.md` (design §2 and §5 with the 2026-11-15 owner decisions, hindsight summary, open items `OD-30`–`OD-34`). Updated `docs/02` §2 to the box as built. Committed seven examples to `fixtures/trades/`. Index pointers in README, AGENTS, CONTRIBUTING; DECISIONS D-010 and OD-30–34. Follow-up commits restated D-010 / docs/15 to fills-only (no purple, no outlines) to match the owner's standing chart rule and the PR #72 review.
+Verified: `npm test` 64/64; `typecheck` and `build` exit 0; `lint` 0 errors, 1 pre-existing warning (`postcss.config.mjs`).
+Left:     PR against main, do-not-merge-without-Chris. `OD-30`–`OD-34` await the owner. No code. `deriveTrade` and `buildMarks` are #33 and #34.
+Watch:    The design file on the box is `trades-on-chart-design-and-plan.md`, not the `position-box-answer.md` the issue cites. Its §2.3 dollar figures assumed five contracts; doc 15 uses the two-contract examples.
+
 ### 2026-11-15 — agent (Grok Bot) — Core math + App shell, branch `feat/batch3-coverage-daystats`
 Did:      Issues #60 and #61. `validateTradeAgainstBars` now requires both entry and exit candles for `complete` coverage, and reports `chronology` separately (`unresolved` when entry and exit fall in the same bar). `fillInsideBar` returns false when the bar is missing. `dayStats` exposes `gross` (not `net`), priced/unpriceable counts, an `incomplete` flag, and a win rate over priced trades only. Today and the day header label the total "gross" and show a quiet incomplete cue.
 Files:    `lib/trade-bar-validation.ts`, `lib/trades.ts`, `lib/selectors.ts`, `components/{DayHeader,TodayScreen,TradeDetail}.tsx`, `app/globals.css`, `lib/__tests__/core.test.ts`, `NOTES.md`.

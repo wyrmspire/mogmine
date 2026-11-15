@@ -1,0 +1,17 @@
+{
+  "schema": "mogmine.trade.v1",
+  "doc": "docs/15-trade-document-and-render-grammar.md",
+  "id": "ex-nottaken",
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "revision": 1,
+  "instrument": { "symbol": "MES", "contract": null },
+  "side": "long",
+  "source": { "kind": "manual", "provider": null, "imported_at": null },
+  "is_sample": true,
+  "events": [
+    { "seq": 1, "t": "2026-11-12T15:31:00Z", "type": "plan", "basis": "stated", "qty": 2,
+      "entry": { "order": "limit", "price": 7600.00 }, "stop": 7595.00,
+      "targets": [ { "key": "t1", "price": 7610.00, "qty": 2 } ] },
+    { "seq": 2, "t": "2026-11-12T16:10:00Z", "type": "cancel", "basis": "stated", "order": "entry", "reason": "price never came back" }
+  ]
+}
