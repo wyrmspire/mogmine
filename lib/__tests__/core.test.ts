@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { describeTrade } from "../describe.ts";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
-import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
+import { applyFilters, dayStats, filtersToQuery, parseFilters } from "../selectors.ts";
 import { demoTrades } from "../fixtures.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { shareCardFileName } from "../shareCard.ts";
@@ -13,7 +13,7 @@ import { shareCardFileName } from "../shareCard.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
-import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
@@ -246,7 +246,102 @@ test("bar validator reports missing, partial, and complete coverage", () => {
 
   const clean = validateTradeAgainstBars(trade, complete);
   assert.equal(clean.coverage, "complete");
+  assert.equal(clean.chronology, "resolved");
   assert.deepEqual(clean.issues, []);
+});
+
+test("issue #60: complete coverage requires the entry candle, not only inside and exit bars", () => {
+  const minute = 60_000;
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  // Entry 15:00:30, exit 15:03:20. Expected inside bars: 15:01, 15:02. Exit bar: 15:03. Entry bar: 15:00.
+  const trade = normalizeTrade({
+    id: "missing-entry", symbol: "MES", direction: "LONG",
+    entry_time: new Date(start + 30_000).toISOString(),
+    exit_time: new Date(start + 3 * minute + 20_000).toISOString(),
+    entry_price: 100, exit_price: 104,
+  });
+  const bar = (time: number): Candle => ({ time, open: 100, high: 105, low: 99, close: 104, volume: 1 });
+  const withoutEntry = [bar(start + minute), bar(start + 2 * minute), bar(start + 3 * minute)];
+  const missingEntry = validateTradeAgainstBars(trade, withoutEntry);
+  assert.equal(missingEntry.coverage, "partial");
+  assert.equal(missingEntry.chronology, "resolved");
+
+  const withEntry = [bar(start), ...withoutEntry];
+  const complete = validateTradeAgainstBars(trade, withEntry);
+  assert.equal(complete.coverage, "complete");
+  assert.equal(complete.chronology, "resolved");
+});
+
+test("issue #60: fillInsideBar is false when the bar is missing", () => {
+  const bar: Candle = { time: Date.parse("2026-11-10T15:00:00Z"), open: 100, high: 101, low: 99, close: 100.5, volume: 1 };
+  assert.equal(fillInsideBar(100, undefined, "MES"), false);
+  assert.equal(fillInsideBar(100, bar, "MES"), true);
+  assert.equal(fillInsideBar(110, bar, "MES"), false);
+});
+
+test("issue #60: a same-bar hold can have complete data and unresolved chronology", () => {
+  const minute = 60_000;
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const trade = normalizeTrade({
+    id: "intra-bar", symbol: "MES", direction: "LONG",
+    entry_time: new Date(start + 10_000).toISOString(),
+    exit_time: new Date(start + 30_000).toISOString(),
+    entry_price: 100, exit_price: 100.25,
+  });
+  const bar: Candle = { time: start, open: 100, high: 101, low: 99, close: 100.5, volume: 1 };
+  const present = validateTradeAgainstBars(trade, [bar]);
+  assert.equal(present.coverage, "complete");
+  assert.equal(present.chronology, "unresolved");
+  assert.deepEqual(present.issues, []);
+
+  const absent = validateTradeAgainstBars(trade, []);
+  assert.equal(absent.coverage, "missing");
+  assert.equal(absent.chronology, "unresolved");
+
+  const otherBar = validateTradeAgainstBars(trade, [{ ...bar, time: start + minute }]);
+  assert.equal(otherBar.coverage, "missing");
+  assert.equal(otherBar.chronology, "unresolved");
+});
+
+test("issue #61: dayStats labels gross, counts unpriceable trades, and uses priced trades for win rate", () => {
+  const winner = normalizeTrade({
+    id: "priced-win", symbol: "MES", direction: "LONG", quantity: 1,
+    entry_time: "2026-11-10T15:00:00.000Z", exit_time: "2026-11-10T15:05:00.000Z",
+    entry_price: 6000, exit_price: 6020, stop_loss_price: 5990,
+  });
+  const unpriceable = normalizeTrade({
+    id: "bad-spec", symbol: "XYZ", direction: "LONG", quantity: 1,
+    entry_time: "2026-11-10T15:10:00.000Z", exit_time: "2026-11-10T15:15:00.000Z",
+    entry_price: 100, exit_price: 90,
+  });
+  assert.equal(tradePnl(winner), 100); // 20 points * $5
+  assert.equal(tradePnl(unpriceable), null);
+
+  const mixed = dayStats([winner, unpriceable]);
+  assert.equal(mixed.count, 2);
+  assert.equal(mixed.pricedCount, 1);
+  assert.equal(mixed.unpriceableCount, 1);
+  assert.equal(mixed.gross, 100);
+  assert.equal(mixed.wins, 1);
+  assert.equal(mixed.winRate, 1);
+  assert.equal(mixed.incomplete, true);
+
+  const clean = dayStats([winner]);
+  assert.equal(clean.gross, 100);
+  assert.equal(clean.pricedCount, 1);
+  assert.equal(clean.unpriceableCount, 0);
+  assert.equal(clean.winRate, 1);
+  assert.equal(clean.incomplete, false);
+
+  const empty = dayStats([]);
+  assert.equal(empty.gross, 0);
+  assert.equal(empty.winRate, null);
+  assert.equal(empty.incomplete, false);
+
+  const onlyBad = dayStats([unpriceable]);
+  assert.equal(onlyBad.gross, 0);
+  assert.equal(onlyBad.winRate, null);
+  assert.equal(onlyBad.incomplete, true);
 });
 
 test("formatting follows docs/08 §13", () => {

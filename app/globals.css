@@ -241,6 +241,8 @@ h1, h2, h3, p { margin: 0; }
 .day-head .net { font-size: 0.875rem; font-weight: 750; white-space: nowrap; }
 .day-head .day-sub { grid-column: 1 / -1; font-size: 0.6875rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .day-head .process { color: var(--gold-light); }
+.day-head .gross-label { font-size: 0.625rem; font-weight: 600; color: var(--text-muted); margin-left: 4px; }
+.incomplete { color: var(--text-muted); font-weight: 600; }
 .tag-chip { font-size: 0.5625rem; font-weight: 850; letter-spacing: 0.07em; padding: 3px 6px; border-radius: 6px; color: var(--text-muted); background: var(--bg-elevated); border: 1px solid var(--border-subtle); }
 
 .trade-list { display: grid; gap: 8px; padding-top: 10px; }
