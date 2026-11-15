@@ -159,6 +159,7 @@ export function classifyTrade(entry: string, exit: string): TradeStyle {
   return "investment";
 }
 
+/** Pick an initial timeframe that puts ordinary intraday holds in roughly 8–40 trade bars. */
 export function defaultTimeframe(holdDurationSeconds: number): Timeframe {
   if (holdDurationSeconds <= 40 * 60) return "1m";
   if (holdDurationSeconds <= 3 * 60 * 60) return "5m";

@@ -7,7 +7,7 @@ import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
-import { MIN_FITTED_BARS, adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, fitWindow, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { MIN_FITTED_BARS, adherence, aggregateCandles, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 
 const base = { id: "t", entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z" };
@@ -87,6 +87,24 @@ test("fitted chart window has a thirty-bar floor", () => {
   const longer = fitWindow(entry, "2026-11-10T15:16:00.000Z", "1m");
   assert.equal(longer.visibleBars, 32);
   assert.equal(longer.holdBars / longer.visibleBars, 0.5);
+});
+
+test("default timeframe follows hold duration", () => {
+  assert.equal(defaultTimeframe(40), "1m");
+  assert.equal(defaultTimeframe(5 * 60), "1m");
+  assert.equal(defaultTimeframe(16 * 60), "1m");
+  assert.equal(defaultTimeframe(90 * 60), "5m");
+  assert.equal(defaultTimeframe(4 * 60 * 60), "15m");
+});
+
+test("coarser timeframes show wider clock-time context", () => {
+  const entry = "2026-11-10T15:00:00.000Z";
+  const exit = "2026-11-10T16:30:00.000Z";
+  const oneMinute = fitWindow(entry, exit, "1m");
+  const fifteenMinute = fitWindow(entry, exit, "15m");
+  assert.equal(oneMinute.end - oneMinute.start, 180 * 60_000);
+  assert.equal(fifteenMinute.end - fifteenMinute.start, 450 * 60_000);
+  assert.ok(fifteenMinute.end - fifteenMinute.start > oneMinute.end - oneMinute.start);
 });
 
 test("formatting follows docs/08 §13", () => {

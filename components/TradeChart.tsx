@@ -149,7 +149,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     tag(tr.planned_target_price, t.profit, "", false);
     tag(tr.key_level_price, t.goldMid, "KEY", true);
 
-    // The fitted view is a continuous function of the hold: 30% before, 50% in-trade, 20% after.
+    // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
     const fittedWindow = fitWindow(tr.entry_time, tr.exit_time, barTimeframe);
     const entryIndex = times.indexOf(entryBar);
     const fitFrom = entryIndex - fittedWindow.beforeBars;

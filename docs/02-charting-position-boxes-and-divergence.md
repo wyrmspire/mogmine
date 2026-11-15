@@ -43,7 +43,9 @@ Every trade automatically renders a TradingView-style **Position Box** directly 
 
 The fitted chart view comes directly from `hold_duration_seconds = exit_time - entry_time`; it never comes from a duration category. The base span is twice the hold: 30% of the view before entry, 50% in the trade and 20% after exit. A 90-minute hold therefore fits into roughly three hours of price action, while a five-minute hold gets a tight view. The rule is continuous, with no session-length label or bucket in the interface.
 
-The fitted view never contains fewer than 30 bars on the selected timeframe. When that floor widens a very short hold, the added context keeps the same before/after bias. The stored `trade_style` field and `classifyTrade` remain for data compatibility while the later AI coaching lens is decided; neither controls the chart window.
+The fitted view never contains fewer than 30 bars on the selected timeframe. When that floor widens a very short hold, the added context keeps the same before/after bias. The initial timeframe comes from duration: `1m` through 40 minutes, `5m` through 3 hours, `15m` through 10 hours, then `1h`. Switching timeframe recomputes the bar-based window, so a `15m` view shows materially more clock-time context than `1m` instead of preserving the same minutes.
+
+The stored `trade_style` field and `classifyTrade` remain for data compatibility while the later AI coaching lens is decided; neither controls the chart window or initial timeframe.
 
 ---
 

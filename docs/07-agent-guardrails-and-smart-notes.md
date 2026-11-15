@@ -159,6 +159,8 @@ export function fitWindow(entryTime: Date, exitTime: Date) {
 ```
 *Agent Note:* Whenever ingesting a trade, also fetch and cache `1m`, `5m`, and `15m` bars into `trade_candles` immediately so switching timeframes on mobile works offline/instantly even months later.
 
+Pick the initial timeframe from the hold duration, not stored style: `1m` through 40 minutes, `5m` through 3 hours, `15m` through 10 hours, then `1h`. Reapply the bar-count rule after every timeframe switch so coarser views show wider clock-time context.
+
 *Agent Notes added 2026-11-14 ([09](09-backend-risk-register.md) §2):*
 - **`windowEnd` is in the future when the trade closes.** A single fetch at ingestion never gets the post-exit bars. Fetch what exists, then schedule a top-up in the `enrichment_jobs` table. Never use `setTimeout` in a process that can restart (B-10).
 - **Record coverage.** Yahoo returns an empty result, not an error, for ranges it no longer serves. Store the requested and received range per timeframe, and fall back to a coarser timeframe for old imports (B-11).
