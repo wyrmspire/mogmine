@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
+import { demoTrades } from "../fixtures.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
 import { MIN_FITTED_BARS, adherence, aggregateCandles, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
@@ -105,6 +106,31 @@ test("coarser timeframes show wider clock-time context", () => {
   assert.equal(oneMinute.end - oneMinute.start, 180 * 60_000);
   assert.equal(fifteenMinute.end - fifteenMinute.start, 450 * 60_000);
   assert.ok(fifteenMinute.end - fifteenMinute.start > oneMinute.end - oneMinute.start);
+});
+
+test("all ten sample trades have deterministic fitted-window goldens", () => {
+  const expected: Record<string, { timeframe: string; share: number }> = {
+    "mes-opening-scalp": { timeframe: "1m", share: 2 / 30 },
+    "mnq-trend-hold": { timeframe: "5m", share: 0.5 },
+    "mes-failed-reclaim": { timeframe: "1m", share: 0.5 },
+    "mes-orb-fakeout": { timeframe: "1m", share: 7 / 30 },
+    "mnq-vwap-reclaim": { timeframe: "1m", share: 0.5 },
+    "mes-lunch-chop": { timeframe: "1m", share: 0.5 },
+    "mnq-breakdown-scalp": { timeframe: "1m", share: 5 / 30 },
+    "mes-premarket-reversal": { timeframe: "1m", share: 0.5 },
+    "mnq-late-chase": { timeframe: "1m", share: 13 / 30 },
+    "mes-afternoon-hold": { timeframe: "5m", share: 0.5 },
+  };
+  assert.equal(demoTrades.length, 10);
+  for (const trade of demoTrades) {
+    const golden = expected[trade.id];
+    assert.ok(golden, `missing golden for ${trade.id}`);
+    const timeframe = defaultTimeframe(Math.round((Date.parse(trade.exit_time) - Date.parse(trade.entry_time)) / 1000));
+    const fitted = fitWindow(trade.entry_time, trade.exit_time, timeframe);
+    assert.equal(timeframe, golden.timeframe, trade.id);
+    assert.ok(Math.abs(fitted.holdBars / fitted.visibleBars - golden.share) < 1e-12, trade.id);
+    assert.ok(fitted.visibleBars >= MIN_FITTED_BARS, trade.id);
+  }
 });
 
 test("formatting follows docs/08 §13", () => {

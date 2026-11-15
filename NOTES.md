@@ -11,11 +11,11 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ## Current state (2026-11-15)
 
-- **Branch `ui/phased-improvements` (local, not pushed) holds UI phases 1–3.** Work is paused for the owner to approve [docs/14](docs/14-ui-phased-plan.md) before Phase 4. `main` and the deployed site are unchanged.
+- **Branch `feat/phase4-chart-windows` (local, not pushed) holds UI Phase 4** on top of `origin/ui/phased-improvements`: duration-fitted chart windows, a 30-bar floor, duration-derived timeframes, removed session-length UI and no-data chart fallback. `main` and the deployed site are unchanged.
 - **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use Yahoo Finance 1m candles when available and deterministic fixture candles offline.
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08` (UX notes), `docs/09` (backend risk register), `docs/10` (Yahoo-first build plan), `docs/11` (mobile workflow and assistant API proposals), `docs/12` (levels, zones and the daily markup), `docs/13` (bold UI bets).
-- 26 entries under Open in [DECISIONS.md](DECISIONS.md) (`OD-24`–`OD-26` come from the UI branch); `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals; they do not expand approved scope.
+- 27 entries under Open in [DECISIONS.md](DECISIONS.md) (`OD-24`–`OD-27` come from the UI branches); `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-27` records the mathematical conflict between the 30-bar floor and a 35% minimum box width for very short fixtures.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 - The development machine had neither Node nor Python installed on 2026-11-14. Node is needed before anything can be scaffolded.
@@ -36,14 +36,23 @@ Claim a lane before starting. Clear the claim when you stop.
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
 | Core math | — | | |
-| Chart | agent (Codex) | 2026-11-14 | Phase 4 issue chain on `feat/phase4-chart-windows` |
-| App shell and notes | agent (Codex) | 2026-11-14 | Phase 4 labels, filters and no-data state |
+| Chart | — | | |
+| App shell and notes | — | | |
 | Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-14 (night CT) — agent (Codex) — Chart + App shell and notes, branch `feat/phase4-chart-windows`
+Did:      Implemented issues #13, #10, #11, #12, #25 and #14 as separate commits: removed duration-category UI, fitted windows from hold duration, added the 30-bar floor and duration timeframes, and removed the no-data chart fallback.
+Files:    `components/`, `lib/`, `app/globals.css`, `docs/02`, `docs/05`, `docs/07`, `docs/08`, `docs/14`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm run lint` 0 errors/1 existing PostCSS warning; `npm run typecheck` clean; `npm test` 16/16; `npm run build` completed 8/8 static pages.
+Verified: 390×844 Chrome pass across all 10 samples: zero overflow/errors/removed labels; 1m→15m context 180→450 minutes; only TradingView attribution is under 44px.
+Artifacts: `/workspace/phase4-scalp.png` (13-minute hold, 43.3%) and `/workspace/phase4-90min.png` (90-minute hold, 50%).
+Left:     Nothing pushed. Owner should decide `OD-27`; 2-, 5- and 7-minute floor-bound fixtures are truthfully 7%, 17% and 23% of 30 bars rather than the issue's impossible 35% minimum.
+Watch:    `package-lock.json` remains untracked and uncommitted as requested. No real-phone/iOS Safari pass was performed.
 
 ### 2026-11-14 (night CT) — agent (Claude Code) — Chart + App shell and notes, branch `ui/phased-improvements`
 Did:      UI phases 1–3, three local commits (`c74bbae`, `685319b`, `5a9f8c6`): routes and a real Today/Feed on phones, device store without inline candles, Position Box rewrite and in-place timeframe switch, Pit Stop, checklist, review queue. Plan and open questions in `docs/14`; `OD-24`–`OD-26` opened.

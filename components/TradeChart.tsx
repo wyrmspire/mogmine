@@ -69,6 +69,8 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
   const latest = useRef({ trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange });
   const renderTimer = useRef<number | undefined>(undefined);
+  const diagnosticTimeframe = TIMEFRAME_MINUTES[timeframe] <= TIMEFRAME_MINUTES[baseTimeframe] ? baseTimeframe : timeframe;
+  const diagnosticWindow = fitWindow(trade.entry_time, trade.exit_time, diagnosticTimeframe);
 
   useEffect(() => { latest.current = { trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange }; });
 
@@ -251,5 +253,13 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     draw.current(refit);
   }, [trade, timeframe, zone, privacy, theme, baseTimeframe]);
 
-  return <div ref={hostRef} className="chart-host" role="img" aria-label={`${describeTrade(trade, zone, privacy)} Candlestick chart with the position box.`} />;
+  return <div
+    ref={hostRef}
+    className="chart-host"
+    role="img"
+    aria-label={`${describeTrade(trade, zone, privacy)} Candlestick chart with the position box.`}
+    data-timeframe={diagnosticTimeframe}
+    data-visible-bars={diagnosticWindow.visibleBars.toFixed(3)}
+    data-trade-share={(diagnosticWindow.holdBars / diagnosticWindow.visibleBars).toFixed(4)}
+  />;
 }

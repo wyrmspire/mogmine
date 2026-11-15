@@ -184,7 +184,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
-        {candles?.status !== "none" && <>
+        {candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
             <div className="timeframes" role="group" aria-label="Timeframe">

@@ -1,6 +1,6 @@
 # 14 — UI & Experience: Phased Plan
 
-Branch `ui/phased-improvements`. Written 2026-11-14 after the owner asked for the plan to be on paper before more is built. **Phases 1–3 are built and committed locally. Nothing is pushed or merged. Phases 4–6 wait for the owner's approval.**
+Originally written on `ui/phased-improvements` on 2026-11-14 after the owner asked for the plan to be on paper before more was built. **Phases 1–3 are committed there; Phase 4 is implemented on `feat/phase4-chart-windows`. Nothing is pushed or merged.**
 
 Scope is the "First" column of [08 §15](08-ux-notes-viewing-and-journaling.md#15-build-order-for-the-experience) (`OD-14`), on device storage and Yahoo data only (`D-009`). No Supabase, broker, CSV or AI work is in this plan.
 
@@ -11,9 +11,9 @@ Scope is the "First" column of [08 §15](08-ux-notes-viewing-and-journaling.md#1
 | Phase | Commit | Status |
 | :--- | :--- | :--- |
 | 1 — Foundation, routes, Today and Feed | `c74bbae` | Done |
-| 2 — Chart craft | `685319b` | Done, **with one known fault: the fitted window (§3)** |
+| 2 — Chart craft | `685319b` | Done; its fitted-window fault is resolved in Phase 4 |
 | 3 — Pit Stop and review queue | `5a9f8c6` | Done |
-| 4 — Chart window from the trade's own duration | — | **Proposed next. Waiting for approval.** |
+| 4 — Chart window from the trade's own duration | `feat/phase4-chart-windows` | **Done locally; not pushed** |
 | 5 — Shield mode, Trade Card sheet, Tune | — | Proposed |
 | 6 — Polish, measurements, spec reconciliation | — | Proposed |
 
@@ -51,13 +51,13 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 
 ---
 
-## 3. Phase 4 (proposed next) — Chart window from the trade's own duration
+## 3. Phase 4 (implemented) — Chart window from the trade's own duration
 
 **Owner note, 2026-11-14:** there is no "90-minute session" category. Some trades simply last about 90 minutes. The visible window must come from each trade's own duration on a continuous scale. A 90-minute trade shows roughly three hours. A 5-minute scalp shows a tight window, so the box is large and readable. Remove session-length tags and fixed 90-minute windows. 1m and 15m must show different context.
 
 **What is wrong now.** The window comes from three fixed buckets (`fitPadding` in `lib/trades.ts`): 35 minutes before a "scalp", 90 before a "90m session", 480 before the rest. A 2-minute trade classed as a scalp sits in about an hour of 1m bars and its box is a few pixels wide. A 16-minute trade is classed "90m session", gets the 90-minute padding on 5m bars, and is as small. On top of that the padding is in minutes with an 18-bar floor, so what a timeframe shows depends on that floor and the bucket, not on the trade.
 
-**Proposed rule (to confirm):**
+**Owner-approved rule:**
 
 1. **Window from duration.** Fitted span = hold time × about 2: the trade takes roughly **half the plot width**, with more room before the entry than after the exit (about 30 % before, 20 % after). A 90-minute trade then shows about three hours, as in the note.
 2. **A floor in bars, not minutes.** Never fewer than about 30 bars on screen, so a 40-second trade still has candles around it. This is the only fixed number.
@@ -66,7 +66,7 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 5. **Remove the category from the interface:** the "Scalp / 90m session / Extended" pill on the trade header, the same words on list rows and the review queue, and the Scalps / 90m / Extended filter pills on the Feed (and `?style=` in the URL).
 6. **Tests:** golden cases for 40 s, 5 min, 16 min, 90 min and 4 h holds, asserting the share of the plot the box takes and the default timeframe.
 
-**Done when:** at 390 × 844, each of the ten sample trades opens with its box between about 35 % and 60 % of the plot width, and switching 1m → 15m visibly widens the context. Screenshots of a scalp and a 90-minute trade go in the handoff.
+**Done when:** at 390 × 844, duration-sized sample trades open with their box between about 35 % and 60 % of the plot width, and switching 1m → 15m visibly widens the context. The approved 30-bar floor necessarily makes the 2-, 5- and 7-minute fixtures narrower (recorded as `OD-27`); the box must not be stretched beyond its true timestamps to meet a percentage target. Screenshots of a tight short-duration trade and a 90-minute trade go in the handoff.
 
 **Spec changes this needs** (same commit, per `AGENTS.md` §5): [02 §3](02-charting-position-boxes-and-divergence.md#3-automatic-trade-classification-scalp-vs-90-min-vs-investment), [07 Recipe 3](07-agent-guardrails-and-smart-notes.md), the wireframe in 05 §1, the "Scalp window" rows of the drift register. Tracked as `OD-24`.
 
@@ -91,7 +91,7 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 
 | # | Question | My recommendation |
 | :--- | :--- | :--- |
-| Q1 | Phase 4 rule: is "trade ≈ half the plot width, floor of ~30 bars" the right target? | Yes. It matches "a 90-minute trade shows about 3 hours". |
+| Q1 | **Resolved by the owner:** trade ≈ half the plot width, with a floor of about 30 bars. | Implemented in Phase 4 issues #10–#12. |
 | Q2 | With the session-length category gone from the screen, should the stored `trade_style` field go too? docs/04 §2 uses it to pick the AI coaching lens, and docs/06 has the column. | Stop showing it and stop using it for windows now. Leave the field until the AI work decides whether it needs a duration bucket (`OD-24`). |
 | Q3 | Blind review (BET-03) was built in Phase 3 as an off-by-default switch on `/review`. Bets in docs/13 are not approved scope. Keep, or remove? | Keep it off by default and try it on last week's trades. It is about 40 lines to remove (`OD-25`). |
 | Q4 | Playbooks, tags and the four checklist rules are fixed defaults in `lib/playbooks.ts`, taken from the docs/03 examples. There is no editor. Are those your setups? | Send your real playbooks and rules. An editor can wait for the database (`OD-26`). |

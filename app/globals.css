@@ -280,7 +280,7 @@ h1, h2, h3, p { margin: 0; }
 .chart-skeleton span { position: relative; }
 .chart-source { min-height: 30px; padding: 7px 10px; border-top: 1px solid var(--border-subtle); color: var(--text-muted); font: 500 10px/1.4 var(--font-mono); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .chart-note { padding: 8px 10px; border-top: 1px solid var(--border-subtle); font-size: 11px; color: var(--warn-amber); display: flex; gap: 8px; align-items: center; justify-content: space-between; }
-.chart-note button { min-height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid currentColor; background: none; font-weight: 800; font-size: 11px; }
+.chart-note button { min-height: 44px; padding: 0 10px; border-radius: 9px; border: 1px solid currentColor; background: none; font-weight: 800; font-size: 11px; }
 .levels { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--border-subtle); }
 .levels > div { padding: 9px 4px; text-align: center; border-right: 1px solid var(--border-subtle); font-family: var(--font-mono); font-variant-numeric: tabular-nums; min-width: 0; }
 .levels > div:last-child { border-right: 0; }
