@@ -18,12 +18,13 @@ import {
   rMultiple,
   tradePnl,
 } from "@/lib/trades";
+import { dateTimeFormat, fromZonedInput, shortTimeFormat, toZonedInput, zoneLabel } from "@/lib/time";
 
 const STORAGE_KEY = "mogmine-trades-v2";
 const LEGACY_STORAGE_KEY = "mogmine-trades-v1";
 const timeframes: Timeframe[] = ["1m", "5m", "15m", "1h", "8h"];
-const dateTime = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
-const shortTime = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+const dateTime = dateTimeFormat;
+const shortTime = shortTimeFormat;
 
 function nearestCandle(candles: Candle[], instant: number) {
   return candles.reduce((best, candle) => Math.abs(candle.time - instant) < Math.abs(best.time - instant) ? candle : best, candles[0]);
@@ -213,8 +214,9 @@ export function TradeJournal() {
   const submitTrade = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const entry = new Date(String(data.get("entry_time")));
-    const exit = new Date(String(data.get("exit_time")));
+    const entry = fromZonedInput(String(data.get("entry_time")));
+    const exit = fromZonedInput(String(data.get("exit_time")));
+    if (Number.isNaN(entry.getTime()) || Number.isNaN(exit.getTime())) return setToast("Enter entry and exit times");
     if (exit <= entry) return setToast("Exit must be after entry");
     const symbol = String(data.get("symbol")).toUpperCase().trim();
     const number = (key: string) => data.get(key) === "" ? null : Number(data.get(key));
@@ -254,7 +256,7 @@ export function TradeJournal() {
           {trades.map((item) => {
             const result = tradePnl(item);
             return <button key={item.id} className={`trade-row ${item.id === trade.id ? "active" : ""}`} onClick={() => selectTrade(item.id)}>
-              <span><strong>{item.symbol}</strong><em className={item.direction === "LONG" ? "long" : "short"}>{item.direction === "LONG" ? "▲ LONG" : "▼ SHORT"}</em><small>{item.trade_style === "session_90m" ? "90m session" : item.trade_style} · {shortTime.format(new Date(item.entry_time))} ET</small></span>
+              <span><strong>{item.symbol}</strong><em className={item.direction === "LONG" ? "long" : "short"}>{item.direction === "LONG" ? "▲ LONG" : "▼ SHORT"}</em><small>{item.trade_style === "session_90m" ? "90m session" : item.trade_style} · {shortTime.format(new Date(item.entry_time))} {zoneLabel(new Date(item.entry_time))}</small></span>
               <b className={result >= 0 ? "positive" : "negative"}>{money(result)}</b>
             </button>;
           })}
@@ -291,20 +293,15 @@ export function TradeJournal() {
   );
 }
 
-function localInput(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function ManualTradeForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const exit = new Date();
   const entry = new Date(exit.getTime() - 30 * 60_000);
   return <form onSubmit={onSubmit}><div className="form-grid">
     <label>Symbol<input name="symbol" required defaultValue="MES" autoCapitalize="characters" /></label>
     <label>Side<select name="direction"><option>LONG</option><option>SHORT</option></select></label>
-    <label>Entry time<input name="entry_time" required type="datetime-local" defaultValue={localInput(entry)} /></label>
+    <label>Entry time <i>CT</i><input name="entry_time" required type="datetime-local" defaultValue={toZonedInput(entry)} /></label>
     <label>Entry price<input name="entry_price" required type="number" step="any" placeholder="6844.25" /></label>
-    <label>Exit time<input name="exit_time" required type="datetime-local" defaultValue={localInput(exit)} /></label>
+    <label>Exit time <i>CT</i><input name="exit_time" required type="datetime-local" defaultValue={toZonedInput(exit)} /></label>
     <label>Exit price<input name="exit_price" required type="number" step="any" placeholder="6849.00" /></label>
     <label>Stop <i>optional</i><input name="stop_loss_price" type="number" step="any" /></label>
     <label>Target <i>optional</i><input name="planned_target_price" type="number" step="any" /></label>
