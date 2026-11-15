@@ -10,11 +10,18 @@ function makeTrade({ followed, ...seed }: SeedTrade): TradeRecord {
   return normalizeTrade({ ...seed, is_sample: true, checklist_state: checklist });
 }
 
+/** Short chip on sample rows. Not a broker-confirmed fill. */
+export const SAMPLE_CHIP = "SCENARIO";
+/** One-line provenance shown on the trade detail, not on the chart. */
+export const SAMPLE_CAPTION = "Historical market-based scenario — not a broker-confirmed fill.";
+
 /**
- * Sample trades. Each plan (stop, target, size) was fixed at entry from structure, independent of
- * the outcome: about $250 risk, targets 1.5R to 3R. The outcome was then found by walking real
- * Yahoo 1m bars (MES=F / MNQ=F) from the entry bar's open: stop touched first -> exit at the stop,
- * target first -> exit at the target, otherwise a manual exit at a bar close. The bars are in
+ * Sample trades are historical market-based scenarios, not executed fills. Each plan (stop,
+ * target, size) was fixed at entry from structure, independent of the outcome: about $250 risk,
+ * targets 1.5R to 3R. The outcome was then found by walking real Yahoo 1m bars (MES=F / MNQ=F)
+ * from the entry bar's open: stop touched first -> exit at the stop, target first -> exit at the
+ * target, otherwise a manual exit at a bar close. A 1m bar touching a level shows that the price
+ * traded there; it does not prove a particular order would have filled. The bars are in
  * fixtures/sample-bars.json and a test checks every sample against them.
  */
 export const demoTrades: TradeRecord[] = [

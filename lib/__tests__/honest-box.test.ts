@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { formatR } from "../format.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { demoTrades } from "../fixtures.ts";
+import { applyFixtureRefresh } from "../store.ts";
 import { exitFlagReason, excursions, isScratch, mergeAxisTags, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
 
@@ -25,16 +26,18 @@ test("entry at bar close does not inherit that bar's earlier high as MFE", () =>
     bar(start + minute, 100, 101, 98, 99),
     bar(start + 2 * minute, 99, 100.5, 97, 98),
     bar(start + 3 * minute, 98, 99, 96, 97),
-    bar(start + 4 * minute, 96, 98, 95, 97),  // fill at the open; low is not provable
+    bar(start + 4 * minute, 96, 98, 95, 97),  // exit at this bar's open; low is after the fill
   ];
   const trade = longTrade({
-    entry_time: new Date(start).toISOString(),
+    // Execution timestamp is the close of the 15:00 bar, not its open.
+    entry_time: new Date(start + minute - 1).toISOString(),
     exit_time: new Date(start + 4 * minute).toISOString(),
     entry_price: 100,
     exit_price: 96,
   });
   const ex = excursions(trade, candles);
   assert.ok(ex);
+  assert.equal(ex.coverage, "complete");
   // Later complete bars never traded above 101, so the entry bar's 108 is not MFE.
   assert.equal(ex.mfePrice, 101);
   // Exit is at the 15:04 open, so that bar's 95 low is not counted. Lowest complete bar is 96.
@@ -57,8 +60,9 @@ test("entry at bar open counts that bar's high and low", () => {
   });
   const ex = excursions(trade, candles);
   assert.ok(ex);
+  assert.equal(ex.coverage, "complete");
   assert.equal(ex.mfePrice, 108);
-  // Exit bar (15:03) is not complete and the fill is not at its close, so 98 is not counted.
+  // Exit bar (15:03) starts at the exit timestamp, so it is not fully inside the hold and 98 is not counted.
   // Lowest complete bar is the entry bar itself (low 99) and the exit fill is 99.
   assert.equal(ex.maePrice, 99);
 });
@@ -88,24 +92,101 @@ test("a one-bar trade and a hold with fewer than two complete bars show no excur
   assert.equal(excursions(shortHold, candles), null);
 });
 
+test("a fill whose price equals the bar open is not treated as a fill at the open unless the timestamp says so", () => {
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const candles = [
+    bar(start, 100, 110, 99, 101),            // price revisits the open mid-bar; high 110 is before the fill
+    bar(start + minute, 101, 102, 100, 101),
+    bar(start + 2 * minute, 101, 103, 100, 102),
+    bar(start + 3 * minute, 102, 104, 101, 103),
+  ];
+  const midBar = longTrade({
+    entry_time: new Date(start + 20_000).toISOString(),
+    exit_time: new Date(start + 3 * minute).toISOString(),
+    entry_price: 100, // equals the entry bar's open, but the fill is 20s in
+    exit_price: 102,
+  });
+  const mid = excursions(midBar, candles);
+  assert.ok(mid);
+  assert.equal(mid.coverage, "complete");
+  assert.equal(mid.mfePrice, 103); // later complete bars (15:01-15:03); the 104 wick is on the exit bar
+  assert.notEqual(mid.mfePrice, 110);
+
+  // Same prices, but the timestamp is the bar open: the whole bar is inside the hold.
+  const atOpen = longTrade({
+    entry_time: new Date(start).toISOString(),
+    exit_time: new Date(start + 3 * minute).toISOString(),
+    entry_price: 100,
+    exit_price: 102,
+  });
+  const opened = excursions(atOpen, candles);
+  assert.ok(opened);
+  assert.equal(opened.coverage, "complete");
+  assert.equal(opened.mfePrice, 110);
+});
+
+test("a mid-bar fill omits unknown entry and exit extremes", () => {
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const candles = [
+    bar(start, 100, 120, 80, 105),
+    bar(start + minute, 105, 108, 104, 107),
+    bar(start + 2 * minute, 107, 109, 106, 108),
+    bar(start + 3 * minute, 108, 130, 70, 100),
+  ];
+  const trade = longTrade({
+    entry_time: new Date(start + 15_000).toISOString(),
+    exit_time: new Date(start + 3 * minute + 15_000).toISOString(),
+    entry_price: 104,
+    exit_price: 100,
+  });
+  const ex = excursions(trade, candles);
+  assert.ok(ex);
+  assert.equal(ex.coverage, "complete");
+  assert.equal(ex.mfePrice, 109);
+  assert.equal(ex.maePrice, 100); // exit fill; the exit-bar 70 low is not in the hold
+});
+
+test("a gapped hold returns a partial excursion, not a complete number", () => {
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  // 5-minute hold with the middle bar missing.
+  const candles = [
+    bar(start, 100, 101, 99, 100),
+    bar(start + minute, 100, 106, 99, 105),
+    // start + 2 minutes is missing
+    bar(start + 3 * minute, 104, 105, 94, 95),
+    bar(start + 4 * minute, 95, 96, 94, 95),
+  ];
+  const trade = longTrade({
+    entry_time: new Date(start).toISOString(),
+    exit_time: new Date(start + 5 * minute).toISOString(),
+    entry_price: 100,
+    exit_price: 95,
+  });
+  const ex = excursions(trade, candles);
+  assert.ok(ex);
+  assert.equal(ex.coverage, "partial");
+  assert.equal(ex.mfePrice, 106);
+  assert.equal(ex.maePrice, 94);
+});
+
 test("scalp from the review screenshot: never-in-profit long does not report the entry bar high as MFE", () => {
   // The trade from the review screenshot: long filled at the close of a red bar whose high was +11.50.
-  const entry = Date.parse("2026-11-09T16:26:00.000Z");
-  const exit = entry + 10 * minute;
+  const entryBar = Date.parse("2026-11-09T16:26:00.000Z");
+  const exit = entryBar + 10 * minute;
   const trade = normalizeTrade({
     id: "review-scalp", symbol: "MNQ", direction: "LONG",
-    entry_time: new Date(entry).toISOString(), exit_time: new Date(exit).toISOString(),
+    entry_time: new Date(entryBar + minute - 1).toISOString(), exit_time: new Date(exit).toISOString(),
     entry_price: 27875.25, exit_price: 27820, stop_loss_price: 27820,
   });
 
   const candles: Candle[] = [];
   // Entry bar: red, close = fill, high = fill + 11.50. This was the misleading MFE.
-  candles.push(bar(entry, 27882, 27886.75, 27874.5, 27875.25));
+  candles.push(bar(entryBar, 27882, 27886.75, 27874.5, 27875.25));
   // Nine later complete bars: price never trades above the fill.
   const laterCloses = [27870, 27862, 27855, 27848, 27840, 27836, 27830, 27826, 27822];
   for (let i = 0; i < laterCloses.length; i++) {
     const close = laterCloses[i];
-    candles.push(bar(entry + (i + 1) * minute, close + 3, close + 4, close - 2, close));
+    candles.push(bar(entryBar + (i + 1) * minute, close + 3, close + 4, close - 2, close));
   }
   // Exit bar opens at the recorded exit time; fill is at the open / stop.
   candles.push(bar(exit, 27820, 27824, 27818, 27821));
@@ -240,4 +321,53 @@ test("every sample outcome is coherent with real 1m bars", () => {
     }
   }
   for (const kind of ["TP", "SL", "manual-profit", "scratch"]) assert.ok(kinds.has(kind), `samples need a ${kind} outcome`);
+});
+
+test("sample refresh preserves user notes, checklist, tags and playbook", () => {
+  const fixture = demoTrades[0];
+  const stored = normalizeTrade({
+    ...fixture,
+    note: "My review of this scenario.",
+    playbook_id: "orb-reclaim",
+    quick_tags: ["My Tag"],
+    checklist_state: [{ id: "a", label: "Plan written", checked: true }],
+    pre_trade_thesis: "Thesis I typed",
+    management_notes: "Managed it this way",
+    post_exit_notes: "Would not take it again",
+    flagged: true,
+    take_again: "pass",
+    take_again_at: "2026-11-15T08:00:00.000Z",
+    review_status: "reviewed",
+    // Stale fixture facts that a new build should replace:
+    entry_price: fixture.entry_price + 10,
+    exit_price: fixture.exit_price + 10,
+    stop_loss_price: (fixture.stop_loss_price ?? 0) + 10,
+  });
+  const refreshed = applyFixtureRefresh(stored, fixture);
+  assert.equal(refreshed.entry_price, fixture.entry_price);
+  assert.equal(refreshed.exit_price, fixture.exit_price);
+  assert.equal(refreshed.stop_loss_price, fixture.stop_loss_price);
+  assert.equal(refreshed.planned_target_price, fixture.planned_target_price);
+  assert.equal(refreshed.entry_time, fixture.entry_time);
+  assert.equal(refreshed.note, "My review of this scenario.");
+  assert.equal(refreshed.playbook_id, "orb-reclaim");
+  assert.deepEqual(refreshed.quick_tags, ["My Tag"]);
+  assert.deepEqual(refreshed.checklist_state, [{ id: "a", label: "Plan written", checked: true }]);
+  assert.equal(refreshed.pre_trade_thesis, "Thesis I typed");
+  assert.equal(refreshed.management_notes, "Managed it this way");
+  assert.equal(refreshed.post_exit_notes, "Would not take it again");
+  assert.equal(refreshed.flagged, true);
+  assert.equal(refreshed.take_again, "pass");
+  assert.equal(refreshed.take_again_at, "2026-11-15T08:00:00.000Z");
+  assert.equal(refreshed.review_status, "reviewed");
+  assert.equal(refreshed.is_sample, true);
+});
+
+test("a first-time sample keeps fixture default annotations", () => {
+  const fixture = demoTrades[0];
+  // No stored copy: the fixture itself is what a new device gets.
+  assert.ok(fixture.note.length > 0);
+  assert.equal(applyFixtureRefresh(fixture, fixture).note, fixture.note);
+  assert.deepEqual(applyFixtureRefresh(fixture, fixture).quick_tags, fixture.quick_tags);
+  assert.equal(applyFixtureRefresh(fixture, fixture).playbook_id, fixture.playbook_id);
 });

@@ -26,6 +26,43 @@ export interface JournalState {
 
 const byNewest = (a: TradeRecord, b: TradeRecord) => Date.parse(b.entry_time) - Date.parse(a.entry_time);
 
+/**
+ * Refresh fixture-owned market facts on a stored sample without overwriting
+ * user annotations (issue #48). First-time inserts still use the fixture as a
+ * whole, including its default note and checklist.
+ */
+export function applyFixtureRefresh(stored: TradeRecord, fixture: TradeRecord): TradeRecord {
+  return normalizeTrade({
+    ...stored,
+    symbol: fixture.symbol,
+    direction: fixture.direction,
+    quantity: fixture.quantity,
+    entry_time: fixture.entry_time,
+    exit_time: fixture.exit_time,
+    entry_price: fixture.entry_price,
+    exit_price: fixture.exit_price,
+    stop_loss_price: fixture.stop_loss_price,
+    planned_target_price: fixture.planned_target_price,
+    key_level_price: fixture.key_level_price,
+    trade_style: fixture.trade_style,
+    is_sample: true,
+    playbook_id: stored.playbook_id,
+    checklist_state: stored.checklist_state,
+    note: stored.note,
+    quick_tags: stored.quick_tags,
+    pre_trade_thesis: stored.pre_trade_thesis,
+    management_notes: stored.management_notes,
+    post_exit_notes: stored.post_exit_notes,
+    flagged: stored.flagged,
+    take_again: stored.take_again,
+    take_again_at: stored.take_again_at,
+    review_status: stored.review_status,
+    candle_source: undefined,
+    sparkline: [],
+  });
+}
+
+
 const serverState: JournalState = { trades: [...demoTrades].sort(byNewest), hydrated: false, saveState: "idle" };
 let state: JournalState = serverState;
 const listeners = new Set<() => void>();
@@ -229,26 +266,7 @@ function readStored(): TradeRecord[] | null {
     // Refresh fixture-owned facts. Samples now carry a plan fixed at entry and an outcome walked from Yahoo bars;
     // stale device copies must not preserve the old impossible exits. Real trades are never changed.
     const currentDemo = demoById.get(trade.id);
-    if (currentDemo && trade.is_sample) trade = normalizeTrade({
-      ...trade,
-      symbol: currentDemo.symbol,
-      direction: currentDemo.direction,
-      quantity: currentDemo.quantity,
-      entry_time: currentDemo.entry_time,
-      exit_time: currentDemo.exit_time,
-      entry_price: currentDemo.entry_price,
-      exit_price: currentDemo.exit_price,
-      stop_loss_price: currentDemo.stop_loss_price,
-      planned_target_price: currentDemo.planned_target_price,
-      key_level_price: currentDemo.key_level_price,
-      trade_style: currentDemo.trade_style,
-      playbook_id: currentDemo.playbook_id,
-      checklist_state: currentDemo.checklist_state,
-      note: currentDemo.note,
-      quick_tags: currentDemo.quick_tags,
-      candle_source: undefined,
-      sparkline: [],
-    });
+    if (currentDemo && trade.is_sample) trade = applyFixtureRefresh(trade, currentDemo);
     // Yahoo candles from an older build are real market data: keep them only when their ticker
     // matches the current spec (OD-15). Skip samples so stale bars are not cached under the #29 signature.
     if (!current && candles?.length && rest.candle_source === "Yahoo Finance" && rest.yahoo_ticker === trade.yahoo_ticker && !trade.is_sample) {
