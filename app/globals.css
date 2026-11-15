@@ -151,6 +151,24 @@ h1, h2, h3, p { margin: 0; }
 }
 .banner.warn { border-color: color-mix(in srgb, var(--warn-amber) 40%, transparent); color: var(--warn-amber); }
 .banner button { min-height: 44px; padding: 0 10px; border-radius: 9px; border: 1px solid currentColor; background: none; font-weight: 800; font-size: 11px; white-space: nowrap; }
+.home-screen-hint {
+  margin: 10px 12px 0; padding: 10px 10px 10px 12px; min-height: 64px;
+  display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+}
+.home-screen-hint-icon {
+  width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+  color: var(--on-gold); background: var(--gold-gradient); box-shadow: 0 5px 16px var(--gold-glow);
+}
+.home-screen-hint-icon svg { width: 20px; height: 20px; }
+.home-screen-hint-copy { min-width: 0; display: grid; gap: 2px; }
+.home-screen-hint-copy strong { font-size: 12px; line-height: 1.25; }
+.home-screen-hint-copy span { color: var(--text-muted); font-size: 11px; line-height: 1.35; }
+.home-screen-hint-copy b { color: var(--text-primary); font-weight: 750; }
+.home-screen-hint button {
+  min-width: 44px; min-height: 44px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--gold-light);
+  font-size: 11px; font-weight: 800;
+}
 
 /* ───────────────────────── Pages ───────────────────────── */
 .page { max-width: 1180px; margin: 0 auto; padding: 16px 12px 8px; }

@@ -37,13 +37,20 @@ Claim a lane before starting. Clear the claim when you stop.
 | :--- | :--- | :--- | :--- |
 | Core math | — | | |
 | Chart | agent (Claude Code) | 2026-11-14 | Paused on `ui/phased-improvements`, waiting for approval of docs/14 Phase 4 |
-| App shell and notes | agent (Claude Code) | 2026-11-14 | Same branch. Phases 1–3 committed locally |
+| App shell and notes | — | | |
 | Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-14 — agent (Codex) — App shell and notes (released), branch `feat/20-home-screen-icons`
+Did:      Issue #20: added opaque MogMine 180/192/512 PNG icons, manifest/head links, and a one-time iOS browser Home Screen hint with durable seen state and dismissal.
+Verified: `npm run build`, `npm run lint`, `npm run typecheck`, `npm test`: all exit 0; lint has the existing `postcss.config.mjs` warning, tests 11/11. `git diff --check` exit 0.
+Verified: Production server returned 200 for manifest, SVG, all PNGs; head links resolved. Playwright at 390×844: hint shown once, 50×44 dismiss target, `scrollWidth 390 <= clientWidth 390`, dismissed and suppressed on reload.
+Left:     Real-iPhone Add to Home Screen installation/icon check remains outstanding; no physical iOS device is available here.
+Watch:    `package-lock.json` was already untracked before this work and is intentionally not part of issue #20.
 
 ### 2026-11-14 (night CT) — agent (Claude Code) — Chart + App shell and notes, branch `ui/phased-improvements`
 Did:      UI phases 1–3, three local commits (`c74bbae`, `685319b`, `5a9f8c6`): routes and a real Today/Feed on phones, device store without inline candles, Position Box rewrite and in-place timeframe switch, Pit Stop, checklist, review queue. Plan and open questions in `docs/14`; `OD-24`–`OD-26` opened.
