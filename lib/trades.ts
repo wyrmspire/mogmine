@@ -9,6 +9,7 @@ export type CandleSource = "Yahoo Finance" | "Demo fixture";
 
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 export const TIMEFRAME_MINUTES: Record<Timeframe, number> = { "1m": 1, "5m": 5, "15m": 15, "1h": 60 };
+export const MIN_FITTED_BARS = 30;
 
 export interface Candle {
   /** Bar open time, UTC milliseconds. */
@@ -217,20 +218,22 @@ export interface FittedWindow {
  * Fit a trade from its own duration: 30% of the view before entry, 50% in the
  * trade, and 20% after exit. This is continuous; stored style never affects it.
  */
-export function fitWindow(entryTime: string, exitTime: string, timeframe: Timeframe): FittedWindow {
+export function fitWindow(entryTime: string, exitTime: string, timeframe: Timeframe, minimumBars = MIN_FITTED_BARS): FittedWindow {
   const entry = Date.parse(entryTime);
   const holdMs = Math.max(1000, Date.parse(exitTime) - entry);
   const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
-  const beforeMs = holdMs * 0.6;
-  const afterMs = holdMs * 0.4;
   const holdBars = holdMs / barMs;
+  const visibleBars = Math.max(holdBars * 2, minimumBars);
+  const contextBars = visibleBars - holdBars;
+  const beforeBars = contextBars * 0.6;
+  const afterBars = contextBars * 0.4;
   return {
-    start: entry - beforeMs,
-    end: entry + holdMs + afterMs,
-    beforeBars: beforeMs / barMs,
+    start: entry - beforeBars * barMs,
+    end: entry + holdMs + afterBars * barMs,
+    beforeBars,
     holdBars,
-    afterBars: afterMs / barMs,
-    visibleBars: (holdMs + beforeMs + afterMs) / barMs,
+    afterBars,
+    visibleBars,
   };
 }
 

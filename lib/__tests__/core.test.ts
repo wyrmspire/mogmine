@@ -7,7 +7,7 @@ import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
-import { adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, fitWindow, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { MIN_FITTED_BARS, adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, fitWindow, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 
 const base = { id: "t", entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z" };
@@ -65,7 +65,7 @@ test("fitted chart window is continuously derived from hold duration", () => {
   const entry = "2026-11-10T15:00:00.000Z";
   for (const seconds of [40, 5 * 60, 16 * 60, 90 * 60, 4 * 60 * 60]) {
     const exit = new Date(Date.parse(entry) + seconds * 1000).toISOString();
-    const window = fitWindow(entry, exit, "1m");
+    const window = fitWindow(entry, exit, "1m", 0);
     const holdMs = seconds * 1000;
     assert.equal(window.end - window.start, holdMs * 2);
     assert.ok(Math.abs(holdMs / (window.end - window.start) - 0.5) < 1e-12);
@@ -74,6 +74,19 @@ test("fitted chart window is continuously derived from hold duration", () => {
   }
   const ninety = fitWindow(entry, "2026-11-10T16:30:00.000Z", "5m");
   assert.equal(ninety.end - ninety.start, 3 * 60 * 60 * 1000);
+});
+
+test("fitted chart window has a thirty-bar floor", () => {
+  const entry = "2026-11-10T15:00:00.000Z";
+  const exit = "2026-11-10T15:00:40.000Z";
+  const oneMinute = fitWindow(entry, exit, "1m");
+  assert.equal(oneMinute.visibleBars, MIN_FITTED_BARS);
+  assert.ok(oneMinute.beforeBars > oneMinute.afterBars);
+  assert.equal(oneMinute.beforeBars + oneMinute.holdBars + oneMinute.afterBars, MIN_FITTED_BARS);
+
+  const longer = fitWindow(entry, "2026-11-10T15:16:00.000Z", "1m");
+  assert.equal(longer.visibleBars, 32);
+  assert.equal(longer.holdBars / longer.visibleBars, 0.5);
 });
 
 test("formatting follows docs/08 §13", () => {

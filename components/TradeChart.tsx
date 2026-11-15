@@ -152,8 +152,8 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     // The fitted view is a continuous function of the hold: 30% before, 50% in-trade, 20% after.
     const fittedWindow = fitWindow(tr.entry_time, tr.exit_time, barTimeframe);
     const entryIndex = times.indexOf(entryBar);
-    const exitIndex = times.indexOf(exitBar);
-    l.fitRange = { from: entryIndex - fittedWindow.beforeBars, to: exitIndex + fittedWindow.afterBars };
+    const fitFrom = entryIndex - fittedWindow.beforeBars;
+    l.fitRange = { from: fitFrom, to: fitFrom + fittedWindow.visibleBars };
     if (refit || dataChanged) l.chart.timeScale().setVisibleLogicalRange(l.fitRange);
 
     window.clearTimeout(renderTimer.current);

@@ -147,9 +147,13 @@ export function syncChartTimeScales(
 ```typescript
 export function fitWindow(entryTime: Date, exitTime: Date) {
   const holdMs = Math.max(1000, exitTime.getTime() - entryTime.getTime());
+  const holdBars = holdMs / 60_000; // selected timeframe in production
+  const visibleBars = Math.max(holdBars * 2, 30);
+  const extraBars = visibleBars - holdBars;
   return {
-    windowStart: new Date(entryTime.getTime() - holdMs * 0.6),
-    windowEnd: new Date(exitTime.getTime() + holdMs * 0.4),
+    beforeBars: extraBars * 0.6,
+    holdBars,
+    afterBars: extraBars * 0.4,
   };
 }
 ```
