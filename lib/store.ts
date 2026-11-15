@@ -203,7 +203,7 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
     take_again_at: typeof rest.take_again_at === "string" ? rest.take_again_at : null,
     is_sample: isSample,
     sparkline,
-    candle_source: rest.candle_source === "Yahoo Finance" || rest.candle_source === "Demo fixture" ? rest.candle_source : undefined,
+    candle_source: rest.candle_source === "Yahoo Finance" || rest.candle_source === "Archive" || rest.candle_source === "Demo fixture" ? rest.candle_source : undefined,
   });
 }
 

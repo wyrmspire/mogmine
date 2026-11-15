@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "archive:ingest": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/ingest-yahoo-archive.ts",
     "test": "node --test \"lib/__tests__/*.test.ts\""
   },
   "dependencies": {

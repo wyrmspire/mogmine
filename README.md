@@ -99,3 +99,21 @@ Read the planning documents in order for the complete technical and product spec
 | [DECISIONS.md](DECISIONS.md) | What is decided, what is open, and which name is canonical when specs disagree. |
 | [NOTES.md](NOTES.md) | The current state, who is working on what, and the latest handoff. |
 | [mogprompt.md](mogprompt.md) | The whole system in one long read. Where it differs from `docs/`, see `DECISIONS.md`. |
+
+
+---
+
+## 6. Candle archive (M0)
+
+The chart can read 1-minute MES and MNQ bars from a Supabase archive, then fall back to Yahoo Finance. Until you create a project and put keys in `.env.local`, nothing changes: empty env keeps the current Yahoo path, and `npm run archive:ingest` prints a clear no-op message and exits 0.
+
+Do this yourself. Do not paste keys into chat, into a ticket, or into the repo.
+
+1. Create a Supabase project. A separate dev project is the right default (B-48). In Authentication, turn sign-ups off and create the one user who should have access (`OD-2`).
+2. Apply `supabase/migrations/20261115100000_market_archive.sql` to that project (SQL editor, or `supabase db push` after you link the project on your machine). Do not apply files under `supabase/planned/`; those are the unwired M1 sketch for trades, notes, and annotations. The journal stays on this device until a later cutover (`AC-08`).
+3. Copy `.env.example` to `.env.local`. Fill in `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` from the project's API settings. Optionally set `DEFAULT_OWNER_USER_ID` to your auth user id (used later for user-scoped rows). The service role key is server-only.
+4. Restart `npm run dev` if it is running, so Next.js picks up the new env.
+5. Run a first ingest from the repo root: `npm run archive:ingest` for the last week, or `npm run archive:ingest -- --backfill` for the last 30 days of `1m` bars (Yahoo's lookback). The script upserts idempotently and prints a coverage report. Batches are at most 8 days; a failed batch is retried on the next run without redoing a successful one.
+6. Open Tune to see the last ingest, including failures. Open a trade chart: it prefers the archive and falls back to Yahoo when the archive has too few bars.
+
+Holiday-aware expected coverage is still open (issue #65). Live recovery against a real project (`AC-05`) can only be confirmed after this setup.

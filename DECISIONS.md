@@ -100,3 +100,8 @@ Fixed during the review, no longer drifting:
 
 - The classifier in `mogprompt.md` §5.2 rounded the hold time to whole minutes before comparing, so a 14m 40s trade was classed `session_90m`. It now compares seconds, matching `docs/07`.
 - Links in `AGENTS.md` and `README.md` pointed at `file:///c:/mogmine/...` and worked on one machine only. They are now relative.
+
+
+### Note on OD-4 (2026-11-15, issue #70, not a new decision)
+
+`feat/m0-candle-archive` stores one row per bar in `market_candles` with a unique key on `(symbol, timeframe, ts)`, and session coverage in `market_coverage`. That is the bar-level shape from the 2026-11-15 GPT audit, and it supersedes the jsonb-per-session blob proposed in docs/09 §8 for this workstream. The chart reads a time range from `market_candles`; `trade_candles` is not built (a later view can serve per-trade slices). Symbols are `MES=F` and `MNQ=F` only (`OD-15`). `OD-4` stays open until the owner confirms this storage shape.
