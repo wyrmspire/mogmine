@@ -19,8 +19,8 @@ IDs are section numbers. Open choices are `OD-30`–`OD-34` in [DECISIONS.md](..
 
 These override the open questions at the end of the design note.
 
-1. **Plan zones.** Keep a faint red fill (stop) and a faint green fill (target) inside a purple outline, with a `PLAN` tag and `TP` / `SL` labels. Not all purple. Plan fills stay clearly weaker than the actual band. Solid green or red fill appears only in the actual band. MFE and MAE are a bracket, never a rectangle.
-2. **Hindsight.** A dotted continuation of entry, last stop and targets is **on by default at Medium detail**. The held-to-plan sentence is one tap away.
+1. **Plan zones.** Faint red fill (stop) and faint green fill (target) only. No outline and no purple. Plan fills stay clearly weaker than the actual band. Solid green or red fill appears only in the actual band, which is also unframed. MFE and MAE are a bracket, never a rectangle. (`PLAN` / `TP` / `SL` text, if shown, is typography, not a coloured frame.)
+2. **Hindsight.** A dotted continuation of entry, last stop and targets is **on by default at Medium detail**. Entry is faint gray; stop and target use the same faint red and green as the plan zones. No end labels and no "after exit" text on the chart. Later-touch marks are a small hollow dot; the `TP +38m` / `SL +12m` text and the held-to-plan sentence live in the hindsight block, one tap away.
 3. **Scratch.** A trade is a scratch when its result is within **0.1R or 2 ticks of entry, whichever is larger**. For `MES` (0.25 point tick, $5 a point) the two-tick floor is 0.50 point.
 4. **Not-taken plans are in v1.** Where they live in the app, Today or a Plans list, is open (`OD-31`, issue #39).
 
@@ -31,29 +31,30 @@ These override the open questions at the end of the design note.
 ### 2.1 Layers
 
 ```text
- PLAN (purple outline,           ACTUAL (teal frame,             EXCURSION (bracket)
-       faint red and green)            green / red / gray fill)
- ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐ TP 2.0R
+ PLAN (faint red and green        ACTUAL (stronger               EXCURSION (bracket)
+       fills, no outline)             green / red / gray fill,
+                                      no frame)
+ ┌               ┐ TP 2.0R
  ╎               ╎                                               ┬ MFE ≈ +1.4R
  ╎  faint green  ╎            ┌────────────┐ exit ▽ MKT           │
  ╎  reward zone  ╎            │ solid green│                     │
  ├───────────────┤ entry ▲────┴────────────┘ ─ ─ ─ ─ ─ ─          ┼ entry
  ╎  faint red    ╎                                               │
  ╎  risk zone    ╎                                               ┴ MAE ≈ −0.3R
- └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘ SL −1R
+ └               ┘ SL −1R
 ```
 
 They are drawn on top of each other in that order. The sketch separates them only to show which is which.
 
 | Layer | Meaning | Look | Source of truth |
 | :--- | :--- | :--- | :--- |
-| **PLAN** | Where the stop and target orders were when the trade began | 1 px `--box-planned` purple outline around each zone. Fill: faint red over entry→stop, faint green over entry→target, at box opacity × 0.28. Right-edge labels `TP 2.0R` and `SL`. A `PLAN` tag on the top-left corner. | Plan and order events |
-| **ACTUAL** | What the fills did | 1.5 px `--box-actual` teal frame, entry fill price to exit fill price, entry bar to exit bar. Fill: green if money was made, red if lost, gray for a scratch, at full box opacity. | Fill events |
+| **PLAN** | Where the stop and target orders were when the trade began | No outline and no purple. Fill: faint red over entry→stop, faint green over entry→target, at box opacity × 0.28. Optional typography: right-edge `TP 2.0R` / `SL`, and a `PLAN` tag. | Plan and order events |
+| **ACTUAL** | What the fills did | No frame. Fill from entry fill price to exit fill price, entry bar to exit bar: green if money was made, red if lost, gray for a scratch, at full box opacity. | Fill events |
 | **EXCURSION** | How far price went for and against the position while it was open | A vertical 1 px bracket in the gap right of the exit bar: a cap at MFE, a cap at MAE, joined through the entry price. Labels `MFE ≈ +11.50` and `MAE ≈ −55.25`. Neutral text colour. No fill. | Bars between entry and exit |
 
 Rules that follow:
 
-- **Solid green or red fill exists only inside ACTUAL, and only when the result is that colour.** A trade stopped for −1R has a red actual band and a purple plan with a faint red risk zone. Green fill is never used to mean a planned target.
+- **Solid green or red fill exists only inside ACTUAL, and only when the result is that colour.** A trade stopped for −1R has a red actual band and a faint red plan risk zone, with no outline. Green fill is never used to mean a planned target.
 - **Plan fills are weaker than the actual band.** The faint plan fill is 0.28 of the box opacity today (`PLAN_FILL_RATIO` in `components/PositionBoxPrimitive.ts`). The actual fill is at full opacity.
 - **The plan's reward zone is drawn at the planned size**, even when it is small or price never went near it. Planned R:R is the ratio of the two plan zones, so a bad plan looks like a bad plan.
 - **Excursion is never a rectangle.** A bracket cannot be mistaken for a target zone.
@@ -61,7 +62,7 @@ Rules that follow:
 
 ### 2.2 Stop moves and trails
 
-The stop is a **stepped line**, not a box edge. It is purple, 1.5 px, dashed, and it moves horizontally in time and jumps vertically at each modification:
+The stop is a **stepped line**, not a box edge. It is 1.5 px, dashed, in the muted / risk colour (never purple), and it moves horizontally in time and jumps vertically at each modification:
 
 ```text
  entry ▲──────────────────────────────▽ TRAIL
@@ -71,7 +72,7 @@ The stop is a **stepped line**, not a box edge. It is purple, 1.5 px, dashed, an
 ```
 
 - The plan's risk zone keeps its **original** size. The stepped line shows where the stop really was at each moment. R is always measured against the original stop (`OD-10`).
-- Where the stop sits at or beyond the entry, the strip between entry and stop gets a faint teal hatch: profit that was locked.
+- Where the stop sits at or beyond the entry, the strip between entry and stop gets a faint hatch in the result colour: profit that was locked.
 - A dot marks each move. At High detail the dot carries the time and the new price.
 - A stop moved **away** from the entry (risk widened) is drawn in the risk colour from that step on and labelled `WIDENED`. That is the "Moved Stop" tag in the journal, detected instead of typed.
 
@@ -81,13 +82,13 @@ Dollar figures use the examples in §3.5: 2 contracts, 5-point stop, $5 a point,
 
 | Case | PLAN | ACTUAL | Exit flag | Pill |
 | :--- | :--- | :--- | :--- | :--- |
-| **TP hit** | Purple outline, faint red and green zones, `TP 2.0R`, `SL` | Solid green band, entry → target price. Its far edge lies on the plan's TP edge. | `▽ TP` | `+2.0R · +$100.00` |
+| **TP hit** | Faint red and green plan fills, no outline, `TP 2.0R`, `SL` | Solid green band, entry → target price. Its far edge lies on the plan's TP edge. | `▽ TP` | `+2.0R · +$100.00` |
 | **SL hit** | Same | Solid red band, entry → stop price. Its far edge lies on the plan's SL edge. | `▽ SL` | `−1.0R · −$50.00` |
 | **Early exit, in profit** | Same | Solid green band, entry → exit. It stops short of the TP edge, and the untouched part of the reward zone stays faint green. | `▽ MKT` | `+0.8R`, plus `of 2.0R planned` at Medium detail |
 | **Scratch at breakeven** | Same | A thin **gray** line at the entry price, no band (the result is inside the scratch threshold, §1). | `▽ BE` | `BE · −$2.50` (fees are real money) |
 | **Trailed stop** | Original zones | Band entry → exit, coloured by result. Stepped stop line ends at the exit. | `▽ TRAIL` | `+1.2R` |
 | **Stop ignored** | Original zones | Solid red band, entry → exit, running **past** the SL edge. The part beyond the stop is hatched red and labelled `PAST STOP −0.6R`. | `▽ MKT` | `−1.6R` |
-| **Plan never filled** | Purple dotted outline, faint zones, tag `PLAN · not filled`. Spans order placed → cancelled. | None. No entry flag. | — | none |
+| **Plan never filled** | Dotted faint plan fills, no outline, tag `PLAN · not filled`. Spans order placed → cancelled. | None. No entry flag. | — | none |
 | **Plan cancelled before any fill** | Same, tag `PLAN · cancelled` | None | — | none |
 | **Two targets** | Reward zone with inner line `T1 1.0R · 1 of 2` and outer edge `T2 2.5R · 1 of 2` | Band to T1 for the first lot, then band continuing to T2 at half the fill's thickness for the runner. The path steps at each exit. | `▽ T1`, `▽ T2` | `+1.75R avg` |
 | **No plan on record** (fills-only import) | Nothing drawn. One line under the chart: "No stop or target on record", with **Add plan**. | Band entry → exit | `▽` with no reason | `+$100.00`, `—R` |
@@ -104,19 +105,19 @@ Wording for the not-filled and cancelled rows assumes the faint zones stay on th
 - The execution path is a **polyline through the fills** in time order. A single diagonal from entry to exit crosses the box and reads as a trend line, so it goes.
 - Average entry and average exit are text in the fills table, not extra lines.
 - Scale-ins: one entry flag per fill. Several fills in one bar collapse to one flag with a count (UX-23). The entry line steps to the new average price.
-- The entry flag sits at the fill price on the entry bar, pointing the way the trade goes (▲ long, ▼ short), in teal. The exit flag is a hollow triangle at the exit fill price, pointing against the trade, with the reason as text: `TP`, `SL`, `TRAIL`, `BE`, `MKT`. Text, not colour, carries the meaning (UX-80).
+- The entry flag sits at the fill price on the entry bar, pointing the way the trade goes (▲ long, ▼ short), in the muted text colour. The exit flag is a hollow triangle at the exit fill price, pointing against the trade, with the reason as text: `TP`, `SL`, `TRAIL`, `BE`, `MKT`. Text, not colour, carries the meaning (UX-80).
 - Flags are placed by price, not by the candle. The `createSeriesMarkers` arrows above and below bars go away.
 
 ### 2.5 Hindsight: after the trade
 
 Owner decision 2 in §1 sets the default. Detail:
 
-- **Dotted continuation.** Entry (teal), last stop and each target (purple) extend from the exit to the right edge of the current view as 1 px dotted lines. Short labels at the far end: `TP`, `entry`, `SL`. No fill. **No price-axis tags**, so they cannot be mistaken for the live trade.
+- **Dotted continuation.** Entry (faint gray), last stop (faint red) and each target (faint green) extend from the exit to the right edge of the current view as 1 px dotted lines. No end labels, no "after exit" text, and no purple or teal. No fill. **No price-axis tags.** Later-touch marks are a small hollow dot only; `TP +38m` / `SL +12m` text lives in the hindsight block.
 - **Default.** On at Medium detail. Low and High are not decided: this doc keeps them off until `OD-32` is answered.
-- **Which stop.** The stop in force when the trade ended. If it was moved, the original stop also runs as a fainter dotted line, labelled `SL (initial)`.
+- **Which stop.** The stop in force when the trade ended. If it was moved, the original stop also runs as a fainter dotted line. Any `SL (initial)` wording lives off the chart, in the hindsight block.
 - **Widening the view.** The `‹ 30` and `30 ›` buttons (and keys `[` and `]`) add 30 bars of the current timeframe on that side, and `Fit` restores the trade's own window. The dotted continuation grows with the view.
-- **The sentence.** The held-to-plan sentence ("After the exit: target reached 38 min later", "stop reached first, 12 min later", or "neither in the 30 bars shown") is one tap away, under an "After the exit" heading. The design note called it optional. It is not part of the default view.
-- **Hindsight is not result.** Forward data carries an `after exit` label. It never changes R, outcome or any statistic (B-63, UX-52). A shared Trade Card shows the extension only if it was on when the card was made, and keeps the label.
+- **The sentence.** The held-to-plan sentence ("Hindsight: the target would have been reached first, 38 min later", or the stop-first / neither equivalents), plus any `TP +38m` / `SL +12m` labels, is one tap away under an "After the exit — hindsight" heading. It is not drawn on the chart.
+- **Hindsight is not result.** It never changes R, outcome or any statistic (B-63, UX-52). A shared Trade Card shows the extension only if it was on when the card was made, and does not add on-chart hindsight text.
 - **Backward is context, not hindsight.** Earlier levels are drawn the same way but computed nothing. Daily levels from [12](12-levels-zones-and-daily-markup.md) are the other lines in that view when they exist.
 - **Not scheduled.** Dragging the dotted stop or target to see the R values (the design's §3.1b) is an idea. Dragging needs hit-testing the chart library does not provide out of the box.
 
@@ -237,7 +238,7 @@ Seven example documents are committed under [`fixtures/trades/`](../fixtures/tra
 | `ex-be.json` | Breakeven scratch | manual | `outcome: scratch`, +0.0R | Plan zones, stop path stepping up to entry at 15:44, gray line in place of a band, `▽ BE` |
 | `ex-trail.json` | Trailed stop | broker | `outcome: trail`, +1.2R (risk from the first stop, 5 points) | Stepped stop line, teal hatch from 15:47, solid green band to 7606, `▽ TRAIL`. Risk zone only, no reward zone: the chart does not invent a target. |
 | `ex-ignored.json` | Stop ignored | broker | `outcome: manual`, −1.6R; fact `stop_removed_while_open` at 15:39:20 | Stop line ends at 15:39 with a `✕`, solid red band to 7592, the 7595→7592 part hatched `PAST STOP −0.6R`. In the manual version (no `cancel`) the observer reports `stop_traded_through` with `basis: inferred`, and the hatch is dotted with `≈`. |
-| `ex-nottaken.json` | Planned, not taken | manual | `status: not_taken`. No result, no R, excluded from every statistic. | Dotted purple plan from 15:31 to 16:10, tag `PLAN · not filled`. The observer adds hindsight: whether price reached the entry and what the plan would have done. |
+| `ex-nottaken.json` | Planned, not taken | manual | `status: not_taken`. No result, no R, excluded from every statistic. | Dotted faint plan fills from 15:31 to 16:10, tag `PLAN · not filled`. The observer adds hindsight: whether price reached the entry and what the plan would have done. |
 | `ex-partials.json` | Two partial targets | manual | `outcome: partial_targets`; initial risk 2 × 5 pts × $5 = $50; result (5 + 12.5) × $5 = $87.50 = +1.75R | Reward zone with inner `T1 1.0R · 1 of 2` and outer `T2 2.5R · 1 of 2`, band to T1 then T2 at half, stop stepping to entry at 15:42, flags `▽ T1` and `▽ T2` |
 
 The results were checked by hand against the examples: for example, ex-ignored is (7592 − 7600) × 2 × $5 = −$80 against $50 of risk, so −1.6R, and the part beyond the stop is (7595 − 7592) × 2 × $5 = $30, or 0.6R.
@@ -267,7 +268,7 @@ Agents propose and the owner decides. Each item is also in [DECISIONS.md](../DEC
 | **OD-30** | Is `mogmine.trade.v1` the stored record, or the shape assembled on read? | (a) One JSON document per trade, rewritten on change. Simple, but breaks append-only. (b) Append-only event rows keyed by trade and `seq`, with the document assembled on read. Matches §3.1 principle 6 and the ledger in [09 §8](09-backend-risk-register.md). **Recommend (b).** | Build only the pure functions and the fixtures. No table names, no migration, until decided. |
 | **OD-31** | Where does `plan` live? Options: a `plan` event in the same log; a revisioned plan record like the daily plan revision ([12 §8](12-levels-zones-and-daily-markup.md#8-the-daily-plan-and-news), [11 §1](11-product-workflows-and-api-context.md#1-the-daily-loop-beyond-the-chart), `OD-19`); or both. Where not-taken plans appear (Today or a Plans list) is issue #39. | Recommend a `plan` event on the trade (the trade's intent at decision time), linked to the daily plan revision when there is one. Owner decides. | Keep `plan` as an event in the fixtures. Do not add a table. |
 | **OD-32** | Hindsight at Low and High detail, and how far the continuation runs. Owner set Medium on by default (§1). My reading, to confirm: the continuation is drawn to the view's right edge, so the buttons set how far it reaches. | Keep Low and High off until the owner decides. | Medium only. |
-| **OD-33** | The owner's first decision (§1) changes the planned look that `OD-23` accepted on 2026-11-14 (purple solid, no fill). `docs/12 §9` and the `docs/02` text must follow. The wording for plan zones on not-taken and cancelled plans (§2.3) is my reading. | Owner confirms the reading, then `OD-23` is restated in `docs/12 §9`. | Use §1 as written. |
+| **OD-33** | §1 restates the as-built fills-only look (no purple, no outlines) and supersedes the purple-outline wording in the issue #32 draft and in `OD-23`. `docs/12 §9` should follow. The wording for plan zones on not-taken and cancelled plans (§2.3) is still a reading. | Restate `OD-23` and docs/12 §9 to match §1. | Use §1 as written: no purple, fills only. |
 | **OD-34** | [CONTRIBUTING §5](../CONTRIBUTING.md#5-fixtures-nobody-needs-a-broker-account-to-contribute) lists seven realistic `MES` scenarios (clean winner, stop-out, multi-fill scale-out, reversal, 40-second scalp, 09:30 open, roll week). The committed set is the seven in §3.5. Are the CONTRIBUTING scenarios added later, or replaced? | Keep the §3.5 set for now and add the others when `deriveTrade` exists. | Do not invent a second list. |
 
 ---
@@ -276,8 +277,8 @@ Agents propose and the owner decides. Each item is also in [DECISIONS.md](../DEC
 
 | Element | On `main` today | Target (this doc) |
 | :--- | :--- | :--- |
-| Plan zones | Faint red and green fills, no outline, no `PLAN` tag, no `TP` / `SL` labels | §2.1: purple outline, the same faint fills, tag and labels |
-| Actual band | Stronger fill in result colour, no frame | §2.1: teal frame, same fill |
+| Plan zones | Faint red and green fills, no outline, no `PLAN` tag, no `TP` / `SL` labels | §2.1: the same fills and no outline; optional typography only |
+| Actual band | Stronger fill in result colour, no frame | §2.1: the same, still no frame |
 | Path | One dotted diagonal, entry fill to exit fill | §2.4: polyline through the fills |
 | Stop path | None | §2.2 |
 | Excursion | None | §2.1 bracket |
