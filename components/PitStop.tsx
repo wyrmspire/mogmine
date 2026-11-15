@@ -73,21 +73,21 @@ export function PitStop({ trade, compact = false }: Props) {
       <div className="chip-group" role="group" aria-label="Playbook">
         <h4>Playbook</h4>
         <div className="chip-row">
-          {untouched && last && <button className="chip outlined" onClick={sameAsLast}>↺ Same as last trade</button>}
-          {playbooks.map((playbook) => <button key={playbook.id} className="chip" aria-pressed={trade.playbook_id === playbook.id} onClick={() => setPlaybook(playbook.id)}>{playbook.name}</button>)}
+          {untouched && last && <button type="button" className="chip outlined" onClick={sameAsLast}><span aria-hidden="true">↺ </span>Same as last trade</button>}
+          {playbooks.map((playbook) => <button key={playbook.id} type="button" className="chip" aria-pressed={trade.playbook_id === playbook.id} onClick={() => setPlaybook(playbook.id)}>{playbook.name}</button>)}
         </div>
       </div>
       <div className="chip-group" role="group" aria-label="Setup drivers">
         <h4>Setup</h4>
-        <div className="chip-row">{setupTags.map((tag) => <button key={tag} className="chip" aria-pressed={trade.quick_tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</button>)}</div>
+        <div className="chip-row">{setupTags.map((tag) => <button key={tag} type="button" className="chip" aria-pressed={trade.quick_tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</button>)}</div>
       </div>
       <div className="chip-group" role="group" aria-label="Execution and mindset">
         <h4>Execution</h4>
-        <div className="chip-row">{executionTags.map((tag) => <button key={tag} className="chip" aria-pressed={trade.quick_tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</button>)}</div>
+        <div className="chip-row">{executionTags.map((tag) => <button key={tag} type="button" className="chip" aria-pressed={trade.quick_tags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</button>)}</div>
       </div>
 
       {!compact && trade.checklist_state.length > 0 && score && (
-        <div className="chip-group">
+        <div className="chip-group" role="group" aria-label="Rules checklist">
           <h4>Rules <span className={`seal ${score.followed === score.total ? "full" : ""}`}>{score.followed}/{score.total} followed</span></h4>
           <ul className="checklist">
             {trade.checklist_state.map((rule) => (
@@ -98,8 +98,8 @@ export function PitStop({ trade, compact = false }: Props) {
       )}
 
       <div className="chip-group">
-        <h4><label htmlFor={compact ? undefined : "review-note"}>Note</label></h4>
-        <textarea id={compact ? undefined : "review-note"} className="note-input" rows={compact ? 2 : 3} value={trade.note} onChange={(event) => updateTrade(trade.id, { note: event.target.value })} placeholder="Why did you take it? What would you do differently?" aria-label="Review note" />
+        <h4><label htmlFor="review-note">Note</label></h4>
+        <textarea id="review-note" className="note-input" rows={compact ? 2 : 3} value={trade.note} onChange={(event) => updateTrade(trade.id, { note: event.target.value })} placeholder="Why did you take it? What would you do differently?" aria-label="Review note" />
       </div>
 
       {!compact && (

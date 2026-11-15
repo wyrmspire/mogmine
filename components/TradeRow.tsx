@@ -38,11 +38,11 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
       <span className="row-main">
         <span className="row-title">
           <strong>{trade.symbol}</strong>
-          <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}>{trade.direction === "LONG" ? "▲ LONG" : "▼ SHORT"}</span>
+          <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
           {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
-          {score && <span className={`seal ${score.followed === score.total ? "full" : ""}`} title="Rules followed">{score.followed}/{score.total}</span>}
-          {trade.flagged && <span className="status-mark reviewed" title="Flagged">⚑</span>}
-          {trade.review_status === "reviewed" && <span className="status-mark reviewed" title="Reviewed">✓</span>}
+          {score && <span className={`seal ${score.followed === score.total ? "full" : ""}`} title="Rules followed">{score.followed}/{score.total}<span className="visually-hidden"> rules followed</span></span>}
+          {trade.flagged && <span className="status-mark reviewed" title="Flagged"><span aria-hidden="true">⚑</span><span className="visually-hidden">Flagged</span></span>}
+          {trade.review_status === "reviewed" && <span className="status-mark reviewed" title="Reviewed"><span aria-hidden="true">✓</span><span className="visually-hidden">Reviewed</span></span>}
         </span>
         <span className="row-meta">{formatListTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}</span>
         <span className={`row-context ${info.todo ? "todo" : ""}`}>{info.text}</span>

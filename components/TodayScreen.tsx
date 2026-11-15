@@ -30,7 +30,7 @@ export function TodayScreen() {
   const { date: todayDate, closed } = useToday();
 
   if (!journal.hydrated || !todayDate) {
-    return <div className="page"><div className="page-head"><div><span className="eyebrow">Today</span><h1>Loading your journal…</h1></div></div>{[0, 1, 2].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>;
+    return <div className="page" role="status" aria-label="Loading your journal…"><div className="page-head"><div><span className="eyebrow">Today</span><h1>Loading your journal…</h1></div></div>{[0, 1, 2].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>;
   }
 
   const trades = withSamples(journal.trades, prefs.showSamples);
@@ -57,7 +57,7 @@ export function TodayScreen() {
           {onlySamples && (
             <div className="banner" style={{ margin: "0 0 14px" }}>
               <span>These are <b>sample trades</b> to show how a review looks. They never count in your statistics.</span>
-              <button onClick={openAddTrade}>Add yours</button>
+              <button type="button" onClick={openAddTrade}>Add yours</button>
             </div>
           )}
 
@@ -70,7 +70,7 @@ export function TodayScreen() {
             <div className="specular-card empty-state">
               <h3>{closed ? "Nothing to log yet" : "No trades yet today"}</h3>
               <p>{closed ? "A good time to finish last week's reviews. New trades can be logged for any day." : "When you close a trade, log it here while it is fresh. It takes about a minute."}</p>
-              <div className="actions"><button className="btn-primary" onClick={openAddTrade}>＋ Add a trade</button></div>
+              <div className="actions"><button type="button" className="btn-primary" onClick={openAddTrade}>＋ Add a trade</button></div>
             </div>
           )}
 
