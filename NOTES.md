@@ -48,6 +48,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — Chart, branch `feat/37-after-the-exit` (#37)
+Did:      After-the-exit hindsight. Medium detail (the default) draws dotted teal entry and purple SL/TP lines past the exit, with hollow later-touch marks. Low detail hides them. ‹ 30 / 30 › widen the view by 30 bars of the current timeframe ([ / ], Fit restores). The "held to plan" sentence is computed in `lib/hindsight.ts` and shown one tap away under "After the exit — hindsight". Never changes R, outcome, or stats.
+Files:    `lib/hindsight.ts`, `lib/__tests__/hindsight.test.ts`, `components/{PositionBoxPrimitive.ts,TradeChart.tsx,TradeDetail.tsx}`, `NOTES.md`.
+Verified: see the PR description for command output.
+Left:     Do not merge without Chris. #34 (buildMarks) can later absorb the continuation segments. Extra candles are not fetched when a tap runs out; the button says "No more candles". Optional post-exit excursion bracket stays off.
+Watch:    Dotted continuation is on by default at Medium, per the owner's 2026-11-15 decision on #37, not the earlier "off by default" note in the design draft.
+
 ### 2026-11-15 — agent (Grok Bot) — Core math + App shell, branch `feat/batch3-coverage-daystats`
 Did:      Issues #60 and #61. `validateTradeAgainstBars` now requires both entry and exit candles for `complete` coverage, and reports `chronology` separately (`unresolved` when entry and exit fall in the same bar). `fillInsideBar` returns false when the bar is missing. `dayStats` exposes `gross` (not `net`), priced/unpriceable counts, an `incomplete` flag, and a win rate over priced trades only. Today and the day header label the total "gross" and show a quiet incomplete cue.
 Files:    `lib/trade-bar-validation.ts`, `lib/trades.ts`, `lib/selectors.ts`, `components/{DayHeader,TodayScreen,TradeDetail}.tsx`, `app/globals.css`, `lib/__tests__/core.test.ts`, `NOTES.md`.
