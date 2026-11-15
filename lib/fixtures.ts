@@ -5,9 +5,21 @@ import { checklistFor } from "./playbooks.ts";
 type SeedTrade = Pick<TradeRecord, "id" | "symbol" | "direction" | "quantity" | "entry_time" | "exit_time" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price" | "key_level_price" | "note">
   & { playbook_id?: string; quick_tags?: string[]; followed?: number };
 
+/**
+ * Version of the sample set below (issue #62). Bump it whenever a sample's facts or default
+ * annotations change, so stored copies are refreshed. Stored copies record the version they came from.
+ */
+export const DEMO_FIXTURE_VERSION = 1;
+
 function makeTrade({ followed, ...seed }: SeedTrade): TradeRecord {
   const checklist = checklistFor(seed.playbook_id ?? null).map((item, index) => ({ ...item, checked: index < (followed ?? 0) }));
-  return normalizeTrade({ ...seed, is_sample: true, checklist_state: checklist });
+  return normalizeTrade({
+    ...seed,
+    is_sample: true,
+    checklist_state: checklist,
+    fixture_version: DEMO_FIXTURE_VERSION,
+    annotations_modified: false,
+  });
 }
 
 /** Short chip on sample rows. Not a broker-confirmed fill. */

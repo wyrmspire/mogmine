@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 import { DEMO_TRADE_IDS, demoTrades } from "./fixtures.ts";
 import { idbSet } from "./idb.ts";
 import type { Prefs } from "./prefs.ts";
-import { candleCacheKey, candleSignature, deriveReviewStatus, normalizeTrade } from "./trades.ts";
+import { annotationKey, candleCacheKey, candleSignature, deriveReviewStatus, normalizeTrade } from "./trades.ts";
 import type { Candle, ChecklistItem, TradeDirection, TradeRecord } from "./trades.ts";
 export { candleCacheKey, candleSignature };
 
@@ -27,13 +27,37 @@ export interface JournalState {
 const byNewest = (a: TradeRecord, b: TradeRecord) => Date.parse(b.entry_time) - Date.parse(a.entry_time);
 
 /**
- * Refresh fixture-owned market facts on a stored sample without overwriting
- * user annotations (issue #48). First-time inserts still use the fixture as a
- * whole, including its default note and checklist.
+ * Whether a stored sample's annotations belong to the trader (issues #48, #62).
+ *
+ * 1. `annotations_modified: true` is the trader's. `updateTrade` sets it on any annotation change.
+ * 2. `annotations_modified: false` stamped by an older fixture was never edited, so its annotations are
+ *    that older fixture's defaults and may be refreshed.
+ * 3. Otherwise (a legacy record without the flag, or one stamped by this same fixture) the annotations
+ *    are untouched only when they equal a known default: this fixture's own, or `previous`, an older
+ *    fixture the caller supplies. Anything else is the trader's and is kept. Unknown means keep, never overwrite.
  */
-export function applyFixtureRefresh(stored: TradeRecord, fixture: TradeRecord): TradeRecord {
+function annotationsModified(stored: TradeRecord, fixture: TradeRecord, previous?: TradeRecord): boolean {
+  if (stored.annotations_modified === true) return true;
+  if (stored.annotations_modified === false && stored.fixture_version !== fixture.fixture_version) return false;
+  const defaults = [fixture, previous].flatMap((trade) => (trade ? [annotationKey(trade)] : []));
+  return !defaults.includes(annotationKey(stored));
+}
+
+/**
+ * Refresh a stored sample from the current fixture (issues #48, #62).
+ *
+ * Always replaced: the market facts (symbol, times, prices, size, style) and the fixture version, so an
+ * old outcome never survives. Annotations are replaced by the fixture's defaults only while they are
+ * untouched (see `annotationsModified`). Pass `previous` to recognise an older fixture's default notes.
+ * Review fields (flags, blind review, review status) are the trader's and are always kept. Real trades
+ * are never changed. First-time inserts use the fixture as a whole.
+ */
+export function applyFixtureRefresh(stored: TradeRecord, fixture: TradeRecord, previous?: TradeRecord): TradeRecord {
+  if (!stored.is_sample) return stored;
+  const modified = annotationsModified(stored, fixture, previous);
   return normalizeTrade({
     ...stored,
+    ...(modified ? {} : pickAnnotations(fixture)),
     symbol: fixture.symbol,
     direction: fixture.direction,
     quantity: fixture.quantity,
@@ -46,20 +70,27 @@ export function applyFixtureRefresh(stored: TradeRecord, fixture: TradeRecord): 
     key_level_price: fixture.key_level_price,
     trade_style: fixture.trade_style,
     is_sample: true,
-    playbook_id: stored.playbook_id,
-    checklist_state: stored.checklist_state,
-    note: stored.note,
-    quick_tags: stored.quick_tags,
-    pre_trade_thesis: stored.pre_trade_thesis,
-    management_notes: stored.management_notes,
-    post_exit_notes: stored.post_exit_notes,
     flagged: stored.flagged,
     take_again: stored.take_again,
     take_again_at: stored.take_again_at,
     review_status: stored.review_status,
     candle_source: undefined,
     sparkline: [],
+    fixture_version: fixture.fixture_version,
+    annotations_modified: modified,
   });
+}
+
+function pickAnnotations(trade: TradeRecord) {
+  return {
+    playbook_id: trade.playbook_id,
+    checklist_state: trade.checklist_state,
+    note: trade.note,
+    quick_tags: trade.quick_tags,
+    pre_trade_thesis: trade.pre_trade_thesis,
+    management_notes: trade.management_notes,
+    post_exit_notes: trade.post_exit_notes,
+  };
 }
 
 
@@ -313,6 +344,8 @@ export function updateTrade(id: string, patch: Partial<TradeRecord>) {
     if (trade.id !== id) return trade;
     changed = true;
     const next = { ...trade, ...patch };
+    // A trader's change to an annotation is theirs, so a later fixture refresh keeps it (issue #62).
+    if (annotationKey(next) !== annotationKey(trade)) next.annotations_modified = true;
     next.review_status = deriveReviewStatus(next);
     return next;
   });

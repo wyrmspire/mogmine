@@ -48,6 +48,11 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Claude Haiku 5.5) — Sample fixture versions, branch `feat/batch3-fixture-version` (#62)
+Did:      Samples carry `fixture_version` (`DEMO_FIXTURE_VERSION = 1`) and `annotations_modified`. `updateTrade` sets the flag when an annotation value changes. `applyFixtureRefresh` takes an optional `previous` fixture and refreshes untouched default annotations, keeping edited ones. Open edge case: `OD-29`.
+Verified: `npm test` 57/57 (new `lib/__tests__/fixture-version.test.ts`), typecheck, build pass. Lint has one warning in `postcss.config.mjs`, unchanged from main.
+Left:     Lane claims not changed. Legacy samples whose default changed in an older build are kept until a snapshot is supplied (`OD-29`).
+
 ### 2026-11-15 — agent (Antigravity) — Core math + App shell and notes, branch `feat/53-54-cleanup-review-status`
 Did:      Issues #53 and #54: removed dead mergeAxisTags, AxisTag, axis title helpers and tests; removed orphaned .style-pill CSS; committed package-lock.json; fixed classifyTrade to compare raw elapsed ms (<15m scalp boundary) with tests; updated deriveReviewStatus to count pre_trade_thesis, management_notes, post_exit_notes, checklist_state, and take_again as review evidence; tightened stale bullets in NOTES.md.
 Files:    `lib/trades.ts`, `app/globals.css`, `lib/__tests__/core.test.ts`, `lib/__tests__/honest-box.test.ts`, `NOTES.md`, `package-lock.json`.
