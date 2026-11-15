@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { formatMoney, formatPoints, formatR } from "../format.ts";
-import { alignToBar, canonicalSymbol, initialRiskUsd, normalizeTrade, plannedR, rMultiple, snapToBar, snapToTick, specFor, toTicks, tradePnl, tradePoints, tradeTicks, validateTradeInput } from "../trades.ts";
+import { alignToBar, alignTradeToBars, canonicalSymbol, initialRiskUsd, isScratch, normalizeTrade, plannedR, rMultiple, snapToBar, snapToTick, specFor, toTicks, tradePnl, tradePoints, tradeTicks, validateTradeInput } from "../trades.ts";
 
 const minute = 60_000;
 const base = { id: "v", entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z" };
@@ -126,4 +126,82 @@ test("issue #51: a missing bar is nearby within three bars, and unresolved beyon
   assert.equal(snapToBar(five, Date.parse("2026-11-10T15:35:00Z"), "5m"), null);
   // A one-hour bar never snaps more than 30 minutes of clock time, even though three bars would be 3 hours.
   assert.equal(snapToBar([Date.parse("2026-11-10T14:00:00Z")], Date.parse("2026-11-10T15:45:00Z"), "1h"), null);
+});
+
+test("issue #63: plannedR rejects a target on the wrong side or at the entry", () => {
+  // Long entered at 6000 with a valid stop at 5999 (4 ticks risk).
+  const longBase = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 1, entry_price: 6000, exit_price: 6002, stop_loss_price: 5999 });
+  // Target below entry: wrong side yields null.
+  assert.equal(plannedR({ ...longBase, planned_target_price: 5998 }), null);
+  // Target at entry: zero reward yields null.
+  assert.equal(plannedR({ ...longBase, planned_target_price: 6000 }), null);
+  // Valid target above entry: 8 ticks reward on 4 ticks risk = 2.0R.
+  assert.equal(plannedR({ ...longBase, planned_target_price: 6002 }), 2);
+  assert.equal(formatR(plannedR({ ...longBase, planned_target_price: 6002 })!), "+2.0R");
+
+  // Short entered at 6000 with a valid stop at 6001 (4 ticks risk).
+  const shortBase = normalizeTrade({ ...base, symbol: "MES", direction: "SHORT", quantity: 1, entry_price: 6000, exit_price: 5998, stop_loss_price: 6001 });
+  // Target above entry: wrong side yields null.
+  assert.equal(plannedR({ ...shortBase, planned_target_price: 6002 }), null);
+  // Target at entry: zero reward yields null.
+  assert.equal(plannedR({ ...shortBase, planned_target_price: 6000 }), null);
+  // Valid target below entry: 8 ticks reward on 4 ticks risk = 2.0R.
+  assert.equal(plannedR({ ...shortBase, planned_target_price: 5998 }), 2);
+  assert.equal(formatR(plannedR({ ...shortBase, planned_target_price: 5998 })!), "+2.0R");
+});
+
+test("issue #63: tradeTicks and isScratch fail closed on invalid quantity or unpriceable trade", () => {
+  for (const quantity of [0, -1, 1.5, Number.NaN]) {
+    // 0-tick move (same entry and exit), which would otherwise be inside the scratch threshold
+    const flat = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity, entry_price: 6000, exit_price: 6000, stop_loss_price: 5995 });
+    assert.equal(tradeTicks(flat), null, `tradeTicks null for flat quantity ${quantity}`);
+    assert.equal(isScratch(flat), false, `isScratch false for flat quantity ${quantity}`);
+
+    // 1-tick move (inside the 2-tick scratch threshold)
+    const near = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity, entry_price: 6000, exit_price: 6000.25, stop_loss_price: 5995 });
+    assert.equal(tradeTicks(near), null, `tradeTicks null for near quantity ${quantity}`);
+    assert.equal(isScratch(near), false, `isScratch false for near quantity ${quantity}`);
+  }
+
+  // Unpriceable trade (unknown symbol or invalid price) is never a scratch
+  const unpriceable = normalizeTrade({ ...base, symbol: "XYZ", direction: "LONG", quantity: 1, entry_price: 100, exit_price: 100, stop_loss_price: 95 });
+  assert.equal(tradeTicks(unpriceable), null);
+  assert.equal(isScratch(unpriceable), false);
+});
+
+test("issue #64: alignTradeToBars marks nearby alignment as approximate and hides unresolved", () => {
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const bars = Array.from({ length: 6 }, (_, i) => start + i * minute);
+
+  // Containing entry and exit: approximate is false
+  const containing = alignTradeToBars(bars, start + 1 * minute + 15_000, start + 3 * minute + 40_000, "1m");
+  assert.deepEqual(containing, {
+    entryBar: start + 1 * minute,
+    exitBar: start + 3 * minute,
+    approximate: false,
+  });
+
+  // Containing entry, nearby exit (exit is 15:07, 2m past last bar at 15:05): approximate is true
+  const nearbyExit = alignTradeToBars(bars, start + 1 * minute + 15_000, start + 7 * minute + 20_000, "1m");
+  assert.deepEqual(nearbyExit, {
+    entryBar: start + 1 * minute,
+    exitBar: start + 5 * minute,
+    approximate: true,
+  });
+
+  // Nearby entry (entry is 14:58, 2m before first bar at 15:00), containing exit: approximate is true
+  const nearbyEntry = alignTradeToBars(bars, start - 2 * minute + 30_000, start + 3 * minute + 40_000, "1m");
+  assert.deepEqual(nearbyEntry, {
+    entryBar: start,
+    exitBar: start + 3 * minute,
+    approximate: true,
+  });
+
+  // Unresolved entry (more than 30m / 3 bars away): returns null
+  const unresolvedEntry = alignTradeToBars(bars, start - 45 * minute, start + 3 * minute, "1m");
+  assert.equal(unresolvedEntry, null);
+
+  // Unresolved exit (more than 30m / 3 bars away): returns null
+  const unresolvedExit = alignTradeToBars(bars, start + 1 * minute, start + 45 * minute, "1m");
+  assert.equal(unresolvedExit, null);
 });

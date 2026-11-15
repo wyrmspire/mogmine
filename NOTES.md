@@ -38,15 +38,21 @@ Claim a lane before starting. Clear the claim when you stop.
 
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
-| Core math | Antigravity | 2026-11-15 | Issues #53 and #54: dead helper cleanup, classify/review honesty |
+| Core math | — | | |
 | Chart | — | | |
-| App shell and notes | Antigravity | 2026-11-15 | Issues #53 and #54: dead helper cleanup, classify/review honesty |
+| App shell and notes | — | | |
 | Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-15 — agent (Antigravity) — Core math + Chart, branch `feat/batch3-calc-alignment`
+Did:      Issues #63 & #64: plannedR rejects wrong-side target and target at entry; tradeTicks returns null for invalid quantity; isScratch returns false when quantity is invalid or trade cannot be priced; alignTradeToBars / TradeChart preserves alignment kind and marks nearby (OD-28 cap kept) as approximate with quiet chart cue (softened fill, thinner/dotted path, tiny ≈).
+Files:    `lib/trades.ts`, `components/PositionBoxPrimitive.ts`, `components/TradeChart.tsx`, `lib/__tests__/validation.test.ts`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` (51/51 pass), `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning), `npm run build` (8/8 static pages).
+Left:     Ready for review; PR against main opened referencing #63 and #64; do-not-merge-without-Chris.
 
 ### 2026-11-15 — agent (Antigravity) — Core math + App shell and notes, branch `feat/53-54-cleanup-review-status`
 Did:      Issues #53 and #54: removed dead mergeAxisTags, AxisTag, axis title helpers and tests; removed orphaned .style-pill CSS; committed package-lock.json; fixed classifyTrade to compare raw elapsed ms (<15m scalp boundary) with tests; updated deriveReviewStatus to count pre_trade_thesis, management_notes, post_exit_notes, checklist_state, and take_again as review evidence; tightened stale bullets in NOTES.md.

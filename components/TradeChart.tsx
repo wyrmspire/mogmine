@@ -9,7 +9,7 @@ import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, fitWindow, includeInPriceRange, isScratch, snapToBar, specFor } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, aggregateCandles, alignTradeToBars, fitWindow, includeInPriceRange, isScratch, specFor } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 type LWC = typeof import("lightweight-charts");
@@ -126,24 +126,23 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
 
     // Fill times are snapped to their bar before they reach the time scale (B-23).
     const times = bars.map((bar) => bar.time);
-    const entryMs = Date.parse(tr.entry_time);
-    const exitMs = Date.parse(tr.exit_time);
     // A fill with no bar within tolerance is unresolved (issue #51): no box is drawn at a far-off bar.
-    const entryBar = snapToBar(times, entryMs, barTimeframe);
-    const exitBar = snapToBar(times, exitMs, barTimeframe);
-    const aligned = entryBar != null && exitBar != null;
-    l.primitive.setHidden(!aligned);
-    if (entryBar != null && exitBar != null) {
+    // When a fill snaps to a nearby bar rather than containing bar, alignment is approximate (issue #64 / OD-28).
+    const alignment = alignTradeToBars(times, tr.entry_time, tr.exit_time, barTimeframe);
+    const entryBar = alignment?.entryBar ?? null;
+    l.primitive.setHidden(alignment == null);
+    if (alignment) {
       const isLong = tr.direction === "LONG";
       const scratch = isScratch(tr);
       const config: PositionBoxConfig = {
-        entryTime: toTime(entryBar), exitTime: toTime(exitBar),
+        entryTime: toTime(alignment.entryBar), exitTime: toTime(alignment.exitBar),
         entryPrice: tr.entry_price, exitPrice: tr.exit_price,
         stopPrice: tr.stop_loss_price, targetPrice: tr.planned_target_price,
         isLong, scratch,
         profitColor: t.profit, riskColor: t.risk, mutedColor: t.textMuted,
         pillBackground: t.surface, textColor: t.textMuted,
         keyPrice: tr.key_level_price, keyColor: t.goldMid, opacity: t.boxOpacity,
+        approximate: alignment.approximate,
       };
       l.primitive.update(config);
     }
@@ -197,6 +196,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         entryTime: 0 as UTCTimestamp, exitTime: 0 as UTCTimestamp, entryPrice: trade.entry_price, exitPrice: trade.exit_price,
         stopPrice: null, targetPrice: null, isLong: true, scratch: false,
         profitColor: "", riskColor: "", mutedColor: "", pillBackground: "", textColor: "", keyPrice: null, keyColor: "", opacity: 0,
+        approximate: false,
       });
       series.attachPrimitive(primitive);
       const state: Live = { lwc, chart, series, primitive, lines: [], fitRange: null, renderedKey: "", touchTracking: false, xrayPinned: false, xrayKey: false };

@@ -160,9 +160,11 @@ function sideSign(direction: string): 1 | -1 | null {
 
 /**
  * Signed ticks captured per contract: positive when the trade made money.
- * Null when a price is non-finite or off-tick, the symbol is unknown, or the direction is not LONG or SHORT.
+ * Null when a price is non-finite or off-tick, the symbol is unknown, the quantity
+ * is not a whole number of 1 or more, or the direction is not LONG or SHORT (issue #50, #63).
  */
 export function tradeTicks(trade: Priced): number | null {
+  if (!isWholeQuantity(trade.quantity)) return null;
   const sign = sideSign(trade.direction);
   const entry = toTicks(trade.entry_price, trade.symbol);
   const exit = toTicks(trade.exit_price, trade.symbol);
@@ -308,6 +310,39 @@ export function snapToBar(times: number[], instant: number, timeframe: Timeframe
   return alignment.kind === "unresolved" ? null : alignment.barTime;
 }
 
+export interface TradeBarAlignment {
+  entryBar: number;
+  exitBar: number;
+  /** True when entry or exit was snapped to a nearby bar rather than a containing bar (issue #64 / OD-28). */
+  approximate: boolean;
+}
+
+/**
+ * Align both entry and exit timestamps to bars.
+ * Returns null when either fill is unresolved (farther than tolerance).
+ * `approximate` is true when either fill was aligned to a nearby bar instead of a containing bar.
+ */
+export function alignTradeToBars(
+  times: number[],
+  entryTime: string | number,
+  exitTime: string | number,
+  timeframe: Timeframe,
+): TradeBarAlignment | null {
+  const entryMs = typeof entryTime === "string" ? Date.parse(entryTime) : entryTime;
+  const exitMs = typeof exitTime === "string" ? Date.parse(exitTime) : exitTime;
+  if (!Number.isFinite(entryMs) || !Number.isFinite(exitMs)) return null;
+  const entryAlign = alignToBar(times, entryMs, timeframe);
+  const exitAlign = alignToBar(times, exitMs, timeframe);
+  if (entryAlign.kind === "unresolved" || exitAlign.kind === "unresolved") {
+    return null;
+  }
+  return {
+    entryBar: entryAlign.barTime,
+    exitBar: exitAlign.barTime,
+    approximate: entryAlign.kind === "nearby" || exitAlign.kind === "nearby",
+  };
+}
+
 export interface FittedWindow {
   /** UTC milliseconds. */
   start: number;
@@ -420,7 +455,10 @@ export function excursions(
   return trade.direction === "LONG" ? { maePrice: low, mfePrice: high, coverage } : { maePrice: high, mfePrice: low, coverage };
 }
 
-/** Planned reward ÷ initial risk, or null without a stop and target. */
+/**
+ * Planned reward ÷ initial risk, or null without a stop and target, or when the stop or
+ * target is on the wrong side (or at the entry) (issue #50, #63).
+ */
 export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "planned_target_price">): number | null {
   if (trade.stop_loss_price == null || trade.planned_target_price == null || !isWholeQuantity(trade.quantity)) return null;
   const riskTicks = stopRiskTicks(trade);
@@ -428,12 +466,15 @@ export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "
   const entry = toTicks(trade.entry_price, trade.symbol);
   const target = toTicks(trade.planned_target_price, trade.symbol);
   if (riskTicks == null || sign == null || entry == null || target == null) return null;
-  return ((target - entry) * sign) / riskTicks;
+  const rewardTicks = (target - entry) * sign;
+  if (rewardTicks <= 0) return null;
+  return rewardTicks / riskTicks;
 }
 
 /**
  * A scratch is a result within 0.1R or 2 ticks of the entry, whichever is larger.
- * Without a valid stop, the threshold is 2 ticks. A trade that cannot be priced is never a scratch.
+ * Without a valid stop, the threshold is 2 ticks. A trade that cannot be priced or
+ * has invalid quantity is never a scratch (issue #63).
  */
 export function isScratch(trade: Priced & Partial<Pick<TradeRecord, "stop_loss_price">>) {
   const captured = tradeTicks(trade);
