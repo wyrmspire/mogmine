@@ -5,11 +5,11 @@ import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
 import type { PositionBoxConfig } from "./PositionBoxPrimitive";
 import { describeTrade } from "@/lib/describe";
-import { formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
+import { approx, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, excursions, fitWindow, includeInPriceRange, rMultiple, snapToBar, specFor, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, aggregateCandles, exitFlagReason, excursions, fitWindow, includeInPriceRange, isScratch, mergeAxisTags, plannedR, rMultiple, snapToBar, specFor, tickDecimals, tradePnl, tradePoints } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 type LWC = typeof import("lightweight-charts");
@@ -19,8 +19,6 @@ type UTCTimestamp = import("lightweight-charts").UTCTimestamp;
 type Time = import("lightweight-charts").Time;
 type IPriceLine = import("lightweight-charts").IPriceLine;
 type AutoscaleInfoProvider = import("lightweight-charts").AutoscaleInfoProvider;
-type SeriesMarker = import("lightweight-charts").SeriesMarker<Time>;
-type MarkersApi = import("lightweight-charts").ISeriesMarkersPluginApi<Time>;
 
 export interface TradeChartHandle {
   /** Snap the view back to the padded trade window. */
@@ -55,7 +53,6 @@ interface Live {
   chart: IChartApi;
   series: CandleSeries;
   primitive: PositionBoxPrimitive;
-  markers: MarkersApi;
   lines: IPriceLine[];
   fitRange: { from: number; to: number } | null;
   renderedKey: string;
@@ -65,6 +62,12 @@ interface Live {
 }
 
 const toTime = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
+
+function signedLevel(points: number, symbol: string) {
+  const decimals = Math.max(2, tickDecimals(specFor(symbol).tickSize));
+  return `${points < 0 ? "−" : "+"}${Math.abs(points).toFixed(decimals)}`;
+}
+
 
 export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone, privacy, readout, onRendered, onFitChange, onXrayChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -136,35 +139,46 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     const r = rMultiple(tr);
     const points = formatPoints(tradePoints(tr), tr.symbol);
     const ex = excursions(tr, p.candles, baseMinutes);
+    const scratch = isScratch(tr);
+    const sign = isLong ? 1 : -1;
+    const maePoints = ex ? (ex.maePrice - tr.entry_price) * sign : null;
+    const mfePoints = ex ? (ex.mfePrice - tr.entry_price) * sign : null;
+    const maePrice = maePoints != null && maePoints < 0 ? ex!.maePrice : null;
+    const mfePrice = mfePoints != null && mfePoints > 0 ? ex!.mfePrice : null;
+    const plan = plannedR(tr);
     const config: PositionBoxConfig = {
       entryTime: toTime(entryBar), exitTime: toTime(exitBar),
       entryPrice: tr.entry_price, exitPrice: tr.exit_price,
       stopPrice: tr.stop_loss_price, targetPrice: tr.planned_target_price,
-      maePrice: ex && (ex.maePrice - tr.entry_price) * (isLong ? 1 : -1) < 0 ? ex.maePrice : null,
-      mfePrice: ex && (ex.mfePrice - tr.entry_price) * (isLong ? 1 : -1) > 0 ? ex.mfePrice : null,
-      isLong,
+      maePrice, mfePrice, isLong, scratch,
       pill: p.privacy ? (r != null ? `${formatR(r)} · ${points}` : points) : (r != null ? `${formatR(r)} · ${formatMoney(pnl)}` : formatMoney(pnl)),
-      pillTone: pnl > 0 ? "profit" : pnl < 0 ? "risk" : "neutral",
-      profitColor: t.profit, riskColor: t.risk, profitTextColor: t.profitText, riskTextColor: t.lossText, frameColor: t.boxActual, pathColor: t.goldMid,
+      pillTone: scratch ? "neutral" : pnl > 0 ? "profit" : pnl < 0 ? "risk" : "neutral",
+      profitColor: t.profit, riskColor: t.risk, profitTextColor: t.profitText, riskTextColor: t.lossText,
+      frameColor: t.boxActual, planColor: t.boxPlanned, mutedColor: t.textMuted,
       pillBackground: t.surface, textColor: t.textPrimary, opacity: t.boxOpacity,
+      stopLabel: tr.stop_loss_price != null ? "SL (initial)" : "",
+      targetLabel: tr.planned_target_price != null ? (plan != null ? `TP ${formatR(plan)}` : "TP") : "",
+      exitReason: exitFlagReason(tr),
+      maeLabel: maePrice != null ? `MAE ${approx(signedLevel(maePoints!, tr.symbol))}` : null,
+      mfeLabel: mfePrice != null ? `MFE ${approx(signedLevel(mfePoints!, tr.symbol))}` : null,
     };
     l.primitive.update(config);
 
-    const markers: SeriesMarker[] = [
-      { time: toTime(entryBar), position: isLong ? "belowBar" : "aboveBar", color: t.textPrimary, shape: isLong ? "arrowUp" : "arrowDown" },
-      { time: toTime(exitBar), position: isLong ? "aboveBar" : "belowBar", color: t.goldMid, shape: isLong ? "arrowDown" : "arrowUp" },
-    ];
-    l.markers.setMarkers(markers);
-
-    // Axis tags for this trade's stop and target; one dotted ray for the key level.
+    // Axis tags for the selected trade only; merge titles when prices coincide (SL · OUT).
     l.lines.forEach((line) => l.series.removePriceLine(line));
     l.lines = [];
-    const tag = (price: number | null, color: string, title: string, lineVisible: boolean) => {
-      if (price != null) l.lines.push(l.series.createPriceLine({ price, color, lineStyle: l.lwc.LineStyle.Dotted, lineWidth: 1, lineVisible, axisLabelVisible: true, title }));
-    };
-    tag(tr.stop_loss_price, t.risk, "", false);
-    tag(tr.planned_target_price, t.profit, "", false);
-    tag(tr.key_level_price, t.goldMid, "KEY", true);
+    for (const tag of mergeAxisTags([
+      { price: tr.stop_loss_price, color: t.risk, title: "SL" },
+      { price: tr.planned_target_price, color: t.profit, title: "TP" },
+      { price: tr.entry_price, color: t.boxActual, title: "IN" },
+      { price: tr.exit_price, color: t.boxActual, title: "OUT" },
+      { price: tr.key_level_price, color: t.goldMid, title: "KEY", lineVisible: true },
+    ], tr.symbol)) {
+      l.lines.push(l.series.createPriceLine({
+        price: tag.price, color: tag.color, title: tag.title,
+        lineStyle: l.lwc.LineStyle.Dotted, lineWidth: 1, lineVisible: tag.lineVisible, axisLabelVisible: true,
+      }));
+    }
 
     // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
     const fittedWindow = fitWindow(tr.entry_time, tr.exit_time, barTimeframe);
@@ -202,11 +216,12 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       });
       const primitive = new PositionBoxPrimitive({
         entryTime: 0 as UTCTimestamp, exitTime: 0 as UTCTimestamp, entryPrice: trade.entry_price, exitPrice: trade.exit_price,
-        stopPrice: null, targetPrice: null, maePrice: null, mfePrice: null, isLong: true, pill: "", pillTone: "neutral",
-        profitColor: "", riskColor: "", frameColor: "", pathColor: "", pillBackground: "", textColor: "", opacity: 0,
+        stopPrice: null, targetPrice: null, maePrice: null, mfePrice: null, isLong: true, scratch: false, pill: "", pillTone: "neutral",
+        profitColor: "", riskColor: "", frameColor: "", planColor: "", mutedColor: "", pillBackground: "", textColor: "", opacity: 0,
+        stopLabel: "", targetLabel: "", exitReason: null, maeLabel: null, mfeLabel: null,
       });
       series.attachPrimitive(primitive);
-      const state: Live = { lwc, chart, series, primitive, markers: lwc.createSeriesMarkers(series, []), lines: [], fitRange: null, renderedKey: "", touchTracking: false, xrayPinned: false, xrayKey: false };
+      const state: Live = { lwc, chart, series, primitive, lines: [], fitRange: null, renderedKey: "", touchTracking: false, xrayPinned: false, xrayKey: false };
       live.current = state;
       draw.current(true);
 

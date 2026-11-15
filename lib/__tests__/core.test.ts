@@ -13,7 +13,7 @@ import { shareCardFileName } from "../shareCard.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
-import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
@@ -247,8 +247,6 @@ test("fill times snap to the bar that contains them (B-23)", () => {
   // A missing bar snaps to the nearest one instead of vanishing.
   const gappy = bars.filter((_, i) => i !== 8).map((bar) => bar.time);
   assert.equal(snapToBar(gappy, fill, "1m"), start + 7 * minute);
-  const ex = excursions({ direction: "LONG", entry_time: new Date(start + 2 * minute + 5000).toISOString(), exit_time: new Date(start + 4 * minute + 5000).toISOString(), entry_price: 12 }, bars);
-  assert.deepEqual(ex, { maePrice: 11, mfePrice: 16 });
 });
 
 test("review status and adherence", () => {

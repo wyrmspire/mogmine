@@ -260,24 +260,155 @@ export interface Excursions {
   mfePrice: number;
 }
 
+function pricesMatch(a: number, b: number, tickSize: number) {
+  return Math.round(a / tickSize) === Math.round(b / tickSize);
+}
+
+/** High/low of an entry bar, or null when the wicks are not provably after the fill. */
+function provableEntryRange(bar: Candle, fillPrice: number, tickSize: number): { high: number; low: number } | null {
+  const atOpen = pricesMatch(fillPrice, bar.open, tickSize);
+  const atClose = pricesMatch(fillPrice, bar.close, tickSize);
+  // A fill at the close cannot have a later high or low in this bar. Mid-bar fills are unprovable.
+  return atOpen && !atClose ? { high: bar.high, low: bar.low } : null;
+}
+
+/** High/low of an exit bar, or null when the wicks are not provably before the fill. */
+function provableExitRange(bar: Candle, fillPrice: number, tickSize: number): { high: number; low: number } | null {
+  const atOpen = pricesMatch(fillPrice, bar.open, tickSize);
+  const atClose = pricesMatch(fillPrice, bar.close, tickSize);
+  return atClose && !atOpen ? { high: bar.high, low: bar.low } : null;
+}
+
 /**
- * MAE and MFE from bars that overlap the hold. Approximate by nature: the entry and exit bars
- * include price action outside the hold, so callers must show these with "≈" (B-33).
+ * MAE and MFE from bars in the hold.
+ *
+ * Only completed bars (the same rule as the bar validator) and the provable side of the
+ * entry and exit bars are counted. A long filled at a bar's close does not inherit that
+ * bar's earlier high as profit. When fewer than two completed bars remain, this returns
+ * null so callers can show "—" rather than a misleading number (B-33, issue #30).
  */
-export function excursions(trade: Pick<TradeRecord, "direction" | "entry_time" | "exit_time" | "entry_price">, candles: Candle[], barMinutes = 1): Excursions | null {
+export function excursions(
+  trade: Pick<TradeRecord, "direction" | "entry_time" | "exit_time" | "entry_price"> & Partial<Pick<TradeRecord, "exit_price" | "symbol">>,
+  candles: Candle[],
+  barMinutes = 1,
+): Excursions | null {
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
+  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) return null;
   const barMs = barMinutes * 60_000;
-  let high = -Infinity;
-  let low = Infinity;
+  const tickSize = trade.symbol ? specFor(trade.symbol).tickSize : 1e-8;
+  const entryBarTime = Math.floor(entry / barMs) * barMs;
+  const exitBarTime = Math.floor(exit / barMs) * barMs;
+
+  const complete: Candle[] = [];
   for (const bar of candles) {
-    if (bar.time + barMs <= entry) continue;
-    if (bar.time > exit) break;
-    high = Math.max(high, bar.high);
-    low = Math.min(low, bar.low);
+    if (bar.time >= entry && bar.time + barMs <= exit) complete.push(bar);
   }
-  if (!Number.isFinite(high) || !Number.isFinite(low)) return null;
+  if (complete.length < 2) return null;
+
+  let high = trade.entry_price;
+  let low = trade.entry_price;
+  if (trade.exit_price != null) {
+    high = Math.max(high, trade.exit_price);
+    low = Math.min(low, trade.exit_price);
+  }
+
+  const include = (range: { high: number; low: number } | null) => {
+    if (!range) return;
+    high = Math.max(high, range.high);
+    low = Math.min(low, range.low);
+  };
+
+  for (const bar of candles) {
+    const isEntryBar = bar.time === entryBarTime;
+    const isExitBar = bar.time === exitBarTime;
+    const isComplete = bar.time >= entry && bar.time + barMs <= exit;
+    if (isEntryBar) {
+      include(provableEntryRange(bar, trade.entry_price, tickSize));
+      continue;
+    }
+    if (isExitBar) {
+      if (trade.exit_price != null) include(provableExitRange(bar, trade.exit_price, tickSize));
+      continue;
+    }
+    if (isComplete) include(bar);
+  }
+
   return trade.direction === "LONG" ? { maePrice: low, mfePrice: high } : { maePrice: high, mfePrice: low };
+}
+
+/** Planned reward ÷ initial risk, or null without a stop and target. */
+export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "planned_target_price">) {
+  if (trade.stop_loss_price == null || trade.planned_target_price == null) return null;
+  const riskTicks = Math.abs(toTicks(trade.entry_price, trade.symbol) - toTicks(trade.stop_loss_price, trade.symbol));
+  if (!riskTicks) return null;
+  const rewardTicks = trade.direction === "LONG"
+    ? toTicks(trade.planned_target_price, trade.symbol) - toTicks(trade.entry_price, trade.symbol)
+    : toTicks(trade.entry_price, trade.symbol) - toTicks(trade.planned_target_price, trade.symbol);
+  return rewardTicks / riskTicks;
+}
+
+/**
+ * A scratch is a result within 0.1R or 2 ticks of the entry, whichever is larger.
+ * Without a stop, the threshold is 2 ticks.
+ */
+export function isScratch(trade: Priced & Partial<Pick<TradeRecord, "stop_loss_price">>) {
+  const captured = Math.abs(tradeTicks(trade));
+  const riskTicks = trade.stop_loss_price == null
+    ? 0
+    : Math.abs(toTicks(trade.entry_price, trade.symbol) - toTicks(trade.stop_loss_price, trade.symbol));
+  const threshold = Math.max(riskTicks > 0 ? 0.1 * riskTicks : 0, 2);
+  return captured <= threshold;
+}
+
+/** Exit flag text: TP or SL when the exit price equals that planned level, otherwise none. */
+export function exitFlagReason(trade: Pick<TradeRecord, "symbol" | "exit_price" | "stop_loss_price" | "planned_target_price">): "TP" | "SL" | null {
+  if (trade.planned_target_price != null && toTicks(trade.exit_price, trade.symbol) === toTicks(trade.planned_target_price, trade.symbol)) return "TP";
+  if (trade.stop_loss_price != null && toTicks(trade.exit_price, trade.symbol) === toTicks(trade.stop_loss_price, trade.symbol)) return "SL";
+  return null;
+}
+
+export interface AxisTag {
+  price: number;
+  title: string;
+  color: string;
+  lineVisible: boolean;
+}
+
+const AXIS_TITLE_ORDER = ["SL", "TP", "IN", "OUT", "KEY"];
+
+function axisTitleRank(title: string) {
+  const index = AXIS_TITLE_ORDER.indexOf(title);
+  return index === -1 ? AXIS_TITLE_ORDER.length : index;
+}
+
+/** Merge axis tags that share a price (`SL · OUT`). */
+export function mergeAxisTags(
+  tags: Array<{ price: number | null | undefined; title: string; color: string; lineVisible?: boolean }>,
+  symbol: string,
+): AxisTag[] {
+  const groups = new Map<number, AxisTag & { rank: number }>();
+  for (const tag of tags) {
+    if (tag.price == null || !Number.isFinite(tag.price)) continue;
+    const key = toTicks(tag.price, symbol);
+    const rank = axisTitleRank(tag.title);
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { price: tag.price, title: tag.title, color: tag.color, lineVisible: !!tag.lineVisible, rank });
+      continue;
+    }
+    const titles = existing.title.split(" · ");
+    if (!titles.includes(tag.title)) titles.push(tag.title);
+    titles.sort((a, b) => axisTitleRank(a) - axisTitleRank(b));
+    existing.title = titles.join(" · ");
+    existing.lineVisible = existing.lineVisible || !!tag.lineVisible;
+    if (rank < existing.rank) {
+      existing.price = tag.price;
+      existing.color = tag.color;
+      existing.rank = rank;
+    }
+  }
+  return [...groups.values()].map(({ price, title, color, lineVisible }) => ({ price, title, color, lineVisible }));
 }
 
 /** ~`points` closes from just before the entry to just after the exit. */

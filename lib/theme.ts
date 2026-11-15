@@ -14,6 +14,7 @@ export interface ChartTheme {
   profitText: string;
   lossText: string;
   boxActual: string;
+  boxPlanned: string;
   goldMid: string;
   goldLight: string;
   textPrimary: string;
@@ -44,6 +45,7 @@ function read(): ChartTheme {
     profitText: value("--profit-text"),
     lossText: value("--loss-text"),
     boxActual: value("--box-actual"),
+    boxPlanned: value("--box-planned"),
     goldMid: value("--gold-mid"),
     goldLight: value("--gold-light"),
     textPrimary: value("--text-primary"),
