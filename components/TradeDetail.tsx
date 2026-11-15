@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PitStop } from "./PitStop";
 import { PriceLadder } from "./PriceLadder";
 import { RiskChips } from "./RiskChips";
 import { TradeChart } from "./TradeChart";
@@ -14,10 +15,10 @@ import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { buildShareCard } from "@/lib/shareCard";
-import { updateTrade, useJournal } from "@/lib/store";
+import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { STYLE_LABEL, TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { STYLE_LABEL, TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
 
@@ -50,7 +51,6 @@ export function TradeDetail({ id }: { id: string }) {
 
 function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; list: TradeRecord[]; listLabel: string; backHref: string }) {
   const prefs = usePrefs();
-  const journal = useJournal();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -135,6 +135,13 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     go(dx < 0 ? next : previous);
   };
 
+  const removeThis = () => {
+    const removed = removeTrade(trade.id);
+    if (!removed) return;
+    showToast("Trade removed", { label: "Undo", run: () => addTrade(removed) });
+    router.push(backHref);
+  };
+
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
   const tone = pnl > 0 ? "positive" : pnl < 0 ? "negative" : "";
@@ -142,7 +149,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const points = formatPoints(tradePoints(trade), trade.symbol);
   const headline = prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl);
   const secondary = prefs.shield ? (r != null ? points : "—R") : formatR(r);
-  const saveText = journal.saveState === "saving" ? "Saving…" : journal.saveState === "error" ? "Not saved — storage is blocked" : "✓ Saved on this device";
 
   const ready = candles?.status === "ready";
   const baseMinutes = TIMEFRAME_MINUTES[base];
@@ -166,7 +172,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       </aside>
 
       <section className="detail-main">
-        <div className="trade-header" onPointerDown={(event) => { swipeStart.current = { x: event.clientX, y: event.clientY }; }} onPointerUp={onSwipeEnd} onPointerCancel={() => { swipeStart.current = null; }}>
+        <div className="trade-header" data-process={processRead(trade) ?? undefined} onPointerDown={(event) => { swipeStart.current = { x: event.clientX, y: event.clientY }; }} onPointerUp={onSwipeEnd} onPointerCancel={() => { swipeStart.current = null; }}>
           <Link className="nav-button" href={backHref} aria-label={`Back to ${listLabel}`}>←</Link>
           <div className="head-main">
             <div className="title-line">
@@ -237,11 +243,18 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       </section>
 
       <aside className="detail-side">
-        <section className="note-card specular-card card-pad">
-          <div className="card-head"><h3>Review note</h3><span>Private</span></div>
-          <textarea id="review-note" value={trade.note} onChange={(event) => updateTrade(trade.id, { note: event.target.value })} placeholder="Why did you take it? What would you do differently?" aria-label="Review note" />
-          <p className="note-state" role="status">{saveText}</p>
+        <section className="specular-card card-pad">
+          <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
+          <PitStop trade={trade} />
         </section>
+        <div className="review-actions">
+          <button className="icon-button" aria-pressed={trade.flagged} aria-label={trade.flagged ? "Flagged for the weekly review. Tap to unflag." : "Flag for the weekly review"} title="Flag for the weekly review" onClick={() => updateTrade(trade.id, { flagged: !trade.flagged })}>⚑</button>
+          {trade.review_status === "reviewed"
+            ? <button className="btn-secondary" onClick={() => updateTrade(trade.id, { review_status: "new" })}>Reviewed ✓ · Reopen</button>
+            : <button className="btn-primary" onClick={() => { updateTrade(trade.id, { review_status: "reviewed" }); showToast("Marked reviewed", { label: "Undo", run: () => updateTrade(trade.id, { review_status: "new" }) }); }}>Mark reviewed</button>}
+        </div>
+        {trade.take_again && <p className="note-state" style={{ textAlign: "left" }}>Blind review: you said <b>{trade.take_again === "yes" ? "take it again" : trade.take_again === "smaller" ? "take it smaller" : "pass"}</b> before seeing the result.</p>}
+        {!trade.is_sample && <button className="btn-danger-ghost" onClick={removeThis}>Remove this trade</button>}
       </aside>
     </div>
   );

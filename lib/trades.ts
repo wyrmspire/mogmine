@@ -52,6 +52,9 @@ export interface TradeRecord {
   management_notes: string;
   post_exit_notes: string;
   flagged: boolean;
+  /** Blind review answer, given before the outcome was shown (docs/13 BET-03). */
+  take_again: "yes" | "smaller" | "pass" | null;
+  take_again_at: string | null;
   /** Fixture or tool-made trade. Never counted in statistics (docs/10 §5). */
   is_sample: boolean;
   /** ~40 closes around the trade for list thumbnails, so lists never load candles (B-42). */
@@ -291,6 +294,8 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     management_notes: "",
     post_exit_notes: "",
     flagged: false,
+    take_again: null,
+    take_again_at: null,
     is_sample: false,
     sparkline: [],
     ...raw,
@@ -298,4 +303,15 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   if (!(trade.quantity > 0)) trade.quantity = 1;
   trade.review_status = deriveReviewStatus(trade);
   return trade;
+}
+
+/** Tags that record a broken process, whatever the trade made. */
+export const VIOLATION_TAGS = ["Chased Entry", "Moved Stop", "Revenge"];
+
+/** How the trade was executed: `clean` (every rule followed, no violation), `broken`, or unknown. */
+export function processRead(trade: Pick<TradeRecord, "checklist_state" | "quick_tags">): "clean" | "broken" | null {
+  const score = adherence(trade);
+  const violated = trade.quick_tags.some((tag) => VIOLATION_TAGS.includes(tag));
+  if (violated || (score && score.followed < score.total)) return "broken";
+  return score ? "clean" : null;
 }

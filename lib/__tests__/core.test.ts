@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
+import { processRead } from "../trades.ts";
 import { adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 
@@ -113,4 +114,12 @@ test("review status and adherence", () => {
   assert.equal(deriveReviewStatus({ ...trade, review_status: "reviewed" }), "reviewed");
   assert.equal(adherence(trade), null);
   assert.deepEqual(adherence({ checklist_state: [{ id: "a", label: "a", checked: true }, { id: "b", label: "b", checked: false }] }), { followed: 1, total: 2, ratio: 0.5 });
+});
+
+test("process read: rules and violation tags decide, never the outcome", () => {
+  const rule = (checked: boolean) => ({ id: "a", label: "a", checked });
+  assert.equal(processRead({ checklist_state: [], quick_tags: [] }), null);
+  assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Level Sweep"] }), "clean");
+  assert.equal(processRead({ checklist_state: [rule(true), rule(false)], quick_tags: [] }), "broken");
+  assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Revenge"] }), "broken");
 });

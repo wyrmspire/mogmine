@@ -16,6 +16,8 @@ export interface Prefs {
   palette: Palette;
   timeZone: string;
   showSamples: boolean;
+  /** Review queue hides the outcome until the entry has been judged (docs/13 BET-03). */
+  blindReview: boolean;
   /** Dollars risked per trade, used to suggest a stop distance (docs/12 LV-17). */
   riskBudgetUsd: number;
 }
@@ -28,6 +30,7 @@ export const DEFAULT_PREFS: Prefs = {
   palette: "classic",
   timeZone: DEFAULT_TIME_ZONE,
   showSamples: true,
+  blindReview: false,
   riskBudgetUsd: 250,
 };
 
@@ -50,6 +53,7 @@ function sanitize(raw: Partial<Prefs>): Prefs {
     palette: raw.palette === "blue-orange" ? "blue-orange" : "classic",
     timeZone: TIME_ZONE_OPTIONS.some((zone) => zone.id === raw.timeZone) ? raw.timeZone as string : DEFAULT_PREFS.timeZone,
     showSamples: raw.showSamples !== false,
+    blindReview: raw.blindReview === true,
     riskBudgetUsd: clamp(raw.riskBudgetUsd, 10, 100_000, DEFAULT_PREFS.riskBudgetUsd),
   };
 }
