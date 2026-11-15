@@ -1,5 +1,6 @@
-import type { Candle } from "@/lib/trades";
-import type { MarketDataProvider, MarketDataRequest } from "./types";
+import { FUTURES_SPECS } from "../trades.ts";
+import type { Candle } from "../trades.ts";
+import type { MarketDataProvider, MarketDataQuery } from "./types.ts";
 
 interface YahooChartResponse {
   chart?: {
@@ -19,12 +20,26 @@ interface YahooChartResponse {
   };
 }
 
+const INTERVAL = { "1m": "1m", "5m": "5m", "15m": "15m", "1h": "60m" } as const;
+
 export class YahooFinanceProvider implements MarketDataProvider {
-  async getCandles({ ticker, start, end }: MarketDataRequest): Promise<Candle[]> {
+  readonly name = "yahoo_finance";
+
+  /** Invariant 3 (OD-15): never the bare symbol. `MES` charts on `MES=F` and `MNQ` on `MNQ=F`, with no mini fallback. */
+  resolveProviderSymbol(canonicalSymbol: string) {
+    const spec = FUTURES_SPECS[canonicalSymbol.toUpperCase()];
+    if (!spec) throw new Error(`Unsupported symbol ${canonicalSymbol}`);
+    return spec.yahooTicker;
+  }
+
+  supportsTickData() { return false; }
+
+  async getCandles({ symbol, timeframe, from, to }: MarketDataQuery): Promise<Candle[]> {
+    const ticker = this.resolveProviderSymbol(symbol);
     const params = new URLSearchParams({
-      interval: "1m",
-      period1: String(Math.floor(start.getTime() / 1000)),
-      period2: String(Math.floor(end.getTime() / 1000)),
+      interval: INTERVAL[timeframe],
+      period1: String(Math.floor(from.getTime() / 1000)),
+      period2: String(Math.floor(to.getTime() / 1000)),
       events: "history",
       includePrePost: "true",
     });
@@ -33,6 +48,8 @@ export class YahooFinanceProvider implements MarketDataProvider {
       headers: { "User-Agent": "Mozilla/5.0 MogMine/1.0", Accept: "application/json" },
       next: { revalidate: 300 },
     });
+    // 422: the range starts beyond what Yahoo serves for this interval. Not available, never retried (docs/10 §2).
+    if (response.status === 422 || response.status === 404) return [];
     if (!response.ok) throw new Error(`Yahoo Finance returned ${response.status}`);
 
     const payload = await response.json() as YahooChartResponse;
@@ -41,15 +58,16 @@ export class YahooFinanceProvider implements MarketDataProvider {
     if (payload.chart?.error) throw new Error(payload.chart.error.description || "Yahoo Finance error");
     if (!result?.timestamp || !quote) return [];
 
+    // Clean before use: drop null-price rows and the stray row outside the window (AGENTS §3b-8).
     return result.timestamp.flatMap((timestamp, index): Candle[] => {
       const open = quote.open?.[index];
       const high = quote.high?.[index];
       const low = quote.low?.[index];
       const close = quote.close?.[index];
-      if ([open, high, low, close].some((value) => value == null)) return [];
+      if (open == null || high == null || low == null || close == null) return [];
       const time = timestamp * 1000;
-      if (time < start.getTime() || time > end.getTime()) return [];
-      return [{ time, open: open!, high: high!, low: low!, close: close!, volume: quote.volume?.[index] ?? 0 }];
+      if (time < from.getTime() || time > to.getTime()) return [];
+      return [{ time, open, high, low, close, volume: quote.volume?.[index] ?? 0 }];
     });
   }
 }

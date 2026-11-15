@@ -149,7 +149,7 @@ Measured against Yahoo's chart endpoint on 2026-11-14 (full results and response
 - **Tick differences.** MES and ES prints differ by a tick or two. Yahoo bars sometimes miss extremes. Fills then draw outside the wick and look like a bug.
 - **Volume.** Measured 2026-11-14: a sampled `ES=F` session had volume on all but 2 of about 1,350 bars, so VWAP from it is usable. Indices such as `^VIX` report zero volume.
 - **Freshness.** Whether the newest `ES=F` bars are delayed was not confirmed (?). The response carries no delay field. Measure the age of the latest bar during a live session.
-- **Micro tickers exist.** Yahoo serves `MES=F` and `MNQ=F` as separate series whose bars differ from `ES=F` and `NQ=F` by up to a point and thirteen points respectively. Drawing micro fills on the micro's own candles removes most of the tick mismatch. See [10 §4](10-yahoo-first-build-plan.md#4-finding-yahoo-has-separate-mesf-and-mnqf-series) and `OD-15`.
+- **Micro tickers exist (`OD-15` decided 2026-11-14).** Yahoo serves `MES=F` and `MNQ=F` as separate series whose bars differ from `ES=F` and `NQ=F` by up to a point and thirteen points respectively. `MES` is charted on `MES=F` and `MNQ` on `MNQ=F` with no `ES=F`/`NQ=F` fallback, and levels are computed from the same instrument as the chart. See [10 §4](10-yahoo-first-build-plan.md#4-finding-yahoo-has-separate-mesf-and-mnqf-series-od-15-decided).
 - **Roll date for free.** `meta.shortName` names the contract month behind the continuous ticker. Store it per session.
 
 Mitigations:

@@ -85,6 +85,8 @@ Read the planning documents in order for the complete technical and product spec
    The owner's premarket markup as a proposal: level formulas (prior day, overnight, pivots, ADR Pivots), zone merging, role colours and right-edge labels, level-set revisions and trade snapshots, risk-sized and planned/actual/archived boxes, AI level facts, missed moves, and the assistant level-set draft. Proposals tracked as `OD-20`–`OD-23`.
 13. **[13 — Bold UI Bets](docs/13-bold-ui-bets.md)**  
    Interface bets shaped by how the owner trades: the Zone Ladder, days instead of trades in the feed, blind review, drawing a trade on the chart, desk mode and the plan-versus-actual execution diff. Bets, not scope (`BET-nn`).
+14. **[14 — UI & Experience: Phased Plan](docs/14-ui-phased-plan.md)**  
+   The `ui/phased-improvements` branch: what phases 1–3 built, the proposed phases 4–6 (starting with a chart window sized from each trade's own duration), and the questions waiting for the owner.
 
 ---
 

@@ -1,71 +1,119 @@
-// Display time zone. Storage and session math stay in UTC / America/New_York (AGENTS.md §3b-5, UX-87);
+// Display time zone. Storage stays UTC and session math stays America/New_York (lib/session.ts);
 // this module only changes how instants are shown and how typed wall-clock times are read.
-// The owner reads charts in Central Time (docs/12 LV-03). Until the /tune preference exists (UX-86),
-// every screen uses this one constant.
-export const DISPLAY_TIME_ZONE = "America/Chicago";
+// The zone is a preference (UX-86). The owner reads charts in Central Time (docs/12 LV-03),
+// so that is the default until they pick another one on the Tune screen.
 
-const zoneParts = new Intl.DateTimeFormat("en-US", {
-  timeZone: DISPLAY_TIME_ZONE,
-  hourCycle: "h23",
-  year: "numeric", month: "2-digit", day: "2-digit",
-  hour: "2-digit", minute: "2-digit", second: "2-digit",
-});
+export const DEFAULT_TIME_ZONE = "America/Chicago";
 
-function wallClock(instant: number) {
-  const parts = Object.fromEntries(zoneParts.formatToParts(new Date(instant)).map((part) => [part.type, part.value]));
+export const TIME_ZONE_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: "America/Chicago", label: "Central (CT)" },
+  { id: "America/New_York", label: "Exchange (ET)" },
+  { id: "Europe/London", label: "London" },
+  { id: "UTC", label: "UTC" },
+];
+
+interface ZoneFormats {
+  parts: Intl.DateTimeFormat;
+  listTime: Intl.DateTimeFormat;
+  detailTime: Intl.DateTimeFormat;
+  dateTime: Intl.DateTimeFormat;
+  axisTime: Intl.DateTimeFormat;
+  axisDay: Intl.DateTimeFormat;
+  crosshair: Intl.DateTimeFormat;
+  zoneName: Intl.DateTimeFormat;
+}
+
+const cache = new Map<string, ZoneFormats>();
+
+function formats(zone: string): ZoneFormats {
+  let found = cache.get(zone);
+  if (!found) {
+    const base = { timeZone: zone } as const;
+    found = {
+      parts: new Intl.DateTimeFormat("en-US", { ...base, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      listTime: new Intl.DateTimeFormat("en-US", { ...base, hourCycle: "h23", hour: "2-digit", minute: "2-digit" }),
+      detailTime: new Intl.DateTimeFormat("en-US", { ...base, hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      dateTime: new Intl.DateTimeFormat("en-US", { ...base, hourCycle: "h23", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+      axisTime: new Intl.DateTimeFormat("en-US", { ...base, hourCycle: "h23", hour: "2-digit", minute: "2-digit" }),
+      axisDay: new Intl.DateTimeFormat("en-US", { ...base, month: "short", day: "numeric" }),
+      crosshair: new Intl.DateTimeFormat("en-US", { ...base, hourCycle: "h23", weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+      zoneName: new Intl.DateTimeFormat("en-US", { ...base, timeZoneName: "short" }),
+    };
+    cache.set(zone, found);
+  }
+  return found;
+}
+
+function wallClock(instant: number, zone: string) {
+  const parts = Object.fromEntries(formats(zone).parts.formatToParts(new Date(instant)).map((part) => [part.type, part.value]));
   return {
     year: Number(parts.year), month: Number(parts.month), day: Number(parts.day),
     hour: Number(parts.hour) % 24, minute: Number(parts.minute), second: Number(parts.second),
   };
 }
 
-/** Milliseconds the display zone is ahead of UTC at this instant (CST = -6 h, CDT = -5 h). */
-function zoneOffset(instant: number) {
-  const w = wallClock(instant);
+/** Milliseconds the zone is ahead of UTC at this instant (CST = −6 h, CDT = −5 h). */
+function zoneOffset(instant: number, zone: string) {
+  const w = wallClock(instant, zone);
   return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second) - Math.floor(instant / 1000) * 1000;
 }
 
-/** `YYYY-MM-DDTHH:mm` as shown in the display zone, for `<input type="datetime-local">`. */
-export function toZonedInput(date: Date) {
-  const w = wallClock(date.getTime());
+/** `YYYY-MM-DDTHH:mm` as shown in the zone, for `<input type="datetime-local">`. */
+export function toZonedInput(date: Date, zone = DEFAULT_TIME_ZONE) {
+  const w = wallClock(date.getTime(), zone);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${w.year}-${pad(w.month)}-${pad(w.day)}T${pad(w.hour)}:${pad(w.minute)}`;
 }
 
-/** Reads a `datetime-local` value as wall-clock time in the display zone, whatever zone the device is in. */
-export function fromZonedInput(value: string) {
+/** Reads a `datetime-local` value as wall-clock time in the zone, whatever zone the device is in. */
+export function fromZonedInput(value: string, zone = DEFAULT_TIME_ZONE) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
   if (!match) return new Date(Number.NaN);
   const [, y, mo, d, h, mi, s] = match;
   const asUtc = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s ?? 0));
-  const first = asUtc - zoneOffset(asUtc);
-  const second = asUtc - zoneOffset(first);
+  const first = asUtc - zoneOffset(asUtc, zone);
+  const second = asUtc - zoneOffset(first, zone);
   return new Date(second);
 }
 
-export const zoneLabel = (date: Date) =>
-  new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TIME_ZONE, timeZoneName: "short" })
-    .formatToParts(date).find((part) => part.type === "timeZoneName")?.value ?? "CT";
+/** Short zone name at that instant: `CST`, `CDT`, `EST`, `GMT`… */
+export function zoneLabel(instant: number | Date, zone = DEFAULT_TIME_ZONE) {
+  const date = typeof instant === "number" ? new Date(instant) : instant;
+  return formats(zone).zoneName.formatToParts(date).find((part) => part.type === "timeZoneName")?.value ?? zone;
+}
 
-export const dateTimeFormat = new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TIME_ZONE, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
-export const shortTimeFormat = new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TIME_ZONE, hour: "2-digit", minute: "2-digit", hour12: false });
-const axisTime = new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TIME_ZONE, hour: "2-digit", minute: "2-digit", hour12: false });
-const axisDay = new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TIME_ZONE, month: "short", day: "numeric" });
-const crosshairTime = new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TIME_ZONE, weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZoneName: "short" });
+/** `09:48` — lists (docs/08 §13). */
+export function formatListTime(instant: number | string, zone = DEFAULT_TIME_ZONE) {
+  return formats(zone).listTime.format(new Date(instant));
+}
+
+/** `09:48:12 CST` — detail views, always with the zone. */
+export function formatDetailTime(instant: number | string, zone = DEFAULT_TIME_ZONE) {
+  const date = new Date(instant);
+  return `${formats(zone).detailTime.format(date)} ${zoneLabel(date, zone)}`;
+}
+
+/** `Nov 13, 09:48 CST` — exports and headers; every exported time carries its zone (UX-75). */
+export function formatDateTime(instant: number | string, zone = DEFAULT_TIME_ZONE) {
+  const date = new Date(instant);
+  return `${formats(zone).dateTime.format(date)} ${zoneLabel(date, zone)}`;
+}
 
 /**
  * lightweight-charts has no time zones and labels UTCTimestamp values in UTC.
  * These formatters relabel the axis and crosshair in the display zone without shifting the data.
  * Tick mark type: 0 Year, 1 Month, 2 DayOfMonth, 3 Time, 4 TimeWithSeconds.
  */
-export function chartTickLabel(seconds: number, tickMarkType: number) {
+export function chartTickLabel(seconds: number, tickMarkType: number, zone = DEFAULT_TIME_ZONE) {
   const date = new Date(seconds * 1000);
-  if (tickMarkType <= 1) return axisDay.format(date);
-  // The library places day ticks on UTC midnight (18:00 or 19:00 CT), so only call it a new day at CT midnight.
-  const time = axisTime.format(date);
-  return tickMarkType === 2 && (time === "00:00" || time === "24:00") ? axisDay.format(date) : time;
+  const f = formats(zone);
+  if (tickMarkType <= 1) return f.axisDay.format(date);
+  // The library places day ticks on UTC midnight, so only call it a new day at midnight in the display zone.
+  const time = f.axisTime.format(date);
+  return tickMarkType === 2 && time === "00:00" ? f.axisDay.format(date) : time;
 }
 
-export function chartCrosshairLabel(seconds: number) {
-  return crosshairTime.format(new Date(seconds * 1000));
+export function chartCrosshairLabel(seconds: number, zone = DEFAULT_TIME_ZONE) {
+  const date = new Date(seconds * 1000);
+  return `${formats(zone).crosshair.format(date)} ${zoneLabel(date, zone)}`;
 }

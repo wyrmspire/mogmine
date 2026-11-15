@@ -20,7 +20,7 @@
     "bars": "Yahoo MES=F 1m/15m (exchange time converted to CT)",
     "quote": "TradingView scanner CME_MINI:MES1! (~10 min delayed)",
     "settle": "Yahoo MES=F 1d close (matched CME settlement on 2026-11-10 and 2026-11-11)",
-    "series_note": "OD-15 interim charts MES on ES=F; these values are from MES=F"
+    "series_note": "OD-15 decided: MES charts and computes levels on MES=F (no ES=F fallback)"
   },
   "reference_price": {
     "price": 7594.0,

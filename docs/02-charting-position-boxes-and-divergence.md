@@ -37,19 +37,21 @@ Every trade automatically renders a TradingView-style **Position Box** directly 
    - **MAE & MFE Inner Watermarks:** Inside the Risk Box, a darker inner shade marks the actual **MAE (Heat Taken)** relative to the full hard Stop Loss; inside the Profit Box, a subtle tick line marks the **MFE Peak** so you immediately see how much heat you absorbed and how much open profit existed before exit.
    - **Post-Exit "Ghost Box" Toggle (`[ 👻 +15m Ghost ]`):** Extends a faint, dotted projection of your Entry, Stop, and Target levels `15–30 bars` past `exit_time`. One tap shows whether exiting early saved you from a reversal or left `+2R` on the table.
 
+The price autoscale always includes the planned target, planned stop and actual exit in addition to the visible candles. The primitive exposes those bounds and the candlestick series merges them into its own autoscale range; **Fit** restores price autoscale as well as the duration-derived time window. A missing planned target is labelled “No target set” and does not invent a profit zone.
+
 ---
 
-## 3. Automatic Trade Classification (`Scalp` vs. `90-Min` vs. `Investment`)
+## 3. Duration-derived chart window
 
-When a trade closes (or is imported), the classifier inspects `hold_duration_seconds = exit_time - entry_time` and session boundaries to configure both the **default chart view** and the **AI coaching lens**:
+The fitted chart view comes directly from `hold_duration_seconds = exit_time - entry_time`; it never comes from a duration category. The base span is twice the hold: 30% of the view before entry, 50% in the trade and 20% after exit. A 90-minute hold therefore fits into roughly three hours of price action, while a five-minute hold gets a tight view. The rule is continuous, with no session-length label or bucket in the interface.
 
-| Classification | Hold Duration Rule | Default Chart Timeframe | Default Context Window | What the Chart & AI Focus On |
-| :--- | :--- | :--- | :--- | :--- |
-| **`scalp`** | `< 15 minutes` | `1m` candles | `35 bars` before entry → `20 bars` after exit | Micro-structure, candle wicks, entry chasing, slippage, immediate reaction off `VWAP`/`ONH`/`ONL`. |
-| **`session_90m`** | `15 minutes` to `2 hours` (or single intraday macro window) | `5m` candles (toggleable to `1m` / `15m`) | Full active session open (e.g., 1.5h before entry → 30m after exit) | Session structure, Opening Range (`ORB`), Initial Balance (`IB`), patience through pullbacks, target management. |
-| **`investment`** (Swing / Extended) | `> 2 hours` / held across multiple sessions | `1h` or `1d` candles (toggleable to `15m`) | `5–20 sessions` prior → post-exit follow-through | Higher-timeframe trend alignment, multi-day levels (`PDH/PDL`, weekly highs/lows), macro catalyst thesis. |
+The fitted view never contains fewer than 30 bars on the selected timeframe. When that floor widens a very short hold, the added context keeps the same before/after bias. The initial timeframe comes from duration: `1m` through 40 minutes, `5m` through 3 hours, `15m` through 10 hours, then `1h`. Switching timeframe recomputes the bar-based window, so a `15m` view shows materially more clock-time context than `1m` instead of preserving the same minutes.
 
-*Note:* The trader can always override the classification manually on a trade if a trade intended as a `90-Min Trade` got stopped out in 4 minutes, or a scalp turned into a runner.
+The stored `trade_style` field and `classifyTrade` remain for data compatibility while the later AI coaching lens is decided; neither controls the chart window or initial timeframe.
+
+Samples follow the same market-data rule as real trades. They use cached or fetched Yahoo bars and have a planned target so both zones can be reviewed. Their entry comes from the real entry bar; stop, target and exit are derived from real bar extrema. The sample exits at the first bar that touches either planned level, so MAE never passes its stop and MFE never passes its target. Synthetic sample candles are forbidden; when market bars are unavailable, no chart is rendered.
+
+Real trades are never rewritten to fit the bars. A pure validator checks completed bars before the recorded exit for a passed planned stop, or a passed target followed by a worse exit, and checks that the exit sits inside its bar. Trade Detail reports those as neutral facts. A same-bar touch is not called “before exit” because OHLC cannot prove event order within one candle; stop-move recording remains tracked in issue #24.
 
 ---
 
@@ -60,8 +62,10 @@ Because **TopstepX** trades futures symbols like `MES` or `MNQ`, the `YahooFinan
 
 | TopstepX Contract | Yahoo Finance Ticker | Role |
 | :--- | :--- | :--- |
-| **`MES` / `ES`** | `ES=F` | **Primary Instrument (Default)** |
-| `MNQ` / `NQ` | `NQ=F` | Common Companion (SMT Divergence / Tech Lead) |
+| **`MES`** | `MES=F` | **Primary Instrument (Default, `OD-15`)** |
+| **`ES`** | `ES=F` | E-mini S&P 500 |
+| **`MNQ`** | `MNQ=F` | Micro Nasdaq-100 (`OD-15`) |
+| `NQ` | `NQ=F` | Common Companion (SMT Divergence / Tech Lead) |
 | `MYM` / `YM` | `YM=F` | Companion (Dow Divergence) |
 | `M2K` / `RTY` | `RTY=F` | Companion (Small-Cap Breadth) |
 | `MGC` / `GC` | `GC=F` | Gold Futures |
@@ -72,14 +76,14 @@ Because **TopstepX** trades futures symbols like `MES` or `MNQ`, the `YahooFinan
 > [!WARNING]
 > **Critical Yahoo Finance Constraint & Caching Solution:**  
 > Yahoo Finance only retains `1m` intraday bars for the trailing **7 to 30 days** (and `5m` bars for ~60 days). If we fetched charts on-demand when opening old reviews, every chart older than a month would fail to load.  
-> **Rule:** As soon as a trade is logged, the backend fetches `1m`, `5m`, and `15m` (plus `1h` for swings) candle windows around the trade for both the primary ticker (`ES=F`) and default companion (`NQ=F`), and **persists them permanently** in Supabase's `trade_candles` table.
+> **Rule:** As soon as a trade is logged, the backend fetches `1m`, `5m`, and `15m` (plus `1h` for swings) candle windows around the trade for both the primary ticker (`MES=F` for `MES`) and default companion (`NQ=F`), and **persists them permanently** in Supabase's `trade_candles` table.
 
 > [!WARNING]
 > **Additions from the 2026-11-14 review** ([09 — Backend Risk Register](09-backend-risk-register.md) §2):
 > - **The post-exit window does not exist when the trade closes.** Fetch what exists, then top up with a durable job (B-10).
 > - **Yahoo limits, measured 2026-11-14:** `1m` goes back 30 days at no more than 8 days per request. `5m`, `15m` and `30m` go back 60 days. `1h` goes back 730 days. Archive every session daily so nothing expires ([10 — Yahoo-First Build Plan](10-yahoo-first-build-plan.md) §2–3, B-11).
-> - **`ES=F` is not the traded contract.** In roll weeks the boxes are offset from the candles. Store the broker contract id and check that fills sit inside their bars (B-12).
-> - **Yahoo does serve `MES=F` and `MNQ=F`** as separate series that differ from the minis bar by bar. Whether to chart micros on them is `OD-15` in [DECISIONS.md](../DECISIONS.md). Archive both in the meantime.
+> - **Continuous tickers are not the exact dated contract.** In roll weeks the boxes can be offset from the candles. Store the broker contract id and check that fills sit inside their bars (B-12).
+> - **Chart `MES` on `MES=F` and `MNQ` on `MNQ=F` (`OD-15` decided 2026-11-14).** No `ES=F` or `NQ=F` fallback. Levels are computed from and drawn on the same instrument as the chart.
 > - **Fill times must be snapped to bar times** before `timeToCoordinate()`, or the Position Box disappears (B-23).
 > - **Levels must be point-in-time.** An opening range that had not formed at entry must not be shown or sent to the AI as if it had (B-14).
 
