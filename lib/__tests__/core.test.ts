@@ -2,12 +2,14 @@
 // Run with `npm test` (Node's built-in runner; no extra dependencies).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { describeTrade } from "../describe.ts";
+import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
 import { demoTrades } from "../fixtures.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
+import { shareCardFileName } from "../shareCard.ts";
+
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
 import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
@@ -301,4 +303,17 @@ test("chart text equivalent describes direction, size, times, prices and R or po
   );
   const noStop = { ...trade, stop_loss_price: null };
   assert.match(describeTrade(noStop, "America/Chicago", true), /plus 13 points, no stop recorded\.$/);
+});
+
+test("Shield / privacy mode omits dollars and contract size in descriptions and share file names (UX-64, UX-72)", () => {
+  const trade = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 3, entry_price: 6844.25, exit_price: 6849, stop_loss_price: 6841.25 });
+  const open = describeTrade(trade, "America/Chicago", false);
+  const shielded = describeTrade(trade, "America/Chicago", true);
+  assert.match(open, /3 contracts/);
+  assert.doesNotMatch(shielded, /contract|3×|\$|usd/i);
+  assert.match(shielded, /plus 1\.6 R/);
+
+  const fileName = shareCardFileName(trade);
+  assert.equal(fileName, "mes-long-2026-11-10-trade-card.png");
+  assert.doesNotMatch(fileName, /\$|usd|3|contract|71\.25/i);
 });

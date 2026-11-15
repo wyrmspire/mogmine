@@ -120,19 +120,21 @@ export function AddTradeSheet() {
     <div className="sheet-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeAddTrade()}>
       <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="add-trade-title">
         <div className="sheet-head">
-          <div><span className="eyebrow">Manual entry</span><h2 id="add-trade-title">Log the execution</h2><p>Side, size, prices and times make the chart. The rest can wait.</p></div>
+          <div><span className="eyebrow">Manual entry</span><h2 id="add-trade-title">Log the execution</h2><p>{prefs.shield ? "Side, prices and times make the chart. The rest can wait." : "Side, size, prices and times make the chart. The rest can wait."}</p></div>
           <button className="icon-button" onClick={closeAddTrade} aria-label="Close">×</button>
         </div>
         <form onSubmit={submit} noValidate>
           <div className="form-grid">
-            <label className="field"><span>Symbol</span>
+            <label className={`field${prefs.shield ? " wide" : ""}`}><span>Symbol</span>
               <select ref={firstField} value={draft.symbol} onChange={(event) => change({ symbol: event.target.value })}>
                 {Object.keys(FUTURES_SPECS).map((symbol) => <option key={symbol}>{symbol}</option>)}
               </select>
             </label>
-            <label className="field"><span>Contracts</span>
-              <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} onChange={(event) => change({ quantity: event.target.value })} />
-            </label>
+            {!prefs.shield && (
+              <label className="field"><span>Contracts</span>
+                <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} onChange={(event) => change({ quantity: event.target.value })} />
+              </label>
+            )}
             <div className="field wide"><span>Side</span>
               <div className="segmented" role="group" aria-label="Side">
                 <button type="button" aria-pressed={draft.direction === "LONG"} onClick={() => change({ direction: "LONG" })}>▲ Long</button>
@@ -164,7 +166,7 @@ export function AddTradeSheet() {
               {errors.target && <span className="error">{errors.target}</span>}
             </label>
             {(suggestedStop != null && draft.stop === "") || (suggestedTarget != null && draft.target === "") ? (
-              <div className="field wide"><span>Suggested from your ${prefs.riskBudgetUsd} risk budget</span>
+              <div className="field wide"><span>{prefs.shield ? "Suggested from your risk budget" : `Suggested from your $${prefs.riskBudgetUsd} risk budget`}</span>
                 <div className="suggest">
                   {suggestedStop != null && draft.stop === "" && <button type="button" onClick={() => change({ stop: String(suggestedStop) })}>Stop {formatPrice(suggestedStop, draft.symbol)} · {budgetPoints.toFixed(2)} pts</button>}
                   {suggestedTarget != null && draft.target === "" && <button type="button" onClick={() => change({ target: String(suggestedTarget) })}>Target {formatPrice(suggestedTarget, draft.symbol)} · exactly 1.5R</button>}
@@ -180,7 +182,7 @@ export function AddTradeSheet() {
           </div>
           <div className="form-preview" aria-live="polite">
             {preview
-              ? <><span>{quantity} × {draft.symbol} · {formatPoints(tradePoints(preview), draft.symbol)}</span><span><b className={tradePnl(preview) >= 0 ? "positive" : "negative"}>{prefs.shield ? formatR(rMultiple(preview)) : formatMoney(tradePnl(preview))}</b>{!prefs.shield && <> · {formatR(rMultiple(preview))}</>}</span></>
+              ? <><span>{prefs.shield ? draft.symbol : `${quantity} × ${draft.symbol}`} · {formatPoints(tradePoints(preview), draft.symbol)}</span><span><b className={tradePnl(preview) >= 0 ? "positive" : "negative"}>{prefs.shield ? formatR(rMultiple(preview)) : formatMoney(tradePnl(preview))}</b>{!prefs.shield && <> · {formatR(rMultiple(preview))}</>}</span></>
               : <span>Result appears here as you type the prices.</span>}
           </div>
           <button className="btn-primary btn-block" type="submit" style={{ marginTop: 14 }}>Save trade and open chart</button>

@@ -82,6 +82,7 @@ h1, h2, h3, p { margin: 0; }
 
 /* Every price, P&L, tick count, R and timestamp: fixed-width digits so nothing jitters. */
 .num, .tabular-price { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+[data-shield="on"] .shield-hide { display: none !important; }
 .positive { color: var(--profit-text); }
 .negative { color: var(--loss-text); }
 .muted { color: var(--text-muted); }

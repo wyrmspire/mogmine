@@ -1,9 +1,22 @@
 // Trade Card image, composed on a canvas from the chart snapshot (OD-8: no html-to-image).
 import { formatDuration, formatMoney, formatPrice } from "./format.ts";
+import { sessionDate } from "./session.ts";
 import { getTheme } from "./theme.ts";
 import { formatDateTime } from "./time.ts";
 import { holdSeconds, tradePnl } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
+
+/**
+ * File name for a shared or saved Trade Card PNG (UX-72).
+ * Never includes dollar P&L, contract quantity, account identifiers or balance.
+ */
+export function shareCardFileName(trade: Pick<TradeRecord, "symbol" | "direction" | "entry_time">) {
+  const symbol = trade.symbol.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const side = trade.direction === "LONG" ? "long" : "short";
+  return `${symbol}-${side}-${sessionDate(trade.entry_time)}-trade-card.png`;
+}
+
+export const shareCardFilename = shareCardFileName;
 
 export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, zone: string) {
   return new Promise<Blob>((resolve, reject) => {
