@@ -5,5 +5,13 @@
   "display": "standalone",
   "background_color": "#07080c",
   "theme_color": "#07080c",
-  "description": "Chart-first futures trade review."
+  "description": "Chart-first futures trade review.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }

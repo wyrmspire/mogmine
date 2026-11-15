@@ -2,20 +2,21 @@
 
 import { useEffect, useRef } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
-import { Timeframe, TradeRecord, price, visibleWindow } from "@/lib/trades";
+import { formatPrice } from "@/lib/format";
+import { getTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
+import { aggregateCandles, fitPadding, snapToBar, specFor } from "@/lib/trades";
+import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 interface Props {
   trade: TradeRecord;
+  candles: Candle[];
   timeframe: Timeframe;
+  zone: string;
   onSnapshot: (canvas: HTMLCanvasElement) => void;
 }
 
-function nearestBarTime(times: number[], instant: number) {
-  return times.reduce((best, current) => Math.abs(current - instant) < Math.abs(best - instant) ? current : best, times[0]);
-}
-
-export function TradeChart({ trade, timeframe, onSnapshot }: Props) {
+export function TradeChart({ trade, candles, timeframe, zone, onSnapshot }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,78 +25,71 @@ export function TradeChart({ trade, timeframe, onSnapshot }: Props) {
     void (async () => {
       const host = hostRef.current;
       if (!host) return;
-      const {
-        CandlestickSeries,
-        ColorType,
-        LineStyle,
-        createChart,
-        createSeriesMarkers,
-      } = await import("lightweight-charts");
+      const { CandlestickSeries, ColorType, LineStyle, createChart, createSeriesMarkers } = await import("lightweight-charts");
+      type UTCTimestamp = import("lightweight-charts").UTCTimestamp;
+      type Time = import("lightweight-charts").Time;
       if (!alive) return;
 
-      const bars = visibleWindow(trade, timeframe);
+      const theme = getTheme();
+      const bars = aggregateCandles(candles, timeframe);
+      if (!bars.length) return;
       const chart = createChart(host, {
         width: host.clientWidth,
         height: host.clientHeight,
-        layout: { background: { type: ColorType.Solid, color: "#090b11" }, textColor: "#8e95a9", fontSize: 11 },
-        grid: { vertLines: { color: "#171b26" }, horzLines: { color: "#171b26" } },
-        rightPriceScale: { borderColor: "#252a36", scaleMargins: { top: 0.12, bottom: 0.12 } },
-        timeScale: { borderColor: "#252a36", timeVisible: true, secondsVisible: false, rightOffset: 2, tickMarkFormatter: (time: import("lightweight-charts").Time, tickMarkType: number) => chartTickLabel(time as number, tickMarkType) },
-        localization: { timeFormatter: (time: import("lightweight-charts").Time) => chartCrosshairLabel(time as number) },
-        crosshair: { vertLine: { color: "#676f82" }, horzLine: { color: "#676f82" } },
+        layout: { background: { type: ColorType.Solid, color: theme.chartBg }, textColor: theme.chartAxis, fontSize: 11 },
+        grid: { vertLines: { color: theme.chartGrid }, horzLines: { color: theme.chartGrid } },
+        rightPriceScale: { borderColor: theme.chartBorder, scaleMargins: { top: 0.12, bottom: 0.12 } },
+        timeScale: { borderColor: theme.chartBorder, timeVisible: true, secondsVisible: false, rightOffset: 2, tickMarkFormatter: (time: Time, tickMarkType: number) => chartTickLabel(time as number, tickMarkType, zone) },
+        localization: { timeFormatter: (time: Time) => chartCrosshairLabel(time as number, zone) },
+        crosshair: { vertLine: { color: theme.crosshair }, horzLine: { color: theme.crosshair } },
         handleScroll: { vertTouchDrag: false },
         handleScale: { axisPressedMouseMove: true, pinch: true, mouseWheel: true },
       });
       const series = chart.addSeries(CandlestickSeries, {
-        upColor: "#18b995", downColor: "#ef5a67", wickUpColor: "#18b995", wickDownColor: "#ef5a67", borderVisible: false,
-        priceFormat: { type: "price", precision: 2, minMove: 0.25 },
+        upColor: theme.candleUp, downColor: theme.candleDown, wickUpColor: theme.candleUp, wickDownColor: theme.candleDown, borderVisible: false,
+        priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol).tickSize },
       });
-      const data = bars.map((bar) => ({
-        time: Math.floor(bar.time / 1000) as import("lightweight-charts").UTCTimestamp,
-        open: bar.open, high: bar.high, low: bar.low, close: bar.close,
-      }));
-      series.setData(data);
+      const toTime = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
+      series.setData(bars.map((bar) => ({ time: toTime(bar.time), open: bar.open, high: bar.high, low: bar.low, close: bar.close })));
 
+      // Fill times are snapped to their bar before they reach the time scale (B-23).
       const times = bars.map((bar) => bar.time);
-      const entryMs = nearestBarTime(times, Date.parse(trade.entry_time));
-      const exitMs = nearestBarTime(times, Date.parse(trade.exit_time));
-      const entryTime = Math.floor(entryMs / 1000) as import("lightweight-charts").UTCTimestamp;
-      const exitTime = Math.floor(exitMs / 1000) as import("lightweight-charts").UTCTimestamp;
-      const style = getComputedStyle(document.documentElement);
-      const alpha = Number.parseFloat(style.getPropertyValue("--position-box-opacity")) || 0.28;
-      const profit = style.getPropertyValue("--profit-emerald-rgb").trim() || "16, 185, 129";
-      const risk = style.getPropertyValue("--risk-crimson-rgb").trim() || "239, 68, 68";
-      const accent = style.getPropertyValue("--gold-mid").trim() || "#d4af37";
-      const riskPrice = trade.stop_loss_price ?? trade.entry_price;
-      const targetPrice = trade.planned_target_price ?? trade.exit_price;
+      const entryMs = Date.parse(trade.entry_time);
+      const exitMs = Date.parse(trade.exit_time);
+      const entryTime = toTime(snapToBar(times, entryMs, timeframe));
+      const exitTime = toTime(snapToBar(times, exitMs, timeframe));
       const outcomeIsProfit = (trade.exit_price - trade.entry_price) * (trade.direction === "LONG" ? 1 : -1) >= 0;
-      const outcomeFill = trade.planned_target_price == null && !outcomeIsProfit ? `rgba(${risk}, ${alpha})` : `rgba(${profit}, ${alpha})`;
       const primitive = new PositionBoxPrimitive({
         entryTime, exitTime, entryPrice: trade.entry_price, exitPrice: trade.exit_price,
-        riskPrice, targetPrice,
-        profitFill: outcomeFill, riskFill: `rgba(${risk}, ${alpha})`, accent,
+        riskPrice: trade.stop_loss_price ?? trade.entry_price,
+        targetPrice: trade.planned_target_price ?? trade.exit_price,
+        profitColor: trade.planned_target_price == null && !outcomeIsProfit ? theme.risk : theme.profit,
+        riskColor: theme.risk, accent: theme.goldMid, opacity: theme.boxOpacity,
       });
       series.attachPrimitive(primitive);
 
       createSeriesMarkers(series, [
-        { time: entryTime, position: trade.direction === "LONG" ? "belowBar" : "aboveBar", color: "#d4af37", shape: trade.direction === "LONG" ? "arrowUp" : "arrowDown", text: "ENTRY" },
-        { time: exitTime, position: trade.direction === "LONG" ? "aboveBar" : "belowBar", color: "#f4f5f7", shape: trade.direction === "LONG" ? "arrowDown" : "arrowUp", text: "EXIT" },
+        { time: entryTime, position: trade.direction === "LONG" ? "belowBar" : "aboveBar", color: theme.goldMid, shape: trade.direction === "LONG" ? "arrowUp" : "arrowDown", text: "ENTRY" },
+        { time: exitTime, position: trade.direction === "LONG" ? "aboveBar" : "belowBar", color: theme.textPrimary, shape: trade.direction === "LONG" ? "arrowDown" : "arrowUp", text: "EXIT" },
       ]);
-      if (trade.stop_loss_price != null) series.createPriceLine({ price: trade.stop_loss_price, color: "#ef4444", lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: "STOP" });
-      if (trade.planned_target_price != null) series.createPriceLine({ price: trade.planned_target_price, color: "#10b981", lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: "TARGET" });
-      if (trade.key_level_price != null) series.createPriceLine({ price: trade.key_level_price, color: accent, lineStyle: LineStyle.Dotted, lineWidth: 1, axisLabelVisible: true, title: "KEY" });
+      if (trade.stop_loss_price != null) series.createPriceLine({ price: trade.stop_loss_price, color: theme.risk, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: "STOP" });
+      if (trade.planned_target_price != null) series.createPriceLine({ price: trade.planned_target_price, color: theme.profit, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: "TARGET" });
+      if (trade.key_level_price != null) series.createPriceLine({ price: trade.key_level_price, color: theme.goldMid, lineStyle: LineStyle.Dotted, lineWidth: 1, axisLabelVisible: true, title: "KEY" });
 
-      const fit = () => chart.timeScale().setVisibleRange({ from: data[0].time, to: data[data.length - 1].time });
+      const pad = fitPadding(trade.trade_style);
+      const from = toTime(snapToBar(times, entryMs - pad.before * 60_000, timeframe));
+      const to = toTime(snapToBar(times, exitMs + pad.after * 60_000, timeframe));
+      const fit = () => chart.timeScale().setVisibleRange({ from, to });
       fit();
       const resize = new ResizeObserver(() => chart.applyOptions({ width: host.clientWidth, height: host.clientHeight }));
       resize.observe(host);
       const snapshotTimer = window.setTimeout(() => alive && onSnapshot(chart.takeScreenshot(true)), 220);
       host.dataset.ready = "true";
       host.addEventListener("mogmine-fit", fit);
-      cleanup = () => { window.clearTimeout(snapshotTimer); resize.disconnect(); host.removeEventListener("mogmine-fit", fit); chart.remove(); };
+      cleanup = () => { window.clearTimeout(snapshotTimer); resize.disconnect(); host.removeEventListener("mogmine-fit", fit); chart.remove(); delete host.dataset.ready; };
     })();
     return () => { alive = false; cleanup(); };
-  }, [trade, timeframe, onSnapshot]);
+  }, [trade, candles, timeframe, zone, onSnapshot]);
 
-  return <div ref={hostRef} className="chart-host" aria-label={`${trade.direction === "LONG" ? "Long" : "Short"} ${trade.symbol}, entered at ${price(trade.entry_price)}, exited at ${price(trade.exit_price)}. Interactive candlestick chart with entry, exit, risk and target.`} />;
+  return <div ref={hostRef} className="chart-host" role="img" aria-label={`${trade.direction === "LONG" ? "Long" : "Short"} ${trade.symbol}, entered at ${formatPrice(trade.entry_price, trade.symbol)}, exited at ${formatPrice(trade.exit_price, trade.symbol)}. Candlestick chart with entry, exit, risk and target.`} />;
 }

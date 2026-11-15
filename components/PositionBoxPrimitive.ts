@@ -18,9 +18,11 @@ export interface PositionBoxConfig {
   exitPrice: number;
   riskPrice: number;
   targetPrice: number;
-  profitFill: string;
-  riskFill: string;
+  /** Colours and opacity come from the theme store (lib/theme.ts), never from literals (Invariant 5). */
+  profitColor: string;
+  riskColor: string;
   accent: string;
+  opacity: number;
 }
 
 interface Coordinates {
@@ -49,19 +51,24 @@ class PositionBoxRenderer implements IPrimitivePaneRenderer {
       const riskTop = Math.min(yEntry!, yRisk!) * sy;
       const riskHeight = Math.max(2, Math.abs(yRisk! - yEntry!)) * sy;
 
-      ctx.fillStyle = this.config.profitFill;
+      ctx.globalAlpha = this.config.opacity;
+      ctx.fillStyle = this.config.profitColor;
       ctx.fillRect(left, profitTop, width, profitHeight);
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = this.config.accent;
       ctx.lineWidth = Math.max(1, sx);
       ctx.setLineDash([]);
       ctx.strokeRect(left, profitTop, width, profitHeight);
 
-      ctx.fillStyle = this.config.riskFill;
+      ctx.globalAlpha = this.config.opacity;
+      ctx.fillStyle = this.config.riskColor;
       ctx.fillRect(left, riskTop, width, riskHeight);
-      ctx.strokeStyle = this.config.riskFill.replace(/0?\.\d+\)$/, "0.9)");
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = this.config.riskColor;
       ctx.setLineDash([5 * sx, 4 * sx]);
       ctx.strokeRect(left, riskTop, width, riskHeight);
 
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = this.config.accent;
       ctx.lineWidth = 1.5 * sx;
       ctx.setLineDash([6 * sx, 4 * sx]);
