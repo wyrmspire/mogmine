@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { describeTrade } from "../describe.ts";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
-import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
+import { applyFilters, dayStats, filtersToQuery, parseFilters } from "../selectors.ts";
 import { demoTrades } from "../fixtures.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { shareCardFileName } from "../shareCard.ts";
@@ -13,7 +13,7 @@ import { shareCardFileName } from "../shareCard.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
-import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
@@ -52,9 +52,14 @@ test("R is null without a stop, never zero", () => {
   assert.equal(formatR(rMultiple({ ...withStop, exit_price: 6841.25 })), "−1.0R");
 });
 
-test("classification compares seconds, not rounded minutes", () => {
+test("classification compares raw elapsed milliseconds at thresholds", () => {
+  // 14m 59.600s is a scalp (< 15m threshold in raw milliseconds, #54)
+  assert.equal(classifyTrade("2026-11-10T15:00:00.000Z", "2026-11-10T15:14:59.600Z"), "scalp");
   assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T15:14:40Z"), "scalp");
-  assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T15:15:00Z"), "session_90m");
+  // Exactly 15m is session_90m
+  assert.equal(classifyTrade("2026-11-10T15:00:00.000Z", "2026-11-10T15:15:00.000Z"), "session_90m");
+  assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T17:00:00.000Z"), "session_90m");
+  assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T17:00:00.001Z"), "investment");
   assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T17:00:01Z"), "investment");
 });
 
@@ -166,7 +171,9 @@ test("bar validator reports crossed plans and an exit outside its bar without ch
     entry_price: 100, exit_price: 108, stop_loss_price: 95, planned_target_price: 110,
   });
   const before = structuredClone(trade);
-  assert.deepEqual(validateTradeAgainstBars(trade, candles), [
+  const result = validateTradeAgainstBars(trade, candles);
+  assert.equal(result.coverage, "complete");
+  assert.deepEqual(result.issues, [
     { code: "stop_crossed_before_exit", barTime: start + minute, price: 95 },
     { code: "target_crossed_before_exit", barTime: start + minute, price: 110 },
     { code: "exit_outside_bar", barTime: start + 3 * minute, price: 108 },
@@ -187,13 +194,154 @@ test("bar validator handles shorts and does not infer order inside the exit bar"
     entry_time: new Date(start).toISOString(), exit_time: new Date(start + minute).toISOString(),
     entry_price: 100, exit_price: 90, stop_loss_price: 105, planned_target_price: 90,
   });
-  assert.deepEqual(validateTradeAgainstBars(exitsAtTarget, candles), []);
+  const clean = validateTradeAgainstBars(exitsAtTarget, candles);
+  assert.equal(clean.coverage, "complete");
+  assert.deepEqual(clean.issues, []);
 
   const exitsLaterAndWorse = { ...exitsAtTarget, exit_time: new Date(start + 2 * minute).toISOString(), exit_price: 94 };
-  assert.deepEqual(validateTradeAgainstBars(exitsLaterAndWorse, candles).map((issue) => issue.code), [
+  const worse = validateTradeAgainstBars(exitsLaterAndWorse, candles);
+  assert.equal(worse.coverage, "complete");
+  assert.deepEqual(worse.issues.map((issue) => issue.code), [
     "stop_crossed_before_exit",
     "target_crossed_before_exit",
   ]);
+});
+
+test("bar validator reports missing, partial, and complete coverage", () => {
+  const minute = 60_000;
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const trade = normalizeTrade({
+    id: "cover", symbol: "MES", direction: "LONG",
+    entry_time: new Date(start).toISOString(), exit_time: new Date(start + 4 * minute).toISOString(),
+    entry_price: 100, exit_price: 104, stop_loss_price: 90, planned_target_price: 120,
+  });
+  const bar = (time: number, high = 105, low = 99): Candle => (
+    { time, open: 100, high, low, close: 104, volume: 1 }
+  );
+  const complete = [
+    bar(start),
+    bar(start + minute),
+    bar(start + 2 * minute),
+    bar(start + 3 * minute),
+    bar(start + 4 * minute),
+  ];
+
+  const empty = validateTradeAgainstBars(trade, []);
+  assert.equal(empty.coverage, "missing");
+  assert.deepEqual(empty.issues, []);
+
+  const noneOverlap = validateTradeAgainstBars(trade, [bar(start + 20 * minute)]);
+  assert.equal(noneOverlap.coverage, "missing");
+  assert.deepEqual(noneOverlap.issues, []);
+
+  const gapped = validateTradeAgainstBars(trade, [
+    bar(start),
+    bar(start + minute),
+    // start + 2 minutes is missing
+    bar(start + 3 * minute),
+    bar(start + 4 * minute),
+  ]);
+  assert.equal(gapped.coverage, "partial");
+  assert.deepEqual(gapped.issues, []);
+
+  const clean = validateTradeAgainstBars(trade, complete);
+  assert.equal(clean.coverage, "complete");
+  assert.equal(clean.chronology, "resolved");
+  assert.deepEqual(clean.issues, []);
+});
+
+test("issue #60: complete coverage requires the entry candle, not only inside and exit bars", () => {
+  const minute = 60_000;
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  // Entry 15:00:30, exit 15:03:20. Expected inside bars: 15:01, 15:02. Exit bar: 15:03. Entry bar: 15:00.
+  const trade = normalizeTrade({
+    id: "missing-entry", symbol: "MES", direction: "LONG",
+    entry_time: new Date(start + 30_000).toISOString(),
+    exit_time: new Date(start + 3 * minute + 20_000).toISOString(),
+    entry_price: 100, exit_price: 104,
+  });
+  const bar = (time: number): Candle => ({ time, open: 100, high: 105, low: 99, close: 104, volume: 1 });
+  const withoutEntry = [bar(start + minute), bar(start + 2 * minute), bar(start + 3 * minute)];
+  const missingEntry = validateTradeAgainstBars(trade, withoutEntry);
+  assert.equal(missingEntry.coverage, "partial");
+  assert.equal(missingEntry.chronology, "resolved");
+
+  const withEntry = [bar(start), ...withoutEntry];
+  const complete = validateTradeAgainstBars(trade, withEntry);
+  assert.equal(complete.coverage, "complete");
+  assert.equal(complete.chronology, "resolved");
+});
+
+test("issue #60: fillInsideBar is false when the bar is missing", () => {
+  const bar: Candle = { time: Date.parse("2026-11-10T15:00:00Z"), open: 100, high: 101, low: 99, close: 100.5, volume: 1 };
+  assert.equal(fillInsideBar(100, undefined, "MES"), false);
+  assert.equal(fillInsideBar(100, bar, "MES"), true);
+  assert.equal(fillInsideBar(110, bar, "MES"), false);
+});
+
+test("issue #60: a same-bar hold can have complete data and unresolved chronology", () => {
+  const minute = 60_000;
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const trade = normalizeTrade({
+    id: "intra-bar", symbol: "MES", direction: "LONG",
+    entry_time: new Date(start + 10_000).toISOString(),
+    exit_time: new Date(start + 30_000).toISOString(),
+    entry_price: 100, exit_price: 100.25,
+  });
+  const bar: Candle = { time: start, open: 100, high: 101, low: 99, close: 100.5, volume: 1 };
+  const present = validateTradeAgainstBars(trade, [bar]);
+  assert.equal(present.coverage, "complete");
+  assert.equal(present.chronology, "unresolved");
+  assert.deepEqual(present.issues, []);
+
+  const absent = validateTradeAgainstBars(trade, []);
+  assert.equal(absent.coverage, "missing");
+  assert.equal(absent.chronology, "unresolved");
+
+  const otherBar = validateTradeAgainstBars(trade, [{ ...bar, time: start + minute }]);
+  assert.equal(otherBar.coverage, "missing");
+  assert.equal(otherBar.chronology, "unresolved");
+});
+
+test("issue #61: dayStats labels gross, counts unpriceable trades, and uses priced trades for win rate", () => {
+  const winner = normalizeTrade({
+    id: "priced-win", symbol: "MES", direction: "LONG", quantity: 1,
+    entry_time: "2026-11-10T15:00:00.000Z", exit_time: "2026-11-10T15:05:00.000Z",
+    entry_price: 6000, exit_price: 6020, stop_loss_price: 5990,
+  });
+  const unpriceable = normalizeTrade({
+    id: "bad-spec", symbol: "XYZ", direction: "LONG", quantity: 1,
+    entry_time: "2026-11-10T15:10:00.000Z", exit_time: "2026-11-10T15:15:00.000Z",
+    entry_price: 100, exit_price: 90,
+  });
+  assert.equal(tradePnl(winner), 100); // 20 points * $5
+  assert.equal(tradePnl(unpriceable), null);
+
+  const mixed = dayStats([winner, unpriceable]);
+  assert.equal(mixed.count, 2);
+  assert.equal(mixed.pricedCount, 1);
+  assert.equal(mixed.unpriceableCount, 1);
+  assert.equal(mixed.gross, 100);
+  assert.equal(mixed.wins, 1);
+  assert.equal(mixed.winRate, 1);
+  assert.equal(mixed.incomplete, true);
+
+  const clean = dayStats([winner]);
+  assert.equal(clean.gross, 100);
+  assert.equal(clean.pricedCount, 1);
+  assert.equal(clean.unpriceableCount, 0);
+  assert.equal(clean.winRate, 1);
+  assert.equal(clean.incomplete, false);
+
+  const empty = dayStats([]);
+  assert.equal(empty.gross, 0);
+  assert.equal(empty.winRate, null);
+  assert.equal(empty.incomplete, false);
+
+  const onlyBad = dayStats([unpriceable]);
+  assert.equal(onlyBad.gross, 0);
+  assert.equal(onlyBad.winRate, null);
+  assert.equal(onlyBad.incomplete, true);
 });
 
 test("formatting follows docs/08 §13", () => {
@@ -257,6 +405,20 @@ test("review status and adherence", () => {
   assert.equal(trade.review_status, "new");
   assert.equal(deriveReviewStatus({ ...trade, quick_tags: ["Level Sweep"] }), "tagged");
   assert.equal(deriveReviewStatus({ ...trade, review_status: "reviewed" }), "reviewed");
+
+  // Deeper notes, checklist, and blind review count as review evidence (#54)
+  assert.equal(deriveReviewStatus({ ...trade, post_exit_notes: "Clean exit at target." }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, management_notes: "Trailing stop behind 1m swing." }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, pre_trade_thesis: "Premarket high reclaim." }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, checklist_state: [{ id: "r1", label: "Rule 1", checked: false }] }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, take_again: "yes" }), "tagged");
+  assert.equal(deriveReviewStatus({ ...trade, take_again: "pass" }), "tagged");
+
+  // Trade with only post_exit_notes is not "new"; trade with none of those fields is "new"
+  assert.equal(deriveReviewStatus({ review_status: "new", post_exit_notes: "Detailed review notes." }), "tagged");
+  assert.equal(deriveReviewStatus({ review_status: "new" }), "new");
+  assert.equal(deriveReviewStatus(trade), "new");
+
   assert.equal(adherence(trade), null);
   assert.deepEqual(adherence({ checklist_state: [{ id: "a", label: "a", checked: true }, { id: "b", label: "b", checked: false }] }), { followed: 1, total: 2, ratio: 0.5 });
 });

@@ -14,6 +14,7 @@ import { showToast } from "@/lib/toast";
 import { holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
 import { rememberList } from "@/lib/ui";
+import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 
 export function ReviewScreen() {
   const journal = useJournal();
@@ -80,7 +81,7 @@ function Queue() {
             <span className="row-title">
               <strong>{trade.symbol}</strong>
               <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
-              {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
+              {trade.is_sample && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}
             </span>
             <span className="row-meta" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>
               {formatSessionDate(sessionDate(trade.entry_time))} · {formatListTime(trade.entry_time, prefs.timeZone)} · in at {formatPrice(trade.entry_price, trade.symbol)}{sealed ? "" : ` · ${formatDuration(holdSeconds(trade))}`}
@@ -88,7 +89,7 @@ function Queue() {
           </span>
           <span className={sealed ? "sealed" : ""} aria-hidden={sealed}><Sparkline points={trade.sparkline} /></span>
           <span className={`row-result num ${sealed ? "sealed" : ""}`} aria-hidden={sealed} style={{ textAlign: "right" }}>
-            <b className={pnl > 0 ? "positive" : pnl < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
+            <b className={(pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
             <span className="muted" style={{ fontSize: 11 }}>{prefs.shield ? (r != null ? points : "") : formatR(r)}</span>
           </span>
         </div>

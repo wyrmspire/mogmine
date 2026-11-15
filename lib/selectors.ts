@@ -6,8 +6,14 @@ import type { TradeRecord } from "./trades.ts";
 export interface DayStats {
   count: number;
   wins: number;
+  /** Wins divided by priced (eligible) trades. Null when nothing can be priced. */
   winRate: number | null;
-  net: number;
+  /** Gross P&L of priced trades only. Not net of fees or commissions. */
+  gross: number;
+  pricedCount: number;
+  unpriceableCount: number;
+  /** True when the gross total omits at least one trade that could not be priced. */
+  incomplete: boolean;
   /** Sum of R over trades that have a stop, and how many that was. */
   netR: number | null;
   withR: number;
@@ -18,18 +24,37 @@ export interface DayStats {
 }
 
 export function dayStats(trades: TradeRecord[]): DayStats {
-  let wins = 0, net = 0, netR = 0, withR = 0, processFollowed = 0, processGraded = 0, needsReview = 0;
+  let wins = 0, gross = 0, pricedCount = 0, unpriceableCount = 0, netR = 0, withR = 0, processFollowed = 0, processGraded = 0, needsReview = 0;
   for (const trade of trades) {
+    // A trade that cannot be priced is counted, but adds nothing to the money totals.
     const pnl = tradePnl(trade);
-    if (pnl > 0) wins += 1;
-    net += pnl;
+    if (pnl != null) {
+      pricedCount += 1;
+      if (pnl > 0) wins += 1;
+      gross += pnl;
+    } else {
+      unpriceableCount += 1;
+    }
     const r = rMultiple(trade);
     if (r != null) { netR += r; withR += 1; }
     const score = adherence(trade);
     if (score) { processGraded += 1; if (score.followed === score.total) processFollowed += 1; }
     if (trade.review_status !== "reviewed") needsReview += 1;
   }
-  return { count: trades.length, wins, winRate: trades.length ? wins / trades.length : null, net, netR: withR ? netR : null, withR, processFollowed, processGraded, needsReview };
+  return {
+    count: trades.length,
+    wins,
+    winRate: pricedCount ? wins / pricedCount : null,
+    gross,
+    pricedCount,
+    unpriceableCount,
+    incomplete: unpriceableCount > 0,
+    netR: withR ? netR : null,
+    withR,
+    processFollowed,
+    processGraded,
+    needsReview,
+  };
 }
 
 export interface DayGroup {

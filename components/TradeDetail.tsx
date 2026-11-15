@@ -19,6 +19,7 @@ import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
 
@@ -144,7 +145,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
-  const tone = pnl > 0 ? "positive" : pnl < 0 ? "negative" : "";
+  const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const sign = trade.direction === "LONG" ? 1 : -1;
   const points = formatPoints(tradePoints(trade), trade.symbol);
   const headline = prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl);
@@ -156,16 +157,23 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
   // Do the fills sit inside the bars they are drawn on? If not, say so instead of looking like a bug (B-12).
+  // A missing bar is a coverage issue, not a fill-alignment issue: only test bars that exist (issue #60).
   const misaligned = useMemo(() => {
     if (!ready || candles.source !== "Yahoo Finance" || trade.is_sample) return false;
     const barMs = baseMinutes * 60_000;
     const barAt = (iso: string) => { const time = Math.floor(Date.parse(iso) / barMs) * barMs; return candles.candles.find((bar) => bar.time === time); };
-    return !fillInsideBar(trade.entry_price, barAt(trade.entry_time), trade.symbol) || !fillInsideBar(trade.exit_price, barAt(trade.exit_time), trade.symbol);
+    const entryBar = barAt(trade.entry_time);
+    const exitBar = barAt(trade.exit_time);
+    const entryOff = Boolean(entryBar) && !fillInsideBar(trade.entry_price, entryBar, trade.symbol);
+    const exitOff = Boolean(exitBar) && !fillInsideBar(trade.exit_price, exitBar, trade.symbol);
+    return entryOff || exitOff;
   }, [ready, candles, trade, baseMinutes]);
-  const barIssues = useMemo(() => {
-    if (!ready || trade.is_sample) return [];
+  const barCheck = useMemo(() => {
+    if (!ready || trade.is_sample) return null;
     return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
   }, [ready, candles, trade, baseMinutes]);
+  const barIssues = barCheck?.issues ?? [];
+  const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
   const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
 
   return (
@@ -182,13 +190,15 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div className="title-line">
               <h1>{trade.symbol}</h1>
               <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
-              {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
+              {trade.is_sample && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}
             </div>
             <p className="when">{formatSessionDate(sessionDate(trade.entry_time))} · {formatDetailTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}{prefs.shield ? "" : ` · ${trade.quantity}×`}</p>
+            {trade.is_sample && <p className="muted" style={{ fontSize: 11, margin: "4px 0 0" }}>{SAMPLE_CAPTION}</p>}
           </div>
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
+        {candles?.status === "none" && !trade.is_sample && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
         {candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
@@ -217,6 +227,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
           {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
           {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
+          {barCoverage === "missing" && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
+          {barCoverage === "partial" && <div className="chart-note"><span>Bar coverage is partial — some candles in the hold are missing, so this is not a complete check.</span></div>}
+          {barCoverage === "complete" && barCheck?.chronology === "unresolved" && <div className="chart-note"><span>Entry and exit sit in the same bar, so this check cannot establish order between them.</span></div>}
           {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
           {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
           {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
@@ -225,8 +238,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
             <div><small>STOP</small><b className={trade.stop_loss_price == null ? "empty" : ""}>{formatPrice(trade.stop_loss_price, trade.symbol)}</b></div>
             <div><small>TARGET</small><b className={trade.planned_target_price == null ? "empty" : ""}>{trade.planned_target_price == null ? "No target set" : formatPrice(trade.planned_target_price, trade.symbol)}</b></div>
-            <div title="Worst price against you during the hold, estimated from bars"><small>HEAT (MAE)</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
-            <div title="Best price in your favour during the hold, estimated from bars"><small>BEST (MFE)</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
+            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
+            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
           </div>
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
           </div>

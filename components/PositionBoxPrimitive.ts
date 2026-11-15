@@ -45,6 +45,8 @@ export interface PositionBoxConfig {
   keyPrice: number | null;
   keyColor: string;
   opacity: number;
+  /** True when entry or exit was snapped to a nearby bar rather than a containing bar (issue #64 / OD-28). */
+  approximate?: boolean;
 }
 
 interface Geometry {
@@ -78,7 +80,9 @@ class FillRenderer implements IPrimitivePaneRenderer {
         ctx.fillStyle = color;
         ctx.fillRect(left, Math.round(Math.min(yA, yB) * sy), width, Math.max(1, Math.round(Math.abs(yB - yA) * sy)));
       };
-      const planAlpha = this.opacity * PLAN_FILL_RATIO;
+      const approxScale = c.approximate ? 0.72 : 1;
+      const effectiveOpacity = this.opacity * approxScale;
+      const planAlpha = effectiveOpacity * PLAN_FILL_RATIO;
       // PLAN fills first, faint, so the actual band (if any) paints over them.
       if (g.yTarget != null) rect(g.yEntry, g.yTarget, c.profitColor, planAlpha);
       if (g.yStop != null) rect(g.yEntry, g.yStop, c.riskColor, planAlpha);
@@ -89,7 +93,7 @@ class FillRenderer implements IPrimitivePaneRenderer {
       const minHalf = 1;
       const yA = Math.abs(g.yExit - g.yEntry) < 2 * minHalf ? (g.yEntry + g.yExit) / 2 - minHalf : g.yEntry;
       const yB = Math.abs(g.yExit - g.yEntry) < 2 * minHalf ? (g.yEntry + g.yExit) / 2 + minHalf : g.yExit;
-      rect(yA, yB, actual, this.opacity);
+      rect(yA, yB, actual, effectiveOpacity);
       ctx.globalAlpha = 1;
     });
   }
@@ -108,10 +112,11 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
       const line = Math.max(1, Math.floor(sx));
 
       // Execution path: thin dotted line from the entry fill to the exit fill, no text.
-      ctx.globalAlpha = 0.85 * strength;
+      // An approximate alignment uses a fainter, thinner dash (issue #64).
+      ctx.globalAlpha = (c.approximate ? 0.6 : 0.85) * strength;
       ctx.strokeStyle = c.textColor;
       ctx.lineWidth = line;
-      ctx.setLineDash([3 * sx, 3 * sx]);
+      ctx.setLineDash(c.approximate ? [1.5 * sx, 3 * sx] : [3 * sx, 3 * sx]);
       ctx.beginPath();
       ctx.moveTo(g.x1 * sx, g.yEntry * sy);
       ctx.lineTo(g.x2 * sx, g.yExit * sy);
@@ -134,7 +139,7 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
           ctx.lineTo(px - size * 0.7, py - size * 0.55);
         }
         ctx.closePath();
-        ctx.globalAlpha = strength;
+        ctx.globalAlpha = (c.approximate ? 0.75 : 1) * strength;
         ctx.fillStyle = color;
         ctx.fill();
       };
@@ -145,6 +150,19 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
     });
 
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      // Faint cue for approximate nearby alignment: quiet tiny ≈ at entry marker (issue #64).
+      if (c.approximate) {
+        const fade = this.xray ? 0.4 : 0.75;
+        ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+        ctx.fillStyle = c.textColor;
+        ctx.globalAlpha = fade;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        const xApprox = g.x1;
+        const yApprox = c.isLong ? g.yEntry - 8 : g.yEntry - 3;
+        ctx.fillText("≈", xApprox, yApprox);
+        ctx.globalAlpha = 1;
+      }
       if (g.yKey == null || g.yKey < 0 || g.yKey > mediaSize.height) return;
       const fade = this.xray ? 0.5 : 1;
       // Faint dotted key level across the pane.
@@ -198,6 +216,7 @@ class PaneView implements IPrimitivePaneView {
 export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   geometry: Geometry | null = null;
   xray = false;
+  private hidden = false;
   private chart?: IChartApi;
   private series?: ISeriesApi<SeriesType, Time>;
   private requestUpdate?: () => void;
@@ -219,7 +238,7 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
 
   updateAllViews() {
     const { chart, series, config } = this;
-    if (!chart || !series) { this.geometry = null; return; }
+    if (!chart || !series || this.hidden) { this.geometry = null; return; }
     const timeScale = chart.timeScale();
     const x1 = timeScale.timeToCoordinate(config.entryTime);
     const x2 = timeScale.timeToCoordinate(config.exitTime);
@@ -246,6 +265,13 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
 
   update(config: PositionBoxConfig) {
     this.config = config;
+    this.requestUpdate?.();
+  }
+
+  /** Hide the box when its fills have no bar to sit on (issue #51). The price scale still keeps the fills. */
+  setHidden(on: boolean) {
+    if (this.hidden === on) return;
+    this.hidden = on;
     this.requestUpdate?.();
   }
 

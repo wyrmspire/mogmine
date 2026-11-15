@@ -78,6 +78,17 @@ export interface TradeRecord {
   sparkline: number[];
   /** Where the candles last came from. The candle cache is the live truth; this is a hint for lists. */
   candle_source?: CandleSource;
+  /**
+   * Version of the sample fixture this record was built from (issue #62). Undefined on records stored
+   * before this field existed. Real trades never set it.
+   */
+  fixture_version?: number;
+  /**
+   * True once a trader changes an annotation (note, checklist, tags, playbook, thesis, management or
+   * post-exit notes). A later fixture refresh keeps such annotations (issue #62). Undefined on records
+   * stored before this field existed.
+   */
+  annotations_modified?: boolean;
 }
 
 export const DEFAULT_OWNER_USER_ID = "demo-owner";
@@ -99,22 +110,44 @@ export const FUTURES_SPECS: Record<string, FuturesContractSpec> = {
   MCL: { tickSize: 0.01, pointValueUsd: 100, yahooTicker: "CL=F" },
 };
 
-const FALLBACK_SPEC: FuturesContractSpec = { tickSize: 0.01, pointValueUsd: 1, yahooTicker: "" };
-
-export function specFor(symbol: string): FuturesContractSpec {
-  return FUTURES_SPECS[symbol] ?? FALLBACK_SPEC;
+/** Upper-case a known contract (`mes` → `MES`), or null for anything not in FUTURES_SPECS. */
+export function canonicalSymbol(symbol: string): string | null {
+  const key = typeof symbol === "string" ? symbol.trim().toUpperCase() : "";
+  return Object.prototype.hasOwnProperty.call(FUTURES_SPECS, key) ? key : null;
 }
 
-/** Price as an integer number of ticks. All money math goes through this (B-31). */
-export function toTicks(priceValue: number, symbol: string) {
-  return Math.round(priceValue / specFor(symbol).tickSize);
+/** The contract's spec, or null for an unknown symbol. There is no fallback spec (issue #50). */
+export function specFor(symbol: string): FuturesContractSpec | null {
+  const key = canonicalSymbol(symbol);
+  return key ? FUTURES_SPECS[key] : null;
 }
 
-/** Snap a price to the contract's tick grid. */
-export function snapToTick(priceValue: number, symbol: string) {
-  const { tickSize } = specFor(symbol);
-  const decimals = tickDecimals(tickSize);
-  return Number((Math.round(priceValue / tickSize) * tickSize).toFixed(decimals));
+/** Contract quantity must be a whole number of 1 or more. Anything else prices as null. */
+export function isWholeQuantity(quantity: number) {
+  return Number.isInteger(quantity) && quantity > 0;
+}
+
+const TICK_TOLERANCE = 1e-6;
+
+/**
+ * Price as an integer number of ticks, or null when the price is not finite, the symbol is
+ * unknown, or the price is off the tick grid. Off-tick prices are never rounded here: an
+ * imported fill keeps its exact value, and the validator rejects it before it is saved (B-31).
+ */
+export function toTicks(priceValue: number, symbol: string): number | null {
+  const spec = specFor(symbol);
+  if (!spec || !Number.isFinite(priceValue)) return null;
+  const ticks = priceValue / spec.tickSize;
+  const rounded = Math.round(ticks);
+  return Math.abs(ticks - rounded) <= TICK_TOLERANCE ? rounded : null;
+}
+
+/** Snap a price to the contract's tick grid. An explicit choice by the caller, never implicit (issue #50). */
+export function snapToTick(priceValue: number, symbol: string): number | null {
+  const spec = specFor(symbol);
+  if (!spec || !Number.isFinite(priceValue)) return null;
+  const decimals = tickDecimals(spec.tickSize);
+  return Number((Math.round(priceValue / spec.tickSize) * spec.tickSize).toFixed(decimals));
 }
 
 export function tickDecimals(tickSize: number) {
@@ -123,45 +156,78 @@ export function tickDecimals(tickSize: number) {
   return dot === -1 ? 0 : text.length - dot - 1;
 }
 
-/** Dollars per tick per contract, in integer cents. */
-function tickValueCents(symbol: string) {
+/** Dollars per tick per contract, in integer cents, or null for an unknown symbol. */
+function tickValueCents(symbol: string): number | null {
   const spec = specFor(symbol);
-  return Math.round(spec.tickSize * spec.pointValueUsd * 100);
+  return spec ? Math.round(spec.tickSize * spec.pointValueUsd * 100) : null;
 }
 
 type Priced = Pick<TradeRecord, "symbol" | "direction" | "entry_price" | "exit_price" | "quantity">;
 
-/** Signed ticks captured per contract: positive when the trade made money. */
-export function tradeTicks(trade: Priced) {
-  const signed = toTicks(trade.exit_price, trade.symbol) - toTicks(trade.entry_price, trade.symbol);
-  return trade.direction === "LONG" ? signed : -signed;
+/** +1 for a long, −1 for a short, null for anything else. */
+function sideSign(direction: string): 1 | -1 | null {
+  return direction === "LONG" ? 1 : direction === "SHORT" ? -1 : null;
 }
 
-/** Signed points captured per contract. */
-export function tradePoints(trade: Priced) {
-  const { tickSize } = specFor(trade.symbol);
-  return Number((tradeTicks(trade) * tickSize).toFixed(tickDecimals(tickSize)));
+/**
+ * Signed ticks captured per contract: positive when the trade made money.
+ * Null when a price is non-finite or off-tick, the symbol is unknown, the quantity
+ * is not a whole number of 1 or more, or the direction is not LONG or SHORT (issue #50, #63).
+ */
+export function tradeTicks(trade: Priced): number | null {
+  if (!isWholeQuantity(trade.quantity)) return null;
+  const sign = sideSign(trade.direction);
+  const entry = toTicks(trade.entry_price, trade.symbol);
+  const exit = toTicks(trade.exit_price, trade.symbol);
+  if (sign == null || entry == null || exit == null) return null;
+  return (exit - entry) * sign;
 }
 
-/** Gross P&L in dollars, computed in integer ticks and cents. */
-export function tradePnl(trade: Priced) {
-  return (tradeTicks(trade) * trade.quantity * tickValueCents(trade.symbol)) / 100;
+/** Signed points captured per contract, or null when the trade cannot be priced. */
+export function tradePoints(trade: Priced): number | null {
+  const spec = specFor(trade.symbol);
+  const ticks = tradeTicks(trade);
+  if (!spec || ticks == null) return null;
+  return Number((ticks * spec.tickSize).toFixed(tickDecimals(spec.tickSize)));
 }
 
-/** Initial risk in dollars, or null without a stop. */
-export function initialRiskUsd(trade: Priced & Pick<TradeRecord, "stop_loss_price">) {
+/** Gross P&L in dollars, computed in integer ticks and cents. Null for an invalid trade, never a plausible number. */
+export function tradePnl(trade: Priced): number | null {
+  const ticks = tradeTicks(trade);
+  const cents = tickValueCents(trade.symbol);
+  if (ticks == null || cents == null || !isWholeQuantity(trade.quantity)) return null;
+  return (ticks * trade.quantity * cents) / 100;
+}
+
+/**
+ * Risk in ticks from entry to the stop. Null when there is no stop, a price is invalid, the stop
+ * is on the wrong side (a long's stop at or above the entry, a short's at or below), or the distance is zero.
+ * A wrong-side stop never yields a positive risk from its absolute distance (issue #50).
+ */
+function stopRiskTicks(trade: Priced & { stop_loss_price?: number | null }): number | null {
   if (trade.stop_loss_price == null) return null;
-  const riskTicks = Math.abs(toTicks(trade.entry_price, trade.symbol) - toTicks(trade.stop_loss_price, trade.symbol));
-  if (!riskTicks) return null;
-  return (riskTicks * trade.quantity * tickValueCents(trade.symbol)) / 100;
+  const sign = sideSign(trade.direction);
+  const entry = toTicks(trade.entry_price, trade.symbol);
+  const stop = toTicks(trade.stop_loss_price, trade.symbol);
+  if (sign == null || entry == null || stop == null) return null;
+  const risk = (entry - stop) * sign;
+  return risk > 0 ? risk : null;
 }
 
-/** R = P&L ÷ initial risk. `null` without a stop, never 0 (AGENTS §3b-4, OD-10). */
-export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price">) {
-  if (trade.stop_loss_price == null) return null;
-  const riskTicks = Math.abs(toTicks(trade.entry_price, trade.symbol) - toTicks(trade.stop_loss_price, trade.symbol));
-  if (!riskTicks) return null;
-  return tradeTicks(trade) / riskTicks;
+/** Initial risk in dollars, or null without a valid stop. */
+export function initialRiskUsd(trade: Priced & Pick<TradeRecord, "stop_loss_price">): number | null {
+  const riskTicks = stopRiskTicks(trade);
+  const cents = tickValueCents(trade.symbol);
+  if (riskTicks == null || cents == null || !isWholeQuantity(trade.quantity)) return null;
+  return (riskTicks * trade.quantity * cents) / 100;
+}
+
+/** R = P&L ÷ initial risk. `null` without a valid stop, never 0 (AGENTS §3b-4, OD-10). */
+export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price">): number | null {
+  const riskTicks = stopRiskTicks(trade);
+  const ticks = tradeTicks(trade);
+  if (riskTicks == null || ticks == null || !isWholeQuantity(trade.quantity)) return null;
+  return ticks / riskTicks;
 }
 
 export function holdSeconds(trade: Pick<TradeRecord, "entry_time" | "exit_time">) {
@@ -169,9 +235,9 @@ export function holdSeconds(trade: Pick<TradeRecord, "entry_time" | "exit_time">
 }
 
 export function classifyTrade(entry: string, exit: string): TradeStyle {
-  const seconds = Math.max(1, Math.round((Date.parse(exit) - Date.parse(entry)) / 1000));
-  if (seconds < 15 * 60) return "scalp";
-  if (seconds <= 2 * 60 * 60) return "session_90m";
+  const elapsedMs = Date.parse(exit) - Date.parse(entry);
+  if (elapsedMs < 15 * 60 * 1000) return "scalp";
+  if (elapsedMs <= 2 * 60 * 60 * 1000) return "session_90m";
   return "investment";
 }
 
@@ -202,22 +268,90 @@ export function aggregateCandles(candles: Candle[], timeframe: Timeframe): Candl
   return result;
 }
 
-/** Open time of the bar that contains `instant`, or the nearest bar when the exact one is missing (B-23). */
-export function snapToBar(times: number[], instant: number, timeframe: Timeframe) {
-  if (!times.length) return instant;
-  const bucketMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
-  const open = Math.floor(instant / bucketMs) * bucketMs;
+/**
+ * How an instant lines up with the available bars (issue #51).
+ * - `containing`: the bar that contains the instant exists.
+ * - `nearby`: that bar is missing, but another bar opens within the tolerance below.
+ * - `unresolved`: no bar is close enough. Callers treat this as missing, never as a bar far away.
+ */
+export type BarAlignment =
+  | { kind: "containing"; barTime: number }
+  | { kind: "nearby"; barTime: number; gapMs: number }
+  | { kind: "unresolved" };
+
+/**
+ * Nearby tolerance: up to three bars, and never more than 30 minutes of clock time. The cap is
+ * what keeps a snap from crossing a weekend, holiday or multi-hour gap, so a fill from Monday
+ * cannot land on Friday's last candle. It is a clock cap, not an exchange calendar.
+ */
+export const NEARBY_BAR_TOLERANCE_BARS = 3;
+export const NEARBY_BAR_TOLERANCE_MS = 30 * 60_000;
+
+/**
+ * Align `instant` (UTC ms) to the sorted bar open `times`. Exact containment wins. Otherwise the
+ * nearest bar counts only within the tolerance; ties go to the earlier bar.
+ */
+export function alignToBar(times: number[], instant: number, timeframe: Timeframe): BarAlignment {
+  if (!times.length || !Number.isFinite(instant)) return { kind: "unresolved" };
+  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
+  const open = Math.floor(instant / barMs) * barMs;
+  // Lower bound: the first index whose bar opens at or after `open`.
   let lo = 0;
-  let hi = times.length - 1;
+  let hi = times.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
     if (times[mid] < open) lo = mid + 1;
     else hi = mid;
   }
-  if (times[lo] === open) return open;
-  const before = times[Math.max(0, lo - 1)];
-  const after = times[lo];
-  return Math.abs(before - open) <= Math.abs(after - open) ? before : after;
+  if (lo < times.length && times[lo] === open) return { kind: "containing", barTime: open };
+  const before = lo > 0 ? times[lo - 1] : undefined;
+  const after = lo < times.length ? times[lo] : undefined;
+  let nearest: number | undefined;
+  if (before !== undefined && after !== undefined) nearest = Math.abs(before - open) <= Math.abs(after - open) ? before : after;
+  else nearest = before ?? after;
+  if (nearest === undefined) return { kind: "unresolved" };
+  const gapMs = Math.abs(nearest - open);
+  const toleranceMs = Math.min(NEARBY_BAR_TOLERANCE_BARS * barMs, NEARBY_BAR_TOLERANCE_MS);
+  return gapMs <= toleranceMs ? { kind: "nearby", barTime: nearest, gapMs } : { kind: "unresolved" };
+}
+
+/** Open time of the bar that contains `instant` or a nearby bar within tolerance (B-23). Null when unresolved (issue #51). */
+export function snapToBar(times: number[], instant: number, timeframe: Timeframe): number | null {
+  const alignment = alignToBar(times, instant, timeframe);
+  return alignment.kind === "unresolved" ? null : alignment.barTime;
+}
+
+export interface TradeBarAlignment {
+  entryBar: number;
+  exitBar: number;
+  /** True when entry or exit was snapped to a nearby bar rather than a containing bar (issue #64 / OD-28). */
+  approximate: boolean;
+}
+
+/**
+ * Align both entry and exit timestamps to bars.
+ * Returns null when either fill is unresolved (farther than tolerance).
+ * `approximate` is true when either fill was aligned to a nearby bar instead of a containing bar.
+ */
+export function alignTradeToBars(
+  times: number[],
+  entryTime: string | number,
+  exitTime: string | number,
+  timeframe: Timeframe,
+): TradeBarAlignment | null {
+  const entryMs = typeof entryTime === "string" ? Date.parse(entryTime) : entryTime;
+  const exitMs = typeof exitTime === "string" ? Date.parse(exitTime) : exitTime;
+  if (!Number.isFinite(entryMs) || !Number.isFinite(exitMs)) return null;
+  const entryAlign = alignToBar(times, entryMs, timeframe);
+  const exitAlign = alignToBar(times, exitMs, timeframe);
+  if (entryAlign.kind === "unresolved" || exitAlign.kind === "unresolved") {
+    return null;
+  }
+  return {
+    entryBar: entryAlign.barTime,
+    exitBar: exitAlign.barTime,
+    approximate: entryAlign.kind === "nearby" || exitAlign.kind === "nearby",
+  };
 }
 
 export interface FittedWindow {
@@ -254,39 +388,47 @@ export function fitWindow(entryTime: string, exitTime: string, timeframe: Timefr
   };
 }
 
+export type ExcursionCoverage = "complete" | "partial";
+
 export interface Excursions {
   /** Worst price against the position during the hold. */
   maePrice: number;
   /** Best price in favour of the position during the hold. */
   mfePrice: number;
+  /**
+   * `complete` when every expected fully-inside bar is present and contiguous.
+   * `partial` when at least two inside bars exist but the hold has gaps.
+   * Unavailable (fewer than two inside bars) is represented by a null return.
+   */
+  coverage: ExcursionCoverage;
 }
 
-function pricesMatch(a: number, b: number, tickSize: number) {
-  return Math.round(a / tickSize) === Math.round(b / tickSize);
-}
-
-/** High/low of an entry bar, or null when the wicks are not provably after the fill. */
-function provableEntryRange(bar: Candle, fillPrice: number, tickSize: number): { high: number; low: number } | null {
-  const atOpen = pricesMatch(fillPrice, bar.open, tickSize);
-  const atClose = pricesMatch(fillPrice, bar.close, tickSize);
-  // A fill at the close cannot have a later high or low in this bar. Mid-bar fills are unprovable.
-  return atOpen && !atClose ? { high: bar.high, low: bar.low } : null;
-}
-
-/** High/low of an exit bar, or null when the wicks are not provably before the fill. */
-function provableExitRange(bar: Candle, fillPrice: number, tickSize: number): { high: number; low: number } | null {
-  const atOpen = pricesMatch(fillPrice, bar.open, tickSize);
-  const atClose = pricesMatch(fillPrice, bar.close, tickSize);
-  return atClose && !atOpen ? { high: bar.high, low: bar.low } : null;
+/** Open times of bars that are entirely inside the hold, using execution timestamps only. */
+export function expectedInsideBarTimes(entry: number, exit: number, barMs: number): number[] {
+  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMs <= 0) return [];
+  const times: number[] = [];
+  let time = Math.ceil(entry / barMs) * barMs;
+  if (time < entry) time += barMs;
+  while (time + barMs <= exit) {
+    times.push(time);
+    time += barMs;
+  }
+  return times;
 }
 
 /**
- * MAE and MFE from bars in the hold.
+ * MAE and MFE from bars that are fully inside the hold.
  *
- * Only completed bars (the same rule as the bar validator) and the provable side of the
- * entry and exit bars are counted. A long filled at a bar's close does not inherit that
- * bar's earlier high as profit. When fewer than two completed bars remain, this returns
- * null so callers can show "—" rather than a misleading number (B-33, issue #30).
+ * A candle establishes its OHLC, not the order of its prices or the timing of a
+ * fill inside that candle (issue #47). Fill timing comes from the execution
+ * timestamps: a bar is counted only when `bar.time >= entry` and
+ * `bar.time + barMs <= exit`. Matching the fill price to the bar's open or
+ * close is never used as evidence that the fill happened at that instant.
+ *
+ * When fewer than two fully-inside bars exist, this returns null so callers
+ * can show "—". When two or more exist but an expected bar is missing, the
+ * result is still computed from what is present and marked `coverage: "partial"`
+ * so the UI can show ≈ / partial rather than a complete measurement.
  */
 export function excursions(
   trade: Pick<TradeRecord, "direction" | "entry_time" | "exit_time" | "entry_price"> & Partial<Pick<TradeRecord, "exit_price" | "symbol">>,
@@ -297,15 +439,18 @@ export function excursions(
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) return null;
   const barMs = barMinutes * 60_000;
-  const tickSize = trade.symbol ? specFor(trade.symbol).tickSize : 1e-8;
-  const entryBarTime = Math.floor(entry / barMs) * barMs;
-  const exitBarTime = Math.floor(exit / barMs) * barMs;
+  const expected = expectedInsideBarTimes(entry, exit, barMs);
 
-  const complete: Candle[] = [];
+  const byTime = new Map<number, Candle>();
   for (const bar of candles) {
-    if (bar.time >= entry && bar.time + barMs <= exit) complete.push(bar);
+    if (bar.time >= entry && bar.time + barMs <= exit && !byTime.has(bar.time)) byTime.set(bar.time, bar);
   }
+  const complete = expected.flatMap((time) => {
+    const bar = byTime.get(time);
+    return bar ? [bar] : [];
+  });
   if (complete.length < 2) return null;
+  const coverage: ExcursionCoverage = complete.length === expected.length ? "complete" : "partial";
 
   let high = trade.entry_price;
   let low = trade.entry_price;
@@ -313,103 +458,50 @@ export function excursions(
     high = Math.max(high, trade.exit_price);
     low = Math.min(low, trade.exit_price);
   }
-
-  const include = (range: { high: number; low: number } | null) => {
-    if (!range) return;
-    high = Math.max(high, range.high);
-    low = Math.min(low, range.low);
-  };
-
-  for (const bar of candles) {
-    const isEntryBar = bar.time === entryBarTime;
-    const isExitBar = bar.time === exitBarTime;
-    const isComplete = bar.time >= entry && bar.time + barMs <= exit;
-    if (isEntryBar) {
-      include(provableEntryRange(bar, trade.entry_price, tickSize));
-      continue;
-    }
-    if (isExitBar) {
-      if (trade.exit_price != null) include(provableExitRange(bar, trade.exit_price, tickSize));
-      continue;
-    }
-    if (isComplete) include(bar);
+  for (const bar of complete) {
+    high = Math.max(high, bar.high);
+    low = Math.min(low, bar.low);
   }
 
-  return trade.direction === "LONG" ? { maePrice: low, mfePrice: high } : { maePrice: high, mfePrice: low };
+  return trade.direction === "LONG" ? { maePrice: low, mfePrice: high, coverage } : { maePrice: high, mfePrice: low, coverage };
 }
 
-/** Planned reward ÷ initial risk, or null without a stop and target. */
-export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "planned_target_price">) {
-  if (trade.stop_loss_price == null || trade.planned_target_price == null) return null;
-  const riskTicks = Math.abs(toTicks(trade.entry_price, trade.symbol) - toTicks(trade.stop_loss_price, trade.symbol));
-  if (!riskTicks) return null;
-  const rewardTicks = trade.direction === "LONG"
-    ? toTicks(trade.planned_target_price, trade.symbol) - toTicks(trade.entry_price, trade.symbol)
-    : toTicks(trade.entry_price, trade.symbol) - toTicks(trade.planned_target_price, trade.symbol);
+/**
+ * Planned reward ÷ initial risk, or null without a stop and target, or when the stop or
+ * target is on the wrong side (or at the entry) (issue #50, #63).
+ */
+export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "planned_target_price">): number | null {
+  if (trade.stop_loss_price == null || trade.planned_target_price == null || !isWholeQuantity(trade.quantity)) return null;
+  const riskTicks = stopRiskTicks(trade);
+  const sign = sideSign(trade.direction);
+  const entry = toTicks(trade.entry_price, trade.symbol);
+  const target = toTicks(trade.planned_target_price, trade.symbol);
+  if (riskTicks == null || sign == null || entry == null || target == null) return null;
+  const rewardTicks = (target - entry) * sign;
+  if (rewardTicks <= 0) return null;
   return rewardTicks / riskTicks;
 }
 
 /**
  * A scratch is a result within 0.1R or 2 ticks of the entry, whichever is larger.
- * Without a stop, the threshold is 2 ticks.
+ * Without a valid stop, the threshold is 2 ticks. A trade that cannot be priced or
+ * has invalid quantity is never a scratch (issue #63).
  */
 export function isScratch(trade: Priced & Partial<Pick<TradeRecord, "stop_loss_price">>) {
-  const captured = Math.abs(tradeTicks(trade));
-  const riskTicks = trade.stop_loss_price == null
-    ? 0
-    : Math.abs(toTicks(trade.entry_price, trade.symbol) - toTicks(trade.stop_loss_price, trade.symbol));
+  const captured = tradeTicks(trade);
+  if (captured == null) return false;
+  const riskTicks = stopRiskTicks(trade) ?? 0;
   const threshold = Math.max(riskTicks > 0 ? 0.1 * riskTicks : 0, 2);
-  return captured <= threshold;
+  return Math.abs(captured) <= threshold;
 }
 
 /** Exit flag text: TP or SL when the exit price equals that planned level, otherwise none. */
 export function exitFlagReason(trade: Pick<TradeRecord, "symbol" | "exit_price" | "stop_loss_price" | "planned_target_price">): "TP" | "SL" | null {
-  if (trade.planned_target_price != null && toTicks(trade.exit_price, trade.symbol) === toTicks(trade.planned_target_price, trade.symbol)) return "TP";
-  if (trade.stop_loss_price != null && toTicks(trade.exit_price, trade.symbol) === toTicks(trade.stop_loss_price, trade.symbol)) return "SL";
+  const exit = toTicks(trade.exit_price, trade.symbol);
+  if (exit == null) return null;
+  if (trade.planned_target_price != null && exit === toTicks(trade.planned_target_price, trade.symbol)) return "TP";
+  if (trade.stop_loss_price != null && exit === toTicks(trade.stop_loss_price, trade.symbol)) return "SL";
   return null;
-}
-
-export interface AxisTag {
-  price: number;
-  title: string;
-  color: string;
-  lineVisible: boolean;
-}
-
-const AXIS_TITLE_ORDER = ["SL", "TP", "IN", "OUT", "KEY"];
-
-function axisTitleRank(title: string) {
-  const index = AXIS_TITLE_ORDER.indexOf(title);
-  return index === -1 ? AXIS_TITLE_ORDER.length : index;
-}
-
-/** Merge axis tags that share a price (`SL · OUT`). */
-export function mergeAxisTags(
-  tags: Array<{ price: number | null | undefined; title: string; color: string; lineVisible?: boolean }>,
-  symbol: string,
-): AxisTag[] {
-  const groups = new Map<number, AxisTag & { rank: number }>();
-  for (const tag of tags) {
-    if (tag.price == null || !Number.isFinite(tag.price)) continue;
-    const key = toTicks(tag.price, symbol);
-    const rank = axisTitleRank(tag.title);
-    const existing = groups.get(key);
-    if (!existing) {
-      groups.set(key, { price: tag.price, title: tag.title, color: tag.color, lineVisible: !!tag.lineVisible, rank });
-      continue;
-    }
-    const titles = existing.title.split(" · ");
-    if (!titles.includes(tag.title)) titles.push(tag.title);
-    titles.sort((a, b) => axisTitleRank(a) - axisTitleRank(b));
-    existing.title = titles.join(" · ");
-    existing.lineVisible = existing.lineVisible || !!tag.lineVisible;
-    if (rank < existing.rank) {
-      existing.price = tag.price;
-      existing.color = tag.color;
-      existing.rank = rank;
-    }
-  }
-  return [...groups.values()].map(({ price, title, color, lineVisible }) => ({ price, title, color, lineVisible }));
 }
 
 /** ~`points` closes from just before the entry to just after the exit. */
@@ -427,10 +519,12 @@ export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_tim
   return result;
 }
 
-/** Whether a fill price sits inside its bar, with a tolerance in ticks (B-12). */
+/** Whether a fill price sits inside its bar, with a tolerance in ticks (B-12).
+ * A missing bar is not a pass: return false so callers do not treat absence as alignment (issue #60).
+ */
 export function fillInsideBar(priceValue: number, bar: Candle | undefined, symbol: string, toleranceTicks = 4) {
-  if (!bar) return true;
-  const tolerance = specFor(symbol).tickSize * toleranceTicks;
+  if (!bar) return false;
+  const tolerance = (specFor(symbol)?.tickSize ?? 0) * toleranceTicks;
   return priceValue >= bar.low - tolerance && priceValue <= bar.high + tolerance;
 }
 
@@ -442,29 +536,72 @@ export function adherence(trade: Pick<TradeRecord, "checklist_state">) {
   return { followed, total, ratio: followed / total };
 }
 
-/** `new`: nothing captured. `tagged`: a playbook, a tag or a note. `reviewed` is only ever set by the trader. */
-export function deriveReviewStatus(trade: Pick<TradeRecord, "review_status" | "playbook_id" | "quick_tags" | "note">): ReviewStatus {
+/** `new`: nothing captured. `tagged`: a playbook, tags, notes, checklist or blind review. `reviewed` is set by the trader. */
+export function deriveReviewStatus(
+  trade: Pick<TradeRecord, "review_status"> &
+    Partial<
+      Pick<
+        TradeRecord,
+        | "playbook_id"
+        | "quick_tags"
+        | "note"
+        | "pre_trade_thesis"
+        | "management_notes"
+        | "post_exit_notes"
+        | "checklist_state"
+        | "take_again"
+      >
+    >,
+): ReviewStatus {
   if (trade.review_status === "reviewed") return "reviewed";
-  return trade.playbook_id || trade.quick_tags.length || trade.note.trim() ? "tagged" : "new";
+  const hasEvidence = Boolean(
+    trade.playbook_id ||
+      trade.quick_tags?.length ||
+      trade.note?.trim() ||
+      trade.pre_trade_thesis?.trim() ||
+      trade.management_notes?.trim() ||
+      trade.post_exit_notes?.trim() ||
+      trade.checklist_state?.length ||
+      trade.take_again != null,
+  );
+  return hasEvidence ? "tagged" : "new";
 }
 
 export function candleCacheKey(trade: Pick<TradeRecord, "id" | "symbol"> & Partial<Pick<TradeRecord, "yahoo_ticker">>) {
-  const ticker = specFor(trade.symbol).yahooTicker || trade.yahoo_ticker || trade.symbol;
+  const ticker = specFor(trade.symbol)?.yahooTicker || trade.yahoo_ticker || trade.symbol;
   return `${trade.id}:${ticker}`;
 }
 
 export function candleSignature(trade: Pick<TradeRecord, "symbol" | "entry_time" | "exit_time"> & Partial<Pick<TradeRecord, "yahoo_ticker">>) {
-  const ticker = specFor(trade.symbol).yahooTicker || trade.yahoo_ticker || trade.symbol;
+  const ticker = specFor(trade.symbol)?.yahooTicker || trade.yahoo_ticker || trade.symbol;
   return `${trade.symbol}|${ticker}|${trade.entry_time}|${trade.exit_time}`;
+}
+
+/**
+ * Stable text for the trader-written annotations (issue #62). Two records with the same key show the
+ * same notes, tags, playbook and checklist ticks. Checklist rows compare by id, label and checked state.
+ */
+export function annotationKey(trade: Partial<Pick<TradeRecord, "note" | "quick_tags" | "checklist_state" | "playbook_id" | "pre_trade_thesis" | "management_notes" | "post_exit_notes">>) {
+  return JSON.stringify([
+    trade.note ?? "",
+    trade.quick_tags ?? [],
+    (trade.checklist_state ?? []).map((item) => [item.id, item.label, item.checked === true]),
+    trade.playbook_id ?? null,
+    trade.pre_trade_thesis ?? "",
+    trade.management_notes ?? "",
+    trade.post_exit_notes ?? "",
+  ]);
 }
 
 /** Fill in fields added after a record was stored, so old device data keeps loading. */
 export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id" | "symbol" | "direction" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): TradeRecord {
   const hadNonMarketCandles = raw.candle_source != null && raw.candle_source !== "Yahoo Finance";
-  const canonicalTicker = specFor(raw.symbol).yahooTicker;
+  // `mes` and `MES` share one spec. An unknown symbol is kept as typed, and its money shows as null.
+  const symbol = canonicalSymbol(raw.symbol) ?? raw.symbol;
+  const canonicalTicker = specFor(symbol)?.yahooTicker;
   const trade: TradeRecord = {
     user_id: DEFAULT_OWNER_USER_ID,
-    yahoo_ticker: canonicalTicker || raw.yahoo_ticker || raw.symbol,
+    yahoo_ticker: canonicalTicker || raw.yahoo_ticker || symbol,
     trade_style: classifyTrade(raw.entry_time, raw.exit_time),
     stop_loss_price: null,
     planned_target_price: null,
@@ -485,12 +622,82 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     sparkline: [],
     ...raw,
   };
+  trade.symbol = symbol;
   if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
-  if (!(trade.quantity > 0)) trade.quantity = 1;
+  // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
+  if (trade.quantity == null) trade.quantity = 1;
   if (trade.candle_source !== "Yahoo Finance") trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
   return trade;
+}
+
+export type TradeInputField = "symbol" | "quantity" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price" | "key_level_price";
+export type TradeInputErrors = Partial<Record<TradeInputField, string>>;
+
+export interface TradeExecutionInput {
+  symbol: string;
+  direction: TradeDirection;
+  quantity: number;
+  /** NaN means the field is empty or not a number. */
+  entry_price: number;
+  exit_price: number;
+  stop_loss_price: number | null;
+  planned_target_price: number | null;
+  key_level_price: number | null;
+}
+
+const PRICE_NAMES: Record<Exclude<TradeInputField, "symbol" | "quantity">, string> = {
+  entry_price: "Entry price",
+  exit_price: "Exit price",
+  stop_loss_price: "Stop",
+  planned_target_price: "Target",
+  key_level_price: "Key level",
+};
+
+/**
+ * Check an execution before it is saved (issue #50). Returns no entries for a trade the money
+ * functions can price. Nothing is rounded: an off-tick price is an error, so the trader sees the exact
+ * number they typed or the importer kept. Times are checked by the caller, which owns the time zone.
+ */
+export function validateTradeInput(input: TradeExecutionInput): TradeInputErrors {
+  const errors: TradeInputErrors = {};
+  const spec = specFor(input.symbol);
+  if (!spec) errors.symbol = `${input.symbol} is not a supported contract`;
+  if (!isWholeQuantity(input.quantity)) errors.quantity = "Enter a whole number of contracts, 1 or more";
+
+  const priceError = (field: keyof typeof PRICE_NAMES, value: number): string | undefined => {
+    const name = PRICE_NAMES[field];
+    if (!Number.isFinite(value)) return `Enter the ${name.toLowerCase()}`;
+    if (spec && toTicks(value, input.symbol) == null) return `${name} must sit on a ${spec.tickSize} tick for ${canonicalSymbol(input.symbol)}`;
+    return undefined;
+  };
+  const entryError = priceError("entry_price", input.entry_price);
+  const exitError = priceError("exit_price", input.exit_price);
+  if (entryError) errors.entry_price = entryError;
+  if (exitError) errors.exit_price = exitError;
+
+  const sign = sideSign(input.direction);
+  const entry = input.entry_price;
+  if (input.stop_loss_price != null) {
+    const stopError = priceError("stop_loss_price", input.stop_loss_price);
+    if (stopError) errors.stop_loss_price = stopError;
+    else if (sign != null && Number.isFinite(entry) && (input.stop_loss_price - entry) * sign >= 0) {
+      errors.stop_loss_price = input.direction === "LONG" ? "A long's stop sits below the entry" : "A short's stop sits above the entry";
+    }
+  }
+  if (input.planned_target_price != null) {
+    const targetError = priceError("planned_target_price", input.planned_target_price);
+    if (targetError) errors.planned_target_price = targetError;
+    else if (sign != null && Number.isFinite(entry) && (input.planned_target_price - entry) * sign <= 0) {
+      errors.planned_target_price = input.direction === "LONG" ? "A long's target sits above the entry" : "A short's target sits below the entry";
+    }
+  }
+  if (input.key_level_price != null) {
+    const keyError = priceError("key_level_price", input.key_level_price);
+    if (keyError) errors.key_level_price = keyError;
+  }
+  return errors;
 }
 
 /** Tags that record a broken process, whatever the trade made. */

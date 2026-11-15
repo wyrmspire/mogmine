@@ -7,6 +7,7 @@ import { playbookName } from "@/lib/playbooks";
 import { formatListTime } from "@/lib/time";
 import { adherence, holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
+import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 
 interface Props {
   trade: TradeRecord;
@@ -27,7 +28,7 @@ function context(trade: TradeRecord) {
 export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
-  const tone = pnl > 0 ? "positive" : pnl < 0 ? "negative" : "";
+  const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const info = context(trade);
   const score = adherence(trade);
   // Shield mode shows skill, not money: R when there is a stop, points otherwise (UX-64).
@@ -39,7 +40,7 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
         <span className="row-title">
           <strong>{trade.symbol}</strong>
           <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
-          {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
+          {trade.is_sample && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}
           {score && <span className={`seal ${score.followed === score.total ? "full" : ""}`} title="Rules followed">{score.followed}/{score.total}<span className="visually-hidden"> rules followed</span></span>}
           {trade.flagged && <span className="status-mark reviewed" title="Flagged"><span aria-hidden="true">⚑</span><span className="visually-hidden">Flagged</span></span>}
           {trade.review_status === "reviewed" && <span className="status-mark reviewed" title="Reviewed"><span aria-hidden="true">✓</span><span className="visually-hidden">Reviewed</span></span>}

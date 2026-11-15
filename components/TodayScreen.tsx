@@ -13,12 +13,13 @@ import { openAddTrade, rememberList, useToday } from "@/lib/ui";
 
 function DaySummary({ group, shield }: { group: DayGroup; shield: boolean }) {
   const { stats } = group;
-  const net = shield ? stats.netR ?? 0 : stats.net;
+  const grossValue = shield ? stats.netR ?? 0 : stats.gross;
+  const winText = stats.pricedCount ? `${formatPercent(stats.winRate)} (${stats.wins}/${stats.pricedCount})` : "—";
   return (
     <div className="specular-card stat-row">
-      <div className="stat"><small>Net</small><b className={net > 0 ? "positive" : net < 0 ? "negative" : ""}>{shield ? formatR(stats.netR) : formatMoney(stats.net)}</b></div>
-      <div className="stat"><small>Trades</small><b>{stats.count}</b></div>
-      <div className="stat"><small>Win rate</small><b>{formatPercent(stats.winRate)}</b></div>
+      <div className="stat"><small>Gross</small><b className={grossValue > 0 ? "positive" : grossValue < 0 ? "negative" : ""}>{shield ? formatR(stats.netR) : formatMoney(stats.gross)}</b></div>
+      <div className="stat"><small>Trades</small><b>{stats.count}</b>{stats.incomplete && <small className="incomplete"> · {stats.unpriceableCount} unpriced</small>}</div>
+      <div className="stat"><small>Win rate</small><b>{winText}</b></div>
       <div className="stat"><small>By the rules</small><b className="gold">{stats.processGraded ? `${stats.processFollowed}/${stats.processGraded}` : "—"}</b></div>
     </div>
   );
