@@ -198,6 +198,7 @@ class PaneView implements IPrimitivePaneView {
 export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   geometry: Geometry | null = null;
   xray = false;
+  private hidden = false;
   private chart?: IChartApi;
   private series?: ISeriesApi<SeriesType, Time>;
   private requestUpdate?: () => void;
@@ -219,7 +220,7 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
 
   updateAllViews() {
     const { chart, series, config } = this;
-    if (!chart || !series) { this.geometry = null; return; }
+    if (!chart || !series || this.hidden) { this.geometry = null; return; }
     const timeScale = chart.timeScale();
     const x1 = timeScale.timeToCoordinate(config.entryTime);
     const x2 = timeScale.timeToCoordinate(config.exitTime);
@@ -246,6 +247,13 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
 
   update(config: PositionBoxConfig) {
     this.config = config;
+    this.requestUpdate?.();
+  }
+
+  /** Hide the box when its fills have no bar to sit on (issue #51). The price scale still keeps the fills. */
+  setHidden(on: boolean) {
+    if (this.hidden === on) return;
+    this.hidden = on;
     this.requestUpdate?.();
   }
 

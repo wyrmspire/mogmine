@@ -56,7 +56,7 @@ export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, 
       ctx.fillStyle = theme.textMuted;
       ctx.font = "650 28px system-ui";
       ctx.fillText(label, x, 1055);
-      ctx.fillStyle = index === 2 ? (pnl >= 0 ? theme.profit : theme.risk) : theme.textPrimary;
+      ctx.fillStyle = index === 2 && pnl != null ? (pnl >= 0 ? theme.profit : theme.risk) : theme.textPrimary;
       ctx.font = "750 38px ui-monospace, monospace";
       ctx.fillText(values[index], x, 1110);
     });

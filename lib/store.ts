@@ -108,7 +108,8 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
   const stopLoss = isFiniteNumber(rest.stop_loss_price) ? rest.stop_loss_price : null;
   const plannedTarget = isFiniteNumber(rest.planned_target_price) ? rest.planned_target_price : null;
   const keyLevel = isFiniteNumber(rest.key_level_price) ? rest.key_level_price : null;
-  const quantity = isFiniteNumber(rest.quantity) && rest.quantity > 0 ? Math.round(rest.quantity) : 1;
+  // A stored 0 or 1.5 is kept as it was saved. Its money reads as null rather than a rounded guess (issue #50).
+  const quantity = isFiniteNumber(rest.quantity) ? rest.quantity : 1;
   return normalizeTrade({
     ...rest,
     id: item.id,

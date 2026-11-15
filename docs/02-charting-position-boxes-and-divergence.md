@@ -84,7 +84,7 @@ Because **TopstepX** trades futures symbols like `MES` or `MNQ`, the `YahooFinan
 > - **Yahoo limits, measured 2026-11-14:** `1m` goes back 30 days at no more than 8 days per request. `5m`, `15m` and `30m` go back 60 days. `1h` goes back 730 days. Archive every session daily so nothing expires ([10 — Yahoo-First Build Plan](10-yahoo-first-build-plan.md) §2–3, B-11).
 > - **Continuous tickers are not the exact dated contract.** In roll weeks the boxes can be offset from the candles. Store the broker contract id and check that fills sit inside their bars (B-12).
 > - **Chart `MES` on `MES=F` and `MNQ` on `MNQ=F` (`OD-15` decided 2026-11-14).** No `ES=F` or `NQ=F` fallback. Levels are computed from and drawn on the same instrument as the chart.
-> - **Fill times must be snapped to bar times** before `timeToCoordinate()`, or the Position Box disappears (B-23).
+> - **Fill times must be snapped to bar times** before `timeToCoordinate()`, or the Position Box disappears (B-23). A fill with no bar within tolerance (OD-28) gets no box rather than a box on a bar days away (issue #51).
 > - **Levels must be point-in-time.** An opening range that had not formed at entry must not be shown or sent to the AI as if it had (B-14).
 
 ---

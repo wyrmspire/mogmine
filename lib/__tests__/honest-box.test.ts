@@ -130,7 +130,7 @@ test("scratch threshold is 0.1R or 2 ticks, whichever is larger", () => {
   assert.equal(isScratch(normalizeTrade({ ...base, exit_price: 7001.25 })), true);
   // 6 ticks is a real result, not a scratch.
   assert.equal(isScratch(normalizeTrade({ ...base, exit_price: 7001.5 })), false);
-  assert.ok(tradeTicks(normalizeTrade({ ...base, exit_price: 7001.5 })) > 5);
+  assert.ok(tradeTicks(normalizeTrade({ ...base, exit_price: 7001.5 }))! > 5);
 
   // Tight stop: 8 ticks of risk, 0.1R = 0.8 ticks, so the 2-tick floor wins.
   const tight = { ...base, stop_loss_price: 6998 };

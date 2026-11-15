@@ -20,9 +20,12 @@ export interface DayStats {
 export function dayStats(trades: TradeRecord[]): DayStats {
   let wins = 0, net = 0, netR = 0, withR = 0, processFollowed = 0, processGraded = 0, needsReview = 0;
   for (const trade of trades) {
+    // A trade that cannot be priced adds nothing to the money totals.
     const pnl = tradePnl(trade);
-    if (pnl > 0) wins += 1;
-    net += pnl;
+    if (pnl != null) {
+      if (pnl > 0) wins += 1;
+      net += pnl;
+    }
     const r = rMultiple(trade);
     if (r != null) { netR += r; withR += 1; }
     const score = adherence(trade);

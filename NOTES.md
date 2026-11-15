@@ -55,6 +55,13 @@ Verified: `npm test` (33/33 pass), `npm run typecheck`, `npm run lint` (0 errors
 Left:     Ready for review; PR opened to main referencing #53 and #54.
 Watch:    holdSeconds() display rounding is untouched; only classifyTrade compares raw milliseconds.
 
+### 2026-11-15 — agent (Claude) — Validation and bar alignment, branch `feat/50-51-validation-alignment`
+Did:      Fixed #50: `specFor` returns null for unknown contracts (no fallback spec); `canonicalSymbol` maps `mes` to `MES`; money and R functions return null for an unknown symbol, non-finite price, off-tick price, quantity that is not a whole number of 1 or more, or a stop on the wrong side. `validateTradeInput` checks executions before save. The add-trade form rejects off-tick prices instead of snapping them. Fixed #51: `alignToBar` returns containing, nearby (3 bars, max 30 minutes, OD-28) or unresolved. `snapToBar` returns null when unresolved. The chart hides the box then.
+Files:    `lib/trades.ts`, `lib/format.ts`, `lib/store.ts`, `lib/describe.ts`, `lib/selectors.ts`, `lib/shareCard.ts`, `components/{AddTradeSheet,RiskChips,TradeChart,PositionBoxPrimitive,TradeRow,TradeDetail,ReviewScreen}.tsx`, `lib/__tests__/{honest-box,validation}.test.ts`, `docs/{02,07}*.md`, `DECISIONS.md` (OD-28), `NOTES.md`.
+Verified: see the PR description for the command output.
+Left:     Backup import keeps trades with an unknown symbol or a stored quantity of 0 or 1.5 and shows their money as "—". It does not drop or repair them. (`package-lock.json` was committed on #57.)
+Watch:    `tradePnl`, `tradePoints`, `tradeTicks`, `rMultiple`, `plannedR`, `initialRiskUsd` now return `number | null`. Callers must handle null. `formatMoney` and `formatPoints` take null and show "—".
+
 ### 2026-11-15 — agent (Codex) — Chart, branch `feat/phase4-chart-windows`
 Did:      Fixed #28: series + primitive autoscale include planned TP/SL and exit; Fit restores price autoscale; every sample has a target; generated sample candles/sparklines are removed; missing data renders no chart.
 Files:    `components/{PositionBoxPrimitive,TradeChart,TradeDetail}.tsx`, `lib/{candles,fixtures,store,trades}.ts`, `lib/__tests__/core.test.ts`, `docs/{02,07,08,14}*.md`, `NOTES.md`.
