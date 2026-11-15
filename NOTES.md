@@ -48,6 +48,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — Core math + App shell, branch `feat/batch3-coverage-daystats`
+Did:      Issues #60 and #61. `validateTradeAgainstBars` now requires both entry and exit candles for `complete` coverage, and reports `chronology` separately (`unresolved` when entry and exit fall in the same bar). `fillInsideBar` returns false when the bar is missing. `dayStats` exposes `gross` (not `net`), priced/unpriceable counts, an `incomplete` flag, and a win rate over priced trades only. Today and the day header label the total "gross" and show a quiet incomplete cue.
+Files:    `lib/trade-bar-validation.ts`, `lib/trades.ts`, `lib/selectors.ts`, `components/{DayHeader,TodayScreen,TradeDetail}.tsx`, `app/globals.css`, `lib/__tests__/core.test.ts`, `NOTES.md`.
+Verified: see the PR description for command output.
+Left:     PR against main, do-not-merge-without-Chris. Issue #65 (session-aware expected coverage) is filed only, not implemented.
+Watch:    `DayStats.net` was renamed to `gross`. Callers must use the new field. Win rate is `wins / pricedCount`, not `wins / count`.
+
 ### 2026-11-15 — agent (Antigravity) — Core math + App shell and notes, branch `feat/53-54-cleanup-review-status`
 Did:      Issues #53 and #54: removed dead mergeAxisTags, AxisTag, axis title helpers and tests; removed orphaned .style-pill CSS; committed package-lock.json; fixed classifyTrade to compare raw elapsed ms (<15m scalp boundary) with tests; updated deriveReviewStatus to count pre_trade_thesis, management_notes, post_exit_notes, checklist_state, and take_again as review evidence; tightened stale bullets in NOTES.md.
 Files:    `lib/trades.ts`, `app/globals.css`, `lib/__tests__/core.test.ts`, `lib/__tests__/honest-box.test.ts`, `NOTES.md`, `package-lock.json`.

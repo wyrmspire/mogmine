@@ -15,9 +15,17 @@ export interface TradeBarIssue {
 
 export type BarCoverage = "complete" | "partial" | "missing";
 
+/** Whether entry vs exit order inside the hold can be established from the bars. */
+export type ChronologyResolution = "resolved" | "unresolved";
+
 export interface TradeBarValidation {
   coverage: BarCoverage;
   issues: TradeBarIssue[];
+  /**
+   * `unresolved` when entry and exit fall in the same bar (or times are invalid).
+   * Complete candle availability is not enough to sequence an intra-bar hold.
+   */
+  chronology: ChronologyResolution;
 }
 
 type ValidatedTrade = Pick<TradeRecord,
@@ -58,9 +66,10 @@ function coverageFor(
   const hasExitBar = present.has(exitBarTime);
   if (expectedPresent === 0 && !hasEntryBar && !hasExitBar) return "missing";
   const expectedComplete = expectedPresent === expected.length;
-  // The exit bar is needed to check whether the recorded exit sits in its range.
-  // An intra-bar hold (no fully-inside bars) is complete only when that bar is present.
-  if (expectedComplete && hasExitBar) return "complete";
+  // Both boundary candles are required: the entry bar to check the entry fill,
+  // and the exit bar to check whether the recorded exit sits in its range.
+  // An intra-bar hold (no fully-inside bars) is complete only when that one bar is present.
+  if (expectedComplete && hasEntryBar && hasExitBar) return "complete";
   return "partial";
 }
 
@@ -79,7 +88,7 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) {
-    return { coverage: "missing", issues: [] };
+    return { coverage: "missing", issues: [], chronology: "unresolved" };
   }
 
   const barMs = barMinutes * 60_000;
@@ -87,6 +96,8 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
   const entryBarTime = Math.floor(entry / barMs) * barMs;
   const exitBarTime = Math.floor(exit / barMs) * barMs;
   const coverage = coverageFor(candles, expected, entryBarTime, exitBarTime);
+  // Same-bar holds have complete data when that bar exists, but chronology is unresolved.
+  const chronology: ChronologyResolution = entryBarTime === exitBarTime ? "unresolved" : "resolved";
 
   const completed = candles.filter((bar) => bar.time >= entry && bar.time + barMs <= exit);
   const issues: TradeBarIssue[] = [];
@@ -108,5 +119,5 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
     issues.push({ code: "exit_outside_bar", barTime: exitBar.time, price: trade.exit_price });
   }
 
-  return { coverage, issues };
+  return { coverage, issues, chronology };
 }

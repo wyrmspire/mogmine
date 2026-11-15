@@ -467,9 +467,11 @@ export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_tim
   return result;
 }
 
-/** Whether a fill price sits inside its bar, with a tolerance in ticks (B-12). */
+/** Whether a fill price sits inside its bar, with a tolerance in ticks (B-12).
+ * A missing bar is not a pass: return false so callers do not treat absence as alignment (issue #60).
+ */
 export function fillInsideBar(priceValue: number, bar: Candle | undefined, symbol: string, toleranceTicks = 4) {
-  if (!bar) return true;
+  if (!bar) return false;
   const tolerance = (specFor(symbol)?.tickSize ?? 0) * toleranceTicks;
   return priceValue >= bar.low - tolerance && priceValue <= bar.high + tolerance;
 }

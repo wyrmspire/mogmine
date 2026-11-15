@@ -157,11 +157,16 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
   // Do the fills sit inside the bars they are drawn on? If not, say so instead of looking like a bug (B-12).
+  // A missing bar is a coverage issue, not a fill-alignment issue: only test bars that exist (issue #60).
   const misaligned = useMemo(() => {
     if (!ready || candles.source !== "Yahoo Finance" || trade.is_sample) return false;
     const barMs = baseMinutes * 60_000;
     const barAt = (iso: string) => { const time = Math.floor(Date.parse(iso) / barMs) * barMs; return candles.candles.find((bar) => bar.time === time); };
-    return !fillInsideBar(trade.entry_price, barAt(trade.entry_time), trade.symbol) || !fillInsideBar(trade.exit_price, barAt(trade.exit_time), trade.symbol);
+    const entryBar = barAt(trade.entry_time);
+    const exitBar = barAt(trade.exit_time);
+    const entryOff = Boolean(entryBar) && !fillInsideBar(trade.entry_price, entryBar, trade.symbol);
+    const exitOff = Boolean(exitBar) && !fillInsideBar(trade.exit_price, exitBar, trade.symbol);
+    return entryOff || exitOff;
   }, [ready, candles, trade, baseMinutes]);
   const barCheck = useMemo(() => {
     if (!ready || trade.is_sample) return null;
@@ -224,6 +229,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
           {barCoverage === "missing" && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
           {barCoverage === "partial" && <div className="chart-note"><span>Bar coverage is partial — some candles in the hold are missing, so this is not a complete check.</span></div>}
+          {barCoverage === "complete" && barCheck?.chronology === "unresolved" && <div className="chart-note"><span>Entry and exit sit in the same bar, so this check cannot establish order between them.</span></div>}
           {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
           {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
           {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
