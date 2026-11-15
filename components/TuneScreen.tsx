@@ -1,7 +1,8 @@
 "use client";
 
-import { ChangeEvent, useRef, useState } from "react";
-import { setPrefs, usePrefs } from "@/lib/prefs";
+import { ChangeEvent, KeyboardEvent, useRef, useState } from "react";
+import { GOLD_PRESETS, setPrefs, usePrefs } from "@/lib/prefs";
+import type { GoldPreset } from "@/lib/prefs";
 import { buildBackup, parseBackupFile, replaceTrades, useJournal } from "@/lib/store";
 import type { ParseBackupResult } from "@/lib/store";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
@@ -9,12 +10,66 @@ import { showToast } from "@/lib/toast";
 
 type PendingRestore = Extract<ParseBackupResult, { ok: true }> & { fileName: string };
 
+const PRESET_META: Record<GoldPreset, { label: string; vibe: string; swatch: string }> = {
+  bullion: {
+    label: "Bullion",
+    vibe: "Classic gold",
+    swatch: "linear-gradient(135deg, #f7df8e, #d4af37 50%, #96731e)",
+  },
+  champagne: {
+    label: "Champagne",
+    vibe: "Warm ivory",
+    swatch: "linear-gradient(135deg, #f5e9c8, #dfc99b 50%, #ae9665)",
+  },
+  amber: {
+    label: "Amber",
+    vibe: "Deep copper",
+    swatch: "linear-gradient(135deg, #fbbf24, #d97706 50%, #92400e)",
+  },
+  platinum: {
+    label: "Platinum",
+    vibe: "Brushed silver",
+    swatch: "linear-gradient(135deg, #f1f5f9, #94a3b8 50%, #475569)",
+  },
+};
+
+const RISK_SUGGESTIONS = [100, 250, 500, 1000];
+
 export function TuneScreen() {
   const prefs = usePrefs();
   const journal = useJournal();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<PendingRestore | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [draftRisk, setDraftRisk] = useState<string | null>(null);
+  const riskDisplay = draftRisk ?? String(prefs.riskBudgetUsd);
+
+  const onRiskChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const val = event.target.value;
+    setDraftRisk(val);
+    const parsed = Number.parseFloat(val);
+    if (Number.isFinite(parsed) && parsed >= 10 && parsed <= 100_000) {
+      setPrefs({ riskBudgetUsd: Math.round(parsed) });
+    }
+  };
+
+  const onRiskBlur = () => {
+    if (draftRisk !== null) {
+      const parsed = Number.parseFloat(draftRisk);
+      if (Number.isFinite(parsed)) {
+        const clamped = Math.min(100_000, Math.max(10, Math.round(parsed)));
+        setPrefs({ riskBudgetUsd: clamped });
+      }
+      setDraftRisk(null);
+    }
+  };
+
+  const onRiskKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.currentTarget.blur();
+    }
+  };
 
   const realCount = journal.trades.filter((t) => !t.is_sample).length;
   const sampleCount = journal.trades.length - realCount;
@@ -64,19 +119,232 @@ export function TuneScreen() {
 
   return (
     <div className="page" style={{ maxWidth: 720 }}>
-      <div className="page-head"><div><span className="eyebrow">Tune</span><h1>Make it yours</h1></div></div>
-      <section className="specular-card card-pad">
+      <div className="page-head">
+        <div>
+          <span className="eyebrow">Tune</span>
+          <h1>Make it yours</h1>
+        </div>
+      </div>
+
+      <div className="section-title">
+        <h2>Visual tuning</h2>
+        <span>Appearance &amp; Canvas</span>
+      </div>
+      <section className="specular-card card-pad" aria-label="Visual tuning">
         <div className="form-grid">
-          <label className="field wide"><span>Display time zone</span>
-            <select value={prefs.timeZone} onChange={(event) => setPrefs({ timeZone: event.target.value })}>
-              {TIME_ZONE_OPTIONS.map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
-            </select>
-            <span className="hint">Changes how times are shown. Sessions are always computed in exchange time.</span>
-          </label>
+          <div className="field wide">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Gold preset</span>
+              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem", textTransform: "capitalize" }}>
+                {prefs.goldPreset}
+              </b>
+            </div>
+            <div className="segmented grid-presets" role="group" aria-label="Gold preset">
+              {GOLD_PRESETS.map((preset) => {
+                const meta = PRESET_META[preset];
+                const active = prefs.goldPreset === preset;
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    className="preset-btn"
+                    aria-pressed={active}
+                    onClick={() => setPrefs({ goldPreset: preset })}
+                  >
+                    <span className="preset-swatch" style={{ background: meta.swatch }} aria-hidden="true" />
+                    <span className="preset-text">
+                      <b>{meta.label}</b>
+                      <small>{meta.vibe}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <span className="hint">
+              Switches metallic accents and card gradients live across the entire app.
+            </span>
+          </div>
+
+          <div className="field wide">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Gold intensity</span>
+              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem" }}>
+                {Math.round(prefs.goldIntensity * 100)}%
+              </b>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.02"
+              value={prefs.goldIntensity}
+              aria-label="Gold intensity"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(prefs.goldIntensity * 100)}
+              aria-valuetext={`${Math.round(prefs.goldIntensity * 100)}%`}
+              onChange={(event) => setPrefs({ goldIntensity: Number.parseFloat(event.target.value) })}
+            />
+            <span className="hint">
+              Scales border glow opacity, specular card lighting, and gold badge brilliance.
+            </span>
+          </div>
+
+          <div className="field wide">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Position Box opacity</span>
+              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem" }}>
+                {Math.round(prefs.boxOpacity * 100)}%
+              </b>
+            </div>
+            <input
+              type="range"
+              min="0.15"
+              max="0.65"
+              step="0.01"
+              value={prefs.boxOpacity}
+              aria-label="Position Box opacity"
+              aria-valuemin={15}
+              aria-valuemax={65}
+              aria-valuenow={Math.round(prefs.boxOpacity * 100)}
+              aria-valuetext={`${Math.round(prefs.boxOpacity * 100)}%`}
+              onChange={(event) => setPrefs({ boxOpacity: Number.parseFloat(event.target.value) })}
+            />
+            <span className="hint">
+              Invariant 5: Sets the Canvas fill alpha of profit and stop boxes (15% to 65%) so candles stay readable.
+            </span>
+          </div>
+
+          <div className="field wide">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Profit &amp; risk palette</span>
+              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem" }}>
+                {prefs.palette === "blue-orange" ? "Blue / Orange" : "Classic"}
+              </b>
+            </div>
+            <div className="segmented" role="group" aria-label="Profit and risk palette">
+              <button
+                type="button"
+                aria-pressed={prefs.palette === "classic"}
+                onClick={() => setPrefs({ palette: "classic" })}
+              >
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981" }} aria-hidden="true" />
+                  Classic (Green / Red)
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={prefs.palette === "blue-orange"}
+                onClick={() => setPrefs({ palette: "blue-orange" })}
+              >
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6" }} aria-hidden="true" />
+                  Blue / Orange (UX-80)
+                </span>
+              </button>
+            </div>
+            <span className="hint">
+              UX-80: Blue/orange colour-blind safe pair replaces red/green for profit and risk across cards, badges, and candles.
+            </span>
+          </div>
         </div>
       </section>
 
-      <div className="section-title"><h2>Journal backup</h2><span>Local file only</span></div>
+      <div className="section-title">
+        <h2>Trading &amp; Privacy</h2>
+        <span>Preferences</span>
+      </div>
+      <section className="specular-card card-pad" aria-label="Trading and privacy">
+        <div className="form-grid">
+          <div className="field wide">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Risk budget ($ USD)</span>
+              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem" }}>
+                ${prefs.riskBudgetUsd}
+              </b>
+            </div>
+            <input
+              type="number"
+              min="10"
+              max="100000"
+              step="25"
+              value={riskDisplay}
+              aria-label="Risk budget in US dollars"
+              onChange={onRiskChange}
+              onBlur={onRiskBlur}
+              onKeyDown={onRiskKeyDown}
+            />
+            <div className="suggest" style={{ marginTop: 4 }}>
+              {RISK_SUGGESTIONS.map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  aria-pressed={prefs.riskBudgetUsd === amount}
+                  onClick={() => {
+                    setDraftRisk(null);
+                    setPrefs({ riskBudgetUsd: amount });
+                  }}
+                >
+                  ${amount}
+                </button>
+              ))}
+            </div>
+            <span className="hint">
+              Used by manual entry to suggest stop distance and by Trade Detail risk chips (default $250).
+            </span>
+          </div>
+
+          <label className="field wide">
+            <span>Display time zone</span>
+            <select value={prefs.timeZone} onChange={(event) => setPrefs({ timeZone: event.target.value })}>
+              {TIME_ZONE_OPTIONS.map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
+            </select>
+            <span className="hint">Changes how times are shown. Sessions are always computed in exchange time (America/New_York).</span>
+          </label>
+
+          <div className="wide" style={{ display: "grid", gap: 10, borderTop: "1px solid var(--border-subtle)", paddingTop: 10 }}>
+            <div className="toggle-row">
+              <span>
+                Shield mode (privacy)
+                <small>Hides dollar amounts and contract size everywhere; shows only R and points.</small>
+              </span>
+              <button
+                type="button"
+                className="switch-hit"
+                role="switch"
+                aria-checked={prefs.shield}
+                aria-label="Shield mode"
+                onClick={() => setPrefs({ shield: !prefs.shield })}
+              >
+                <span className="switch" data-checked={prefs.shield} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="toggle-row" style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 10 }}>
+              <span>
+                Show sample trades
+                <small>Includes demo fixture trades in Today, Feed, and Review queue. Turn off to focus solely on real trades.</small>
+              </span>
+              <button
+                type="button"
+                className="switch-hit"
+                role="switch"
+                aria-checked={prefs.showSamples}
+                aria-label="Show sample trades"
+                onClick={() => setPrefs({ showSamples: !prefs.showSamples })}
+              >
+                <span className="switch" data-checked={prefs.showSamples} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="section-title">
+        <h2>Journal backup</h2>
+        <span>Local file only</span>
+      </div>
       <section className="specular-card card-pad" aria-label="Journal backup">
         <p className="muted" style={{ fontSize: 13 }}>
           Your journal lives in this browser&apos;s storage ({realCount} {realCount === 1 ? "trade" : "trades"}
