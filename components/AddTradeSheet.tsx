@@ -7,7 +7,7 @@ import { usePrefs } from "@/lib/prefs";
 import { addTrade } from "@/lib/store";
 import { fromZonedInput, toZonedInput, zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { FUTURES_SPECS, normalizeTrade, rMultiple, snapToTick, specFor, tradePnl, tradePoints } from "@/lib/trades";
+import { FUTURES_SPECS, isWholeQuantity, normalizeTrade, rMultiple, snapToTick, specFor, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeDirection } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft } from "@/lib/ui";
 
@@ -71,39 +71,55 @@ export function AddTradeSheet() {
   const exitPrice = toNumber(draft.exitPrice);
   const stop = toNumber(draft.stop);
   const target = toNumber(draft.target);
-  const quantity = Math.max(1, Math.round(Number(draft.quantity) || 1));
+  const keyLevel = toNumber(draft.keyLevel);
+  // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50).
+  const quantity = Number(draft.quantity);
   const entry = fromZonedInput(draft.entryTime, zone);
   const exit = fromZonedInput(draft.exitTime, zone);
 
-  const errors: Partial<Record<keyof Draft, string>> = {};
-  if (entryPrice == null || !(entryPrice > 0)) errors.entryPrice = "Enter the entry price";
-  if (exitPrice == null || !(exitPrice > 0)) errors.exitPrice = "Enter the exit price";
+  // Price, side, size and tick rules live in the lib. An off-tick price is rejected, never snapped.
+  const executionErrors = validateTradeInput({
+    symbol: draft.symbol, direction: draft.direction, quantity,
+    entry_price: entryPrice ?? Number.NaN, exit_price: exitPrice ?? Number.NaN,
+    stop_loss_price: stop, planned_target_price: target, key_level_price: keyLevel,
+  });
+  const errors: Partial<Record<keyof Draft, string>> = {
+    symbol: executionErrors.symbol,
+    quantity: executionErrors.quantity,
+    entryPrice: executionErrors.entry_price,
+    exitPrice: executionErrors.exit_price,
+    stop: executionErrors.stop_loss_price,
+    target: executionErrors.planned_target_price,
+    keyLevel: executionErrors.key_level_price,
+  };
+  if (entryPrice != null && !(entryPrice > 0)) errors.entryPrice = "Enter the entry price";
+  if (exitPrice != null && !(exitPrice > 0)) errors.exitPrice = "Enter the exit price";
   if (Number.isNaN(entry.getTime())) errors.entryTime = "Enter the entry time";
   if (Number.isNaN(exit.getTime())) errors.exitTime = "Enter the exit time";
   else if (!errors.entryTime && exit <= entry) errors.exitTime = "The exit must be after the entry";
-  if (stop != null && entryPrice != null && (stop - entryPrice) * sign >= 0) errors.stop = draft.direction === "LONG" ? "A long's stop sits below the entry" : "A short's stop sits above the entry";
-  if (target != null && entryPrice != null && (target - entryPrice) * sign <= 0) errors.target = draft.direction === "LONG" ? "A long's target sits above the entry" : "A short's target sits below the entry";
+  const hasErrors = Object.values(errors).some(Boolean);
   const show = (key: keyof Draft) => (submitted ? errors[key] : undefined);
 
   const preview = entryPrice != null && exitPrice != null && entryPrice > 0 && exitPrice > 0
-    ? { symbol: draft.symbol, direction: draft.direction, quantity, entry_price: snapToTick(entryPrice, draft.symbol), exit_price: snapToTick(exitPrice, draft.symbol), stop_loss_price: stop != null && !errors.stop ? snapToTick(stop, draft.symbol) : null }
+    ? { symbol: draft.symbol, direction: draft.direction, quantity, entry_price: entryPrice, exit_price: exitPrice, stop_loss_price: stop != null && !errors.stop ? stop : null }
     : null;
+  const previewPnl = preview ? tradePnl(preview) : null;
 
   // Sizing defaults (docs/12 LV-17): stop distance from the risk budget, target at 1.5R.
-  const budgetPoints = prefs.riskBudgetUsd / (quantity * spec.pointValueUsd);
-  const suggestedStop = entryPrice != null && entryPrice > 0 ? snapToTick(entryPrice - sign * budgetPoints, draft.symbol) : null;
+  const sized = !!spec && isWholeQuantity(quantity);
+  const budgetPoints = sized && spec ? prefs.riskBudgetUsd / (quantity * spec.pointValueUsd) : 0;
+  const suggestedStop = sized && entryPrice != null && entryPrice > 0 ? snapToTick(entryPrice - sign * budgetPoints, draft.symbol) : null;
   const suggestedTarget = entryPrice != null && stop != null && !errors.stop ? snapToTick(entryPrice + sign * Math.abs(entryPrice - stop) * 1.5, draft.symbol) : null;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setSubmitted(true);
-    if (Object.keys(errors).length || entryPrice == null || exitPrice == null) return;
-    const snap = (value: number | null) => (value == null ? null : snapToTick(value, draft.symbol));
+    if (hasErrors || entryPrice == null || exitPrice == null) return;
     const trade = normalizeTrade({
       id: crypto.randomUUID(), symbol: draft.symbol, direction: draft.direction, quantity,
       entry_time: entry.toISOString(), exit_time: exit.toISOString(),
-      entry_price: snapToTick(entryPrice, draft.symbol), exit_price: snapToTick(exitPrice, draft.symbol),
-      stop_loss_price: snap(stop), planned_target_price: snap(target), key_level_price: snap(toNumber(draft.keyLevel)),
+      entry_price: entryPrice, exit_price: exitPrice,
+      stop_loss_price: stop, planned_target_price: target, key_level_price: keyLevel,
       note: draft.note.trim(),
     });
     addTrade(trade);
@@ -114,7 +130,7 @@ export function AddTradeSheet() {
   };
 
   const zoneName = Number.isNaN(entry.getTime()) ? "" : zoneLabel(entry, zone);
-  const step = spec.tickSize;
+  const step = spec?.tickSize;
 
   return (
     <div className="sheet-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeAddTrade()}>
@@ -129,10 +145,12 @@ export function AddTradeSheet() {
               <select ref={firstField} value={draft.symbol} onChange={(event) => change({ symbol: event.target.value })}>
                 {Object.keys(FUTURES_SPECS).map((symbol) => <option key={symbol}>{symbol}</option>)}
               </select>
+              {show("symbol") && <span className="error">{show("symbol")}</span>}
             </label>
             {!prefs.shield && (
               <label className="field"><span>Contracts</span>
-                <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} onChange={(event) => change({ quantity: event.target.value })} />
+                <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} aria-invalid={!!show("quantity")} onChange={(event) => change({ quantity: event.target.value })} />
+                {show("quantity") && <span className="error">{show("quantity")}</span>}
               </label>
             )}
             <div className="field wide"><span>Side</span>
@@ -174,7 +192,8 @@ export function AddTradeSheet() {
               </div>
             ) : null}
             <label className="field wide"><span>Key level <i>optional</i></span>
-              <input inputMode="decimal" type="number" step={step} value={draft.keyLevel} onChange={(event) => change({ keyLevel: event.target.value })} />
+              <input inputMode="decimal" type="number" step={step} value={draft.keyLevel} aria-invalid={!!errors.keyLevel} onChange={(event) => change({ keyLevel: event.target.value })} />
+              {errors.keyLevel && <span className="error">{errors.keyLevel}</span>}
             </label>
             <label className="field wide"><span>Private note <i>optional</i></span>
               <textarea value={draft.note} onChange={(event) => change({ note: event.target.value })} placeholder="Why I took it / what I would change" />
@@ -182,7 +201,7 @@ export function AddTradeSheet() {
           </div>
           <div className="form-preview" aria-live="polite">
             {preview
-              ? <><span>{prefs.shield ? draft.symbol : `${quantity} × ${draft.symbol}`} · {formatPoints(tradePoints(preview), draft.symbol)}</span><span><b className={tradePnl(preview) >= 0 ? "positive" : "negative"}>{prefs.shield ? formatR(rMultiple(preview)) : formatMoney(tradePnl(preview))}</b>{!prefs.shield && <> · {formatR(rMultiple(preview))}</>}</span></>
+              ? <><span>{prefs.shield ? draft.symbol : `${draft.quantity} × ${draft.symbol}`} · {formatPoints(tradePoints(preview), draft.symbol)}</span><span><b className={previewPnl == null ? "" : previewPnl >= 0 ? "positive" : "negative"}>{prefs.shield ? formatR(rMultiple(preview)) : formatMoney(previewPnl)}</b>{!prefs.shield && <> · {formatR(rMultiple(preview))}</>}</span></>
               : <span>Result appears here as you type the prices.</span>}
           </div>
           <button className="btn-primary btn-block" type="submit" style={{ marginTop: 14 }}>Save trade and open chart</button>

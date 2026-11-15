@@ -144,7 +144,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
-  const tone = pnl > 0 ? "positive" : pnl < 0 ? "negative" : "";
+  const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const sign = trade.direction === "LONG" ? 1 : -1;
   const points = formatPoints(tradePoints(trade), trade.symbol);
   const headline = prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl);

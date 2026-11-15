@@ -7,10 +7,16 @@ function signOf(value: number) {
   return value < 0 ? MINUS : "+";
 }
 
-/** `+$325.00`, `−$110.00` */
-export function formatMoney(value: number) {
+/** `+$325.00`, `−$110.00`, `—` when the trade cannot be priced. */
+export function formatMoney(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return "—";
   const abs = Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${signOf(value)}$${abs}`;
+}
+
+/** Display decimals for a symbol. Display only: no money is computed from this. Unknown symbols get two. */
+function displayDecimals(symbol: string) {
+  return Math.max(2, tickDecimals(specFor(symbol)?.tickSize ?? 0.01));
 }
 
 /** `+2.6R`, `−1.0R`, `—R` when there is no stop. Never `0.0R` for an unknown risk. */
@@ -23,12 +29,13 @@ export function formatR(r: number | null) {
 /** Price at the contract's tick precision, `—` when missing. */
 export function formatPrice(value: number | null | undefined, symbol = "MES") {
   if (value == null || !Number.isFinite(value)) return "—";
-  return value.toFixed(Math.max(2, tickDecimals(specFor(symbol).tickSize)));
+  return value.toFixed(displayDecimals(symbol));
 }
 
-/** `+13.00 pts` */
-export function formatPoints(points: number, symbol = "MES") {
-  return `${signOf(points)}${Math.abs(points).toFixed(Math.max(2, tickDecimals(specFor(symbol).tickSize)))} pts`;
+/** `+13.00 pts`, `—` when the trade cannot be priced. */
+export function formatPoints(points: number | null, symbol = "MES") {
+  if (points == null || !Number.isFinite(points)) return "—";
+  return `${signOf(points)}${Math.abs(points).toFixed(displayDecimals(symbol))} pts`;
 }
 
 /** `+52 ticks` */

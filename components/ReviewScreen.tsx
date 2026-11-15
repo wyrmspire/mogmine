@@ -88,7 +88,7 @@ function Queue() {
           </span>
           <span className={sealed ? "sealed" : ""} aria-hidden={sealed}><Sparkline points={trade.sparkline} /></span>
           <span className={`row-result num ${sealed ? "sealed" : ""}`} aria-hidden={sealed} style={{ textAlign: "right" }}>
-            <b className={pnl > 0 ? "positive" : pnl < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
+            <b className={(pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
             <span className="muted" style={{ fontSize: 11 }}>{prefs.shield ? (r != null ? points : "") : formatR(r)}</span>
           </span>
         </div>

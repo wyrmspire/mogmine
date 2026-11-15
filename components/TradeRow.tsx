@@ -27,7 +27,7 @@ function context(trade: TradeRecord) {
 export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
-  const tone = pnl > 0 ? "positive" : pnl < 0 ? "negative" : "";
+  const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const info = context(trade);
   const score = adherence(trade);
   // Shield mode shows skill, not money: R when there is a stop, points otherwise (UX-64).

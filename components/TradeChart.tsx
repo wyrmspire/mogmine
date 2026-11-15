@@ -128,20 +128,25 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     const times = bars.map((bar) => bar.time);
     const entryMs = Date.parse(tr.entry_time);
     const exitMs = Date.parse(tr.exit_time);
+    // A fill with no bar within tolerance is unresolved (issue #51): no box is drawn at a far-off bar.
     const entryBar = snapToBar(times, entryMs, barTimeframe);
     const exitBar = snapToBar(times, exitMs, barTimeframe);
-    const isLong = tr.direction === "LONG";
-    const scratch = isScratch(tr);
-    const config: PositionBoxConfig = {
-      entryTime: toTime(entryBar), exitTime: toTime(exitBar),
-      entryPrice: tr.entry_price, exitPrice: tr.exit_price,
-      stopPrice: tr.stop_loss_price, targetPrice: tr.planned_target_price,
-      isLong, scratch,
-      profitColor: t.profit, riskColor: t.risk, mutedColor: t.textMuted,
-      pillBackground: t.surface, textColor: t.textMuted,
-      keyPrice: tr.key_level_price, keyColor: t.goldMid, opacity: t.boxOpacity,
-    };
-    l.primitive.update(config);
+    const aligned = entryBar != null && exitBar != null;
+    l.primitive.setHidden(!aligned);
+    if (entryBar != null && exitBar != null) {
+      const isLong = tr.direction === "LONG";
+      const scratch = isScratch(tr);
+      const config: PositionBoxConfig = {
+        entryTime: toTime(entryBar), exitTime: toTime(exitBar),
+        entryPrice: tr.entry_price, exitPrice: tr.exit_price,
+        stopPrice: tr.stop_loss_price, targetPrice: tr.planned_target_price,
+        isLong, scratch,
+        profitColor: t.profit, riskColor: t.risk, mutedColor: t.textMuted,
+        pillBackground: t.surface, textColor: t.textMuted,
+        keyPrice: tr.key_level_price, keyColor: t.goldMid, opacity: t.boxOpacity,
+      };
+      l.primitive.update(config);
+    }
 
     // No axis tags: the fills say where the stop, target, entry and exit are, and the price scale
     // stays readable. Remove any lines left by an older build.
@@ -150,10 +155,16 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
 
     // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
     const fittedWindow = fitWindow(tr.entry_time, tr.exit_time, barTimeframe);
-    const entryIndex = times.indexOf(entryBar);
-    const fitFrom = entryIndex - fittedWindow.beforeBars;
-    l.fitRange = { from: fitFrom, to: fitFrom + fittedWindow.visibleBars };
-    if (refit || dataChanged) l.chart.timeScale().setVisibleLogicalRange(l.fitRange);
+    const entryIndex = entryBar == null ? -1 : times.indexOf(entryBar);
+    if (entryIndex >= 0) {
+      const fitFrom = entryIndex - fittedWindow.beforeBars;
+      l.fitRange = { from: fitFrom, to: fitFrom + fittedWindow.visibleBars };
+      if (refit || dataChanged) l.chart.timeScale().setVisibleLogicalRange(l.fitRange);
+    } else {
+      // Nothing to fit around: show the whole candle set rather than a window around a missing bar.
+      l.fitRange = null;
+      if (refit || dataChanged) l.chart.timeScale().fitContent();
+    }
 
     window.clearTimeout(renderTimer.current);
     renderTimer.current = window.setTimeout(() => latest.current.onRendered?.(), 260);
@@ -180,7 +191,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       });
       const series = chart.addSeries(lwc.CandlestickSeries, {
         borderVisible: false, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol).tickSize },
+        priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
       });
       const primitive = new PositionBoxPrimitive({
         entryTime: 0 as UTCTimestamp, exitTime: 0 as UTCTimestamp, entryPrice: trade.entry_price, exitPrice: trade.exit_price,
