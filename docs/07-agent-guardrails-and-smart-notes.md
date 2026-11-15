@@ -220,14 +220,14 @@ export interface FuturesContractSpec {
 }
 
 export const FUTURES_SPECS: Record<string, FuturesContractSpec> = {
-  MES: { symbol: 'MES', yahooTicker: 'ES=F', tickSize: 0.25, pointValueUsd: 5.0,  tickValueUsd: 1.25 },
-  ES:  { symbol: 'ES',  yahooTicker: 'ES=F', tickSize: 0.25, pointValueUsd: 50.0, tickValueUsd: 12.50 },
-  MNQ: { symbol: 'MNQ', yahooTicker: 'NQ=F', tickSize: 0.25, pointValueUsd: 2.0,  tickValueUsd: 0.50 },
-  NQ:  { symbol: 'NQ',  yahooTicker: 'NQ=F', tickSize: 0.25, pointValueUsd: 20.0, tickValueUsd: 5.00 },
-  MYM: { symbol: 'MYM', yahooTicker: 'YM=F', tickSize: 1.0,  pointValueUsd: 0.5,  tickValueUsd: 0.50 },
-  M2K: { symbol: 'M2K', yahooTicker: 'RTY=F',tickSize: 0.1,  pointValueUsd: 5.0,  tickValueUsd: 0.50 },
-  MGC: { symbol: 'MGC', yahooTicker: 'GC=F', tickSize: 0.1,  pointValueUsd: 10.0, tickValueUsd: 1.00 },
-  MCL: { symbol: 'MCL', yahooTicker: 'CL=F', tickSize: 0.01, pointValueUsd: 100.0,tickValueUsd: 1.00 },
+  MES: { symbol: 'MES', yahooTicker: 'MES=F', tickSize: 0.25, pointValueUsd: 5.0,  tickValueUsd: 1.25 },
+  ES:  { symbol: 'ES',  yahooTicker: 'ES=F',  tickSize: 0.25, pointValueUsd: 50.0, tickValueUsd: 12.50 },
+  MNQ: { symbol: 'MNQ', yahooTicker: 'MNQ=F', tickSize: 0.25, pointValueUsd: 2.0,  tickValueUsd: 0.50 },
+  NQ:  { symbol: 'NQ',  yahooTicker: 'NQ=F',  tickSize: 0.25, pointValueUsd: 20.0, tickValueUsd: 5.00 },
+  MYM: { symbol: 'MYM', yahooTicker: 'YM=F',  tickSize: 1.0,  pointValueUsd: 0.5,  tickValueUsd: 0.50 },
+  M2K: { symbol: 'M2K', yahooTicker: 'RTY=F', tickSize: 0.1,  pointValueUsd: 5.0,  tickValueUsd: 0.50 },
+  MGC: { symbol: 'MGC', yahooTicker: 'GC=F',  tickSize: 0.1,  pointValueUsd: 10.0, tickValueUsd: 1.00 },
+  MCL: { symbol: 'MCL', yahooTicker: 'CL=F',  tickSize: 0.01, pointValueUsd: 100.0,tickValueUsd: 1.00 },
 };
 ```
 

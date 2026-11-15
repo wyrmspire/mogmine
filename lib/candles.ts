@@ -7,7 +7,7 @@
 import { useSyncExternalStore } from "react";
 import { generateCandles } from "./fixtures.ts";
 import { idbGet, idbSet } from "./idb.ts";
-import { candleSignature, getTrade, updateTrade } from "./store.ts";
+import { candleCacheKey, candleSignature, getTrade, updateTrade } from "./store.ts";
 import { buildSparkline, snapToTick } from "./trades.ts";
 import type { Candle, CandleSource, Timeframe, TradeRecord } from "./trades.ts";
 
@@ -66,7 +66,8 @@ function adopt(trade: TradeRecord, stored: StoredCandles) {
 }
 
 async function load(trade: TradeRecord, signature: string) {
-  const cached = await idbGet<StoredCandles>(trade.id);
+  const key = candleCacheKey(trade);
+  const cached = await idbGet<StoredCandles>(key);
   if (entries.get(trade.id)?.signature !== signature) return; // the trade changed while we waited
   if (cached?.signature === signature && cached.candles.length >= 4) return adopt(trade, cached);
 
@@ -78,7 +79,7 @@ async function load(trade: TradeRecord, signature: string) {
     if (!Array.isArray(body.candles) || body.candles.length < 4) throw new Error("incomplete");
     if (entries.get(trade.id)?.signature !== signature) return;
     const stored: StoredCandles = { signature, candles: body.candles, source: "Yahoo Finance", baseTimeframe: body.baseTimeframe ?? "1m", fetchedAt: Date.now() };
-    void idbSet(trade.id, stored);
+    void idbSet(key, stored);
     adopt(trade, stored);
   } catch {
     const current = entries.get(trade.id);

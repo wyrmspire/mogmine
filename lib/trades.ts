@@ -72,9 +72,9 @@ export interface FuturesContractSpec {
 }
 
 export const FUTURES_SPECS: Record<string, FuturesContractSpec> = {
-  MES: { tickSize: 0.25, pointValueUsd: 5, yahooTicker: "ES=F" },
+  MES: { tickSize: 0.25, pointValueUsd: 5, yahooTicker: "MES=F" },
   ES: { tickSize: 0.25, pointValueUsd: 50, yahooTicker: "ES=F" },
-  MNQ: { tickSize: 0.25, pointValueUsd: 2, yahooTicker: "NQ=F" },
+  MNQ: { tickSize: 0.25, pointValueUsd: 2, yahooTicker: "MNQ=F" },
   NQ: { tickSize: 0.25, pointValueUsd: 20, yahooTicker: "NQ=F" },
   MYM: { tickSize: 1, pointValueUsd: 0.5, yahooTicker: "YM=F" },
   M2K: { tickSize: 0.1, pointValueUsd: 5, yahooTicker: "RTY=F" },
@@ -275,11 +275,22 @@ export function deriveReviewStatus(trade: Pick<TradeRecord, "review_status" | "p
   return trade.playbook_id || trade.quick_tags.length || trade.note.trim() ? "tagged" : "new";
 }
 
+export function candleCacheKey(trade: Pick<TradeRecord, "id" | "symbol"> & Partial<Pick<TradeRecord, "yahoo_ticker">>) {
+  const ticker = specFor(trade.symbol).yahooTicker || trade.yahoo_ticker || trade.symbol;
+  return `${trade.id}:${ticker}`;
+}
+
+export function candleSignature(trade: Pick<TradeRecord, "symbol" | "entry_time" | "exit_time"> & Partial<Pick<TradeRecord, "yahoo_ticker">>) {
+  const ticker = specFor(trade.symbol).yahooTicker || trade.yahoo_ticker || trade.symbol;
+  return `${trade.symbol}|${ticker}|${trade.entry_time}|${trade.exit_time}`;
+}
+
 /** Fill in fields added after a record was stored, so old device data keeps loading. */
 export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id" | "symbol" | "direction" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): TradeRecord {
+  const canonicalTicker = specFor(raw.symbol).yahooTicker;
   const trade: TradeRecord = {
     user_id: DEFAULT_OWNER_USER_ID,
-    yahoo_ticker: specFor(raw.symbol).yahooTicker || raw.symbol,
+    yahoo_ticker: canonicalTicker || raw.yahoo_ticker || raw.symbol,
     trade_style: classifyTrade(raw.entry_time, raw.exit_time),
     stop_loss_price: null,
     planned_target_price: null,
@@ -300,6 +311,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     sparkline: [],
     ...raw,
   };
+  if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
   if (!(trade.quantity > 0)) trade.quantity = 1;
   trade.review_status = deriveReviewStatus(trade);
   return trade;

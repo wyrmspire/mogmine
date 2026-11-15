@@ -71,9 +71,9 @@ This is the one time-sensitive task. Nothing else in the project loses data by w
 
 ---
 
-## 4. Finding: Yahoo has separate `MES=F` and `MNQ=F` series
+## 4. Finding: Yahoo has separate `MES=F` and `MNQ=F` series (`OD-15` decided)
 
-Invariant 3 maps `MES` to `ES=F` and `MNQ` to `NQ=F` on the premise that Yahoo has no reliable micro data. That is true of the bare symbols `MES` and `MNQ`. It is not true of `MES=F` and `MNQ=F`, which returned full `1m` series with their own prints and volume.
+Earlier drafts of Invariant 3 mapped `MES` to `ES=F` and `MNQ` to `NQ=F` on the premise that Yahoo had no reliable micro data. That is true of the bare symbols `MES` and `MNQ`. It is not true of `MES=F` and `MNQ=F`, which return full `1m` series with their own prints and volume.
 
 | Pair, one `1m` session | Bars with identical OHLC | Largest difference in a bar | Volume |
 | :--- | :--- | :--- | :--- |
@@ -82,10 +82,8 @@ Invariant 3 maps `MES` to `ES=F` and `MNQ` to `NQ=F` on the premise that Yahoo h
 
 A micro trade drawn on mini candles will often show a fill outside the wick, by up to 4 ticks on `MES` and far more on `MNQ`. Drawing it on the micro's own candles removes that.
 
-- **Recommendation:** chart `MES` on `MES=F` and `MNQ` on `MNQ=F`, with `ES=F` and `NQ=F` as the fallback. This needs the owner to amend Invariant 3. It is `OD-15` in [DECISIONS.md](../DECISIONS.md).
-- **Until then:** archive both. It costs little, it keeps Invariant 3 satisfied, and the micro data expires in 30 days if it is not saved.
-- **Caveat:** this is two sampled sessions. Let the archive run a few weeks and compare the two series before relying on the micro tickers.
-- Point values are unaffected. `MES` is still `$5` a point whichever candles are drawn.
+- **Owner decision (`OD-15`, 2026-11-14):** chart `MES` on `MES=F` and `MNQ` on `MNQ=F`, with **no `ES=F`/`NQ=F` fallback**. Levels are computed from and drawn on the same instrument as the chart (`MES=F` for `MES`). Invariant 3 in [AGENTS.md](../AGENTS.md) is amended accordingly, and candle cache keys include the Yahoo ticker so old `ES=F` bars are never reused for `MES`.
+- Point values are unaffected. `MES` is still `$5` a point and `MNQ` is `$2` a point.
 
 ---
 

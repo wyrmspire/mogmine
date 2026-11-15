@@ -90,8 +90,8 @@ When a trader finishes an intraday session or steps away from their execution de
                     v                                                               v
 +------------------------------------+                             +-----------------------------------+
 |      YAHOO FINANCE DATA FEED       |                             |     MULTIMODAL AI INFERENCE       |
-|  - `ES=F` (Primary for MES)        |                             |  - Vercel AI SDK (Gemini / Claude |
-|  - `NQ=F` (Nasdaq Companion)       |                             |    Vision / OpenAI GPT-4o)        |
+|  - `MES=F`, `ES=F` (Primary S&P)   |                             |  - Vercel AI SDK (Gemini / Claude |
+|  - `MNQ=F`, `NQ=F` (Nasdaq)        |                             |    Vision / OpenAI GPT-4o)        |
 |  - `YM=F`, `RTY=F`, `^VIX`, DXY    |                             |  - Inputs: Image + JSON Telemetry |
 |  - Intervals: 1m, 2m, 5m, 15m, 1h  |                             |  - Strict Zod Schema Validation   |
 +------------------------------------+                             +-----------------------------------+
@@ -137,9 +137,9 @@ export interface MarketDataProvider {
 
 | Canonical Symbol | Instrument Description | Yahoo Finance Provider Ticker | Tick Size | Point Multiplier (USD) | Tick Value (USD) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`MES`** | Micro E-mini S&P 500 | `ES=F` | `0.25` | `$5.00` | `$1.25` |
+| **`MES`** | Micro E-mini S&P 500 | `MES=F` | `0.25` | `$5.00` | `$1.25` |
 | **`ES`** | E-mini S&P 500 | `ES=F` | `0.25` | `$50.00` | `$12.50` |
-| **`MNQ`** | Micro E-mini Nasdaq-100 | `NQ=F` | `0.25` | `$2.00` | `$0.50` |
+| **`MNQ`** | Micro E-mini Nasdaq-100 | `MNQ=F` | `0.25` | `$2.00` | `$0.50` |
 | **`NQ`** | E-mini Nasdaq-100 | `NQ=F` | `0.25` | `$20.00` | `$5.00` |
 | **`MYM`** | Micro E-mini Dow Jones | `YM=F` | `1.00` | `$0.50` | `$0.50` |
 | **`YM`** | E-mini Dow Jones | `YM=F` | `1.00` | `$5.00` | `$5.00` |
