@@ -1,9 +1,10 @@
 // The Position Box: a Canvas series primitive, never HTML over the chart (Invariant 1).
 // Drawn like TradingView's long/short position tool: fills only, no outline or frame on any box,
-// and no text on the box (the price-axis tags and the P&L pill carry the numbers).
+// and no numbers over the candles (they live in the header and stats grid).
 //   PLAN — faint red fill entry→stop, faint green fill entry→target.
 //   ACTUAL — a stronger fill entry→exit in the result colour: green win, red loss, gray scratch.
-//   EXCURSION — a thin unlabelled MFE/MAE bracket beside the box (numbers live in the stats grid).
+//   PATH — a thin dotted line from the entry fill to the exit fill.
+//   KEY — an optional faint dotted level with a small low-contrast `KEY` pill at the right edge.
 //
 // Fills are drawn under the candles, so candles stay crisp at any opacity.
 // Colours and opacity arrive in the config from the theme store; draw() never reads CSS (AGENTS §3b-7).
@@ -31,22 +32,18 @@ export interface PositionBoxConfig {
   exitPrice: number;
   stopPrice: number | null;
   targetPrice: number | null;
-  /** Approximate excursions during the hold (B-33). Null when they cannot be shown honestly. */
-  maePrice: number | null;
-  mfePrice: number | null;
   isLong: boolean;
   /** Result is within the scratch threshold: the actual band is gray instead of green or red. */
   scratch: boolean;
-  /** Result label drawn on the chart, e.g. `+1.6R · +$47.50`. R only in Shield mode (UX-71). */
-  pill: string;
-  pillTone: "profit" | "risk" | "neutral";
   profitColor: string;
   riskColor: string;
-  profitTextColor?: string;
-  riskTextColor?: string;
   mutedColor: string;
+  /** Background for the small KEY pill. */
   pillBackground: string;
   textColor: string;
+  /** Key level, drawn faint with a small pill. Null hides it. */
+  keyPrice: number | null;
+  keyColor: string;
   opacity: number;
 }
 
@@ -59,14 +56,13 @@ interface Geometry {
   yExit: number;
   yStop: number | null;
   yTarget: number | null;
-  yMae: number | null;
-  yMfe: number | null;
+  yKey: number | null;
 }
 
 const XRAY_OPACITY = 0.05;
 /** Plan fills stay clearly weaker than the actual band so they cannot be read as P&L. */
 const PLAN_FILL_RATIO = 0.28;
-const PILL_FONT = "600 11px ui-monospace, SFMono-Regular, Menlo, monospace";
+const KEY_FONT = "600 9px ui-monospace, SFMono-Regular, Menlo, monospace";
 
 class FillRenderer implements IPrimitivePaneRenderer {
   constructor(private g: Geometry | null, private c: PositionBoxConfig, private opacity: number) {}
@@ -109,8 +105,18 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
     const made = (c.exitPrice - c.entryPrice) * (c.isLong ? 1 : -1);
     const resultColor = c.scratch || made === 0 ? c.mutedColor : made > 0 ? c.profitColor : c.riskColor;
     target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: sx, verticalPixelRatio: sy }) => {
-      const y = (value: number) => Math.round(value * sy) + 0.5;
       const line = Math.max(1, Math.floor(sx));
+
+      // Execution path: thin dotted line from the entry fill to the exit fill, no text.
+      ctx.globalAlpha = 0.85 * strength;
+      ctx.strokeStyle = c.textColor;
+      ctx.lineWidth = line;
+      ctx.setLineDash([3 * sx, 3 * sx]);
+      ctx.beginPath();
+      ctx.moveTo(g.x1 * sx, g.yEntry * sy);
+      ctx.lineTo(g.x2 * sx, g.yExit * sy);
+      ctx.stroke();
+      ctx.setLineDash([]);
 
       // Entry and exit flags at the fill prices. Entry is neutral; the exit takes the result colour.
       const flag = (x: number, yValue: number, pointUp: boolean, color: string) => {
@@ -135,55 +141,42 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
       flag(g.x1, g.yEntry, c.isLong, c.textColor);
       flag(g.x2, g.yExit, !c.isLong, resultColor);
 
-      // Excursion bracket in the gap right of the exit bar — no text, never a rectangle or a full-width line.
-      const capLow = g.yMae ?? g.yEntry;
-      const capHigh = g.yMfe ?? g.yEntry;
-      if (g.yMae != null || g.yMfe != null) {
-        const cap = 5 * sx;
-        const bx = Math.round(g.right * sx + 8 * sx) + 0.5;
-        ctx.globalAlpha = strength;
-        ctx.strokeStyle = c.mutedColor;
-        ctx.lineWidth = line;
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.moveTo(bx - cap, y(capHigh));
-        ctx.lineTo(bx + cap, y(capHigh));
-        ctx.moveTo(bx, y(capHigh));
-        ctx.lineTo(bx, y(capLow));
-        ctx.moveTo(bx - cap, y(capLow));
-        ctx.lineTo(bx + cap, y(capLow));
-        ctx.moveTo(bx - cap * 0.6, y(g.yEntry));
-        ctx.lineTo(bx + cap * 0.6, y(g.yEntry));
-        ctx.stroke();
-      }
       ctx.globalAlpha = 1;
     });
 
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      if (!c.pill) return;
-      ctx.font = PILL_FONT;
-      const width = Math.ceil(ctx.measureText(c.pill).width) + 16;
-      const height = 22;
-      // Attach the pill to the exit flag, above it when there is room.
-      let yPill = g.yExit - height - 14;
-      if (yPill < 4) yPill = Math.min(mediaSize.height - height - 4, g.yExit + 14);
-      let xPill = Math.max(4, Math.min(mediaSize.width - width - 4, g.x2 - width / 2));
-      // Keep it clear of the excursion bracket on the right.
-      if (g.yMae != null || g.yMfe != null) {
-        const rightLimit = g.right - 4;
-        if (xPill + width > rightLimit) xPill = Math.max(4, rightLimit - width);
-      }
-      ctx.globalAlpha = this.xray ? 0.5 : 1;
+      if (g.yKey == null || g.yKey < 0 || g.yKey > mediaSize.height) return;
+      const fade = this.xray ? 0.5 : 1;
+      // Faint dotted key level across the pane.
+      ctx.globalAlpha = 0.45 * fade;
+      ctx.strokeStyle = c.keyColor;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
       ctx.beginPath();
-      ctx.roundRect(xPill, yPill, width, height, 7);
+      ctx.moveTo(0, Math.round(g.yKey) + 0.5);
+      ctx.lineTo(mediaSize.width, Math.round(g.yKey) + 0.5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Small low-contrast pill at the right edge of the pane, never over the price scale.
+      ctx.font = KEY_FONT;
+      const text = "KEY";
+      const width = Math.ceil(ctx.measureText(text).width) + 8;
+      const height = 12;
+      const x = mediaSize.width - width - 4;
+      const yPill = Math.round(g.yKey - height / 2);
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.beginPath();
+      ctx.roundRect(x, yPill, width, height, 6);
       ctx.fillStyle = c.pillBackground;
       ctx.fill();
-      const profitText = c.profitTextColor || c.profitColor;
-      const riskText = c.riskTextColor || c.riskColor;
-      ctx.fillStyle = c.pillTone === "profit" ? profitText : c.pillTone === "risk" ? riskText : c.textColor;
-      ctx.textBaseline = "middle";
+      ctx.globalAlpha = 0.18 * fade;
+      ctx.fillStyle = c.keyColor;
+      ctx.fill();
+      ctx.globalAlpha = 0.8 * fade;
+      ctx.fillStyle = c.keyColor;
       ctx.textAlign = "center";
-      ctx.fillText(c.pill, xPill + width / 2, yPill + height / 2 + 0.5);
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, x + width / 2, yPill + height / 2 + 0.5);
       ctx.globalAlpha = 1;
     });
   }
@@ -238,7 +231,7 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
     const half = Math.max(3, timeScale.options().barSpacing / 2);
     this.geometry = {
       left: Math.min(x1, x2) - half, right: Math.max(x1, x2) + half, x1, x2, yEntry, yExit,
-      yStop: price(config.stopPrice), yTarget: price(config.targetPrice), yMae: price(config.maePrice), yMfe: price(config.mfePrice),
+      yStop: price(config.stopPrice), yTarget: price(config.targetPrice), yKey: price(config.keyPrice),
     };
   }
 
