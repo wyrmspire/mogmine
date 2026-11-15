@@ -8,7 +8,7 @@ import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
 import { demoTrades } from "../fixtures.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
-import { MIN_FITTED_BARS, adherence, aggregateCandles, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { MIN_FITTED_BARS, adherence, aggregateCandles, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 
 const base = { id: "t", entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z" };
@@ -123,6 +123,8 @@ test("all ten sample trades have deterministic fitted-window goldens", () => {
   };
   assert.equal(demoTrades.length, 10);
   for (const trade of demoTrades) {
+    assert.notEqual(trade.planned_target_price, null, `${trade.id} needs a planned target`);
+    assert.deepEqual(trade.sparkline, [], `${trade.id} must not ship generated candles`);
     const golden = expected[trade.id];
     assert.ok(golden, `missing golden for ${trade.id}`);
     const timeframe = defaultTimeframe(Math.round((Date.parse(trade.exit_time) - Date.parse(trade.entry_time)) / 1000));
@@ -131,6 +133,12 @@ test("all ten sample trades have deterministic fitted-window goldens", () => {
     assert.ok(Math.abs(fitted.holdBars / fitted.visibleBars - golden.share) < 1e-12, trade.id);
     assert.ok(fitted.visibleBars >= MIN_FITTED_BARS, trade.id);
   }
+});
+
+test("chart autoscale includes candles, planned stop, planned target and actual exit", () => {
+  assert.deepEqual(includeInPriceRange({ minValue: 100, maxValue: 110 }, [104, 116, 96, 114]), { minValue: 96, maxValue: 116 });
+  assert.deepEqual(includeInPriceRange(null, [104, 116, 96, 114]), { minValue: 96, maxValue: 116 });
+  assert.deepEqual(includeInPriceRange({ minValue: 100, maxValue: 110 }, [null, undefined, Number.NaN]), { minValue: 100, maxValue: 110 });
 });
 
 test("formatting follows docs/08 §13", () => {

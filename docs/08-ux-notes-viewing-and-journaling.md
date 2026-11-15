@@ -89,6 +89,7 @@ Every screen is specified for more than the happy path. If a state is not in thi
 | No candles at all | No chart area, generated candles, price ladder or placeholder graphic. The trade header, details and notes remain usable. |
 | Chart data may not line up (B-12) | A small amber chip: "Candles are from the ES continuous contract. Your fills may sit slightly off the bars." |
 | No stop recorded | R shows `—R` with an **Add stop** affordance. Never `0.0R`. |
+| No planned target recorded | Target shows “No target set”. No TP zone is invented. |
 | MAE/MFE estimated (B-33) | Values prefixed with `≈`. |
 | Broker corrected or voided a fill later (B-04) | "Updated by broker 11:02" on the trade. Notes are kept. |
 | P&L disagrees with the broker (B-34) | Both numbers, with the broker's labelled. |

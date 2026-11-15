@@ -18,6 +18,7 @@ import type {
   SeriesType,
   Time,
 } from "lightweight-charts";
+import { includeInPriceRange } from "@/lib/trades";
 
 export interface PositionBoxConfig {
   /** Fill times already snapped to bar open times for the active timeframe (B-23). */
@@ -238,8 +239,8 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   /** Keep the stop and target inside the price scale, so the box is never clipped by auto-fit. */
   autoscaleInfo(): AutoscaleInfo | null {
     const { entryPrice, exitPrice, stopPrice, targetPrice } = this.config;
-    const prices = [entryPrice, exitPrice, stopPrice, targetPrice].filter((value): value is number => value != null);
-    return { priceRange: { minValue: Math.min(...prices), maxValue: Math.max(...prices) } };
+    const priceRange = includeInPriceRange(null, [entryPrice, exitPrice, stopPrice, targetPrice]);
+    return priceRange ? { priceRange } : null;
   }
 
   update(config: PositionBoxConfig) {

@@ -1,11 +1,9 @@
 // Candles per trade, on the device. Completed candle sets never change, so they are cached in
 // IndexedDB and old trades open instantly and offline (docs/08 §2). Lists never touch this module (B-42).
 //
-// Labeled sample trades have deterministic fixture charts for offline demos and tests, and are
-// re-priced onto real Yahoo candles when available. Fixtures are never a fallback for a real trade:
-// without Yahoo data, a real trade has no chart (docs/08 §4, principle 5).
+// Samples and real trades follow the same rule: only market candles can produce a chart. A missing
+// Yahoo response leaves the trade details usable but renders no chart (docs/08 §4, issue #28).
 import { useSyncExternalStore } from "react";
-import { generateCandles } from "./fixtures.ts";
 import { idbGet, idbSet } from "./idb.ts";
 import { candleSignature, getTrade, updateTrade } from "./store.ts";
 import { buildSparkline, snapToTick } from "./trades.ts";
@@ -93,9 +91,7 @@ export function ensureCandles(trade: TradeRecord, force = false) {
   const signature = candleSignature(trade);
   const existing = entries.get(trade.id);
   if (existing && existing.signature === signature && !(force && !existing.fetching && existing.source !== "Yahoo Finance")) return;
-  put(trade.id, trade.is_sample
-    ? { status: "ready", candles: generateCandles(trade), source: "Demo fixture", baseTimeframe: "1m", fetching: true, signature }
-    : { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: true, signature });
+  put(trade.id, { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: true, signature });
   void load(trade, signature);
 }
 

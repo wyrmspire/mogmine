@@ -5,7 +5,7 @@ export type TradeDirection = "LONG" | "SHORT";
 export type TradeStyle = "scalp" | "session_90m" | "investment";
 export type Timeframe = "1m" | "5m" | "15m" | "1h";
 export type ReviewStatus = "new" | "tagged" | "reviewed";
-export type CandleSource = "Yahoo Finance" | "Demo fixture";
+export type CandleSource = "Yahoo Finance";
 
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 export const TIMEFRAME_MINUTES: Record<Timeframe, number> = { "1m": 1, "5m": 5, "15m": 15, "1h": 60 };
@@ -19,6 +19,21 @@ export interface Candle {
   low: number;
   close: number;
   volume: number;
+}
+
+export interface PriceRange {
+  minValue: number;
+  maxValue: number;
+}
+
+/** Extend an autoscale range with every finite required price. */
+export function includeInPriceRange(base: PriceRange | null, required: Array<number | null | undefined>): PriceRange | null {
+  const prices = required.filter((value): value is number => value != null && Number.isFinite(value));
+  if (!prices.length) return base;
+  return {
+    minValue: Math.min(base?.minValue ?? Infinity, ...prices),
+    maxValue: Math.max(base?.maxValue ?? -Infinity, ...prices),
+  };
 }
 
 /** One checklist rule, frozen on the trade when the playbook is chosen (UX-50). */
@@ -303,6 +318,7 @@ export function deriveReviewStatus(trade: Pick<TradeRecord, "review_status" | "p
 
 /** Fill in fields added after a record was stored, so old device data keeps loading. */
 export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id" | "symbol" | "direction" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): TradeRecord {
+  const hadNonMarketCandles = raw.candle_source != null && raw.candle_source !== "Yahoo Finance";
   const trade: TradeRecord = {
     user_id: DEFAULT_OWNER_USER_ID,
     yahoo_ticker: specFor(raw.symbol).yahooTicker || raw.symbol,
@@ -327,6 +343,8 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     ...raw,
   };
   if (!(trade.quantity > 0)) trade.quantity = 1;
+  if (trade.candle_source !== "Yahoo Finance") trade.candle_source = undefined;
+  if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
   return trade;
 }

@@ -37,6 +37,8 @@ Every trade automatically renders a TradingView-style **Position Box** directly 
    - **MAE & MFE Inner Watermarks:** Inside the Risk Box, a darker inner shade marks the actual **MAE (Heat Taken)** relative to the full hard Stop Loss; inside the Profit Box, a subtle tick line marks the **MFE Peak** so you immediately see how much heat you absorbed and how much open profit existed before exit.
    - **Post-Exit "Ghost Box" Toggle (`[ 👻 +15m Ghost ]`):** Extends a faint, dotted projection of your Entry, Stop, and Target levels `15–30 bars` past `exit_time`. One tap shows whether exiting early saved you from a reversal or left `+2R` on the table.
 
+The price autoscale always includes the planned target, planned stop and actual exit in addition to the visible candles. The primitive exposes those bounds and the candlestick series merges them into its own autoscale range; **Fit** restores price autoscale as well as the duration-derived time window. A missing planned target is labelled “No target set” and does not invent a profit zone.
+
 ---
 
 ## 3. Duration-derived chart window
@@ -46,6 +48,8 @@ The fitted chart view comes directly from `hold_duration_seconds = exit_time - e
 The fitted view never contains fewer than 30 bars on the selected timeframe. When that floor widens a very short hold, the added context keeps the same before/after bias. The initial timeframe comes from duration: `1m` through 40 minutes, `5m` through 3 hours, `15m` through 10 hours, then `1h`. Switching timeframe recomputes the bar-based window, so a `15m` view shows materially more clock-time context than `1m` instead of preserving the same minutes.
 
 The stored `trade_style` field and `classifyTrade` remain for data compatibility while the later AI coaching lens is decided; neither controls the chart window or initial timeframe.
+
+Samples follow the same market-data rule as real trades. They use cached or fetched Yahoo bars and have a planned target so both zones can be reviewed. Synthetic sample candles are forbidden; when market bars are unavailable, no chart is rendered.
 
 ---
 

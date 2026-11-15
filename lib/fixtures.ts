@@ -1,62 +1,13 @@
-import { buildSparkline, normalizeTrade } from "./trades.ts";
-import type { Candle, TradeRecord } from "./trades.ts";
+import { normalizeTrade } from "./trades.ts";
+import type { TradeRecord } from "./trades.ts";
 import { checklistFor } from "./playbooks.ts";
 
 type SeedTrade = Pick<TradeRecord, "id" | "symbol" | "direction" | "quantity" | "entry_time" | "exit_time" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price" | "key_level_price" | "note">
   & { playbook_id?: string; quick_tags?: string[]; followed?: number };
 
-function hash(value: string) {
-  let result = 2166136261;
-  for (let i = 0; i < value.length; i += 1) result = Math.imul(result ^ value.charCodeAt(i), 16777619);
-  return result >>> 0;
-}
-
-function random(seed: number) {
-  let state = seed >>> 0;
-  return () => {
-    state += 0x6d2b79f5;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Deterministic synthetic 1m candles around a trade. Only ever used for sample trades. */
-export function generateCandles(trade: Pick<TradeRecord, "id" | "symbol" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): Candle[] {
-  const entry = Date.parse(trade.entry_time);
-  const exit = Date.parse(trade.exit_time);
-  const start = entry - 900 * 60_000;
-  const rng = random(hash(trade.id));
-  const volatility = Math.max(Math.abs(trade.exit_price - trade.entry_price) / 8, trade.symbol.includes("NQ") ? 5 : 0.65);
-  let previous = trade.entry_price + (rng() - 0.5) * volatility * 22;
-  return Array.from({ length: 1801 }, (_, index) => {
-    const time = start + index * 60_000;
-    const progress = (time - entry) / Math.max(60_000, exit - entry);
-    const anchor = progress < 0
-      ? trade.entry_price - Math.sin(progress * 2.4) * volatility * 2.5
-      : progress <= 1
-        ? trade.entry_price + (trade.exit_price - trade.entry_price) * progress + Math.sin(progress * Math.PI * 3) * volatility * 0.45
-        : trade.exit_price + Math.sin(progress * 1.7) * volatility * 1.7;
-    const open = previous;
-    const close = open * 0.22 + anchor * 0.78 + (rng() - 0.5) * volatility * 1.5;
-    const candle = {
-      time,
-      open: Number(open.toFixed(2)),
-      high: Number((Math.max(open, close) + rng() * volatility).toFixed(2)),
-      low: Number((Math.min(open, close) - rng() * volatility).toFixed(2)),
-      close: Number(close.toFixed(2)),
-      volume: Math.round(90 + rng() * 1200),
-    };
-    previous = close;
-    return candle;
-  });
-}
-
 function makeTrade({ followed, ...seed }: SeedTrade): TradeRecord {
   const checklist = checklistFor(seed.playbook_id ?? null).map((item, index) => ({ ...item, checked: index < (followed ?? 0) }));
-  const trade = normalizeTrade({ ...seed, is_sample: true, candle_source: "Demo fixture", checklist_state: checklist });
-  return { ...trade, sparkline: buildSparkline(trade, generateCandles(trade)) };
+  return normalizeTrade({ ...seed, is_sample: true, checklist_state: checklist });
 }
 
 export const demoTrades: TradeRecord[] = [
@@ -80,7 +31,7 @@ export const demoTrades: TradeRecord[] = [
     id: "mes-failed-reclaim", symbol: "MES", direction: "LONG", quantity: 2,
     entry_time: "2026-11-13T15:51:00.000Z", exit_time: "2026-11-13T16:08:00.000Z",
     entry_price: 6827.5, exit_price: 6822.25, stop_loss_price: 6821.5,
-    planned_target_price: null, key_level_price: 6832,
+    planned_target_price: 6836.5, key_level_price: 6832,
     playbook_id: "orb-reclaim", quick_tags: ["Chased Entry"], followed: 2,
     note: "Bought a reclaim before it was confirmed while volume was fading. The level never held. Next time: wait for a close above 6832 and a successful retest.",
   }),
@@ -103,7 +54,7 @@ export const demoTrades: TradeRecord[] = [
     id: "mes-lunch-chop", symbol: "MES", direction: "LONG", quantity: 2,
     entry_time: "2026-11-11T17:18:00.000Z", exit_time: "2026-11-11T17:42:00.000Z",
     entry_price: 6819.75, exit_price: 6817.5, stop_loss_price: null,
-    planned_target_price: null, key_level_price: 6820,
+    planned_target_price: 6826, key_level_price: 6820,
     note: "",
   }),
   makeTrade({
@@ -125,7 +76,7 @@ export const demoTrades: TradeRecord[] = [
     id: "mnq-late-chase", symbol: "MNQ", direction: "LONG", quantity: 1,
     entry_time: "2026-11-09T16:26:00.000Z", exit_time: "2026-11-09T16:39:00.000Z",
     entry_price: 25588, exit_price: 25561, stop_loss_price: 25558,
-    planned_target_price: null, key_level_price: 25580,
+    planned_target_price: 25633, key_level_price: 25580,
     playbook_id: "no-setup", quick_tags: ["Chased Entry", "Revenge"],
     note: "Chased the third push after the clean entry was gone. The pullback was normal, but my location made it unmanageable. Next time: let it go.",
   }),

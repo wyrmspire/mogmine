@@ -8,6 +8,7 @@ import { deriveReviewStatus, normalizeTrade } from "./trades.ts";
 import type { Candle, TradeRecord } from "./trades.ts";
 
 const STORAGE_KEY = "mogmine-trades-v3";
+const demoById = new Map(demoTrades.map((trade) => [trade.id, trade]));
 // Older builds stored trades with their candles inline. They are read once and left untouched,
 // so going back to an older build still finds its data.
 const LEGACY_KEYS = ["mogmine-trades-v2", "mogmine-trades-v1"];
@@ -60,7 +61,11 @@ function readStored(): TradeRecord[] | null {
   return parsed.flatMap((item) => {
     if (!item?.id || !item.symbol || !item.entry_time || !item.exit_time || item.entry_price == null || item.exit_price == null || !item.direction) return [];
     const { candles, ...rest } = item;
-    const trade = normalizeTrade({ ...(rest as TradeRecord), is_sample: rest.is_sample ?? DEMO_TRADE_IDS.has(item.id) });
+    let trade = normalizeTrade({ ...(rest as TradeRecord), is_sample: rest.is_sample ?? DEMO_TRADE_IDS.has(item.id) });
+    // Samples seeded before issue #28 may be stored without a target. Bring only that fixture field
+    // forward so every sample has the planned TP that its Position Box is meant to demonstrate.
+    const currentDemo = demoById.get(trade.id);
+    if (currentDemo && trade.planned_target_price == null) trade = { ...trade, planned_target_price: currentDemo.planned_target_price };
     // Yahoo candles from an older build are real market data: keep them (they expire at the source).
     if (!current && candles?.length && rest.candle_source === "Yahoo Finance") {
       void idbSet(trade.id, { signature: candleSignature(trade), candles, source: "Yahoo Finance", baseTimeframe: "1m", fetchedAt: Date.now() });

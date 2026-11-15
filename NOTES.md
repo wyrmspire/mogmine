@@ -11,8 +11,8 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ## Current state (2026-11-15)
 
-- **Branch `feat/phase4-chart-windows` (local, not pushed) holds UI Phase 4** on top of `origin/ui/phased-improvements`: duration-fitted chart windows, a 30-bar floor, duration-derived timeframes, removed session-length UI and no-data chart fallback. `main` and the deployed site are unchanged.
-- **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use Yahoo Finance 1m candles when available and deterministic fixture candles offline.
+- **Branch `feat/phase4-chart-windows` (local, not pushed) holds UI Phase 4 and the #28 follow-up**: duration-fitted chart windows, a 30-bar floor, duration-derived timeframes, TP/SL/exit-aware price autoscale, and no generated candle fallback. `main` and the deployed site are unchanged.
+- **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use real Yahoo Finance candles only; without market bars they show no chart.
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08` (UX notes), `docs/09` (backend risk register), `docs/10` (Yahoo-first build plan), `docs/11` (mobile workflow and assistant API proposals), `docs/12` (levels, zones and the daily markup), `docs/13` (bold UI bets).
 - 27 entries under Open in [DECISIONS.md](DECISIONS.md) (`OD-24`–`OD-27` come from the UI branches); `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-27` records the mathematical conflict between the 30-bar floor and a 35% minimum box width for very short fixtures.
@@ -45,6 +45,14 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Codex) — Chart, branch `feat/phase4-chart-windows`
+Did:      Fixed #28: series + primitive autoscale include planned TP/SL and exit; Fit restores price autoscale; every sample has a target; generated sample candles/sparklines are removed; missing data renders no chart.
+Files:    `components/{PositionBoxPrimitive,TradeChart,TradeDetail}.tsx`, `lib/{candles,fixtures,store,trades}.ts`, `lib/__tests__/core.test.ts`, `docs/{02,07,08,14}*.md`, `NOTES.md`.
+Verified: `npm run build` passed (8/8 pages); `npm run lint` 0 errors/1 existing PostCSS warning; `npm run typecheck` clean; `npm test` 17/17.
+Verified: app route returned 1,730/1,805 real Yahoo `NQ=F` 1m bars; 390×844 Chrome had 390px scroll width, no console/request errors, and a forced 404 rendered 0 chart hosts while details remained.
+Artifacts: `/workspace/phase4-scalp.png` (13m, 30 bars, 43.33%) and `/workspace/phase4-90min.png` (90m, 36×5m bars, 50%); both visibly show TP and SL.
+Left:     Nothing pushed or merged. `package-lock.json` remains untracked and uncommitted. No real-phone/iOS Safari pass was performed.
+
 ### 2026-11-14 (night CT) — agent (Codex) — Chart + App shell and notes, branch `feat/phase4-chart-windows`
 Did:      Implemented issues #13, #10, #11, #12, #25 and #14 as separate commits: removed duration-category UI, fitted windows from hold duration, added the 30-bar floor and duration timeframes, and removed the no-data chart fallback.
 Files:    `components/`, `lib/`, `app/globals.css`, `docs/02`, `docs/05`, `docs/07`, `docs/08`, `docs/14`, `DECISIONS.md`, `NOTES.md`.
@@ -67,15 +75,15 @@ Left:     Level sets and zones are not in code: the chart still draws one dotted
 Watch:    The display zone is a constant, not yet the UX-86 preference. Day ticks on the chart axis are relabelled only at CT midnight because the library places them at UTC midnight.
 
 ### 2026-11-15 — agent (Codex Work) — Market data + demo set
-Did:      Added a server-side Yahoo Finance adapter/API, ten seeded MES/MNQ trades, existing-storage migration, source labels and offline fixture fallback.
+Did:      Added a server-side Yahoo Finance adapter/API, ten seeded MES/MNQ trades, existing-storage migration, source labels and an offline fixture fallback (the fallback was later removed by issue #28).
 Verified: Vercel build READY at commit e4a5857; production page returned 200 with 10 trades; Yahoo route returned 1,810 NQ=F candles; runtime error scan was clean.
 Left:     Yahoo candles are fetched per opened trade and cached only on-device. The Supabase daily archive from M0 is still pending.
-Watch:    Yahoo may throttle hosted requests, so every trade retains its complete fixture chart.
+Watch:    Superseded by issue #28: Yahoo may throttle hosted requests, and no generated fallback chart is allowed.
 
 ### 2026-11-14 — agent (Codex Work) — Chart + app shell and notes
 Did:      Scaffolded the first Next.js frontend; added offline fixtures, adaptive trade review, v5 Canvas PositionBoxPrimitive, manual entry, local-first notes, and private Trade Card sharing.
 Verified: Local source checks passed before publication; npm install was blocked by the executor network (403), so Vercel preview build is the package/type/build verification.
-Left:     Supabase, Yahoo archive and owner auth are not wired; the preview deliberately uses fixture candles and localStorage. No Topstep work was added.
+Left:     Supabase, Yahoo archive and owner auth are not wired; the original preview used generated candles, removed later by issue #28. No Topstep work was added.
 Watch:    Trade Card generation uses takeScreenshot(true). Re-check iOS share/copy and the 390×844 acceptance flow on the deployed preview.
 
 Format:

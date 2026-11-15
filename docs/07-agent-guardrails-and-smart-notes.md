@@ -95,6 +95,8 @@ class PositionBoxRenderer implements IPrimitivePaneRenderer {
 - **Do not call `getComputedStyle()` inside `draw()`.** It runs on every frame of a pinch. Read `--position-box-opacity`, `--gold-mid` and the profit and risk colours into a small store, update it when a slider or preset changes, then call `requestUpdate()`. The values still come from the CSS variables (Invariant 5).
 - **Read the profit and risk colours from tokens too** (`--profit-emerald`, `--risk-crimson`). The literal `rgba(16, 185, 129, …)` above blocks a colour-blind preset ([08](08-ux-notes-viewing-and-journaling.md) UX-80).
 - **Chart times are shifted for display only.** The library has no time-zone support. Pass every bar, marker and primitive time through one `toChartTime()` helper, and never let a shifted time reach the database or the AI (B-22).
+- **Extend the series autoscale, not only the drawing.** Merge `entry_price`, `exit_price`, `stop_loss_price` and `planned_target_price` into the candlestick series' `autoscaleInfoProvider`, and return the same bounds from the primitive's `autoscaleInfo()`. Fit must restore automatic price scaling so TP, SL and exit remain visible.
+- **Never generate sample candles.** A sample may point at real archived/fetched bars, but if those bars are unavailable it has no chart, exactly like a real trade. Give seeded sample trades an explicit planned target; do not infer one in the chart.
 
 ---
 

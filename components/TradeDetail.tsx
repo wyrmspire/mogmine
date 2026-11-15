@@ -161,7 +161,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     const barAt = (iso: string) => { const time = Math.floor(Date.parse(iso) / barMs) * barMs; return candles.candles.find((bar) => bar.time === time); };
     return !fillInsideBar(trade.entry_price, barAt(trade.entry_time), trade.symbol) || !fillInsideBar(trade.exit_price, barAt(trade.exit_time), trade.symbol);
   }, [ready, candles, trade, baseMinutes]);
-  const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Sample candles, not market data" : "No candles"} · ${ready ? timeframe : "—"}`;
+  const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
 
   return (
     <div className="detail-layout">
@@ -211,13 +211,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <span className="source-text">{candles?.fetching ? "Checking Yahoo…" : ""}</span>
           </div>
           {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
-          {ready && candles.source === "Demo fixture" && !candles.fetching && <div className="chart-note"><span>Sample candles. Real market data was not available.</span><button onClick={() => ensureCandles(trade, true)}>Retry</button></div>}
           {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
           <div className="levels">
             <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
             <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
             <div><small>STOP</small><b className={trade.stop_loss_price == null ? "empty" : ""}>{formatPrice(trade.stop_loss_price, trade.symbol)}</b></div>
-            <div><small>TARGET</small><b className={trade.planned_target_price == null ? "empty" : ""}>{formatPrice(trade.planned_target_price, trade.symbol)}</b></div>
+            <div><small>TARGET</small><b className={trade.planned_target_price == null ? "empty" : ""}>{trade.planned_target_price == null ? "No target set" : formatPrice(trade.planned_target_price, trade.symbol)}</b></div>
             <div title="Worst price against you during the hold, estimated from bars"><small>HEAT (MAE)</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
             <div title="Best price in your favour during the hold, estimated from bars"><small>BEST (MFE)</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
           </div>
