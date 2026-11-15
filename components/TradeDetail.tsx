@@ -22,7 +22,7 @@ import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInside
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
-import { buildHindsight } from "@/lib/hindsight";
+import { buildHindsight, laterTouchLabel } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
 export function TradeDetail({ id }: { id: string }) {
@@ -256,7 +256,15 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               <button type="button" className="tool-button" aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>
                 After the exit — hindsight
               </button>
-              {hindsightOpen ? <span>{hindsight.sentence}</span> : <span>Hindsight is one tap away and never changes R or the grade of the decision.</span>}
+              {hindsightOpen ? (
+                <span>
+                  {hindsight.sentence}
+                  {hindsight.target ? ` ${laterTouchLabel(hindsight.target)}.` : ""}
+                  {hindsight.stop ? ` ${laterTouchLabel(hindsight.stop)}.` : ""}
+                </span>
+              ) : (
+                <span>Hindsight is one tap away and never changes R or the grade of the decision.</span>
+              )}
             </div>
           )}
           <div className="levels">

@@ -11,7 +11,7 @@ import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
 import { TIMEFRAME_MINUTES, aggregateCandles, alignTradeToBars, fitWindow, includeInPriceRange, isScratch, specFor } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
-import { buildHindsight, laterTouchLabel } from "@/lib/hindsight";
+import { buildHindsight } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
 type LWC = typeof import("lightweight-charts");
@@ -213,7 +213,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       const scratch = isScratch(tr);
       const showContinuation = p.detailLevel !== "low";
       const fact = showContinuation ? buildHindsight(tr, bars) : null;
-      const laterTouches = [fact?.target, fact?.stop].flatMap((touch) => touch ? [{ time: toTime(touch.time), kind: touch.kind, label: laterTouchLabel(touch) }] : []);
+      const laterTouches = [fact?.target, fact?.stop].flatMap((touch) => touch ? [{ time: toTime(touch.time), kind: touch.kind }] : []);
       const config: PositionBoxConfig = {
         entryTime: toTime(alignment.entryBar), exitTime: toTime(alignment.exitBar),
         entryPrice: tr.entry_price, exitPrice: tr.exit_price,
@@ -225,8 +225,6 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         approximate: alignment.approximate,
         showContinuation,
         extendBackward: l.extraBefore > 0,
-        continuationEntryColor: t.boxActual,
-        continuationPlanColor: t.boxPlanned,
         laterTouches,
       };
       l.primitive.update(config);
