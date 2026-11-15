@@ -7,6 +7,13 @@ export const metadata: Metadata = {
   description: "Chart-first futures trade review.",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "MogMine", statusBarStyle: "black-translucent" },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 // Page zoom stays enabled: it is an accessibility feature (UX-44).

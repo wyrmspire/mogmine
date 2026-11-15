@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { AddTradeSheet } from "./AddTradeSheet";
+import { HomeScreenHint } from "./HomeScreenHint";
 import { hydratePrefs, setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { hydrateJournal, useJournal } from "@/lib/store";
@@ -55,6 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <button type="button" className="icon-button" onClick={openAddTrade} aria-label="Add trade">＋</button>
       </header>
 
+      <HomeScreenHint />
       {!online && <div className="banner warn" role="status">You are offline. Trades and notes on this device stay readable; new market data waits.</div>}
 
       <main id="main-content" tabIndex={-1}>{children}</main>

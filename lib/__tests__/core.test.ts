@@ -15,6 +15,7 @@ import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
 import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, excursions, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
+import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
 
 const base = { id: "t", entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z" };
@@ -432,4 +433,19 @@ test("parseBackupFile accepts legacy raw trade arrays, strips inline candles, an
   assert.equal(parseBackupFile(JSON.stringify({ app: "other", trades: [] })).ok, false);
   assert.equal(parseBackupFile(JSON.stringify({ app: "mogmine", trades: [] })).ok, false);
   assert.equal(parseBackupFile(JSON.stringify({ app: "mogmine", trades: [{ id: "bad-trade" }] })).ok, false);
+});
+
+test("home-screen hint only appears once in an uninstalled iOS browser", () => {
+  const ios = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1";
+  const ipadDesktop = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15";
+  assert.equal(isIosDevice(ios, 5), true);
+  assert.equal(isIosDevice(ipadDesktop, 5), true);
+  assert.equal(isIosDevice(ipadDesktop, 0), false);
+
+  const environment = { userAgent: ios, maxTouchPoints: 5, navigatorStandalone: false, displayModeStandalone: false, seen: false };
+  assert.equal(shouldShowHomeScreenHint(environment), true);
+  assert.equal(shouldShowHomeScreenHint({ ...environment, seen: true }), false);
+  assert.equal(shouldShowHomeScreenHint({ ...environment, navigatorStandalone: true }), false);
+  assert.equal(shouldShowHomeScreenHint({ ...environment, displayModeStandalone: true }), false);
+  assert.equal(shouldShowHomeScreenHint({ ...environment, userAgent: "Mozilla/5.0 (Linux; Android 15)" }), false);
 });
