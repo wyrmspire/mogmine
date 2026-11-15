@@ -5,7 +5,7 @@ import { Sparkline } from "./Sparkline";
 import { formatDuration, formatMoney, formatPoints, formatR } from "@/lib/format";
 import { playbookName } from "@/lib/playbooks";
 import { formatListTime } from "@/lib/time";
-import { STYLE_LABEL, adherence, holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { adherence, holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
 
 interface Props {
@@ -44,7 +44,7 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
           {trade.flagged && <span className="status-mark reviewed" title="Flagged">⚑</span>}
           {trade.review_status === "reviewed" && <span className="status-mark reviewed" title="Reviewed">✓</span>}
         </span>
-        <span className="row-meta">{STYLE_LABEL[trade.trade_style]} · {formatListTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}</span>
+        <span className="row-meta">{formatListTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}</span>
         <span className={`row-context ${info.todo ? "todo" : ""}`}>{info.text}</span>
       </span>
       <Sparkline points={trade.sparkline} />

@@ -158,15 +158,12 @@ export function classifyTrade(entry: string, exit: string): TradeStyle {
   return "investment";
 }
 
-export function defaultTimeframe(style: TradeStyle): Timeframe {
-  return style === "scalp" ? "1m" : style === "session_90m" ? "5m" : "1h";
+export function defaultTimeframe(holdDurationSeconds: number): Timeframe {
+  if (holdDurationSeconds <= 40 * 60) return "1m";
+  if (holdDurationSeconds <= 3 * 60 * 60) return "5m";
+  if (holdDurationSeconds <= 10 * 60 * 60) return "15m";
+  return "1h";
 }
-
-export const STYLE_LABEL: Record<TradeStyle, string> = {
-  scalp: "Scalp",
-  session_90m: "90m session",
-  investment: "Extended",
-};
 
 export function aggregateCandles(candles: Candle[], timeframe: Timeframe): Candle[] {
   const minutes = TIMEFRAME_MINUTES[timeframe];
@@ -205,11 +202,10 @@ export function snapToBar(times: number[], instant: number, timeframe: Timeframe
   return Math.abs(before - open) <= Math.abs(after - open) ? before : after;
 }
 
-/** Minutes of context shown before the entry and after the exit when the chart fits the trade. */
-export function fitPadding(style: TradeStyle) {
-  if (style === "scalp") return { before: 35, after: 20 };
-  if (style === "session_90m") return { before: 90, after: 30 };
-  return { before: 480, after: 240 };
+/** Duration-derived context in minutes. Replaced by the fitted-window helper in Phase 4 issue #10. */
+export function fitPadding(holdDurationSeconds: number) {
+  const holdMinutes = Math.max(1 / 60, holdDurationSeconds / 60);
+  return { before: holdMinutes * 0.6, after: holdMinutes * 0.4 };
 }
 
 export interface Excursions {
@@ -240,7 +236,7 @@ export function excursions(trade: Pick<TradeRecord, "direction" | "entry_time" |
 }
 
 /** ~`points` closes from just before the entry to just after the exit. */
-export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_time" | "trade_style">, candles: Candle[], points = 40) {
+export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_time">, candles: Candle[], points = 40) {
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
   const pad = Math.max(10 * 60_000, (exit - entry) * 0.6);

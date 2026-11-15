@@ -36,8 +36,8 @@ Claim a lane before starting. Clear the claim when you stop.
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
 | Core math | — | | |
-| Chart | agent (Claude Code) | 2026-11-14 | Paused on `ui/phased-improvements`, waiting for approval of docs/14 Phase 4 |
-| App shell and notes | agent (Claude Code) | 2026-11-14 | Same branch. Phases 1–3 committed locally |
+| Chart | agent (Codex) | 2026-11-14 | Phase 4 issue chain on `feat/phase4-chart-windows` |
+| App shell and notes | agent (Codex) | 2026-11-14 | Phase 4 labels, filters and no-data state |
 | Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |

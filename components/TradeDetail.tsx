@@ -18,7 +18,7 @@ import { buildShareCard } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { STYLE_LABEL, TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
 
@@ -57,7 +57,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const zone = prefs.timeZone;
   const [chosen, setChosen] = useState<Timeframe>(() => {
     const fromUrl = searchParams.get("tf") as Timeframe | null;
-    return fromUrl && TIMEFRAMES.includes(fromUrl) ? fromUrl : defaultTimeframe(trade.trade_style);
+    return fromUrl && TIMEFRAMES.includes(fromUrl) ? fromUrl : defaultTimeframe(holdSeconds(trade));
   });
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [fitted, setFitted] = useState(true);
@@ -178,7 +178,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div className="title-line">
               <h1>{trade.symbol}</h1>
               <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}>{trade.direction === "LONG" ? "▲ LONG" : "▼ SHORT"}</span>
-              <span className="style-pill">{STYLE_LABEL[trade.trade_style]}</span>
               {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
             </div>
             <p className="when">{formatSessionDate(sessionDate(trade.entry_time))} · {formatDetailTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}{prefs.shield ? "" : ` · ${trade.quantity}×`}</p>

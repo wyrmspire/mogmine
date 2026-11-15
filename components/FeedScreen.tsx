@@ -5,16 +5,10 @@ import { DayHeader } from "./DayHeader";
 import { TradeRow } from "./TradeRow";
 import { usePrefs } from "@/lib/prefs";
 import { applyFilters, describeFilters, filtersToQuery, groupByDay, parseFilters, withSamples } from "@/lib/selectors";
-import type { FeedFilters, StatusFilter, StyleFilter } from "@/lib/selectors";
+import type { FeedFilters, StatusFilter } from "@/lib/selectors";
 import { useJournal } from "@/lib/store";
 import { openAddTrade, rememberList } from "@/lib/ui";
 
-const STYLE_PILLS: Array<{ value: StyleFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "scalp", label: "Scalps" },
-  { value: "session_90m", label: "90m" },
-  { value: "investment", label: "Extended" },
-];
 const STATUS_PILLS: Array<{ value: StatusFilter; label: string }> = [
   { value: "unreviewed", label: "Needs review" },
   { value: "flagged", label: "⚑ Flagged" },
@@ -33,7 +27,7 @@ export function FeedScreen() {
   const all = withSamples(journal.trades, prefs.showSamples);
   const shown = applyFilters(all, filters);
   const groups = groupByDay(shown);
-  const filtered = filters.style !== "all" || filters.status !== "all";
+  const filtered = filters.status !== "all";
   const count = (patch: Partial<FeedFilters>) => applyFilters(all, { ...filters, ...patch }).length;
   const open = () => rememberList({ ids: shown.map((trade) => trade.id), label: describeFilters(filters), href: `/feed${filtersToQuery(filters)}` });
 
@@ -42,12 +36,6 @@ export function FeedScreen() {
       <div className="page-head"><div><span className="eyebrow">Feed</span><h1>Every trading day</h1></div></div>
 
       <div className="filter-bar" role="group" aria-label="Filters">
-        {STYLE_PILLS.map((pill) => (
-          <button key={pill.value} className="pill" aria-pressed={filters.style === pill.value} onClick={() => setFilters({ style: pill.value })}>
-            {pill.label}{journal.hydrated && <span className="count">{count({ style: pill.value })}</span>}
-          </button>
-        ))}
-        <span className="filter-sep" aria-hidden="true" />
         {STATUS_PILLS.map((pill) => (
           <button key={pill.value} className="pill" aria-pressed={filters.status === pill.value} onClick={() => setFilters({ status: filters.status === pill.value ? "all" : pill.value })}>
             {pill.label}{journal.hydrated && <span className="count">{count({ status: pill.value })}</span>}
@@ -63,7 +51,7 @@ export function FeedScreen() {
             <>
               <h3>Nothing matches “{describeFilters(filters)}”</h3>
               <p>{filters.status === "unreviewed" ? "Every trade in this view is reviewed." : "No trades fit these filters yet."}</p>
-              <div className="actions"><button className="btn-secondary" onClick={() => setFilters({ style: "all", status: "all" })}>Clear filters</button></div>
+              <div className="actions"><button className="btn-secondary" onClick={() => setFilters({ status: "all" })}>Clear filters</button></div>
             </>
           ) : (
             <>

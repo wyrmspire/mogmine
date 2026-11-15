@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
+import { applyFilters, filtersToQuery, parseFilters } from "../selectors.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
 import { adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
@@ -47,6 +48,17 @@ test("classification compares seconds, not rounded minutes", () => {
   assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T15:14:40Z"), "scalp");
   assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T15:15:00Z"), "session_90m");
   assert.equal(classifyTrade("2026-11-10T15:00:00Z", "2026-11-10T17:00:01Z"), "investment");
+});
+
+test("feed ignores the removed style query and filters only by review status", () => {
+  const params = new URLSearchParams("style=scalp&status=unreviewed");
+  const filters = parseFilters(params);
+  assert.deepEqual(filters, { status: "unreviewed" });
+  assert.equal(filtersToQuery(filters), "?status=unreviewed");
+
+  const scalp = normalizeTrade({ ...base, id: "scalp", symbol: "MES", direction: "LONG", entry_price: 1, exit_price: 2 });
+  const longer = normalizeTrade({ ...base, id: "longer", symbol: "MES", direction: "LONG", entry_price: 1, exit_price: 2, entry_time: "2026-11-10T15:00:00Z", exit_time: "2026-11-10T16:30:00Z" });
+  assert.deepEqual(applyFilters([scalp, longer], filters).map((trade) => trade.id), ["scalp", "longer"]);
 });
 
 test("formatting follows docs/08 §13", () => {

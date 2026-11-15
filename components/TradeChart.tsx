@@ -9,7 +9,7 @@ import { formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, excursions, fitPadding, rMultiple, snapToBar, specFor, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, aggregateCandles, excursions, fitPadding, holdSeconds, rMultiple, snapToBar, specFor, tradePnl, tradePoints } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 type LWC = typeof import("lightweight-charts");
@@ -151,7 +151,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
 
     // The fitted view: the trade with its context, never fewer than a readable number of bars.
     const minutes = TIMEFRAME_MINUTES[barTimeframe];
-    const pad = fitPadding(tr.trade_style);
+    const pad = fitPadding(holdSeconds(tr));
     const entryIndex = times.indexOf(entryBar);
     const exitIndex = times.indexOf(exitBar);
     l.fitRange = { from: entryIndex - Math.max(18, Math.ceil(pad.before / minutes)) - 0.5, to: exitIndex + Math.max(10, Math.ceil(pad.after / minutes)) + 2.5 };
