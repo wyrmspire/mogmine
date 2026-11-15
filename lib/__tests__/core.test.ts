@@ -2,8 +2,10 @@
 // Run with `npm test` (Node's built-in runner; no extra dependencies).
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { describeTrade } from "../describe.ts";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
+import { shareCardFileName } from "../shareCard.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
 import { adherence, aggregateCandles, classifyTrade, deriveReviewStatus, excursions, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
@@ -122,4 +124,17 @@ test("process read: rules and violation tags decide, never the outcome", () => {
   assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Level Sweep"] }), "clean");
   assert.equal(processRead({ checklist_state: [rule(true), rule(false)], quick_tags: [] }), "broken");
   assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Revenge"] }), "broken");
+});
+
+test("Shield / privacy mode omits dollars and contract size in descriptions and share file names (UX-64, UX-72)", () => {
+  const trade = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 3, entry_price: 6844.25, exit_price: 6849, stop_loss_price: 6841.25 });
+  const open = describeTrade(trade, "America/Chicago", false);
+  const shielded = describeTrade(trade, "America/Chicago", true);
+  assert.match(open, /3 contracts/);
+  assert.doesNotMatch(shielded, /contract|3×|\$|usd/i);
+  assert.match(shielded, /plus 1\.6 R/);
+
+  const fileName = shareCardFileName(trade);
+  assert.equal(fileName, "mes-long-2026-11-10-trade-card.png");
+  assert.doesNotMatch(fileName, /\$|usd|3|contract|71\.25/i);
 });

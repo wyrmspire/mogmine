@@ -14,7 +14,7 @@ import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR
 import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
-import { buildShareCard } from "@/lib/shareCard";
+import { buildShareCard, shareCardFileName } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -94,7 +94,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const shareCard = useCallback(async () => {
     if (!shareBlob) return;
-    const file = new File([shareBlob], `${trade.symbol}-trade-card.png`, { type: "image/png" });
+    const file = new File([shareBlob], shareCardFileName(trade), { type: "image/png" });
     try {
       if (navigator.share && navigator.canShare?.({ files: [file] })) await navigator.share({ title: `${trade.symbol} trade review`, files: [file] });
       else {
@@ -105,7 +105,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         showToast("Trade card downloaded");
       }
     } catch (error) { if ((error as DOMException).name !== "AbortError") showToast("Share failed"); }
-  }, [shareBlob, trade.symbol]);
+  }, [shareBlob, trade]);
 
   // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card. X (hold for X-Ray) lives in the chart.
   useEffect(() => {
@@ -228,7 +228,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div title="Worst price against you during the hold, estimated from bars"><small>HEAT (MAE)</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
             <div title="Best price in your favour during the hold, estimated from bars"><small>BEST (MFE)</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
           </div>
-          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} />}
+          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
         </div>
 
         <div className="detail-actions">

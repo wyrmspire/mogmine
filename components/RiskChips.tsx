@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatPrice } from "@/lib/format";
+import { usePrefs } from "@/lib/prefs";
 import { updateTrade } from "@/lib/store";
 import { showToast } from "@/lib/toast";
 import { snapToTick, specFor } from "@/lib/trades";
@@ -11,7 +12,9 @@ import type { TradeRecord } from "@/lib/trades";
  * Risk in one tap when no stop was recorded (UX-36). The chips come from the trader's risk budget
  * and this trade's size (docs/12 LV-17), not from fixed point distances.
  */
-export function RiskChips({ trade, budgetUsd }: { trade: TradeRecord; budgetUsd: number }) {
+export function RiskChips({ trade, budgetUsd, shield }: { trade: TradeRecord; budgetUsd: number; shield?: boolean }) {
+  const prefs = usePrefs();
+  const hideMoney = shield ?? prefs.shield;
   const [custom, setCustom] = useState("");
   const spec = specFor(trade.symbol);
   const sign = trade.direction === "LONG" ? 1 : -1;
@@ -34,7 +37,7 @@ export function RiskChips({ trade, budgetUsd }: { trade: TradeRecord; budgetUsd:
       <div className="chip-row">
         {options.map((option) => (
           <button key={option.usd} className="chip" onClick={() => setStop(option.price)}>
-            <span className="num">{option.points.toFixed(2)} pts</span><small className="shield-hide">${option.usd}</small>
+            <span className="num">{option.points.toFixed(2)} pts</span>{!hideMoney && <small className="shield-hide">${option.usd}</small>}
           </button>
         ))}
       </div>
