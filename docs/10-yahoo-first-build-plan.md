@@ -140,14 +140,39 @@ What to change:
 
 | Milestone | Build | Done when |
 | :--- | :--- | :--- |
-| **M0 — Archive** | Supabase with RLS, `market_candles`, the archiver, the backfill | Every session of the last 30 days is stored and the job has run unattended for three days |
-| **M1 — One trade on one chart** | Deployed app, chart from the archive with derived timeframes and an ET axis, manual entry, the test-trade tool, P&L in ticks, the Position Box with snapping, Fit | A test trade placed from a phone on yesterday's session draws correctly at `1m`, `5m` and `15m` |
+| **M0 — Archive** | Supabase with RLS, `market_candles`, the archiver, the backfill | Every session of the last 30 days is stored, the job has run unattended for three days, and AC-01 – AC-05 below hold |
+| **M1 — One trade on one chart** | Deployed app, chart from the archive with derived timeframes and an ET axis, manual entry, the test-trade tool, P&L in ticks, the Position Box with snapping, Fit | A test trade placed from a phone on yesterday's session draws correctly at `1m`, `5m` and `15m`, and AC-06 – AC-11 below hold, with AC-11 checked on a real phone |
 | **M2 — Feed and notes** | Today and Feed with their states, the Pit Stop, review status, Shield mode | It has been used for two weeks on trades entered by hand |
 | **M3 — Context** | Point-in-time session levels, the companion pane, a Trade Card in one aspect ratio | The trader can explain a trade from the screen alone |
 | **M4 — AI** | Voice or text to suggested tags, then a data-only review | The reviews are judged useful on twenty real trades |
 | **M5 — Broker** | Pull sync, ProjectX bars, stops from orders | Trades arrive without typing |
 
-Risk items that matter for M0 and M1, and nothing else yet: B-40, B-11, B-13, B-20, B-22, B-23, B-30, B-31, B-42.
+Risk items that matter for M0 and M1, and nothing else yet: B-40, B-11, B-13, B-20, B-22, B-23, B-30, B-31, B-42, and, since the first frontend already fetches per trade, B-10, B-47 and B-61.
+
+### Acceptance criteria for M0 and M1
+
+Added from the owner's review of the first frontend (2026-11-14). A milestone is not done until its criteria hold. **Highest priority: coverage tracking (AC-03, AC-06, AC-07), safe writes (AC-08) and recovery testing (AC-05).** Code references are to `main` at `d93583f`.
+
+**M0 — Archive**
+
+| ID | Criterion | How it is checked |
+| :--- | :--- | :--- |
+| **AC-01** | **Repeatable upserts.** One row per symbol, interval and session (a unique key), written with an upsert. Running the same job twice for the same window changes nothing. | Run a job, record row counts and a checksum per session, run it again. No new rows, no changed values. |
+| **AC-02** | **Bounded backfill.** The backfill runs in batches no wider than Yahoo accepts (8 days of `1m`, §2). Each batch is recorded. A failed batch is retried on its own and does not restart or abort the others. | Kill the backfill halfway and start it again. It resumes at the first unfinished batch. |
+| **AC-03** | **Coverage per symbol and session.** For each symbol and session, store expected bars (from the session calendar, B-21), received bars, missing ranges, and a status: `complete`, `partial`, `missing` or `closed`. An empty weekend response is `closed`, not `missing` (§2). | A session with a known gap shows `partial` and lists the gap. |
+| **AC-04** | **Retries and a visible failure.** Network errors, `429` and `5xx` are retried with backoff a bounded number of times. `422` is never retried (§2). Every run writes a status row (started, finished, result per symbol, last error). A failed run shows on the Tune screen at once, not only after the three-day rule in §3. | Point the job at a bad host. The failure shows on Tune with its error. |
+| **AC-05** | **Recovery is tested before the archive is called complete.** (a) Rerun yesterday's job: AC-01 holds. (b) Skip one scheduled run, or delete one stored session: the next run refills it from the 8-day overlap and its coverage becomes `complete`. (c) Force one run to fail: the status shows it, and the next run recovers without manual steps. | Results of (a)–(c) are written in the PR. |
+
+**M1 — One trade on one chart**
+
+| ID | Criterion | Found in the current code |
+| :--- | :--- | :--- |
+| **AC-06** | **A partial download is never final.** Each trade stores the range its candles cover and a `candles_status` (B-10). The required window is the trade's chart window: pre-entry padding, the hold, post-exit padding. Until it is covered, the app fetches again when the trade is opened or the app regains focus. `candle_source` says where bars came from, never that they are complete. Once the archive exists, coverage comes from AC-03. | Any trade with `candle_source: "Yahoo Finance"` is never fetched again (`components/TradeJournal.tsx:143`). A failed fetch is also not retried until reload (`:111`, `:144`). A trade logged just after its exit keeps a window with no post-exit bars. |
+| **AC-07** | **Coverage is checked, not counted.** A response is accepted for what it covers: the entry bar, the exit bar and the padding either side. Missing bars inside the window are drawn as gaps and counted on screen ([08 §4](08-ux-notes-viewing-and-journaling.md#trade-detail)). A higher-timeframe candle built from fewer `1m` bars than its bucket holds is marked incomplete. A real trade never shows fixture candles as its chart; with no data it shows the "No candles" state. | The fetch accepts any 4 bars (`components/TradeJournal.tsx:153`). `visibleWindow` falls back to all bars when fewer than 4 are in the window (`lib/trades.ts:105`). `aggregateCandles` does not count the bars in a bucket (`lib/trades.ts:79-96`). Manual trades start on generated candles (`components/TradeJournal.tsx:233`) and keep them if Yahoo fails (`:157`). |
+| **AC-08** | **Safe writes.** The Supabase move uses stable record ids, one write per trade or note (column-scoped, B-47), a version or `updated_at` check that refuses a stale overwrite, and an idempotency key so a retried write never duplicates. The on-device cache never overwrites newer server rows. | Every change saves the whole trade array to one `localStorage` key (`components/TradeJournal.tsx:130-138`). Storage is read once at load (`:113-128`) and nothing listens for changes from another tab, so the last tab to save wins. Trade ids are already UUIDs (`:224`). |
+| **AC-09** | **Gross P&L and valid prices.** Prices off the contract's tick increment are rejected or flagged at entry. P&L and R use the same tick-rounded prices. Every P&L figure is labelled gross until a fee field exists (B-32, B-34, `OD-10`). Unknown symbols are rejected, not priced at a default. | Price inputs take any value (`step="any"`, `components/TradeJournal.tsx:303-308`). P&L rounds to ticks (`lib/trades.ts:63-69`), R uses raw prices (`lib/trades.ts:71-77`). `TradeRecord` has no fee field (`lib/trades.ts:14-33`). The stats tile sums gross P&L under the label "Net" (`components/TradeJournal.tsx:254`). Unknown symbols fall back to a 0.01 tick and $1 a point (`lib/trades.ts:60`, `:64`). |
+| **AC-10** | **The Trade Card shows what is on screen.** The card preview is built from the current trade and the current visible range and timeframe. It is rebuilt after pan or zoom settles, after Fit, after a timeframe change and after a trade switch, still before the tap (UX-70). Share always has a card; tapping the active timeframe never leaves it empty. | The screenshot is taken once, 220 ms after the chart is created (`components/TradeChart.tsx:92`). The chart effect reruns only on trade or timeframe change (`:98`), so pan and zoom never reach the card. Every timeframe tap clears the card (`components/TradeJournal.tsx:273`); tapping the active one changes no state, so no new card is made and Share stays on "Preparing card…" (`:279`). |
+| **AC-11** | **Checked end to end on a real phone.** On the deployed build, on a phone (iOS Safari, and the installed PWA if used): log a manual trade, write a note, reload and close the app (both survive); pan, pinch and a vertical swipe on the chart (UX-41); switch timeframes and Fit; share through the native sheet and copy the image, and the card matches the screen. Record device, OS, browser and deployed commit in the PR. | A successful build and a Yahoo API response prove the server only. Phone persistence, gestures and native sharing have not been checked (see [NOTES.md](../NOTES.md#handoff-log)). |
 
 ### Parked until proven needed
 

@@ -85,6 +85,7 @@ Every screen is specified for more than the happy path. If a state is not in thi
 | :--- | :--- |
 | Candles loading | Header numbers at once (they come from the trade row). A chart skeleton at final height so nothing jumps. |
 | Post-exit candles not yet available (B-10) | The chart and box as normal. The area after the exit is marked "Post-exit candles arrive ~10:55 ET". The Ghost toggle is disabled and says why. |
+| Bars missing inside the window (B-11, `AC-07`) | Gaps drawn as gaps, never bridged, with a line: "6 bars missing 09:41–09:46". A higher-timeframe candle built from missing minutes is marked incomplete. |
 | A timeframe was never captured (B-11) | The best available timeframe, with a line: "1m data was not captured for this trade — showing 15m". |
 | No candles at all | A price ladder instead of a blank chart: entry, exit and stop on a price axis, plus the fills table. |
 | Chart data may not line up (B-12) | A small amber chip: "Candles are from the ES continuous contract. Your fills may sit slightly off the bars." |
@@ -324,5 +325,7 @@ Before a UI task is marked complete:
 - [ ] Shield mode hides every dollar amount on the screen, including inside the chart (UX-64, UX-71).
 - [ ] The screen works with red/green removed (UX-80) and with reduced motion on (UX-83).
 - [ ] At 1280 px wide the layout uses the space (UX-68).
+- [ ] The Trade Card preview matches the chart after pan, zoom, Fit and a timeframe change ([10 `AC-10`](10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1)).
+- [ ] Persistence, gestures and the native share sheet were checked on a real phone, with device and commit in the PR ([10 `AC-11`](10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1)). A build or an API response is not this check.
 
 Proposed additions for daily plans, anchored comments, detail/full-chart controls, indicator coverage and external assistants are in [11 — Mobile Workflows, Chart Context & Assistant API](11-product-workflows-and-api-context.md). Its §6 extends the state matrix and §7 supplies review scenarios; scope remains open under `OD-17`–`OD-19`.

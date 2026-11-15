@@ -12,6 +12,8 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 ## Current state (2026-11-15)
 
 - **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use Yahoo Finance 1m candles when available and deterministic fixture candles offline.
+- **Which build is where.** `mogmine.vercel.app` served a bundle containing `America/Chicago` (`lib/time.ts`) at 21:28 CT on 2026-11-14, so it is serving `main` at or after PR #2 (CT). The Vercel preview for branch `app/first-trade-review` (`aaed7af`) predates PR #2 and still shows ET. Vercel reports successful builds for both heads. Which branch Vercel calls Production was not read from Vercel's settings: unverified.
+- **Phone behaviour is not verified.** Builds and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08` (UX notes), `docs/09` (backend risk register), `docs/10` (Yahoo-first build plan), `docs/11` (mobile workflow and assistant API proposals), `docs/12` (levels, zones and the daily markup), `docs/13` (bold UI bets).
 - 23 entries under Open in [DECISIONS.md](DECISIONS.md); `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals; they do not expand approved scope.
@@ -20,6 +22,8 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - The development machine had neither Node nor Python installed on 2026-11-14. Node is needed before anything can be scaffolded.
 
 ## Next up
+
+M0 and M1 are done only when their acceptance criteria hold: `AC-01` – `AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1).
 
 1. **Start the candle archive** ([docs/10 §3](docs/10-yahoo-first-build-plan.md#3-start-the-candle-archive-first)). It is the only task that loses data by waiting: `1m` bars older than 30 days cannot be fetched.
 2. Owner decides `OD-16` (build order) and `OD-2` (auth and RLS from the first migration).
@@ -44,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-14 (late evening CT) — agent (Grok Bot) — M0/M1 acceptance from owner review
+Did:      Added `AC-01`–`AC-11` to `docs/10` §7 (M0: repeatable upserts, bounded backfill, coverage per symbol/session, retries and visible failure, recovery test; M1: per-trade coverage and refresh, gaps and incomplete candles, safe writes, gross P&L and tick validation, Trade Card follows the view, phone E2E). Linked them from the M0/M1 rows, `docs/09` (B-10, B-47, B-61, M0/M1 list) and `docs/08` (§4 state row, §16 checklist). Annotated the 2026-11-15 Codex entry.
+Verified: Each finding read in code on `main` `d93583f`; file:line references are in the AC table. Markdown relative-link check: 0 broken. Docs only, no code changed.
+Left:     Nothing is built. Priority: coverage (AC-03, AC-06, AC-07), safe writes (AC-08), recovery test (AC-05). Vercel's Production branch setting is unverified (see Current state).
+Watch:    The deployed `app/first-trade-review` preview still shows ET; `main` and `mogmine.vercel.app` show CT.
+
 ### 2026-11-14 (evening CT) — agent (Grok Bot) — levels docs + CT display
 Did:      Ported `docs/11`–`13`, `fixtures/levelsets/MES-2026-11-12.json` and their pointer edits from the pre-PR#1 snapshot (base `7c3d8fa`). Added `lib/time.ts`; `TradeJournal`/`TradeChart` show CT (list, header, Trade Card, axis, crosshair); manual entry reads typed times as CT.
 Verified: `npx tsc --noEmit` and `npm run build` pass. `npm run lint`: the same 7 errors as `main` (refs/setState in `TradeJournal`), none new. CT parse/format checked across both DST switches with the device set to Tokyo. Markdown link check: 0 broken.
@@ -53,6 +63,7 @@ Watch:    The display zone is a constant, not yet the UX-86 preference. Day tick
 ### 2026-11-15 — agent (Codex Work) — Market data + demo set
 Did:      Added a server-side Yahoo Finance adapter/API, ten seeded MES/MNQ trades, existing-storage migration, source labels and offline fixture fallback.
 Verified: Vercel build READY at commit e4a5857; production page returned 200 with 10 trades; Yahoo route returned 1,810 NQ=F candles; runtime error scan was clean.
+Correction (2026-11-14, owner review): "Verified" above covers server function only (build, page load, Yahoo route). Phone persistence, gestures and native sharing were not checked on a phone and still need an end-to-end check (`docs/10` `AC-11`).
 Left:     Yahoo candles are fetched per opened trade and cached only on-device. The Supabase daily archive from M0 is still pending.
 Watch:    Yahoo may throttle hosted requests, so every trade retains its complete fixture chart.
 
