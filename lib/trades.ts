@@ -9,7 +9,8 @@ export type CandleSource = "Yahoo Finance";
 
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 export const TIMEFRAME_MINUTES: Record<Timeframe, number> = { "1m": 1, "5m": 5, "15m": 15, "1h": 60 };
-export const MIN_FITTED_BARS = 30;
+/** Fewest bars a fitted trade window shows (owner, 2026-11-15: raised from 30). */
+export const MIN_FITTED_BARS = 45;
 
 export interface Candle {
   /** Bar open time, UTC milliseconds. */

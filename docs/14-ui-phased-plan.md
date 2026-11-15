@@ -60,13 +60,13 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 **Owner-approved rule:**
 
 1. **Window from duration.** Fitted span = hold time × about 2: the trade takes roughly **half the plot width**, with more room before the entry than after the exit (about 30 % before, 20 % after). A 90-minute trade then shows about three hours, as in the note.
-2. **A floor in bars, not minutes.** Never fewer than about 30 bars on screen, so a 40-second trade still has candles around it. This is the only fixed number.
+2. **A floor in bars, not minutes.** Never fewer than 45 bars on screen (raised from about 30 by the owner on 2026-11-15), so a 40-second trade still has candles around it. This is the only fixed number.
 3. **Default timeframe from duration,** picked so the trade spans a readable 8–40 bars: 1m up to about 40 minutes, 5m up to about 3 hours, 15m up to about 10 hours, then 1h.
 4. **Timeframes show different context.** Choosing a timeframe keeps a similar number of bars on screen, not the same clock time. On 1m the trade fills the view. On 15m the same trade is a narrow box inside most of the session.
 5. **Remove the category from the interface:** the "Scalp / 90m session / Extended" pill on the trade header, the same words on list rows and the review queue, and the Scalps / 90m / Extended filter pills on the Feed (and `?style=` in the URL).
 6. **Tests:** golden cases for 40 s, 5 min, 16 min, 90 min and 4 h holds, asserting the share of the plot the box takes and the default timeframe.
 
-**Done when:** at 390 × 844, duration-sized sample trades open with their box between about 35 % and 60 % of the plot width, and switching 1m → 15m visibly widens the context. The approved 30-bar floor necessarily makes the 2-, 5- and 7-minute fixtures narrower (recorded as `OD-27`); the box must not be stretched beyond its true timestamps to meet a percentage target. Screenshots of a tight short-duration trade and a 90-minute trade go in the handoff.
+**Done when:** at 390 × 844, duration-sized sample trades open with their box between about 35 % and 60 % of the plot width, and switching 1m → 15m visibly widens the context. The approved 45-bar floor necessarily makes short fixtures narrower (recorded as `OD-27`); the box must not be stretched beyond its true timestamps to meet a percentage target. Screenshots of a tight short-duration trade and a 90-minute trade go in the handoff.
 
 **Spec changes this needs** (same commit, per `AGENTS.md` §5): [02 §3](02-charting-position-boxes-and-divergence.md#3-automatic-trade-classification-scalp-vs-90-min-vs-investment), [07 Recipe 3](07-agent-guardrails-and-smart-notes.md), the wireframe in 05 §1, the "Scalp window" rows of the drift register. Tracked as `OD-24`.
 
@@ -91,7 +91,7 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 
 | # | Question | My recommendation |
 | :--- | :--- | :--- |
-| Q1 | **Resolved by the owner:** trade ≈ half the plot width, with a floor of about 30 bars. | Implemented in Phase 4 issues #10–#12. |
+| Q1 | **Resolved by the owner:** trade ≈ half the plot width, with a floor of about 30 bars (raised to 45 on 2026-11-15). | Implemented in Phase 4 issues #10–#12. |
 | Q2 | With the session-length category gone from the screen, should the stored `trade_style` field go too? docs/04 §2 uses it to pick the AI coaching lens, and docs/06 has the column. | Stop showing it and stop using it for windows now. Leave the field until the AI work decides whether it needs a duration bucket (`OD-24`). |
 | Q3 | Blind review (BET-03) was built in Phase 3 as an off-by-default switch on `/review`. Bets in docs/13 are not approved scope. Keep, or remove? | Keep it off by default and try it on last week's trades. It is about 40 lines to remove (`OD-25`). |
 | Q4 | Playbooks, tags and the four checklist rules are fixed defaults in `lib/playbooks.ts`, taken from the docs/03 examples. There is no editor. Are those your setups? | Send your real playbooks and rules. An editor can wait for the database (`OD-26`). |

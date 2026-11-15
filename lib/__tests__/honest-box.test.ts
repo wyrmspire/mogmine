@@ -1,7 +1,9 @@
 // Golden tests for honest excursion math (#30) and the box display helpers (#31).
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { formatR } from "../format.ts";
+import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { demoTrades } from "../fixtures.ts";
 import { exitFlagReason, excursions, isScratch, mergeAxisTags, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
@@ -87,13 +89,14 @@ test("a one-bar trade and a hold with fewer than two complete bars show no excur
 });
 
 test("scalp from the review screenshot: never-in-profit long does not report the entry bar high as MFE", () => {
-  // mnq-late-chase, as reviewed: long filled at the close of a red bar whose high was +11.50.
-  const trade = demoTrades.find((item) => item.id === "mnq-late-chase");
-  assert.ok(trade);
-  const entry = Date.parse(trade.entry_time);
-  const exit = Date.parse(trade.exit_time);
-  assert.equal(trade.entry_price, 27875.25);
-  assert.equal(trade.exit_price, 27820);
+  // The trade from the review screenshot: long filled at the close of a red bar whose high was +11.50.
+  const entry = Date.parse("2026-11-09T16:26:00.000Z");
+  const exit = entry + 10 * minute;
+  const trade = normalizeTrade({
+    id: "review-scalp", symbol: "MNQ", direction: "LONG",
+    entry_time: new Date(entry).toISOString(), exit_time: new Date(exit).toISOString(),
+    entry_price: 27875.25, exit_price: 27820, stop_loss_price: 27820,
+  });
 
   const candles: Candle[] = [];
   // Entry bar: red, close = fill, high = fill + 11.50. This was the misleading MFE.
@@ -147,10 +150,11 @@ test("planned R, exit flag reason and merged axis tags", () => {
 
   const scalpPlan = plannedR(scalp);
   assert.ok(scalpPlan != null);
-  assert.equal(formatR(scalpPlan), "+0.2R");
+  assert.equal(formatR(scalpPlan), "+2.0R");
+  assert.equal(formatR(plannedR(winner)!), "+3.0R");
   assert.equal(exitFlagReason(scalp), "SL");
   assert.equal(exitFlagReason(winner), "TP");
-  assert.equal(exitFlagReason({ ...scalp, exit_price: 27850 }), null);
+  assert.equal(exitFlagReason({ ...scalp, exit_price: 27870 }), null);
 
   const tags = mergeAxisTags([
     { price: 27820, title: "SL", color: "red" },
@@ -167,4 +171,73 @@ test("planned R, exit flag reason and merged axis tags", () => {
   assert.equal(byTitle.IN.price, 27875.25);
   assert.equal(byTitle.KEY.lineVisible, true);
   assert.equal(tags.length, 4);
+});
+
+// ---- Sample trades: plan fixed at entry, outcome walked from real Yahoo 1m bars ----
+
+const sampleBars = JSON.parse(readFileSync(new URL("../../fixtures/sample-bars.json", import.meta.url), "utf8")) as {
+  bars: Record<string, [number, number, number, number, number][]>;
+};
+const POINT_VALUE: Record<string, number> = { MES: 5, MNQ: 2 };
+const TICK = 0.25;
+
+function barsFor(id: string): Candle[] {
+  return (sampleBars.bars[id] ?? []).map(([time, open, high, low, close]) => bar(time, open, high, low, close));
+}
+
+test("every sample trade has a realistic plan fixed at entry", () => {
+  for (const trade of demoTrades) {
+    assert.equal(trade.is_sample, true, trade.id);
+    const stop = trade.stop_loss_price!;
+    const target = trade.planned_target_price!;
+    assert.ok(stop != null && target != null, `${trade.id} needs a stop and a target`);
+    const sign = trade.direction === "LONG" ? 1 : -1;
+    const risk = (trade.entry_price - stop) * sign;
+    const reward = (target - trade.entry_price) * sign;
+    assert.ok(risk > 0 && reward > 0, `${trade.id}: stop and target must sit on opposite sides of entry`);
+    const [minStop, maxStop] = trade.symbol === "MES" ? [3, 15] : [15, 80];
+    assert.ok(risk >= minStop && risk <= maxStop, `${trade.id}: ${risk}-point stop is outside ${minStop}-${maxStop}`);
+    const rr = reward / risk;
+    assert.ok(rr >= 1.5 - 1e-9 && rr <= 3 + 1e-9, `${trade.id}: planned ${rr.toFixed(2)}R is outside 1.5R-3R`);
+    const dollars = risk * POINT_VALUE[trade.symbol] * trade.quantity;
+    assert.ok(dollars >= 200 && dollars <= 260, `${trade.id}: risk $${dollars} is not about $250`);
+  }
+});
+
+test("every sample outcome is coherent with real 1m bars", () => {
+  const kinds = new Set<string>();
+  for (const trade of demoTrades) {
+    const candles = barsFor(trade.id);
+    assert.ok(candles.length >= 2, `${trade.id} needs recorded bars`);
+    assert.equal(candles[0].time, Date.parse(trade.entry_time), `${trade.id}: entry is the open of its first bar`);
+    assert.equal(candles[0].open, trade.entry_price, `${trade.id}: entry price is that bar's open`);
+    assert.deepEqual(validateTradeAgainstBars(trade, candles), [], `${trade.id} must have no validator findings`);
+
+    const sign = trade.direction === "LONG" ? 1 : -1;
+    const stop = trade.stop_loss_price!;
+    const target = trade.planned_target_price!;
+    const exitBarTime = Math.floor(Date.parse(trade.exit_time) / minute) * minute;
+    // No bar before the exit bar touched either plan level (the exit bar is where it was hit, if at all).
+    for (const candle of candles.filter((c) => c.time < exitBarTime)) {
+      const stopHit = sign > 0 ? candle.low <= stop : candle.high >= stop;
+      const targetHit = sign > 0 ? candle.high >= target : candle.low <= target;
+      assert.ok(!stopHit && !targetHit, `${trade.id}: a plan level traded at ${new Date(candle.time).toISOString()} before the exit`);
+    }
+    const exitBar = candles.find((c) => c.time === exitBarTime);
+    assert.ok(exitBar, `${trade.id}: exit bar is recorded`);
+    const nearStop = Math.abs(trade.exit_price - stop) <= TICK;
+    const nearTarget = Math.abs(trade.exit_price - target) <= TICK;
+    if (trade.exit_price === stop) {
+      assert.ok(sign > 0 ? exitBar.low <= stop : exitBar.high >= stop, `${trade.id}: stop exit bar must reach the stop`);
+      kinds.add("SL");
+    } else if (trade.exit_price === target) {
+      assert.ok(sign > 0 ? exitBar.high >= target : exitBar.low <= target, `${trade.id}: target exit bar must reach the target`);
+      kinds.add("TP");
+    } else {
+      assert.ok(!nearStop && !nearTarget, `${trade.id}: a manual exit may not sit within a tick of the stop or target`);
+      assert.equal(trade.exit_price, exitBar.close, `${trade.id}: manual exit is at its bar's close`);
+      kinds.add(isScratch(trade) ? "scratch" : (trade.exit_price - trade.entry_price) * sign > 0 ? "manual-profit" : "manual-loss");
+    }
+  }
+  for (const kind of ["TP", "SL", "manual-profit", "scratch"]) assert.ok(kinds.has(kind), `samples need a ${kind} outcome`);
 });

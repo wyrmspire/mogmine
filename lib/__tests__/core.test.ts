@@ -81,10 +81,13 @@ test("fitted chart window is continuously derived from hold duration", () => {
     assert.ok(Math.abs((window.end - Date.parse(exit)) / (window.end - window.start) - 0.2) < 1e-12);
   }
   const ninety = fitWindow(entry, "2026-11-10T16:30:00.000Z", "5m");
-  assert.equal(ninety.end - ninety.start, 3 * 60 * 60 * 1000);
+  // Twice the 90-minute hold is 36 five-minute bars, so the 45-bar floor binds: 225 minutes.
+  assert.equal(ninety.end - ninety.start, 45 * 5 * 60 * 1000);
+  const twoHours = fitWindow(entry, "2026-11-10T17:00:00.000Z", "5m");
+  assert.equal(twoHours.end - twoHours.start, 4 * 60 * 60 * 1000);
 });
 
-test("fitted chart window has a thirty-bar floor", () => {
+test("fitted chart window has a forty-five-bar floor", () => {
   const entry = "2026-11-10T15:00:00.000Z";
   const exit = "2026-11-10T15:00:40.000Z";
   const oneMinute = fitWindow(entry, exit, "1m");
@@ -92,8 +95,8 @@ test("fitted chart window has a thirty-bar floor", () => {
   assert.ok(oneMinute.beforeBars > oneMinute.afterBars);
   assert.equal(oneMinute.beforeBars + oneMinute.holdBars + oneMinute.afterBars, MIN_FITTED_BARS);
 
-  const longer = fitWindow(entry, "2026-11-10T15:16:00.000Z", "1m");
-  assert.equal(longer.visibleBars, 32);
+  const longer = fitWindow(entry, "2026-11-10T15:24:00.000Z", "1m");
+  assert.equal(longer.visibleBars, 48);
   assert.equal(longer.holdBars / longer.visibleBars, 0.5);
 });
 
@@ -111,22 +114,22 @@ test("coarser timeframes show wider clock-time context", () => {
   const oneMinute = fitWindow(entry, exit, "1m");
   const fifteenMinute = fitWindow(entry, exit, "15m");
   assert.equal(oneMinute.end - oneMinute.start, 180 * 60_000);
-  assert.equal(fifteenMinute.end - fifteenMinute.start, 450 * 60_000);
+  assert.equal(fifteenMinute.end - fifteenMinute.start, 45 * 15 * 60_000);
   assert.ok(fifteenMinute.end - fifteenMinute.start > oneMinute.end - oneMinute.start);
 });
 
 test("all ten sample trades have deterministic fitted-window goldens", () => {
   const expected: Record<string, { timeframe: string; share: number }> = {
-    "mes-opening-scalp": { timeframe: "1m", share: 2 / 30 },
-    "mnq-trend-hold": { timeframe: "5m", share: 14 / 30 },
-    "mes-failed-reclaim": { timeframe: "1m", share: 14 / 30 },
-    "mes-orb-fakeout": { timeframe: "1m", share: 2 / 30 },
-    "mnq-vwap-reclaim": { timeframe: "1m", share: 0.5 },
-    "mes-lunch-chop": { timeframe: "1m", share: 0.5 },
-    "mnq-breakdown-scalp": { timeframe: "1m", share: 5 / 30 },
-    "mes-premarket-reversal": { timeframe: "5m", share: 10.8 / 30 },
-    "mnq-late-chase": { timeframe: "1m", share: 10 / 30 },
-    "mes-afternoon-hold": { timeframe: "5m", share: 0.5 },
+    "mes-opening-scalp": { timeframe: "1m", share: (479 / 60) / 45 },
+    "mnq-trend-hold": { timeframe: "5m", share: 13.9 / 45 },
+    "mes-failed-reclaim": { timeframe: "1m", share: 3.5 / 45 },
+    "mes-orb-fakeout": { timeframe: "1m", share: 0.5 },
+    "mnq-vwap-reclaim": { timeframe: "1m", share: 10.5 / 45 },
+    "mes-lunch-chop": { timeframe: "5m", share: (4199 / 300) / 45 },
+    "mnq-breakdown-scalp": { timeframe: "1m", share: 5.5 / 45 },
+    "mes-premarket-reversal": { timeframe: "1m", share: 7.5 / 45 },
+    "mnq-late-chase": { timeframe: "1m", share: 2.5 / 45 },
+    "mes-afternoon-hold": { timeframe: "1m", share: 0.5 },
   };
   assert.equal(demoTrades.length, 10);
   for (const trade of demoTrades) {
