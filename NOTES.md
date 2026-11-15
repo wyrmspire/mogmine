@@ -43,6 +43,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-14 — agent (Codex Work) — Chart + app shell and notes
+Did:      Scaffolded the first Next.js frontend; added offline fixtures, adaptive trade review, v5 Canvas PositionBoxPrimitive, manual entry, local-first notes, and private Trade Card sharing.
+Verified: Local source checks passed before publication; npm install was blocked by the executor network (403), so Vercel preview build is the package/type/build verification.
+Left:     Supabase, Yahoo archive and owner auth are not wired; the preview deliberately uses fixture candles and localStorage. No Topstep work was added.
+Watch:    Trade Card generation uses takeScreenshot(true). Re-check iOS share/copy and the 390×844 acceptance flow on the deployed preview.
+
 Format:
 
 ```text
