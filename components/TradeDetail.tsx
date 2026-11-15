@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
 import { TradeChart } from "./TradeChart";
-import type { TradeChartHandle } from "./TradeChart";
+import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
 import { ensureCandles, useCandles } from "@/lib/candles";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
@@ -22,6 +22,8 @@ import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInside
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
+import { buildHindsight, laterTouchLabel } from "@/lib/hindsight";
+import type { ChartDetailLevel } from "@/lib/hindsight";
 
 export function TradeDetail({ id }: { id: string }) {
   const journal = useJournal();
@@ -64,6 +66,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [fitted, setFitted] = useState(true);
   const [xray, setXray] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
+  const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
+  const [hindsightOpen, setHindsightOpen] = useState(false);
   const candles = useCandles(trade.id);
   const chartRef = useRef<TradeChartHandle>(null);
   const readoutRef = useRef<HTMLSpanElement>(null);
@@ -119,6 +124,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       if (key === "j") go(next);
       else if (key === "k") go(previous);
       else if (key === "f") chartRef.current?.fit();
+      else if (key === "[") chartRef.current?.extend("before");
+      else if (key === "]") chartRef.current?.extend("after");
       else if (key === "c") void shareCard();
       else if (key === "n") { event.preventDefault(); document.getElementById("review-note")?.focus(); }
     };
@@ -172,6 +179,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     if (!ready || trade.is_sample) return null;
     return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
   }, [ready, candles, trade, baseMinutes]);
+  const hindsight = useMemo(() => {
+    if (!ready || detailLevel === "low") return null;
+    return buildHindsight(trade, candles.candles);
+  }, [ready, detailLevel, trade, candles]);
   const barIssues = barCheck?.issues ?? [];
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
   const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
@@ -206,7 +217,14 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               {TIMEFRAMES.map((value) => <button key={value} type="button" aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
             </div>
             <div className="chart-tools">
+              <button type="button" className="tool-button" disabled={!extension.canBefore} title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"} aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"} onClick={() => chartRef.current?.extend("before")}>‹ 30</button>
+              <button type="button" className="tool-button" disabled={!extension.canAfter} title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"} aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"} onClick={() => chartRef.current?.extend("after")}>30 ›</button>
               {!fitted && <button type="button" className="tool-button attention" onClick={() => chartRef.current?.fit()} title="Fit the trade (F)">Fit</button>}
+              <div className="timeframes" role="group" aria-label="Chart detail">
+                {(["low", "medium"] as ChartDetailLevel[]).map((level) => (
+                  <button key={level} type="button" aria-pressed={detailLevel === level} onClick={() => setDetailLevel(level)}>{level === "low" ? "Low" : "Medium"}</button>
+                ))}
+              </div>
               <button type="button" className="tool-button" aria-pressed={xray} aria-label="X-Ray: fade the position box" title="X-Ray: fade the box to read the candles (hold X)" onClick={() => { chartRef.current?.setXray(!xray); setXray(!xray); }}>X-Ray</button>
               <button type="button" className="tool-button" aria-pressed={fullscreen} aria-label={fullscreen ? "Exit full screen" : "Full-screen chart"} onClick={() => setFullscreen(!fullscreen)}>
                 {fullscreen ? "Done" : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>}
@@ -215,7 +233,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
           <div className="chart-frame">
             {ready ? (
-              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={prefs.shield} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} />
+              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={prefs.shield} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} detailLevel={detailLevel} onExtensionChange={setExtension} />
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
             )}
@@ -233,6 +251,22 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
           {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
           {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
+          {hindsight && (
+            <div className="chart-note fact" aria-label="After the exit — hindsight">
+              <button type="button" className="tool-button" aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>
+                After the exit — hindsight
+              </button>
+              {hindsightOpen ? (
+                <span>
+                  {hindsight.sentence}
+                  {hindsight.target ? ` ${laterTouchLabel(hindsight.target)}.` : ""}
+                  {hindsight.stop ? ` ${laterTouchLabel(hindsight.stop)}.` : ""}
+                </span>
+              ) : (
+                <span>Hindsight is one tap away and never changes R or the grade of the decision.</span>
+              )}
+            </div>
+          )}
           <div className="levels">
             <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
             <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
