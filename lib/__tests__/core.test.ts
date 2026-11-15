@@ -171,7 +171,9 @@ test("bar validator reports crossed plans and an exit outside its bar without ch
     entry_price: 100, exit_price: 108, stop_loss_price: 95, planned_target_price: 110,
   });
   const before = structuredClone(trade);
-  assert.deepEqual(validateTradeAgainstBars(trade, candles), [
+  const result = validateTradeAgainstBars(trade, candles);
+  assert.equal(result.coverage, "complete");
+  assert.deepEqual(result.issues, [
     { code: "stop_crossed_before_exit", barTime: start + minute, price: 95 },
     { code: "target_crossed_before_exit", barTime: start + minute, price: 110 },
     { code: "exit_outside_bar", barTime: start + 3 * minute, price: 108 },
@@ -192,13 +194,59 @@ test("bar validator handles shorts and does not infer order inside the exit bar"
     entry_time: new Date(start).toISOString(), exit_time: new Date(start + minute).toISOString(),
     entry_price: 100, exit_price: 90, stop_loss_price: 105, planned_target_price: 90,
   });
-  assert.deepEqual(validateTradeAgainstBars(exitsAtTarget, candles), []);
+  const clean = validateTradeAgainstBars(exitsAtTarget, candles);
+  assert.equal(clean.coverage, "complete");
+  assert.deepEqual(clean.issues, []);
 
   const exitsLaterAndWorse = { ...exitsAtTarget, exit_time: new Date(start + 2 * minute).toISOString(), exit_price: 94 };
-  assert.deepEqual(validateTradeAgainstBars(exitsLaterAndWorse, candles).map((issue) => issue.code), [
+  const worse = validateTradeAgainstBars(exitsLaterAndWorse, candles);
+  assert.equal(worse.coverage, "complete");
+  assert.deepEqual(worse.issues.map((issue) => issue.code), [
     "stop_crossed_before_exit",
     "target_crossed_before_exit",
   ]);
+});
+
+test("bar validator reports missing, partial, and complete coverage", () => {
+  const minute = 60_000;
+  const start = Date.parse("2026-11-10T15:00:00Z");
+  const trade = normalizeTrade({
+    id: "cover", symbol: "MES", direction: "LONG",
+    entry_time: new Date(start).toISOString(), exit_time: new Date(start + 4 * minute).toISOString(),
+    entry_price: 100, exit_price: 104, stop_loss_price: 90, planned_target_price: 120,
+  });
+  const bar = (time: number, high = 105, low = 99): Candle => (
+    { time, open: 100, high, low, close: 104, volume: 1 }
+  );
+  const complete = [
+    bar(start),
+    bar(start + minute),
+    bar(start + 2 * minute),
+    bar(start + 3 * minute),
+    bar(start + 4 * minute),
+  ];
+
+  const empty = validateTradeAgainstBars(trade, []);
+  assert.equal(empty.coverage, "missing");
+  assert.deepEqual(empty.issues, []);
+
+  const noneOverlap = validateTradeAgainstBars(trade, [bar(start + 20 * minute)]);
+  assert.equal(noneOverlap.coverage, "missing");
+  assert.deepEqual(noneOverlap.issues, []);
+
+  const gapped = validateTradeAgainstBars(trade, [
+    bar(start),
+    bar(start + minute),
+    // start + 2 minutes is missing
+    bar(start + 3 * minute),
+    bar(start + 4 * minute),
+  ]);
+  assert.equal(gapped.coverage, "partial");
+  assert.deepEqual(gapped.issues, []);
+
+  const clean = validateTradeAgainstBars(trade, complete);
+  assert.equal(clean.coverage, "complete");
+  assert.deepEqual(clean.issues, []);
 });
 
 test("formatting follows docs/08 §13", () => {

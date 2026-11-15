@@ -276,7 +276,9 @@ test("every sample outcome is coherent with real 1m bars", () => {
     assert.ok(candles.length >= 2, `${trade.id} needs recorded bars`);
     assert.equal(candles[0].time, Date.parse(trade.entry_time), `${trade.id}: entry is the open of its first bar`);
     assert.equal(candles[0].open, trade.entry_price, `${trade.id}: entry price is that bar's open`);
-    assert.deepEqual(validateTradeAgainstBars(trade, candles), [], `${trade.id} must have no validator findings`);
+    const check = validateTradeAgainstBars(trade, candles);
+    assert.equal(check.coverage, "complete", `${trade.id} should have complete bar coverage`);
+    assert.deepEqual(check.issues, [], `${trade.id} must have no validator findings`);
 
     const sign = trade.direction === "LONG" ? 1 : -1;
     const stop = trade.stop_loss_price!;
