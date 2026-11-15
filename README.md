@@ -6,6 +6,8 @@
 
 ## 1. Project Vision
 
+**Current build context:** no broker account exists yet (`D-009`). The first phone frontend is live with ten demo trades ([NOTES.md](NOTES.md)). Manual entry, demo trades and fixtures are the current trade sources; broker/CSV work is parked. The lifecycle below describes the longer-term vision. [docs/10](docs/10-yahoo-first-build-plan.md) explains the Yahoo-first build proposal; [docs/11](docs/11-product-workflows-and-api-context.md) records the newer mobile workflow and assistant API proposals without expanding approved scope.
+
 Most trading journals feel like desktop spreadsheets bolted onto a cramped browser tab. **MogMine** is built **mobile-first** from day one, hosted on **Vercel**, and engineered specifically for intraday futures traders—starting with **`MES` (Micro E-mini S&P 500)** on **TopstepX** and designed with pluggable adapters to grow across instruments, data feeds, and eventually multiple users.
 
 When a trade closes:
@@ -76,6 +78,13 @@ Read the planning documents in order for the complete technical and product spec
    What breaks if the blueprint is built as written, with fixes: Topstep's read-only server rule, the fill ledger, candle enrichment passes, session and money math, Supabase security, Vercel limits, the AI pipeline, proposed schema changes, and a log of what was verified against vendor docs.
 10. **[10 — Yahoo-First Build Plan](docs/10-yahoo-first-build-plan.md)**  
    **Start here to build.** There is no broker account yet, so this covers Yahoo's measured limits (`1m` bars go back 30 days), the daily candle archive to start first, how to get trades without a broker, and a build order in six milestones with a list of what is parked.
+
+11. **[11 — Mobile Workflows, Chart Context & Assistant API](docs/11-product-workflows-and-api-context.md)**  
+   Daily planning and quick capture beyond the chart, independent detail/full-chart controls, anchored notes and zones, reproducible indicator context, assistant draft permissions, and acceptance scenarios. Proposals tracked as `OD-17`–`OD-19`.
+12. **[12 — Levels, Zones & the Daily Markup](docs/12-levels-zones-and-daily-markup.md)**  
+   The owner's premarket markup as a proposal: level formulas (prior day, overnight, pivots, ADR Pivots), zone merging, role colours and right-edge labels, level-set revisions and trade snapshots, risk-sized and planned/actual/archived boxes, AI level facts, missed moves, and the assistant level-set draft. Proposals tracked as `OD-20`–`OD-23`.
+13. **[13 — Bold UI Bets](docs/13-bold-ui-bets.md)**  
+   Interface bets shaped by how the owner trades: the Zone Ladder, days instead of trades in the feed, blind review, drawing a trade on the chart, desk mode and the plan-versus-actual execution diff. Bets, not scope (`BET-nn`).
 
 ---
 

@@ -11,13 +11,15 @@ A day-trading journal only works if opening it right after a trade feels **effor
    - Quick tagging (`Simple Mode`), Voice Memo recording, and the **`Trade Card`** button sit directly below the chart in the natural thumb arc.
 2. **Instant Realtime Push Feedback:**
    - When Google Cloud Run writes a newly closed TopstepX trade to Supabase, **Supabase Realtime** triggers an immediate in-app toast banner (*"MES Long Closed • +2.4R • Tap to Tag"*).
-3. **Zero-Lag Cached Charts:**
-   - Because Yahoo Finance bars are pre-cached in `trade_candles`, swiping between today's trades or revisiting a trade from 6 months ago renders the candlestick chart + **translucent Position Box** in under `100ms`.
+3. **Cached Charts with Measured Budgets:**
+   - Render archived candles with an explicit loading or missing-coverage state. Targets are ≤ 1.0 s on first visit and ≤ 300 ms with candles already on the device; measure them under [08 §2](08-ux-notes-viewing-and-journaling.md#2-experience-budgets).
 4. **Progressive Disclosure (Never Overwhelming):**
    - **Layer 1 (Default Mobile View):** Compact header (`MES • LONG • 90m Trade • +$325`), instant chart with Position Box + toggleable `NQ=F` sync pane, and 10-second Simple Notes.
    - **Layer 2 (Expandable):** AI Grade & structured coaching cards, Key Level proximity pills, Economic News hazard badge, and Advanced Note-Taking checklist.
 5. **Swipeable Daily Review Flow:**
-   - Swipe left/right between trades within the same session (or filter by `All`, `Scalps`, `90m Trades`, `A+ Setups`, `Needs Review`) without losing context.
+   - Previous/next controls and header-strip swipes follow the current filtered list. Chart drags always remain chart gestures (UX-40); preserve feed scroll on return.
+
+Proposed **Low / Medium / High detail** and **full-chart mode** are independent of Simple/Advanced note-taking. Their layer rules, context sheet, persistence and missing-data behavior are specified in [11 §2](11-product-workflows-and-api-context.md#2-detail-and-full-chart-mode-are-separate), pending `OD-17`. Daily workflows beyond the chart are in §1 of that document.
 
 ### Mobile Screen Flow Wireframe
 
@@ -47,14 +49,14 @@ A day-trading journal only works if opening it right after a trade feels **effor
 ## 2. High-Craft Mobile Chart Gestures & Layout Modes
 
 > [!WARNING]
-> **Several gestures in this document are claimed twice.** Swiping between trades collides with chart panning. X-Ray Hold collides with the chart library's built-in long-press crosshair. A vertical drag that starts on the chart is captured by the library by default and stops the page from scrolling. The resolutions are in [08 — UX Notes §6](08-ux-notes-viewing-and-journaling.md#6-gesture-conflict-map). The same file replaces the "under 100ms" claim above with measured budgets (§2), specifies every loading, empty and late-data state (§4), and separates in-app Realtime from lock-screen push (§8).
+> **Gesture ownership follows [08 — UX Notes §6](08-ux-notes-viewing-and-journaling.md#6-gesture-conflict-map).** Trade swipes belong to the header, X-Ray shares crosshair tracking, and vertical drags must allow page scrolling. Use that file's measured budgets (§2), loading/empty/late-data states (§4) and distinction between in-app Realtime and lock-screen push (§8).
 
 ### A. Chart Touch Gestures & Ergonomics
 1. **`[ 🎯 Fit Trade ]` Double-Tap / Floating Pill:**
    - When a trader pinches or scrolls across the session to check overnight structure, a subtle floating **`Fit Trade`** pill appears in the top-right corner of the chart (or triggers via double-tap). One tap smoothly animates and snaps the viewport back to the exact padded trade window (`entry - padding` to `exit + padding`).
 2. **"X-Ray Hold" (Press-and-Hold Gesture):**
-   - Holding a finger stationary on the chart for `250ms` temporarily drops Position Box and Key Level opacity down to **`5%`** and reveals a clean top-bar **OHLC + VWAP/Level Distance Magnifier** (`O 5948.25  H 5951.00  L 5947.50  C 5950.50  •  +2.25 vs VWAP`).
-   - Releasing your finger immediately restores your `--position-box-opacity` slider setting—letting you inspect raw candle wicks underneath the Position Box without ever needing to toggle settings.
+   - Bind X-Ray to the chart's tracking/crosshair mode (UX-42). While tracking is active, temporarily fade boxes to **`5%`** and show OHLC plus available level distances. Do not add a competing 250 ms long-press handler.
+   - Exiting tracking restores the user's `--position-box-opacity`. Desktop users can hold `X`; keep a visible alternative for touch and keyboard users.
 
 ### B. Companion Chart Mobile Layout Modes (Solving Vertical Screen Real Estate)
 Phone screens (`390×844`) punish equal 50/50 split charts. MogMine gives you three compact ways to view `NQ=F`, `^VIX`, or `DX-Y.NYB` alongside `MES`:
@@ -63,7 +65,7 @@ Phone screens (`390×844`) punish equal 50/50 split charts. MogMine gives you th
 3. **Mode 3 — Auto-Detected `⚡ SMT` Timeline Pin:** Places clickable gold divergence markers directly along the time axis whenever the backend detects opposite swing highs/lows between `ES=F` and `NQ=F` within the trade window.
 
 ### C. The "10-Second Post-Trade Pit Stop" & Rapid Review Queue
-1. **Realtime Slide-Up Sheet:** The moment TopstepX closes a trade, a thumb-zone bottom sheet slides up featuring the auto-classified badge (`Scalp` / `90m Trade`), mini Position Box preview, 1-tap Playbook & Mindset chips, and a **Live Waveform Voice Mic** whose AI parser highlights matching tags (`#Sweep`, `#SMT`, `#EarlyExit`) in real time as you speak.
+1. **User-Opened Pit Stop:** A newly available trade adds a non-blocking toast/badge; tapping it opens the thumb-zone sheet with the classification, preview and playbook/tag chips. Never open over active input or stack sheets (UX-35). Voice is tap to record, then transcribe; parsed tags remain suggestions until accepted (UX-33, UX-37). Live highlighting is deferred.
 2. **End-of-Session Swipe Queue:** An optional card-stack view on the **Today** tab lets you swipe through any unreviewed scalps one by one after the bell to finish tagging in under 60 seconds.
 
 ---

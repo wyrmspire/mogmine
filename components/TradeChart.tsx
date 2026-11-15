@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
 import { Timeframe, TradeRecord, price, visibleWindow } from "@/lib/trades";
+import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
 
 interface Props {
   trade: TradeRecord;
@@ -39,7 +40,8 @@ export function TradeChart({ trade, timeframe, onSnapshot }: Props) {
         layout: { background: { type: ColorType.Solid, color: "#090b11" }, textColor: "#8e95a9", fontSize: 11 },
         grid: { vertLines: { color: "#171b26" }, horzLines: { color: "#171b26" } },
         rightPriceScale: { borderColor: "#252a36", scaleMargins: { top: 0.12, bottom: 0.12 } },
-        timeScale: { borderColor: "#252a36", timeVisible: true, secondsVisible: false, rightOffset: 2 },
+        timeScale: { borderColor: "#252a36", timeVisible: true, secondsVisible: false, rightOffset: 2, tickMarkFormatter: (time: import("lightweight-charts").Time, tickMarkType: number) => chartTickLabel(time as number, tickMarkType) },
+        localization: { timeFormatter: (time: import("lightweight-charts").Time) => chartCrosshairLabel(time as number) },
         crosshair: { vertLine: { color: "#676f82" }, horzLine: { color: "#676f82" } },
         handleScroll: { vertTouchDrag: false },
         handleScale: { axisPressedMouseMove: true, pinch: true, mouseWheel: true },

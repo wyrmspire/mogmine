@@ -11,6 +11,9 @@ For every developer and every AI agent. [AGENTS.md](AGENTS.md) holds the rules t
 | [AGENTS.md](AGENTS.md) | What must I never break? Which spec do I read? | Rarely |
 | [docs/01 – 09](docs/) | What exactly are we building? | With the feature |
 | [docs/10](docs/10-yahoo-first-build-plan.md) | What do I build first, and on what data? | When the build order or the data source changes |
+| [docs/11](docs/11-product-workflows-and-api-context.md) | Which daily workflows, chart context and assistant API behaviors are proposed? | With owner review of `OD-17`–`OD-19` |
+| [docs/12](docs/12-levels-zones-and-daily-markup.md) | How are daily levels, zones and the markup computed, drawn and stored? | With owner review of `OD-20`–`OD-23` |
+| [docs/13](docs/13-bold-ui-bets.md) | Which bolder interface ideas are on the table, and which three to try first? | When a bet is adopted or dropped |
 | [DECISIONS.md](DECISIONS.md) | What is decided? What is open? Which name is canonical? | When a decision is made |
 | [NOTES.md](NOTES.md) | What is the state right now? Who is on what? What did the last person leave? | Every working session |
 | [mogprompt.md](mogprompt.md) | The whole system in one long read | When the specs it summarises change |

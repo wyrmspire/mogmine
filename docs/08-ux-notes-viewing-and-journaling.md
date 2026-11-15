@@ -21,7 +21,7 @@ IDs (`UX-nn`) are stable. Cite them in PRs and handoff notes. Items that change 
 
 ## 2. Experience budgets
 
-`docs/05` promises charts "in under 100 ms". Replace that with budgets measured on a real mid-range phone over cellular. A budget that is missed is a bug.
+Measure these budgets on a real mid-range phone over cellular. They are targets, not verified performance claims. Record misses and their conditions.
 
 | ID | Moment | Budget |
 | :--- | :--- | :--- |
@@ -47,7 +47,7 @@ How to hit them:
 
 | Screen | URL | Notes |
 | :--- | :--- | :--- |
-| Today | `/` | Current trading day. If it has no trades, show the most recent day that does. |
+| Today | `/` | Current trading day, including no-trade days; show the previous trading day's summary separately and label its date. |
 | Feed | `/feed?style=scalp&status=unreviewed&playbook=…` | Grouped by trading day with a sticky day header. |
 | Trade Detail | `/trades/[id]?tf=5m&companion=NQ` | The deep-link target for toasts, pushes and shared links between your own devices. |
 | Review Queue | `/review` | Card stack of trades that still need tags or review. |
@@ -70,7 +70,7 @@ Every screen is specified for more than the happy path. If a state is not in thi
 
 | State | What the user sees |
 | :--- | :--- |
-| First run, no trades ever | A clearly labelled sample trade to explore, plus three actions: **Sync from TopstepX**, **Import CSV**, **Add manually**. |
+| First run, no trades ever | Under `D-009`, a clearly labelled sample trade and **Add manually**; test-trade tools are development-only. Broker sync and CSV import remain absent until their prerequisites exist. |
 | No trades today | "No trades yet today", with the last trading day's summary underneath. |
 | Syncing or importing | Progress with counts ("Imported 42 of 60"). Failures are listed with a reason and can be retried one by one. |
 | Everything reviewed | A quiet "All caught up". No confetti. |
@@ -97,7 +97,7 @@ Every screen is specified for more than the happy path. If a state is not in thi
 
 | State | What the user sees |
 | :--- | :--- |
-| Saving | Nothing blocks. A small "Saved" tick appears within 100 ms. |
+| Saving | Nothing blocks. A local acknowledgement appears within 100 ms; distinguish device-only saving, syncing and server-confirmed saving. |
 | Offline | "Saved on this device — will sync". The note is fully usable. |
 | Sync failed | A retry affordance on the note. Never a lost note, never a silent failure. |
 | Voice transcribing | The recording is kept and playable. The transcript appears when ready. |
@@ -135,7 +135,7 @@ That leaves roughly 530 px for charts in an installed PWA and closer to 400 px i
 ### Details that decide whether the chart is trusted
 
 - **UX-20 — Fill times are snapped to their bar.** Without snapping the box disappears (B-23). After a timeframe switch the box is recomputed for the new bars.
-- **UX-21 — Level labels never overlap.** When levels sit within a few ticks, merge the labels ("ONL · VWAP"). Show only levels inside the visible price range. Default to the three nearest the entry, with the rest behind one toggle.
+- **UX-21 — Level labels never overlap.** When levels sit within a few ticks, merge the labels ("ONL · VWAP"). Show only levels inside the visible price range. Default to the three nearest the entry, with the rest behind one toggle. Stored daily zones are proposed in [12 §4–5](12-levels-zones-and-daily-markup.md#4-zone-merging) (`OD-20`).
 - **UX-22 — Levels start where they formed.** The opening-range line begins at 09:35 or 09:45, not at the left edge (B-14).
 - **UX-23 — Dense fills collapse.** Six fills inside one bar become one marker with a count. Tapping it opens the fills table: time, side, quantity, price, running position.
 - **UX-24 — One data-source line** under the chart: "ES=F · Yahoo · 1m" or "MES Z6 · TopstepX · 1m".
@@ -172,7 +172,7 @@ Several gestures in `docs/05` are claimed twice. Resolve them this way.
 - **UX-33 — AI suggests, the trader decides.** Tags parsed from a voice memo appear as outlined chips with **Accept all**. They never overwrite a playbook or tag the trader already picked. Each tag records its source (`user` or `voice_ai`).
 - **UX-34 — Undo beats confirm.** Removing a tag or clearing a note shows an undo toast. No confirmation dialogs.
 - **UX-35 — The sheet never opens itself over input.** A closed trade shows a toast and a badge. If the app is idle on Today, a non-modal peek card is acceptable. Trades that close in quick succession queue in the Review Queue. Sheets do not stack.
-- **UX-36 — Risk in one tap.** When no stop came from the broker (B-07), the sheet offers risk chips from the playbook default ("4 pts", "6 pts", "8 pts", custom). That unlocks R without typing.
+- **UX-36 — Risk in one tap.** When no stop came from the broker (B-07), the sheet offers risk chips from the playbook default ("4 pts", "6 pts", "8 pts", custom). That unlocks R without typing. Risk-budget chips ($250 → 50 pts on 1 `MES`) are proposed in [12 §9](12-levels-zones-and-daily-markup.md#9-position-boxes-sizing-and-the-three-styles).
 
 ### Voice
 
@@ -278,7 +278,7 @@ One formatting module. No component formats a number on its own.
 | Time on detail | With seconds and zone | `09:48:12 ET` |
 | Approximate values | Prefix | `≈ −1.25 pts` |
 
-- **UX-86 — Display time zone is a preference.** Exchange time (ET) is the default. A trader in Chicago or London can switch, and the zone label always shows.
+- **UX-86 — Display time zone is a preference.** Exchange time (ET) is the default. A trader in Chicago or London can switch, and the zone label always shows. Until `/tune` exists the app uses the owner's choice, `America/Chicago`, from one constant in `lib/time.ts` ([12 LV-03](12-levels-zones-and-daily-markup.md#2-sessions)).
 - **UX-87 — Session logic never uses the display zone.** Sessions are computed in `America/New_York` (B-20).
 
 ---
@@ -324,3 +324,5 @@ Before a UI task is marked complete:
 - [ ] Shield mode hides every dollar amount on the screen, including inside the chart (UX-64, UX-71).
 - [ ] The screen works with red/green removed (UX-80) and with reduced motion on (UX-83).
 - [ ] At 1280 px wide the layout uses the space (UX-68).
+
+Proposed additions for daily plans, anchored comments, detail/full-chart controls, indicator coverage and external assistants are in [11 — Mobile Workflows, Chart Context & Assistant API](11-product-workflows-and-api-context.md). Its §6 extends the state matrix and §7 supplies review scenarios; scope remains open under `OD-17`–`OD-19`.

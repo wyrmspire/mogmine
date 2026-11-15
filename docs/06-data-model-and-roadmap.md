@@ -152,7 +152,7 @@ erDiagram
 | **`trades`** | Aggregated round-trip positions. Stores `trade_style` (`'scalp' \| 'session_90m' \| 'investment'`), `style_overridden` boolean, `entry_price`, `exit_price`, `stop_loss_price`, `mae_price`, `mfe_price`, `r_multiple`, `net_pnl`, and `session_tag` (`'NY_AM' \| 'NY_PM' \| 'LONDON' \| 'ASIA'`). |
 | **`trade_candles`** | Permanently caches Yahoo Finance OHLCV arrays (`bars` JSONB of `{ time, open, high, low, close, volume }`) keyed by `(trade_id, symbol, timeframe)` so `1m` intraday history never vanishes after 30 days. |
 | **`trade_companion_charts`** | Stores secondary charts attached to a trade: either `kind = 'yahoo_sync'` (e.g., `NQ=F`, `^VIX` with `relationship_type = 'smt_divergence' \| 'confirming_push'` and 2-point `annotations` coordinates) or `kind = 'uploaded_image'` (Supabase Storage URL + caption). |
-| **`session_levels`** | One row per `(session_date, symbol)` holding `pdh`, `pdl`, `pdc`, `onh`, `onl`, `orb_high`, `orb_low`, `ibh`, `ibl` so multiple trades on the same day share the same levels. |
+| **`session_levels`** | One row per `(session_date, symbol)` holding `pdh`, `pdl`, `pdc`, `onh`, `onl`, `orb_high`, `orb_low`, `ibh`, `ibl` so multiple trades on the same day share the same levels. Revisioned level sets are proposed in [12 §6](12-levels-zones-and-daily-markup.md#6-data-model-proposed-shape) (`OD-20`). |
 | **`economic_events`** | Stores scheduled/fetched Tier-1 USD economic releases (`CPI`, `FOMC`, `NFP`, `PPI`, `ISM`) for ±30m trade hazard checks. |
 | **`playbooks`** | User-defined setups (e.g., *"ONL Sweep + NQ SMT"*), each with an ordered `checklist_rules` array (`[{ id, label, required }]`). |
 | **`trade_notes`** | Combines **Simple Mode** (`quick_tags`, `voice_audio_url`, `voice_transcript`, `mood_tag`) and **Advanced Mode** (`pre_trade_thesis`, `divergence_notes`, `management_notes`, `post_exit_notes`, `checklist_state`). |
@@ -164,6 +164,8 @@ erDiagram
 ## 3. Phased Build Roadmap
 
 > [!NOTE]
+> **Current owner constraint `D-009` overrides broker/CSV tasks below:** use manual entry, test trades and fixtures until a broker account/export exists. Auth/RLS follow the `OD-2` interim rule from the first migration, not optional Phase 5 activation. Product proposals in [docs/11](11-product-workflows-and-api-context.md) (`OD-17`–`OD-19`) do not add tables or change this roadmap. Before their implementation, define ownership/RLS, revisions, attachments, plan history and preference migrations in a separate schema change.
+>
 > Each phase has gate items in [09 — Backend Risk Register §9](09-backend-risk-register.md#9-phase-gates). Two roadmap changes are proposed in [DECISIONS.md](../DECISIONS.md): a stateless **Sync from TopstepX** pull in Phase 1, ahead of the Cloud Run listener (`OD-3`), and a narrower first version of the experience (`OD-14`, [08 §15](08-ux-notes-viewing-and-journaling.md#15-build-order-for-the-experience)).
 
 ### Phase 1: Vercel App, Obsidian/Gold Theme & Core Chart Engine
