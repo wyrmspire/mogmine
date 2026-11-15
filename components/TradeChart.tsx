@@ -9,7 +9,7 @@ import { approx, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/f
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, exitFlagReason, excursions, fitWindow, includeInPriceRange, isScratch, mergeAxisTags, plannedR, rMultiple, snapToBar, specFor, tickDecimals, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, aggregateCandles, exitFlagReason, excursions, fitWindow, includeInPriceRange, isScratch, mergeAxisTags, plannedR, rMultiple, snapToBar, specFor, tickDecimals, toTicks, tradePnl, tradePoints } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 type LWC = typeof import("lightweight-charts");
@@ -145,6 +145,9 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     const mfePoints = ex ? (ex.mfePrice - tr.entry_price) * sign : null;
     const maePrice = maePoints != null && maePoints < 0 ? ex!.maePrice : null;
     const mfePrice = mfePoints != null && mfePoints > 0 ? ex!.mfePrice : null;
+    const near = (price: number | null, level: number | null) => (
+      price != null && level != null && Math.abs(toTicks(price, tr.symbol) - toTicks(level, tr.symbol)) <= 2
+    );
     const plan = plannedR(tr);
     const config: PositionBoxConfig = {
       entryTime: toTime(entryBar), exitTime: toTime(exitBar),
@@ -159,8 +162,8 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       stopLabel: tr.stop_loss_price != null ? "SL (initial)" : "",
       targetLabel: tr.planned_target_price != null ? (plan != null ? `TP ${formatR(plan)}` : "TP") : "",
       exitReason: exitFlagReason(tr),
-      maeLabel: maePrice != null ? `MAE ${approx(signedLevel(maePoints!, tr.symbol))}` : null,
-      mfeLabel: mfePrice != null ? `MFE ${approx(signedLevel(mfePoints!, tr.symbol))}` : null,
+      maeLabel: maePrice != null && !near(maePrice, tr.stop_loss_price) && !near(maePrice, tr.exit_price) ? `MAE ${approx(signedLevel(maePoints!, tr.symbol))}` : null,
+      mfeLabel: mfePrice != null && !near(mfePrice, tr.planned_target_price) && !near(mfePrice, tr.exit_price) ? `MFE ${approx(signedLevel(mfePoints!, tr.symbol))}` : null,
     };
     l.primitive.update(config);
 

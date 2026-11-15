@@ -210,7 +210,10 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
       ctx.globalAlpha = this.xray ? 0.5 : 1;
       const planTop = Math.min(...[g.yEntry, g.yStop, g.yTarget].filter((value): value is number => value != null));
 
-      // PLAN tag, top-left of the plan outline.
+      // PLAN tag, top-left of the plan outline. The top edge label sits on the same row
+      // so a thin reward zone (like the scalp) still has a readable TP label.
+      let planTagRight = g.left;
+      let planTagY = planTop - 15;
       if (g.yStop != null || g.yTarget != null) {
         ctx.font = TAG_FONT;
         const tag = "PLAN";
@@ -218,6 +221,8 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
         const height = 12;
         const xTag = Math.max(2, g.left + 2);
         const yTag = Math.max(2, planTop - height - 3);
+        planTagRight = xTag + width;
+        planTagY = yTag + height / 2;
         ctx.beginPath();
         ctx.roundRect(xTag, yTag, width, height, 3);
         ctx.fillStyle = c.pillBackground;
@@ -232,43 +237,65 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
         ctx.fillText(tag, xTag + width / 2, yTag + height / 2 + 0.5);
       }
 
-      // Plan edge labels sit just inside the right edge so the bracket keeps the gap.
       ctx.font = LABEL_FONT;
-      ctx.textAlign = "right";
+      ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      const labelX = g.right - 4;
-      const place = (text: string, yValue: number, color: string, bias: number) => {
+      const place = (text: string, x: number, yText: number) => {
         if (!text) return;
         const w = ctx.measureText(text).width + 4;
-        const yText = yValue + bias;
         ctx.fillStyle = c.pillBackground;
         ctx.globalAlpha = (this.xray ? 0.5 : 1) * 0.82;
-        ctx.fillRect(labelX - w, yText - 7, w, 14);
+        ctx.fillRect(x - 2, yText - 7, w, 14);
         ctx.globalAlpha = this.xray ? 0.5 : 1;
-        ctx.fillStyle = color;
-        ctx.fillText(text, labelX, yText);
+        ctx.fillStyle = c.planColor;
+        ctx.fillText(text, x, yText);
       };
-      if (c.targetLabel && g.yTarget != null) place(c.targetLabel, g.yTarget, c.planColor, g.yTarget <= g.yEntry ? -8 : 8);
-      if (c.stopLabel && g.yStop != null) place(c.stopLabel, g.yStop, c.planColor, g.yStop >= g.yEntry ? 8 : -8);
+      const planBottom = Math.max(...[g.yEntry, g.yStop, g.yTarget].filter((value): value is number => value != null));
+      const topIsTarget = g.yTarget != null && (g.yStop == null || g.yTarget < g.yStop);
+      if (c.targetLabel && g.yTarget != null) {
+        if (topIsTarget) place(c.targetLabel, planTagRight + 6, planTagY);
+        else place(c.targetLabel, g.left + 6, Math.min(mediaSize.height - 8, planBottom + 10));
+      }
+      if (c.stopLabel && g.yStop != null) {
+        if (!topIsTarget) place(c.stopLabel, planTagRight + 6, planTagY);
+        else place(c.stopLabel, g.left + 6, Math.min(mediaSize.height - 8, planBottom + 10));
+      }
 
       if (c.exitReason) {
         ctx.font = LABEL_FONT;
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = c.textColor;
         const reasonX = g.x2 + 8;
-        const reasonY = g.yExit + (c.isLong ? -8 : 8);
+        const reasonY = g.yExit + (c.isLong ? -10 : 10);
+        const w = ctx.measureText(c.exitReason).width + 6;
+        ctx.fillStyle = c.pillBackground;
+        ctx.globalAlpha = (this.xray ? 0.5 : 1) * 0.86;
+        ctx.fillRect(reasonX - 2, reasonY - 7, w, 14);
+        ctx.globalAlpha = this.xray ? 0.5 : 1;
+        ctx.fillStyle = c.textColor;
         ctx.fillText(c.exitReason, reasonX, reasonY);
       }
 
       if (g.yMae != null || g.yMfe != null) {
         const bx = g.right + 8;
         ctx.font = LABEL_FONT;
-        ctx.textAlign = "left";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = c.mutedColor;
-        if (c.mfeLabel && g.yMfe != null) ctx.fillText(c.mfeLabel, bx + 8, g.yMfe);
-        if (c.maeLabel && g.yMae != null) ctx.fillText(c.maeLabel, bx + 8, g.yMae);
+        const axisPad = 56;
+        const caption = (text: string, yValue: number, bias: number) => {
+          const yText = yValue + bias;
+          const w = ctx.measureText(text).width + 4;
+          const fitsRight = bx + 8 + w < mediaSize.width - axisPad;
+          const xText = fitsRight ? bx + 8 : bx - 8;
+          ctx.textAlign = fitsRight ? "left" : "right";
+          ctx.fillStyle = c.pillBackground;
+          ctx.globalAlpha = (this.xray ? 0.5 : 1) * 0.86;
+          ctx.fillRect(fitsRight ? xText - 2 : xText - w + 2, yText - 7, w, 14);
+          ctx.globalAlpha = this.xray ? 0.5 : 1;
+          ctx.fillStyle = c.mutedColor;
+          ctx.fillText(text, xText, yText);
+        };
+        if (c.mfeLabel && g.yMfe != null) caption(c.mfeLabel, g.yMfe, g.yMfe <= g.yEntry ? -9 : 9);
+        if (c.maeLabel && g.yMae != null) caption(c.maeLabel, g.yMae, g.yMae >= g.yEntry ? 9 : -9);
       }
 
       if (c.pill) {
