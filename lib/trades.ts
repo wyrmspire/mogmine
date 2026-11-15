@@ -28,6 +28,7 @@ export interface TradeRecord {
   quantity: number;
   note: string;
   review_status: "new" | "tagged" | "reviewed";
+  candle_source?: "Yahoo Finance" | "Demo fixture";
   candles: Candle[];
 }
 

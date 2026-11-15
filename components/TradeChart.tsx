@@ -66,10 +66,12 @@ export function TradeChart({ trade, timeframe, onSnapshot }: Props) {
       const accent = style.getPropertyValue("--gold-mid").trim() || "#d4af37";
       const riskPrice = trade.stop_loss_price ?? trade.entry_price;
       const targetPrice = trade.planned_target_price ?? trade.exit_price;
+      const outcomeIsProfit = (trade.exit_price - trade.entry_price) * (trade.direction === "LONG" ? 1 : -1) >= 0;
+      const outcomeFill = trade.planned_target_price == null && !outcomeIsProfit ? `rgba(${risk}, ${alpha})` : `rgba(${profit}, ${alpha})`;
       const primitive = new PositionBoxPrimitive({
         entryTime, exitTime, entryPrice: trade.entry_price, exitPrice: trade.exit_price,
         riskPrice, targetPrice,
-        profitFill: `rgba(${profit}, ${alpha})`, riskFill: `rgba(${risk}, ${alpha})`, accent,
+        profitFill: outcomeFill, riskFill: `rgba(${risk}, ${alpha})`, accent,
       });
       series.attachPrimitive(primitive);
 

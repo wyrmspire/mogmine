@@ -2,8 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TradeChart } from "./TradeChart";
-import { demoTrades, generateCandles } from "@/lib/fixtures";
+import { DEMO_TRADE_IDS, demoTrades, generateCandles } from "@/lib/fixtures";
 import {
+  Candle,
   DEFAULT_OWNER_USER_ID,
   FUTURES_SPECS,
   Timeframe,
@@ -18,10 +19,35 @@ import {
   tradePnl,
 } from "@/lib/trades";
 
-const STORAGE_KEY = "mogmine-trades-v1";
+const STORAGE_KEY = "mogmine-trades-v2";
+const LEGACY_STORAGE_KEY = "mogmine-trades-v1";
 const timeframes: Timeframe[] = ["1m", "5m", "15m", "1h", "8h"];
 const dateTime = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
 const shortTime = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+
+function nearestCandle(candles: Candle[], instant: number) {
+  return candles.reduce((best, candle) => Math.abs(candle.time - instant) < Math.abs(best.time - instant) ? candle : best, candles[0]);
+}
+
+function attachYahooCandles(trade: TradeRecord, candles: Candle[]) {
+  if (!DEMO_TRADE_IDS.has(trade.id)) return { ...trade, candles, candle_source: "Yahoo Finance" as const };
+  const entryCandle = nearestCandle(candles, Date.parse(trade.entry_time));
+  const exitCandle = nearestCandle(candles, Date.parse(trade.exit_time));
+  const tickSize = FUTURES_SPECS[trade.symbol]?.tickSize ?? 0.01;
+  const round = (value: number) => Math.round(value / tickSize) * tickSize;
+  const entryPrice = round(entryCandle.close);
+  const shift = entryPrice - trade.entry_price;
+  return {
+    ...trade,
+    entry_price: entryPrice,
+    exit_price: round(exitCandle.close),
+    stop_loss_price: trade.stop_loss_price == null ? null : round(trade.stop_loss_price + shift),
+    planned_target_price: trade.planned_target_price == null ? null : round(trade.planned_target_price + shift),
+    key_level_price: trade.key_level_price == null ? null : round(trade.key_level_price + shift),
+    candles,
+    candle_source: "Yahoo Finance" as const,
+  };
+}
 
 function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord) {
   return new Promise<Blob>((resolve, reject) => {
@@ -80,16 +106,20 @@ export function TradeJournal() {
   const [savedState, setSavedState] = useState("Saved");
   const [toast, setToast] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [marketState, setMarketState] = useState<Record<string, "loading" | "ready" | "fallback">>({});
+  const marketRequests = useRef(new Set<string>());
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as TradeRecord[];
         if (Array.isArray(parsed) && parsed.length) {
-          setTrades(parsed);
-          setSelectedId(parsed[0].id);
-          setTimeframe(defaultTimeframe(parsed[0].trade_style));
+          const existingIds = new Set(parsed.map((trade) => trade.id));
+          const merged = [...parsed, ...demoTrades.filter((trade) => !existingIds.has(trade.id))];
+          setTrades(merged);
+          setSelectedId(merged[0].id);
+          setTimeframe(defaultTimeframe(merged[0].trade_style));
         }
       } else localStorage.setItem(STORAGE_KEY, JSON.stringify(demoTrades));
     } catch { /* Demo fixtures remain available if storage is blocked. */ }
@@ -107,6 +137,26 @@ export function TradeJournal() {
   }, [trades, hydrated]);
 
   useEffect(() => {
+    if (!hydrated) return;
+    const selected = trades.find((item) => item.id === selectedId);
+    if (!selected || selected.candle_source === "Yahoo Finance" || marketRequests.current.has(selected.id)) return;
+    marketRequests.current.add(selected.id);
+    setMarketState((current) => ({ ...current, [selected.id]: "loading" }));
+    const params = new URLSearchParams({ symbol: selected.symbol, entry: selected.entry_time, exit: selected.exit_time });
+    void fetch(`/api/market-data?${params}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Yahoo data unavailable");
+        return response.json() as Promise<{ candles: Candle[] }>;
+      })
+      .then(({ candles }) => {
+        if (!Array.isArray(candles) || candles.length < 4) throw new Error("Yahoo data incomplete");
+        setTrades((current) => current.map((item) => item.id === selected.id ? attachYahooCandles(item, candles) : item));
+        setMarketState((current) => ({ ...current, [selected.id]: "ready" }));
+      })
+      .catch(() => setMarketState((current) => ({ ...current, [selected.id]: "fallback" })));
+  }, [hydrated, selectedId, trades]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(""), 1800);
     return () => window.clearTimeout(timer);
@@ -115,7 +165,7 @@ export function TradeJournal() {
   const selectedIndex = Math.max(0, trades.findIndex((trade) => trade.id === selectedId));
   const trade = trades[selectedIndex] ?? trades[0];
   const chartTradeRef = useRef(trade);
-  if (chartTradeRef.current.id !== trade.id) chartTradeRef.current = trade;
+  if (chartTradeRef.current.id !== trade.id || chartTradeRef.current.candles !== trade.candles) chartTradeRef.current = trade;
   const chartTrade = chartTradeRef.current;
   const tradeRef = useRef(trade);
   tradeRef.current = trade;
@@ -178,7 +228,7 @@ export function TradeJournal() {
       stop_loss_price: number("stop_loss_price"), planned_target_price: number("planned_target_price"), key_level_price: number("key_level_price"),
       quantity: 1, note: String(data.get("note") ?? ""), review_status: "new" as const,
     };
-    const created: TradeRecord = { ...base, candles: generateCandles(base) };
+    const created: TradeRecord = { ...base, candle_source: "Demo fixture", candles: generateCandles(base) };
     setTrades((current) => [created, ...current]);
     setSelectedId(created.id);
     setTimeframe(defaultTimeframe(created.trade_style));
@@ -220,7 +270,7 @@ export function TradeJournal() {
         <div className="chart-card specular-card">
           <div className="chart-toolbar"><div className="timeframes">{timeframes.map((value) => <button key={value} className={value === timeframe ? "active" : ""} onClick={() => { setTimeframe(value); setShareBlob(null); }}>{value}</button>)}</div><button className="fit-button" onClick={() => document.querySelector(".chart-host")?.dispatchEvent(new Event("mogmine-fit"))}>⌖ Fit</button></div>
           <TradeChart trade={chartTrade} timeframe={timeframe} onSnapshot={onSnapshot} />
-          <div className="chart-source">{trade.yahoo_ticker} · Demo fixture · {timeframe} <span>Trade locked in view</span></div>
+          <div className="chart-source">{trade.yahoo_ticker} · {marketState[trade.id] === "loading" ? "Loading Yahoo…" : trade.candle_source ?? "Demo fixture"} · {timeframe} <span>{trade.candle_source === "Yahoo Finance" ? "Live market context" : "Offline-ready fixture"}</span></div>
           <div className="levels"><div><small>ENTRY</small><b>{price(trade.entry_price)}</b></div><div><small>EXIT</small><b>{price(trade.exit_price)}</b></div><div><small>STOP</small><b className={!trade.stop_loss_price ? "empty" : ""}>{trade.stop_loss_price ? price(trade.stop_loss_price) : "Not recorded"}</b></div><div><small>TARGET</small><b className={!trade.planned_target_price ? "empty" : ""}>{trade.planned_target_price ? price(trade.planned_target_price) : "Not recorded"}</b></div></div>
         </div>
 

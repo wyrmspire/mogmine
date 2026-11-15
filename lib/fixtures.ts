@@ -57,7 +57,7 @@ function makeTrade(seed: SeedTrade): TradeRecord {
     trade_style: classifyTrade(seed.entry_time, seed.exit_time),
     review_status: seed.note ? "tagged" as const : "new" as const,
   };
-  return { ...base, candles: generateCandles(base) };
+  return { ...base, candle_source: "Demo fixture" as const, candles: generateCandles(base) };
 }
 
 export const demoTrades: TradeRecord[] = [
@@ -82,4 +82,55 @@ export const demoTrades: TradeRecord[] = [
     planned_target_price: null, key_level_price: 6832,
     note: "Bought a reclaim before it was confirmed while volume was fading. The level never held. Next time: wait for a close above 6832 and a successful retest.",
   }),
+  makeTrade({
+    id: "mes-orb-fakeout", symbol: "MES", direction: "SHORT", quantity: 2,
+    entry_time: "2026-11-13T15:34:00.000Z", exit_time: "2026-11-13T15:41:00.000Z",
+    entry_price: 6835.25, exit_price: 6830.5, stop_loss_price: 6838.5,
+    planned_target_price: 6828.75, key_level_price: 6834,
+    note: "The opening-range break failed and price slipped back below the level. Next time: keep the first target at the prior low instead of reaching for the full extension.",
+  }),
+  makeTrade({
+    id: "mnq-vwap-reclaim", symbol: "MNQ", direction: "LONG", quantity: 1,
+    entry_time: "2026-11-12T15:47:00.000Z", exit_time: "2026-11-12T16:19:00.000Z",
+    entry_price: 25736, exit_price: 25782, stop_loss_price: 25716,
+    planned_target_price: 25800, key_level_price: 25740,
+    note: "VWAP reclaimed after the flush and held on the retest. I followed the plan, but could have left a small runner after the first push.",
+  }),
+  makeTrade({
+    id: "mes-lunch-chop", symbol: "MES", direction: "LONG", quantity: 2,
+    entry_time: "2026-11-11T17:18:00.000Z", exit_time: "2026-11-11T17:42:00.000Z",
+    entry_price: 6819.75, exit_price: 6817.5, stop_loss_price: 6815.75,
+    planned_target_price: null, key_level_price: 6820,
+    note: "Tried to force a reclaim during thin lunch trade. Price never accepted above the level. Next time: skip the middle of the range when volume dries up.",
+  }),
+  makeTrade({
+    id: "mnq-breakdown-scalp", symbol: "MNQ", direction: "SHORT", quantity: 1,
+    entry_time: "2026-11-11T16:03:00.000Z", exit_time: "2026-11-11T16:08:00.000Z",
+    entry_price: 25692, exit_price: 25654, stop_loss_price: 25708,
+    planned_target_price: 25648, key_level_price: 25680,
+    note: "Lower high formed under the broken support and sellers accelerated. Good entry, clean exit, no need to add after the move was already underway.",
+  }),
+  makeTrade({
+    id: "mes-premarket-reversal", symbol: "MES", direction: "LONG", quantity: 2,
+    entry_time: "2026-11-10T14:51:00.000Z", exit_time: "2026-11-10T15:28:00.000Z",
+    entry_price: 6831.5, exit_price: 6838.25, stop_loss_price: 6827.5,
+    planned_target_price: 6841.5, key_level_price: 6830,
+    note: "Premarket low swept and immediately reclaimed. I reduced into the first resistance and kept risk controlled through the open.",
+  }),
+  makeTrade({
+    id: "mnq-late-chase", symbol: "MNQ", direction: "LONG", quantity: 1,
+    entry_time: "2026-11-09T16:26:00.000Z", exit_time: "2026-11-09T16:39:00.000Z",
+    entry_price: 25588, exit_price: 25561, stop_loss_price: 25558,
+    planned_target_price: null, key_level_price: 25580,
+    note: "Chased the third push after the clean entry was gone. The pullback was normal, but my location made it unmanageable. Next time: let it go.",
+  }),
+  makeTrade({
+    id: "mes-afternoon-hold", symbol: "MES", direction: "SHORT", quantity: 2,
+    entry_time: "2026-11-09T18:22:00.000Z", exit_time: "2026-11-09T19:44:00.000Z",
+    entry_price: 6846.75, exit_price: 6836, stop_loss_price: 6852.25,
+    planned_target_price: 6833.5, key_level_price: 6844,
+    note: "Afternoon lower high held below the morning balance. Stayed patient through the pullback and covered near the session low.",
+  }),
 ];
+
+export const DEMO_TRADE_IDS = new Set(demoTrades.map((trade) => trade.id));
