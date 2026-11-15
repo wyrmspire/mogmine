@@ -45,6 +45,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Antigravity) — App shell and notes + Chart, branch `feat/19-accessibility`
+Did:      Phase 6 accessibility pass (#19) in `app/globals.css`, `components/*`, `lib/theme.ts`, `lib/__tests__/core.test.ts`: `rem` typography & fluid grids for large text (UX-85), `>= 44px` tap targets on segmented/suggest/toast/chart-note/topnav buttons, `--text-faint` contrast raised to `#7b8498` (`>= 4.77:1`), blue/orange box frame + result pill text/dashed border (UX-80), skip link, modal focus trap & dialog guard for `J`/`K`/`F`/`N`/`C`/`X`, valid ARIA on badges/switches/chips/status skeletons (UX-83, UX-84).
+Verified: `npm test` (11/11), `npm run typecheck`, `npm run lint` (0 errors, 1 existing warning), `npm run build` pass. Headless Chrome across `/`, `/feed`, `/trades/[id]` (winner, no-stop, missing), `/review`, `/tune` + `AddTradeSheet` at 390×844 (100%, 125%, 150% font scale) and 1280×900 with `prefers-reduced-motion: reduce`, `data-palette="blue-orange"`, and `--gold-intensity: 0`: 0 horizontal overflow, 0 missing accessible names, 0 sub-44px targets, 0 console errors.
+Left:     No real iPhone / iOS Safari or native iOS share sheet available in this Linux container; Phase 5 Tune controls (sliders/palette switcher UI, backup) and the new Trade Card sheet live on sibling branches and should be re-checked on hardware after merge.
+Watch:    Keep `.pill` and `.save-status` as `position: relative` so `.visually-hidden` children never widen scroll containers.
+
 ### 2026-11-14 (night CT) — agent (Claude Code) — Chart + App shell and notes, branch `ui/phased-improvements`
 Did:      UI phases 1–3, three local commits (`c74bbae`, `685319b`, `5a9f8c6`): routes and a real Today/Feed on phones, device store without inline candles, Position Box rewrite and in-place timeframe switch, Pit Stop, checklist, review queue. Plan and open questions in `docs/14`; `OD-24`–`OD-26` opened.
 Verified: `npx tsc --noEmit` clean; `npm run lint` 0 errors, 1 old warning; `npm test` 10/10; `npm run build` passes. Headless Chrome at 390×844 and 1280×900: no overflow, no console errors; touch swipe on the chart scrolls the page. No real phone, no iOS, share sheet untested.

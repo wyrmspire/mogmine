@@ -79,7 +79,7 @@ function Queue() {
           <span className="row-main">
             <span className="row-title">
               <strong>{trade.symbol}</strong>
-              <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}>{trade.direction === "LONG" ? "▲ LONG" : "▼ SHORT"}</span>
+              <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
               {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
             </span>
             <span className="row-meta" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>
@@ -98,9 +98,9 @@ function Queue() {
             <h3>Take it again?</h3>
             <p>Judge the entry before you see how it ended. The result stays hidden until you answer.</p>
             <div className="choices">
-              <button className="btn-secondary" onClick={() => grade("yes")}>Yes</button>
-              <button className="btn-secondary" onClick={() => grade("smaller")}>Smaller</button>
-              <button className="btn-secondary" onClick={() => grade("pass")}>Pass</button>
+              <button type="button" className="btn-secondary" onClick={() => grade("yes")}>Yes</button>
+              <button type="button" className="btn-secondary" onClick={() => grade("smaller")}>Smaller</button>
+              <button type="button" className="btn-secondary" onClick={() => grade("pass")}>Pass</button>
             </div>
           </div>
         ) : (
@@ -108,16 +108,16 @@ function Queue() {
         )}
 
         <div className="queue-foot">
-          <button className="btn-ghost" onClick={advance}>Skip</button>
+          <button type="button" className="btn-ghost" onClick={advance}>Skip</button>
           <Link className="btn-secondary" href={`/trades/${trade.id}`} onClick={() => rememberList({ ids, label: "Review queue", href: "/review" })}>{sealed ? "Chart later" : "Open chart"}</Link>
-          <button className="btn-primary" disabled={sealed} onClick={finish}>Reviewed ✓</button>
+          <button type="button" className="btn-primary" disabled={sealed} onClick={finish}>Reviewed ✓</button>
         </div>
       </section>
 
       <div className="card card-pad" style={{ marginTop: 14 }}>
         <div className="toggle-row">
           <span>Blind review<small>Hide the result until you have judged the entry. Works best on trades older than a week.</small></span>
-          <button className="switch-hit" role="switch" aria-checked={prefs.blindReview} aria-label="Blind review" onClick={() => setPrefs({ blindReview: !prefs.blindReview })}><span className="switch" aria-checked={prefs.blindReview} /></button>
+          <button type="button" className="switch-hit" role="switch" aria-checked={prefs.blindReview} aria-label="Blind review" onClick={() => setPrefs({ blindReview: !prefs.blindReview })}><span className="switch" data-checked={prefs.blindReview} aria-hidden="true" /></button>
         </div>
       </div>
     </div>

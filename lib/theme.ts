@@ -11,6 +11,8 @@ export interface ChartTheme {
   candleDown: string;
   profit: string;
   risk: string;
+  profitText: string;
+  lossText: string;
   boxActual: string;
   goldMid: string;
   goldLight: string;
@@ -39,6 +41,8 @@ function read(): ChartTheme {
     candleDown: value("--candle-down"),
     profit: value("--profit-emerald"),
     risk: value("--risk-crimson"),
+    profitText: value("--profit-text"),
+    lossText: value("--loss-text"),
     boxActual: value("--box-actual"),
     goldMid: value("--gold-mid"),
     goldLight: value("--gold-light"),

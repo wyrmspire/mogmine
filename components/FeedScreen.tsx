@@ -15,9 +15,9 @@ const STYLE_PILLS: Array<{ value: StyleFilter; label: string }> = [
   { value: "session_90m", label: "90m" },
   { value: "investment", label: "Extended" },
 ];
-const STATUS_PILLS: Array<{ value: StatusFilter; label: string }> = [
+const STATUS_PILLS: Array<{ value: StatusFilter; label: string; icon?: string }> = [
   { value: "unreviewed", label: "Needs review" },
-  { value: "flagged", label: "⚑ Flagged" },
+  { value: "flagged", label: "Flagged", icon: "⚑" },
 ];
 
 export function FeedScreen() {
@@ -43,20 +43,20 @@ export function FeedScreen() {
 
       <div className="filter-bar" role="group" aria-label="Filters">
         {STYLE_PILLS.map((pill) => (
-          <button key={pill.value} className="pill" aria-pressed={filters.style === pill.value} onClick={() => setFilters({ style: pill.value })}>
-            {pill.label}{journal.hydrated && <span className="count">{count({ style: pill.value })}</span>}
+          <button key={pill.value} type="button" className="pill" aria-pressed={filters.style === pill.value} onClick={() => setFilters({ style: pill.value })}>
+            {pill.label}{journal.hydrated && <span className="count"><span className="visually-hidden"> (</span>{count({ style: pill.value })}<span className="visually-hidden">)</span></span>}
           </button>
         ))}
         <span className="filter-sep" aria-hidden="true" />
         {STATUS_PILLS.map((pill) => (
-          <button key={pill.value} className="pill" aria-pressed={filters.status === pill.value} onClick={() => setFilters({ status: filters.status === pill.value ? "all" : pill.value })}>
-            {pill.label}{journal.hydrated && <span className="count">{count({ status: pill.value })}</span>}
+          <button key={pill.value} type="button" className="pill" aria-pressed={filters.status === pill.value} onClick={() => setFilters({ status: filters.status === pill.value ? "all" : pill.value })}>
+            {pill.icon && <span aria-hidden="true">{pill.icon} </span>}{pill.label}{journal.hydrated && <span className="count"><span className="visually-hidden"> (</span>{count({ status: pill.value })}<span className="visually-hidden">)</span></span>}
           </button>
         ))}
       </div>
 
       {!journal.hydrated ? (
-        [0, 1, 2, 3].map((key) => <div key={key} className="skeleton skeleton-row" />)
+        <div role="status" aria-label="Loading trades…">{[0, 1, 2, 3].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>
       ) : groups.length === 0 ? (
         <div className="specular-card empty-state">
           {filtered ? (

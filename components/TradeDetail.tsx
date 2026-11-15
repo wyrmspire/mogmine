@@ -29,7 +29,7 @@ export function TradeDetail({ id }: { id: string }) {
   const trade = journal.trades.find((item) => item.id === id);
 
   if (!trade) {
-    if (!journal.hydrated) return <div className="page"><div className="skeleton" style={{ height: 420 }} /></div>;
+    if (!journal.hydrated) return <div className="page" role="status" aria-label="Loading trade…"><div className="skeleton" style={{ height: 420 }} /></div>;
     return (
       <div className="page"><div className="specular-card empty-state">
         <h3>This trade is not on this device</h3>
@@ -110,7 +110,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card. X (hold for X-Ray) lives in the chart.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || document.querySelector('[role="dialog"]')) return;
       const target = event.target as HTMLElement | null;
       if (event.key === "Escape") { setFullscreen(false); return; }
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
@@ -177,7 +177,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="head-main">
             <div className="title-line">
               <h1>{trade.symbol}</h1>
-              <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}>{trade.direction === "LONG" ? "▲ LONG" : "▼ SHORT"}</span>
+              <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
               <span className="style-pill">{STYLE_LABEL[trade.trade_style]}</span>
               {trade.is_sample && <span className="tag-chip">SAMPLE</span>}
             </div>
@@ -189,27 +189,27 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
             <div className="timeframes" role="group" aria-label="Timeframe">
-              {TIMEFRAMES.map((value) => <button key={value} aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
+              {TIMEFRAMES.map((value) => <button key={value} type="button" aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
             </div>
             <div className="chart-tools">
-              {!fitted && <button className="tool-button attention" onClick={() => chartRef.current?.fit()} title="Fit the trade (F)">Fit</button>}
-              <button className="tool-button" aria-pressed={xray} aria-label="X-Ray: fade the position box" title="X-Ray: fade the box to read the candles (hold X)" onClick={() => { chartRef.current?.setXray(!xray); setXray(!xray); }}>X-Ray</button>
-              <button className="tool-button" aria-pressed={fullscreen} aria-label={fullscreen ? "Exit full screen" : "Full-screen chart"} onClick={() => setFullscreen(!fullscreen)}>
+              {!fitted && <button type="button" className="tool-button attention" onClick={() => chartRef.current?.fit()} title="Fit the trade (F)">Fit</button>}
+              <button type="button" className="tool-button" aria-pressed={xray} aria-label="X-Ray: fade the position box" title="X-Ray: fade the box to read the candles (hold X)" onClick={() => { chartRef.current?.setXray(!xray); setXray(!xray); }}>X-Ray</button>
+              <button type="button" className="tool-button" aria-pressed={fullscreen} aria-label={fullscreen ? "Exit full screen" : "Full-screen chart"} onClick={() => setFullscreen(!fullscreen)}>
                 {fullscreen ? "Done" : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>}
               </button>
             </div>
           </div>
           <div className="chart-frame">
             {ready ? (
-              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={prefs.shield} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} />
+              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={prefs.shield} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} />
             ) : candles?.status === "none" ? (
               <div className="ladder-state">
                 <PriceLadder trade={trade} />
                 <p>No candles for this trade yet. Yahoo did not return data for {trade.yahoo_ticker} around these times.</p>
-                <div className="actions"><button className="btn-secondary" onClick={() => ensureCandles(trade, true)}>Try again</button></div>
+                <div className="actions"><button type="button" className="btn-secondary" onClick={() => ensureCandles(trade, true)}>Try again</button></div>
               </div>
             ) : (
-              <div className="chart-skeleton"><div className="skeleton" /><span>Loading candles…</span></div>
+              <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
             )}
           </div>
           <div className="chart-source">
@@ -218,7 +218,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <span className="source-text">{candles?.fetching ? "Checking Yahoo…" : ""}</span>
           </div>
           {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
-          {ready && candles.source === "Demo fixture" && !candles.fetching && <div className="chart-note"><span>Sample candles. Real market data was not available.</span><button onClick={() => ensureCandles(trade, true)}>Retry</button></div>}
+          {ready && candles.source === "Demo fixture" && !candles.fetching && <div className="chart-note"><span>Sample candles. Real market data was not available.</span><button type="button" onClick={() => ensureCandles(trade, true)}>Retry</button></div>}
           {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
           <div className="levels">
             <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
@@ -232,13 +232,13 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         </div>
 
         <div className="detail-actions">
-          <button className="btn-primary" disabled={!shareBlob} onClick={shareCard}>{shareBlob ? "Share Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
+          <button type="button" className="btn-primary" disabled={!shareBlob} onClick={shareCard}>{shareBlob ? "Share Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
         </div>
 
         <div className="pager">
-          <button aria-label="Previous trade (K)" disabled={!previous} onClick={() => go(previous)}>‹ Prev</button>
+          <button type="button" aria-label="Previous trade (K)" disabled={!previous} onClick={() => go(previous)}>‹ Prev</button>
           <span className="where num">{index >= 0 ? `${index + 1} / ${list.length}` : ""} · {listLabel}</span>
-          <button aria-label="Next trade (J)" disabled={!next} onClick={() => go(next)}>Next ›</button>
+          <button type="button" aria-label="Next trade (J)" disabled={!next} onClick={() => go(next)}>Next ›</button>
         </div>
       </section>
 
@@ -248,13 +248,13 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <PitStop trade={trade} />
         </section>
         <div className="review-actions">
-          <button className="icon-button" aria-pressed={trade.flagged} aria-label={trade.flagged ? "Flagged for the weekly review. Tap to unflag." : "Flag for the weekly review"} title="Flag for the weekly review" onClick={() => updateTrade(trade.id, { flagged: !trade.flagged })}>⚑</button>
+          <button type="button" className="icon-button" aria-pressed={trade.flagged} aria-label={trade.flagged ? "Flagged for the weekly review. Tap to unflag." : "Flag for the weekly review"} title="Flag for the weekly review" onClick={() => updateTrade(trade.id, { flagged: !trade.flagged })}><span aria-hidden="true">⚑</span></button>
           {trade.review_status === "reviewed"
-            ? <button className="btn-secondary" onClick={() => updateTrade(trade.id, { review_status: "new" })}>Reviewed ✓ · Reopen</button>
-            : <button className="btn-primary" onClick={() => { updateTrade(trade.id, { review_status: "reviewed" }); showToast("Marked reviewed", { label: "Undo", run: () => updateTrade(trade.id, { review_status: "new" }) }); }}>Mark reviewed</button>}
+            ? <button type="button" className="btn-secondary" onClick={() => updateTrade(trade.id, { review_status: "new" })}>Reviewed ✓ · Reopen</button>
+            : <button type="button" className="btn-primary" onClick={() => { updateTrade(trade.id, { review_status: "reviewed" }); showToast("Marked reviewed", { label: "Undo", run: () => updateTrade(trade.id, { review_status: "new" }) }); }}>Mark reviewed</button>}
         </div>
         {trade.take_again && <p className="note-state" style={{ textAlign: "left" }}>Blind review: you said <b>{trade.take_again === "yes" ? "take it again" : trade.take_again === "smaller" ? "take it smaller" : "pass"}</b> before seeing the result.</p>}
-        {!trade.is_sample && <button className="btn-danger-ghost" onClick={removeThis}>Remove this trade</button>}
+        {!trade.is_sample && <button type="button" className="btn-danger-ghost" onClick={removeThis}>Remove this trade</button>}
       </aside>
     </div>
   );

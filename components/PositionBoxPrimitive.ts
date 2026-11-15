@@ -36,6 +36,8 @@ export interface PositionBoxConfig {
   pillTone: "profit" | "risk" | "neutral";
   profitColor: string;
   riskColor: string;
+  profitTextColor?: string;
+  riskTextColor?: string;
   frameColor: string;
   pathColor: string;
   pillBackground: string;
@@ -169,9 +171,13 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
       ctx.fillStyle = c.pillBackground;
       ctx.fill();
       ctx.lineWidth = 1;
-      ctx.strokeStyle = c.frameColor;
+      ctx.strokeStyle = c.pillTone === "risk" ? c.riskColor : c.frameColor;
+      ctx.setLineDash(c.pillTone === "risk" ? [4, 3] : []);
       ctx.stroke();
-      ctx.fillStyle = c.pillTone === "profit" ? c.profitColor : c.pillTone === "risk" ? c.riskColor : c.textColor;
+      ctx.setLineDash([]);
+      const profitText = c.profitTextColor || c.profitColor;
+      const riskText = c.riskTextColor || c.riskColor;
+      ctx.fillStyle = c.pillTone === "profit" ? profitText : c.pillTone === "risk" ? riskText : c.textColor;
       ctx.textBaseline = "middle";
       ctx.textAlign = "center";
       ctx.fillText(c.pill, xPill + width / 2, yPill + height / 2 + 0.5);

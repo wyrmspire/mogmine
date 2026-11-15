@@ -45,6 +45,8 @@ interface Props {
   onRendered?: () => void;
   /** Whether the visible range is still the fitted trade window. */
   onFitChange?: (fitted: boolean) => void;
+  /** Whether X-Ray mode is currently active (button, touch tracking, or hold X). */
+  onXrayChange?: (active: boolean) => void;
 }
 
 interface Live {
@@ -63,19 +65,19 @@ interface Live {
 
 const toTime = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
 
-export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone, privacy, readout, onRendered, onFitChange }: Props) {
+export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone, privacy, readout, onRendered, onFitChange, onXrayChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange });
+  const latest = useRef({ trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange, onXrayChange });
   const renderTimer = useRef<number | undefined>(undefined);
 
-  useEffect(() => { latest.current = { trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange }; });
+  useEffect(() => { latest.current = { trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange, onXrayChange }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => { const l = live.current; if (l?.fitRange) l.chart.timeScale().setVisibleLogicalRange(l.fitRange); },
     screenshot: () => live.current?.chart.takeScreenshot(true, false) ?? null,
-    setXray: (on: boolean) => { const l = live.current; if (l) { l.xrayPinned = on; l.primitive.setXray(on || l.touchTracking || l.xrayKey); } },
+    setXray: (on: boolean) => { const l = live.current; if (l) { l.xrayPinned = on; const active = on || l.touchTracking || l.xrayKey; l.primitive.setXray(active); latest.current.onXrayChange?.(active); } },
   }), []);
 
   // Draws the current props onto the existing chart. Switching timeframe only swaps data: the chart
@@ -128,7 +130,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       isLong,
       pill: p.privacy ? (r != null ? `${formatR(r)} · ${points}` : points) : (r != null ? `${formatR(r)} · ${formatMoney(pnl)}` : formatMoney(pnl)),
       pillTone: pnl > 0 ? "profit" : pnl < 0 ? "risk" : "neutral",
-      profitColor: t.profit, riskColor: t.risk, frameColor: t.boxActual, pathColor: t.goldMid,
+      profitColor: t.profit, riskColor: t.risk, profitTextColor: t.profitText, riskTextColor: t.lossText, frameColor: t.boxActual, pathColor: t.goldMid,
       pillBackground: t.surface, textColor: t.textPrimary, opacity: t.boxOpacity,
     };
     l.primitive.update(config);
@@ -194,7 +196,11 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       live.current = state;
       draw.current(true);
 
-      const applyXray = () => primitive.setXray(state.xrayPinned || state.touchTracking || state.xrayKey);
+      const applyXray = () => {
+        const active = state.xrayPinned || state.touchTracking || state.xrayKey;
+        primitive.setXray(active);
+        latest.current.onXrayChange?.(active);
+      };
       let lastPointer = "mouse";
       const onPointer = (event: PointerEvent) => { lastPointer = event.pointerType; };
       host.addEventListener("pointerdown", onPointer, true);
@@ -219,7 +225,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       });
 
       // Desktop: hold X for X-Ray (UX-69).
-      const typing = (event: KeyboardEvent) => event.target instanceof HTMLElement && (event.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName));
+      const typing = (event: KeyboardEvent) => Boolean(document.querySelector('[role="dialog"]')) || (event.target instanceof HTMLElement && (event.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)));
       const onKeyDown = (event: KeyboardEvent) => { if (event.key.toLowerCase() === "x" && !event.metaKey && !event.ctrlKey && !typing(event)) { state.xrayKey = true; applyXray(); } };
       const onKeyUp = (event: KeyboardEvent) => { if (event.key.toLowerCase() === "x") { state.xrayKey = false; applyXray(); } };
       window.addEventListener("keydown", onKeyDown);

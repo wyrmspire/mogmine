@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR, formatTicks } from "../format.ts";
+import { describeTrade } from "../describe.ts";
 import { formatSessionDate, sessionDate } from "../session.ts";
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { processRead } from "../trades.ts";
@@ -122,4 +123,26 @@ test("process read: rules and violation tags decide, never the outcome", () => {
   assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Level Sweep"] }), "clean");
   assert.equal(processRead({ checklist_state: [rule(true), rule(false)], quick_tags: [] }), "broken");
   assert.equal(processRead({ checklist_state: [rule(true)], quick_tags: ["Revenge"] }), "broken");
+});
+
+test("chart text equivalent describes direction, size, times, prices and R or points (UX-84, UX-71)", () => {
+  const trade = normalizeTrade({
+    ...base,
+    symbol: "MES",
+    direction: "LONG",
+    quantity: 2,
+    entry_price: 5948.5,
+    exit_price: 5961.5,
+    stop_loss_price: 5943.5,
+  });
+  assert.equal(
+    describeTrade(trade, "America/Chicago", false),
+    "Long MES, 2 contracts, entered 09:43:00 CST at 5948.50, exited 09:45:00 CST at 5961.50, plus 2.6 R.",
+  );
+  assert.equal(
+    describeTrade(trade, "America/Chicago", true),
+    "Long MES, entered 09:43:00 CST at 5948.50, exited 09:45:00 CST at 5961.50, plus 2.6 R.",
+  );
+  const noStop = { ...trade, stop_loss_price: null };
+  assert.match(describeTrade(noStop, "America/Chicago", true), /plus 13 points, no stop recorded\.$/);
 });
