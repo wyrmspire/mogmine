@@ -1,9 +1,9 @@
 // Candles per trade, on the device. Completed candle sets never change, so they are cached in
 // IndexedDB and old trades open instantly and offline (docs/08 §2). Lists never touch this module (B-42).
 //
-// Sample trades always have a deterministic fixture chart, and are re-priced onto real Yahoo candles
-// when those are available. A real (manual) trade is never drawn on invented candles: without market
-// data it shows the price ladder instead (docs/08 §4, principle 5).
+// Labeled sample trades have deterministic fixture charts for offline demos and tests, and are
+// re-priced onto real Yahoo candles when available. Fixtures are never a fallback for a real trade:
+// without Yahoo data, a real trade has no chart (docs/08 §4, principle 5).
 import { useSyncExternalStore } from "react";
 import { generateCandles } from "./fixtures.ts";
 import { idbGet, idbSet } from "./idb.ts";

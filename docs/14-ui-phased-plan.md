@@ -39,7 +39,7 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 - **Position Box** in the Actual style (`OD-23`): teal frame, solid profit border, dashed risk border (UX-80), fills under the candles so candles stay crisp, MAE and MFE marks, and a result pill drawn in the canvas that shows R and points only in Shield mode (UX-71).
 - **Timeframe switch swaps data in place.** The chart is no longer torn down, and the box is re-snapped to the new bars (UX-02, UX-20, B-23).
 - X-Ray on crosshair tracking (UX-42), Fit shown only when the view has moved, full-screen chart (UX-25), `J`/`K`/`F`/`N`/`C`/`X` keys (UX-69), swipe between trades on the header only (UX-40).
-- **States:** price ladder when there are no candles, "showing 5m" notice, fills-off-the-bars notice (B-12), `—R` with one-tap risk chips (UX-36), `≈` on estimated MAE/MFE (B-33).
+- **States:** no chart area when there are no Yahoo candles, "showing 5m" notice, fills-off-the-bars notice (B-12), `—R` with one-tap risk chips (UX-36), `≈` on estimated MAE/MFE (B-33).
 - Verified with real touch events: a vertical swipe that starts on the chart scrolls the page (UX-41).
 
 ### Phase 3 — Pit Stop and review queue
@@ -96,7 +96,7 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 | Q3 | Blind review (BET-03) was built in Phase 3 as an off-by-default switch on `/review`. Bets in docs/13 are not approved scope. Keep, or remove? | Keep it off by default and try it on last week's trades. It is about 40 lines to remove (`OD-25`). |
 | Q4 | Playbooks, tags and the four checklist rules are fixed defaults in `lib/playbooks.ts`, taken from the docs/03 examples. There is no editor. Are those your setups? | Send your real playbooks and rules. An editor can wait for the database (`OD-26`). |
 | Q5 | Daily levels on the chart (the last handoff's "next step") are blocked: the fixture is computed from `MES=F`, the chart draws `ES=F` (Invariant 3), and LV-06 forbids mixing them. | Decide `OD-15` first. Not in this plan until then. |
-| Q6 | A manual trade with no Yahoo candles now shows a price ladder. Before, it was drawn on generated candles, which looked like market data. Samples still use generated candles and say so. | Keep the ladder. |
+| Q6 | **Resolved by the owner:** a trade with no Yahoo candles shows no chart area. Labeled samples may use deterministic fixture candles for offline demos and tests; fixtures never backfill a real trade. | Implemented in Phase 4 issue #25. |
 | Q7 | The `8h` timeframe button was removed. With ±15 hours of data it drew four or five bars. | Leave it out. |
 | Q8 | Commits are authored as "Claude Code <noreply@anthropic.com>" because this machine has no git identity. | Tell me if you want your own name on them before anything is pushed. |
 

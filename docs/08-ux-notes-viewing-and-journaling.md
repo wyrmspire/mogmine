@@ -86,7 +86,7 @@ Every screen is specified for more than the happy path. If a state is not in thi
 | Candles loading | Header numbers at once (they come from the trade row). A chart skeleton at final height so nothing jumps. |
 | Post-exit candles not yet available (B-10) | The chart and box as normal. The area after the exit is marked "Post-exit candles arrive ~10:55 ET". The Ghost toggle is disabled and says why. |
 | A timeframe was never captured (B-11) | The best available timeframe, with a line: "1m data was not captured for this trade — showing 15m". |
-| No candles at all | A price ladder instead of a blank chart: entry, exit and stop on a price axis, plus the fills table. |
+| No candles at all | No chart area, generated candles, price ladder or placeholder graphic. The trade header, details and notes remain usable. |
 | Chart data may not line up (B-12) | A small amber chip: "Candles are from the ES continuous contract. Your fills may sit slightly off the bars." |
 | No stop recorded | R shows `—R` with an **Add stop** affordance. Never `0.0R`. |
 | MAE/MFE estimated (B-33) | Values prefixed with `≈`. |

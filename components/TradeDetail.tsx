@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PitStop } from "./PitStop";
-import { PriceLadder } from "./PriceLadder";
 import { RiskChips } from "./RiskChips";
 import { TradeChart } from "./TradeChart";
 import type { TradeChartHandle } from "./TradeChart";
@@ -185,7 +184,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
-        <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
+        {candles?.status !== "none" && <>
+          <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
             <div className="timeframes" role="group" aria-label="Timeframe">
               {TIMEFRAMES.map((value) => <button key={value} aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
@@ -201,12 +201,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="chart-frame">
             {ready ? (
               <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={prefs.shield} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} />
-            ) : candles?.status === "none" ? (
-              <div className="ladder-state">
-                <PriceLadder trade={trade} />
-                <p>No candles for this trade yet. Yahoo did not return data for {trade.yahoo_ticker} around these times.</p>
-                <div className="actions"><button className="btn-secondary" onClick={() => ensureCandles(trade, true)}>Try again</button></div>
-              </div>
             ) : (
               <div className="chart-skeleton"><div className="skeleton" /><span>Loading candles…</span></div>
             )}
@@ -228,11 +222,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div title="Best price in your favour during the hold, estimated from bars"><small>BEST (MFE)</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
           </div>
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} />}
-        </div>
+          </div>
 
-        <div className="detail-actions">
-          <button className="btn-primary" disabled={!shareBlob} onClick={shareCard}>{shareBlob ? "Share Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
-        </div>
+          <div className="detail-actions">
+            <button className="btn-primary" disabled={!shareBlob} onClick={shareCard}>{shareBlob ? "Share Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
+          </div>
+        </>}
 
         <div className="pager">
           <button aria-label="Previous trade (K)" disabled={!previous} onClick={() => go(previous)}>‹ Prev</button>
