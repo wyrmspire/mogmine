@@ -176,3 +176,7 @@ export interface ReviewContextPlugin {
 4. `EconomicCalendarPlugin` — High-impact USD news proximity check (`CPI`, `FOMC`, `NFP`).
 5. `PlaybookAndNotesPlugin` — Playbook checklist adherence + Simple/Advanced/Voice notes.
 6. `ChartVisionSnapshotPlugin` — High-res PNG of the rendered chart with translucent Position Boxes.
+
+## 5. Proposed external-assistant boundary
+
+The website and a future custom GPT should use the same application operations and validation. Assistants request bounded context and create draft plans/annotations with domain references; the app owns rendering, styling and navigation. Ownership checks, revocable client permissions, idempotency, revisions and activity records are required before external writes. See [11 §5](11-product-workflows-and-api-context.md#5-assistant-api-without-assistant-controlled-layout), proposal `OD-19`. This does not introduce endpoint paths, credentials or a broker trading capability.

@@ -122,4 +122,11 @@ Every `MES` chart calculates and optionally toggles clean, subtle horizontal pri
 | **`IBH` / `IBL`** | Initial Balance (09:30–10:30 ET High and Low) | Thin Muted Cyan lines |
 | **`VWAP`** | Session Volume-Weighted Average Price (computed from `1m` cached candles) | Smooth Gold-White curve |
 
-Because all level pills can be toggled on or off in one tap, the chart never feels cluttered on a small mobile screen.
+Collision handling and nearest-level defaults follow UX-21 in [08 §5](08-ux-notes-viewing-and-journaling.md#5-trade-detail-layout); toggles alone do not solve clutter. VWAP is a curve, while the other levels above are horizontal rays. Each begins only when its inputs were available (B-14).
+
+## 7. Proposed annotations, indicator presets and view controls
+
+[11 — Mobile Workflows, Chart Context & Assistant API](11-product-workflows-and-api-context.md) specifies the proposed additions: comments anchored to fills/candles/levels/zones (§3), independent detail and full-chart controls (§2), and code-computed indicator values with explicit definitions and coverage (§4). Session/weekly VWAP, 200 EMA and bands remain configuration proposals, not new defaults. Do not silently resolve the VWAP anchor conflict or invent a meaning for “BE” (`OD-18`). AI supplies structured content; Canvas primitives and app-owned panels determine presentation (`OD-17`, `OD-19`).
+
+> [!NOTE]
+> The owner's daily markup (pivots, ADR Pivots bands, weekly and 4h levels, zones, role colours, right-edge labels) is proposed in [12 — Levels, Zones & the Daily Markup](12-levels-zones-and-daily-markup.md). It defines `PDH` / `PDL` over the Globex session with settlement as `PDC` (`OD-21`) and styles by role, not type (`OD-22`).

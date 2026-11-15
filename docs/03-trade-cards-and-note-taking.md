@@ -41,14 +41,14 @@ From any trade view, tapping the **`Trade Card`** button generates a high-craft,
 
 ### How the Card Is Built & Exported
 1. **Live Interactive Preview:** A dedicated React component styled with the active **Obsidian + Gold Gradient** theme tokens and tabular monospace pricing (`tabular-nums`).
-2. **Chart + Overlay Merge:** Calls `lightweight-charts`'s `takeScreenshot()` (which includes the custom Canvas **translucent Position Boxes** and key levels) and embeds that crisp canvas bitmap inside the card layout. If a time-synced companion chart (`NQ=F`) is attached, the user can toggle **Single Chart** or **Dual Stacked Chart** layout on the card.
+2. **Chart + Overlay Merge:** Calls `lightweight-charts`'s `takeScreenshot(true)` to include the custom Canvas **translucent Position Boxes** and key levels, then embeds that bitmap inside the card layout. If a time-synced companion chart (`NQ=F`) is attached, the user can toggle **Single Chart** or **Dual Stacked Chart** layout on the card. Proposed anchored comments and saved-view export behavior are in [11 §3](11-product-workflows-and-api-context.md#3-notes-attach-to-market-objects); comment-sheet text needs deliberate card composition.
 3. **"Collector's Grade" Card Controls:**
    - **Privacy / Prop Shield Toggle (`$ Dollars` ↔ `R-Multiple & Points`):** One tap strips dollar PnL and account identifiers from the card, displaying pure skill telemetry (`+2.6R • +13.00 pts • 52 ticks`) so you can safely share cards in Discord study groups or on X/Twitter.
    - **Aspect Ratio Switcher:** Export cleanly in **`9:16` Mobile Story**, **`16:9` Landscape**, or **`1:1` Square** layouts without clipping the chart or AI verdict.
    - **Dual "Process Grade + Outcome" Seal:** Pairs the metallic gold **Process Grade & Rule Adherence seal** (`Grade A • 4/4 Rules`) directly alongside the R-multiple so disciplined `-1R` stop-outs are visually respected alongside big winners.
 4. **One-Click PNG Export & Storage:**
    - Captures the card DOM + canvas at `2x` Retina resolution (`html-to-image` or server-side Satori render) for instant download/iOS Share Sheet.
-   - Automatically caches a clean snapshot in **Supabase Storage** (`trade-snapshots/`) so the **Vision AI Engine** can inspect the exact trade visual.
+   - Uploads the chosen card to private **Supabase Storage**, retaining a bucket path. The Vision AI snapshot is a separate standardized render (UX-73), not automatically the user-composed card.
 
 ---
 
@@ -69,7 +69,7 @@ Designed for one-handed thumb use right after closing a trade:
 - **Voice-to-Structured-Note Button:**
   - Press and hold (or tap) the gold microphone icon and speak naturally for 5–15 seconds:  
     *"Took MES long after we swept the overnight low at 9:45, NQ refused to make a lower low and pushed hard. Got a little scared at VWAP and took everything off instead of leaving a runner."*
-  - **AI Auto-Parser:** Transcribes the audio, saves the raw voice note, and automatically populates your **Playbook**, **Tags** (`SMT Divergence`, `Level Sweep`, `Cut Early`), **Thesis Summary**, and **Emotional State** so you don't have to type on your phone keyboard.
+  - **AI Auto-Parser:** Transcribes the audio and offers suggested **Playbook**, **Tags** (`SMT Divergence`, `Level Sweep`, `Cut Early`), **Thesis Summary**, and **Emotional State** for acceptance. It never overwrites user selections or prose. Audio retention follows the user's setting (UX-33, UX-39).
 
 ### B. Advanced Mode (Post-Market Deep Review)
 Expandable drawer or tab when sitting down after the session to grade yourself thoroughly:
@@ -83,3 +83,5 @@ Expandable drawer or tab when sitting down after the session to grade yourself t
    - **Post-Exit Price Action:** What price did `15–60 minutes` after you exited (did you nail the top/bottom, or leave 3R on the table?).
 3. **Multi-Timeframe & AI Follow-Up Chat:**
    - Inline chat panel tied to that specific trade where you can ask the AI Coach follow-up questions (*"Look at the 9:50 1m candle—was my stop too tight below VWAP?"*).
+
+Daily plans, notes captured before a trade exists, cross-device revision conflicts and later weekly reviews are proposed in [11 §1](11-product-workflows-and-api-context.md#1-the-daily-loop-beyond-the-chart) (`OD-19`). Reusable `playbooks` remain setup definitions; a daily plan references them without replacing their rules.

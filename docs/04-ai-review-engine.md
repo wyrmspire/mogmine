@@ -6,7 +6,9 @@ Generic trading AI prompts ("Looks like a good trade, manage your risk!") are us
 
 ## 1. The 6 Context Inputs Fed to the AI
 
-When a review is requested (automatically after a trade closes + notes are added, or on demand via **Re-Analyze**), the `ReviewContextPlugin` pipeline assembles a structured context bundle:
+When a review is requested (automatically after a trade closes + notes are added, or on demand via **Re-Analyze**), the `ReviewContextPlugin` pipeline assembles a structured context bundle. AI completion does not mark the trade reviewed (docs/08 §7).
+
+Proposed chart observations use stable trade/fill/time/level/zone anchors plus evidence references, never pixel coordinates or arbitrary UI markup. See [11 §3](11-product-workflows-and-api-context.md#3-notes-attach-to-market-objects) and §5 (`OD-17`, `OD-19`). A claim about planned behavior needs the plan revision available at decision time; a later plan is hindsight.
 
 ### Input 1: TopstepX Execution Telemetry
 - Instrument (`MES`), direction (`LONG` / `SHORT`), contract size, individual scale-in/scale-out fill timestamps and prices.
@@ -17,6 +19,7 @@ When a review is requested (automatically after a trade closes + notes are added
 - The cached `1m` / `5m` / `15m` candlestick array before, during, and `30 minutes` after the exit (so the AI sees post-exit follow-through!).
 - Pre-computed distances (in points and ATR multiples) from entry/exit to **`PDH/PDL`**, **`ONH/ONL`**, **`ORB High/Low`**, **`IBH/IBL`**, and **`VWAP`**.
 - Local volatility (`14-bar ATR`) and wick/body candle behavior around the entry bar.
+- Proposed levels block (entry zone, stop and target versus structure, plan scenario matched) and wider news kinds (Fed speakers, auctions, EIA): [12 §8, §10](12-levels-zones-and-daily-markup.md#10-how-the-ai-review-uses-levels).
 
 ### Input 3: Companion Charts & Intermarket Divergence / Pushes
 - If `NQ=F` (or `YM=F`, `^VIX`, `DX-Y.NYB`) is attached as a Companion Chart, the engine computes a synchronized comparison table (e.g., *"Between 09:40 and 09:45 ET, ES=F made a new session low by -2.25 pts while NQ=F held +14.5 pts above its prior swing low — bullish SMT divergence"*).

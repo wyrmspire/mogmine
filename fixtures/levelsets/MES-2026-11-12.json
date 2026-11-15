@@ -1,0 +1,511 @@
+{
+  "schema": "mogmine.levelset.v1",
+  "doc": "docs/12-levels-zones-and-daily-markup.md",
+  "symbol": "MES",
+  "provider": "yahoo_finance",
+  "provider_symbol": "MES=F",
+  "contract_label": "MICRO E-MINI S&P 500 INDEX FUTU",
+  "session_date": "2026-11-12",
+  "revision": 1,
+  "status": "draft",
+  "source": "assistant",
+  "calc_version": "levels-v1",
+  "computed_at": "2026-11-12T08:05:00-06:00",
+  "display_tz": "America/Chicago",
+  "chart": {
+    "timeframe": "15m",
+    "session": "ETH"
+  },
+  "data_provenance": {
+    "bars": "Yahoo MES=F 1m/15m (exchange time converted to CT)",
+    "quote": "TradingView scanner CME_MINI:MES1! (~10 min delayed)",
+    "settle": "Yahoo MES=F 1d close (matched CME settlement on 2026-11-10 and 2026-11-11)",
+    "series_note": "OD-15 interim charts MES on ES=F; these values are from MES=F"
+  },
+  "reference_price": {
+    "price": 7594.0,
+    "as_of": "2026-11-12T08:00:00-06:00",
+    "delayed_minutes": 10
+  },
+  "merge_tolerance_pts": 5.0,
+  "inputs": {
+    "prior_session": {
+      "session_date": "2026-11-11",
+      "high": 7671.5,
+      "low": 7547.5,
+      "settle": 7640.5
+    },
+    "prior_rth": {
+      "open": 7612.0,
+      "high": 7671.5,
+      "low": 7593.0,
+      "close_1500": 7642.75
+    },
+    "overnight": {
+      "globex_open": 7616.5,
+      "onh": 7628.75,
+      "onh_at": "2026-11-11T20:20:00-06:00",
+      "onl": 7572.5,
+      "onl_at": "2026-11-12T07:17:00-06:00"
+    },
+    "adr": {
+      "method": "arunkbhaskar_adr_pivots",
+      "length": 14,
+      "window": [
+        "2026-10-23",
+        "2026-11-11"
+      ],
+      "value": 141.73,
+      "day_open": 7616.5,
+      "inner_multiplier": 0.33
+    }
+  },
+  "levels": [
+    {
+      "key": "wk_high_zone",
+      "type": "week_high",
+      "price_low": 7738.75,
+      "price_high": 7752.5,
+      "label": "Wk high",
+      "formula": "authored zone: prior weekly high area",
+      "zone": "z01"
+    },
+    {
+      "key": "r2",
+      "type": "r2",
+      "price": 7743.75,
+      "label": "R2",
+      "formula": "PP + (H − L) = 7619.83 + 124.00",
+      "zone": "z01"
+    },
+    {
+      "key": "lh_4h_7700",
+      "type": "swing_high_4h",
+      "price": 7700.0,
+      "label": "4h LH",
+      "formula": "authored: 4h lower high",
+      "zone": "z02"
+    },
+    {
+      "key": "adr_high",
+      "type": "adr_high",
+      "price": 7687.25,
+      "label": "ADR High",
+      "formula": "Open + ADR/2 = 7616.50 + 70.87",
+      "zone": "z03"
+    },
+    {
+      "key": "r1",
+      "type": "r1",
+      "price": 7692.25,
+      "label": "R1",
+      "formula": "2·PP − L = 2·7619.83 − 7547.50",
+      "zone": "z03"
+    },
+    {
+      "key": "pdh",
+      "type": "pdh",
+      "price": 7671.5,
+      "formed_at": "2026-11-11T12:45:00-06:00",
+      "label": "Wed high",
+      "formula": "max(high) over Globex session 2026-11-11",
+      "zone": "z04"
+    },
+    {
+      "key": "pdc",
+      "type": "pdc",
+      "price": 7640.5,
+      "label": "Wed settle",
+      "formula": "Settlement 2026-11-11 (Yahoo 1d close)",
+      "zone": "z05"
+    },
+    {
+      "key": "adr_inner_high",
+      "type": "adr_inner_high",
+      "price": 7640.0,
+      "label": "ADR inner high",
+      "formula": "Open + 0.33·ADR/2 = 7616.50 + 23.39",
+      "zone": "z05"
+    },
+    {
+      "key": "onh",
+      "type": "onh",
+      "price": 7628.75,
+      "formed_at": "2026-11-11T20:20:00-06:00",
+      "label": "ONH",
+      "formula": "max(high) 17:00–08:30 CT",
+      "zone": "z06"
+    },
+    {
+      "key": "nov3_4h",
+      "type": "swing_high_4h",
+      "price_low": 7623.75,
+      "price_high": 7625.75,
+      "label": "Nov 3 4h",
+      "formula": "authored zone: 4h swing from 2026-11-03",
+      "zone": "z06"
+    },
+    {
+      "key": "pp",
+      "type": "pp",
+      "price": 7619.75,
+      "label": "PP",
+      "formula": "(H + L + C)/3 = (7671.50 + 7547.50 + 7640.50)/3 = 7619.83",
+      "zone": "z07"
+    },
+    {
+      "key": "globex_open",
+      "type": "globex_open",
+      "price": 7616.5,
+      "formed_at": "2026-11-11T17:00:00-06:00",
+      "label": "Globex open",
+      "formula": "open of first bar at 17:00 CT",
+      "zone": "z07"
+    },
+    {
+      "key": "tue_high",
+      "type": "day_high",
+      "source_session_date": "2026-11-10",
+      "price": 7598.75,
+      "label": "Tue high",
+      "formula": "max(high) over Globex session 2026-11-10",
+      "zone": "z08"
+    },
+    {
+      "key": "adr_inner_low",
+      "type": "adr_inner_low",
+      "price": 7593.0,
+      "label": "ADR inner low",
+      "formula": "Open − 0.33·ADR/2 = 7616.50 − 23.39",
+      "zone": "z09"
+    },
+    {
+      "key": "rth_low",
+      "type": "rth_low",
+      "price": 7593.0,
+      "label": "Wed RTH low",
+      "formula": "min(low) 08:30–15:00 CT 2026-11-11",
+      "zone": "z09"
+    },
+    {
+      "key": "onl",
+      "type": "onl",
+      "price": 7572.5,
+      "formed_at": "2026-11-12T07:17:00-06:00",
+      "label": "ONL",
+      "formula": "min(low) 17:00–08:30 CT",
+      "zone": "z10"
+    },
+    {
+      "key": "s1",
+      "type": "s1",
+      "price": 7568.25,
+      "label": "S1",
+      "formula": "2·PP − H = 2·7619.83 − 7671.50",
+      "zone": "z10"
+    },
+    {
+      "key": "pdl",
+      "type": "pdl",
+      "price": 7547.5,
+      "label": "PDL",
+      "formula": "min(low) over Globex session 2026-11-11",
+      "zone": "z11"
+    },
+    {
+      "key": "adr_low",
+      "type": "adr_low",
+      "price": 7545.75,
+      "label": "ADR Low",
+      "formula": "Open − ADR/2 = 7616.50 − 70.87",
+      "zone": "z11"
+    },
+    {
+      "key": "tue_settle",
+      "type": "day_settle",
+      "source_session_date": "2026-11-10",
+      "price": 7544.25,
+      "label": "Tue settle",
+      "formula": "Settlement 2026-11-10 (Yahoo 1d close)",
+      "zone": "z11"
+    },
+    {
+      "key": "cpi_shelf",
+      "type": "event_shelf",
+      "price": 7512.0,
+      "label": "Tue CPI shelf",
+      "formula": "authored: shelf built after Tue CPI release",
+      "zone": "z12"
+    },
+    {
+      "key": "mon_breakout",
+      "type": "breakout_zone",
+      "price_low": 7456.0,
+      "price_high": 7477.0,
+      "label": "Mon breakout",
+      "formula": "authored zone: Monday breakout base",
+      "zone": "z13"
+    },
+    {
+      "key": "s2",
+      "type": "s2",
+      "price": 7495.75,
+      "label": "S2",
+      "formula": "PP − (H − L)",
+      "hidden": true
+    },
+    {
+      "key": "rth_open",
+      "type": "rth_open",
+      "price": 7612.0,
+      "label": "Wed RTH open",
+      "formula": "open of 08:30 CT bar",
+      "hidden": true
+    },
+    {
+      "key": "rth_close",
+      "type": "rth_close",
+      "price": 7642.75,
+      "label": "Wed 3 PM close",
+      "formula": "close of 14:59 CT bar",
+      "hidden": true
+    }
+  ],
+  "zones": [
+    {
+      "key": "z01",
+      "price_low": 7738.75,
+      "price_high": 7752.5,
+      "label": "Wk high / R2",
+      "role": "resistance",
+      "draw": "rectangle"
+    },
+    {
+      "key": "z02",
+      "price_low": 7700.0,
+      "price_high": 7700.0,
+      "label": "4h LH",
+      "role": "resistance",
+      "draw": "ray"
+    },
+    {
+      "key": "z03",
+      "price_low": 7687.25,
+      "price_high": 7692.25,
+      "label": "ADR High / R1",
+      "role": "adr",
+      "draw": "rectangle"
+    },
+    {
+      "key": "z04",
+      "price_low": 7671.5,
+      "price_high": 7671.5,
+      "label": "Wed high",
+      "role": "resistance",
+      "draw": "ray"
+    },
+    {
+      "key": "z05",
+      "price_low": 7640.0,
+      "price_high": 7640.5,
+      "label": "Wed settle / ADR inner high",
+      "role": "adr",
+      "draw": "rectangle"
+    },
+    {
+      "key": "z06",
+      "price_low": 7623.75,
+      "price_high": 7628.75,
+      "label": "ONH / Nov 3 4h",
+      "role": "resistance",
+      "draw": "rectangle"
+    },
+    {
+      "key": "z07",
+      "price_low": 7616.5,
+      "price_high": 7619.75,
+      "label": "Globex open / PP",
+      "role": "neutral",
+      "draw": "rectangle"
+    },
+    {
+      "key": "z08",
+      "price_low": 7598.75,
+      "price_high": 7598.75,
+      "label": "Tue high",
+      "role": "resistance",
+      "draw": "ray"
+    },
+    {
+      "key": "z09",
+      "price_low": 7593.0,
+      "price_high": 7593.0,
+      "label": "ADR inner low / Wed RTH low",
+      "role": "adr",
+      "draw": "ray"
+    },
+    {
+      "key": "z10",
+      "price_low": 7568.25,
+      "price_high": 7572.5,
+      "label": "ONL / S1",
+      "role": "support",
+      "draw": "rectangle"
+    },
+    {
+      "key": "z11",
+      "price_low": 7544.25,
+      "price_high": 7547.5,
+      "label": "ADR Low / PDL / Tue settle",
+      "role": "adr",
+      "draw": "rectangle"
+    },
+    {
+      "key": "z12",
+      "price_low": 7512.0,
+      "price_high": 7512.0,
+      "label": "Tue CPI shelf",
+      "role": "support",
+      "draw": "ray"
+    },
+    {
+      "key": "z13",
+      "price_low": 7456.0,
+      "price_high": 7477.0,
+      "label": "Mon breakout",
+      "role": "support",
+      "draw": "rectangle"
+    }
+  ],
+  "plan": {
+    "bias": "bullish",
+    "bias_condition": "Short-term pullback, but the bigger rebound holds while 7547.50 holds.",
+    "risk_budget_usd": 250,
+    "min_reward_risk": 1.5,
+    "scenarios": [
+      {
+        "side": "long",
+        "trigger_zone": "z09",
+        "trigger": "7593–7599 holds into the 08:30 open",
+        "targets": [
+          "z07",
+          "z06",
+          "z05"
+        ],
+        "invalidation": "Clean break under 7568"
+      },
+      {
+        "side": "long",
+        "trigger_zone": "z10",
+        "trigger": "Second chance: 7568–7572 holds",
+        "targets": [
+          "z09",
+          "z07"
+        ],
+        "invalidation": "Clean break under 7568"
+      },
+      {
+        "side": "short",
+        "trigger_zone": "z07",
+        "trigger": "Rejection at 7616.50–7620 or 7624–7629",
+        "targets": [
+          "z09",
+          "z10"
+        ],
+        "invalidation": "Reclaim of 7640.50"
+      },
+      {
+        "side": "short",
+        "trigger_zone": "z10",
+        "trigger": "7593 breaks and 7568–7572 fails",
+        "targets": [
+          "z11",
+          "z12"
+        ],
+        "invalidation": "Back above 7593"
+      }
+    ],
+    "do_not": [
+      "Fade a reclaim of 7640.50: it brings 7671.50 and 7687–7692 back into play."
+    ],
+    "news": [
+      {
+        "event_time": "2026-11-12T07:30:00-06:00",
+        "kind": "data",
+        "impact": "high",
+        "title": "Initial jobless claims",
+        "actual": "200K",
+        "forecast": "195K"
+      },
+      {
+        "event_time": "2026-11-12T08:00:00-06:00",
+        "kind": "fed_speaker",
+        "impact": "medium",
+        "title": "Hammack speaks",
+        "speaker": "Hammack",
+        "is_voter": true
+      },
+      {
+        "event_time": "2026-11-12T09:00:00-06:00",
+        "kind": "data",
+        "impact": "medium",
+        "title": "Existing home sales"
+      },
+      {
+        "event_time": "2026-11-12T09:00:00-06:00",
+        "kind": "fed_speaker",
+        "impact": "high",
+        "title": "Barr speaks",
+        "speaker": "Barr",
+        "is_voter": true
+      },
+      {
+        "event_time": "2026-11-12T10:30:00-06:00",
+        "kind": "fed_speaker",
+        "impact": "medium",
+        "title": "Goolsbee speaks",
+        "speaker": "Goolsbee"
+      },
+      {
+        "event_time": "2026-11-12T11:00:00-06:00",
+        "kind": "eia",
+        "impact": "medium",
+        "title": "EIA crude inventories"
+      },
+      {
+        "event_time": "2026-11-12T12:00:00-06:00",
+        "kind": "auction",
+        "impact": "medium",
+        "title": "30-year bond auction"
+      },
+      {
+        "event_time": "2026-11-12T12:10:00-06:00",
+        "kind": "fed_speaker",
+        "impact": "medium",
+        "title": "Daly speaks",
+        "speaker": "Daly"
+      },
+      {
+        "event_time": "2026-11-12T12:30:00-06:00",
+        "kind": "fed_speaker",
+        "impact": "medium",
+        "title": "Schmid speaks",
+        "speaker": "Schmid"
+      },
+      {
+        "event_time": "2026-11-12T17:30:00-06:00",
+        "kind": "fed_speaker",
+        "impact": "high",
+        "title": "Williams speaks",
+        "speaker": "Williams",
+        "is_voter": true
+      },
+      {
+        "event_time": "2026-11-13T07:30:00-06:00",
+        "kind": "data",
+        "impact": "high",
+        "title": "PPI (Friday)"
+      }
+    ]
+  }
+}
