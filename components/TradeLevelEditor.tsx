@@ -53,23 +53,39 @@ export function TradeLevelEditor({ trade, field }: { trade: TradeRecord; field: 
       setError(nextError);
       return;
     }
+    // Undo restores what was there before: the previous level on a correction, nothing on an add.
+    const previous = value;
     updateTrade(trade.id, levelPatch(field, price));
-    showToast(`${label[0]}${label.slice(1).toLowerCase()} set at ${formatPrice(price, trade.symbol)}`, {
+    showToast(`${label[0]}${label.slice(1).toLowerCase()} ${previous == null ? "set" : "changed"} to ${formatPrice(price, trade.symbol)}`, {
       label: "Undo",
-      run: () => updateTrade(trade.id, levelPatch(field, null)),
+      run: () => updateTrade(trade.id, levelPatch(field, previous)),
     });
     close();
   };
 
-  if (value != null) {
-    return <div><small>{label}</small><b>{formatPrice(value, trade.symbol)}</b></div>;
+  const startEditing = () => {
+    setDraft(value == null ? "" : String(value));
+    setEditing(true);
+  };
+
+  // A set level stays editable: tap it to correct the price. Only the undo toast is not the
+  // only way back (review follow-up).
+  if (value != null && !editing) {
+    return (
+      <div className="level-editor">
+        <small>{label}</small>
+        <button type="button" className="level-add level-value" onClick={startEditing} aria-label={`Change ${label.toLowerCase()} from ${formatPrice(value, trade.symbol)}`}>
+          <b>{formatPrice(value, trade.symbol)}</b>
+        </button>
+      </div>
+    );
   }
 
   if (!editing) {
     return (
       <div className="level-editor">
         <small>{label}</small>
-        <button type="button" className="level-add" onClick={() => setEditing(true)} aria-label={`Add ${label.toLowerCase()}`}>Add</button>
+        <button type="button" className="level-add" onClick={startEditing} aria-label={`Add ${label.toLowerCase()}`}>Add</button>
       </div>
     );
   }
@@ -90,11 +106,11 @@ export function TradeLevelEditor({ trade, field }: { trade: TradeRecord; field: 
           onChange={(event) => { setDraft(event.target.value); setError(null); }}
         />
         <div className="level-editor-actions">
-          <button type="submit">Set</button>
-          <button type="button" onClick={close} aria-label={`Cancel adding ${label.toLowerCase()}`}>×</button>
+          <button type="submit">{value == null ? "Set" : "Change"}</button>
+          <button type="button" onClick={close} aria-label={`Cancel ${value == null ? "adding" : "changing"} ${label.toLowerCase()}`}>×</button>
         </div>
         {error && <span className="error" id={`${trade.id}-${field}-error`} role="alert">{error}</span>}
       </form>
     </div>
   );
-}
+      }
