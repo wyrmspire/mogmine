@@ -8,7 +8,7 @@ import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, dayStats, filtersToQuery, parseFilters } from "../selectors.ts";
 import { demoTrades } from "../fixtures.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
-import { shareCardFileName } from "../shareCard.ts";
+import { shareCardContent, shareCardFileName } from "../shareCard.ts";
 
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
@@ -471,7 +471,18 @@ test("chart text equivalent describes direction, size, times, prices and R or po
 });
 
 test("Shield / privacy mode omits dollars and contract size in descriptions and share file names (UX-64, UX-72)", () => {
-  const trade = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 3, entry_price: 6844.25, exit_price: 6849, stop_loss_price: 6841.25 });
+  const trade = normalizeTrade({
+    ...base,
+    symbol: "MES",
+    direction: "LONG",
+    quantity: 3,
+    entry_price: 6844.25,
+    exit_price: 6849,
+    stop_loss_price: 6841.25,
+    playbook_id: "orb-reclaim",
+    quick_tags: ["Opening Drive", "A+ Patience"],
+    checklist_state: [{ id: "hard-stop", label: "Hard stop placed", checked: true }],
+  });
   const open = describeTrade(trade, "America/Chicago", false);
   const shielded = describeTrade(trade, "America/Chicago", true);
   assert.match(open, /3 contracts/);
@@ -481,6 +492,21 @@ test("Shield / privacy mode omits dollars and contract size in descriptions and 
   const fileName = shareCardFileName(trade);
   assert.equal(fileName, "mes-long-2026-11-10-trade-card.png");
   assert.doesNotMatch(fileName, /\$|usd|3|contract|71\.25/i);
+
+  const privateCard = shareCardContent(trade, "America/Chicago", true);
+  assert.doesNotMatch(JSON.stringify(privateCard), /\$|contract/i);
+  assert.match(privateCard.outcome, /R$/);
+  assert.equal(privateCard.outcomeDetail, "+4.75 pts");
+  assert.match(privateCard.entry, /ENTRY Nov 10, 09:43 CST/);
+  assert.match(privateCard.exit, /EXIT Nov 10, 09:45 CST/);
+  assert.equal(privateCard.playbook, "ORB Reclaim");
+  assert.deepEqual(privateCard.tags, ["Opening Drive", "A+ Patience"]);
+  assert.equal(privateCard.ruleSeal, "1/1 FOLLOWED");
+  assert.deepEqual(privateCard.rules, trade.checklist_state);
+
+  const openCard = shareCardContent(trade, "America/Chicago", false);
+  assert.match(openCard.outcome, /\+\$71\.25/);
+  assert.match(openCard.direction, /3 contracts/);
 });
 
 test("journal backup round-trips trades (notes, prices, tags, checklist, playbook) and preserves sample labels", () => {

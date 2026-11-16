@@ -47,6 +47,11 @@ export interface PositionBoxConfig {
   opacity: number;
   /** True when entry or exit was snapped to a nearby bar rather than a containing bar (issue #64 / OD-28). */
   approximate?: boolean;
+  /** Issue #37: dotted continuation past the exit (and, when extended, before the entry). Hidden at Low detail. */
+  showContinuation?: boolean;
+  /** Draw the same dotted levels to the left of entry after the trader taps ‹ 30. */
+  extendBackward?: boolean;
+  laterTouches?: Array<{ time: Time; kind: "target" | "stop" }>;
 }
 
 interface Geometry {
@@ -59,6 +64,7 @@ interface Geometry {
   yStop: number | null;
   yTarget: number | null;
   yKey: number | null;
+  touches: Array<{ x: number; y: number; kind: "target" | "stop" }>;
 }
 
 const XRAY_OPACITY = 0.05;
@@ -163,6 +169,44 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
         ctx.fillText("≈", xApprox, yApprox);
         ctx.globalAlpha = 1;
       }
+      if (c.showContinuation) {
+        // Same colours as the plan zones: faint green target, faint red stop, faint gray entry.
+        // No end labels and no "after exit" text on the chart (owner review of PR #72).
+        const fade = this.xray ? 0.28 : 0.5;
+        const level = (y: number | null, fromX: number, toX: number, color: string) => {
+          if (y == null || y < 0 || y > mediaSize.height) return;
+          if (Math.abs(toX - fromX) < 6) return;
+          ctx.globalAlpha = fade;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([1, 3]);
+          ctx.beginPath();
+          ctx.moveTo(fromX, Math.round(y) + 0.5);
+          ctx.lineTo(toX, Math.round(y) + 0.5);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        };
+        const rightEdge = mediaSize.width - 4;
+        level(g.yEntry, g.x2, rightEdge, c.mutedColor);
+        level(g.yStop, g.x2, rightEdge, c.riskColor);
+        level(g.yTarget, g.x2, rightEdge, c.profitColor);
+        if (c.extendBackward) {
+          level(g.yEntry, g.x1, 4, c.mutedColor);
+          level(g.yStop, g.x1, 4, c.riskColor);
+          level(g.yTarget, g.x1, 4, c.profitColor);
+        }
+        for (const touch of g.touches) {
+          if (touch.x < 0 || touch.x > mediaSize.width) continue;
+          ctx.strokeStyle = touch.kind === "stop" ? c.riskColor : c.profitColor;
+          ctx.lineWidth = 1.25;
+          ctx.globalAlpha = this.xray ? 0.35 : 0.7;
+          ctx.beginPath();
+          ctx.arc(touch.x, touch.y, 3, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
       if (g.yKey == null || g.yKey < 0 || g.yKey > mediaSize.height) return;
       const fade = this.xray ? 0.5 : 1;
       // Faint dotted key level across the pane.
@@ -248,9 +292,18 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
     if (x1 == null || x2 == null || yEntry == null || yExit == null) { this.geometry = null; return; }
     // Cover the whole entry and exit bars, so a trade inside one bar is still a visible box.
     const half = Math.max(3, timeScale.options().barSpacing / 2);
+    const yStop = price(config.stopPrice);
+    const yTarget = price(config.targetPrice);
+    const touches = (config.laterTouches ?? []).flatMap((touch) => {
+      const x = timeScale.timeToCoordinate(touch.time);
+      const y = touch.kind === "stop" ? yStop : yTarget;
+      if (x == null || y == null) return [];
+      return [{ x, y, kind: touch.kind }];
+    });
     this.geometry = {
       left: Math.min(x1, x2) - half, right: Math.max(x1, x2) + half, x1, x2, yEntry, yExit,
-      yStop: price(config.stopPrice), yTarget: price(config.targetPrice), yKey: price(config.keyPrice),
+      yStop, yTarget, yKey: price(config.keyPrice),
+      touches,
     };
   }
 
