@@ -162,7 +162,7 @@ export function TuneScreen() {
               })}
             </div>
             <span className="hint">
-              Switches metallic accents and card gradients live across the entire app.
+              The gold used to mark a well-executed trade (rules followed, clean-process glow).
             </span>
           </div>
 
@@ -187,14 +187,14 @@ export function TuneScreen() {
               onChange={(event) => setPrefs({ goldIntensity: Number.parseFloat(event.target.value) })}
             />
             <span className="hint">
-              Scales border glow opacity, specular card lighting, and gold badge brilliance.
+              How strong that process gold appears.
             </span>
           </div>
 
           <div className="field wide">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>Position Box opacity</span>
-              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem" }}>
+              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-primary)", fontSize: "0.8125rem" }}>
                 {Math.round(prefs.boxOpacity * 100)}%
               </b>
             </div>
@@ -219,7 +219,7 @@ export function TuneScreen() {
           <div className="field wide">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>Profit &amp; risk palette</span>
-              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem" }}>
+              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-primary)", fontSize: "0.8125rem" }}>
                 {prefs.palette === "blue-orange" ? "Blue / Orange" : "Classic"}
               </b>
             </div>
@@ -261,7 +261,7 @@ export function TuneScreen() {
           <div className="field wide">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>{riskBudgetDisplay.label}</span>
-              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem" }}>
+              <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-primary)", fontSize: "0.8125rem" }}>
                 {riskBudgetDisplay.valueText}
               </b>
             </div>
