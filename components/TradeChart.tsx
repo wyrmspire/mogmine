@@ -76,6 +76,7 @@ interface Live {
   programmaticRangeChange: boolean;
   programmaticClearTimer: number | undefined;
   holdTimer: number | undefined;
+  viewSettleTimer: number | undefined;
   heldDefaultRange: { from: number; to: number } | null;
   savedTimeRange: { from: UTCTimestamp; to: UTCTimestamp } | null;
 }
@@ -339,7 +340,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         fitRange: null, renderedKey: "", extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
         userPanned: false, programmaticRangeChange: false,
-        programmaticClearTimer: undefined, holdTimer: undefined,
+        programmaticClearTimer: undefined, holdTimer: undefined, viewSettleTimer: undefined,
         heldDefaultRange: null, savedTimeRange: null,
       };
       live.current = state;
@@ -374,6 +375,13 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         } else {
           writeVisibleCount(state, range);
         }
+        // A user-driven range change settles into a new view: let listeners (the Trade Card,
+        // issue #87) rebuild from it once the drag or pinch stops moving. Programmatic echoes
+        // from setData / fit are not view changes.
+        if (!state.programmaticRangeChange) {
+          window.clearTimeout(state.viewSettleTimer);
+          state.viewSettleTimer = window.setTimeout(() => latest.current.onRendered?.(), 300);
+        }
         const fitted = state.extraBefore === 0 && state.extraAfter === 0
           && Math.abs(range.from - state.baseFitRange.from) < 1.5 && Math.abs(range.to - state.baseFitRange.to) < 1.5;
         latest.current.onFitChange?.(fitted);
@@ -384,8 +392,29 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         state.userPanned = true;
         state.heldDefaultRange = null;
       };
+      // A tap is not a pan: only an actual drag (or a wheel / pinch, which move the range) marks
+      // one, so tapping the chart never drops the fitted default window (review follow-up to #82).
+      const panStart = new Map<number, { x: number; y: number }>();
+      const PAN_DRAG_PX = 6;
+      const onPointerDown = (event: PointerEvent) => {
+        panStart.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      };
+      const onPointerMove = (event: PointerEvent) => {
+        const start = panStart.get(event.pointerId);
+        if (!start) return;
+        if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > PAN_DRAG_PX) {
+          panStart.delete(event.pointerId);
+          markUserPan();
+        }
+      };
+      const onPointerEnd = (event: PointerEvent) => {
+        panStart.delete(event.pointerId);
+      };
       host.addEventListener("wheel", markUserPan, { passive: true });
-      host.addEventListener("pointerdown", markUserPan);
+      host.addEventListener("pointerdown", onPointerDown);
+      host.addEventListener("pointermove", onPointerMove);
+      host.addEventListener("pointerup", onPointerEnd);
+      host.addEventListener("pointercancel", onPointerEnd);
 
       const resize = new ResizeObserver(() => {
         chart.applyOptions({ width: host.clientWidth, height: host.clientHeight });
@@ -400,8 +429,12 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         window.clearTimeout(renderTimer.current);
         window.clearTimeout(state.programmaticClearTimer);
         window.clearTimeout(state.holdTimer);
+        window.clearTimeout(state.viewSettleTimer);
         host.removeEventListener("wheel", markUserPan);
-        host.removeEventListener("pointerdown", markUserPan);
+        host.removeEventListener("pointerdown", onPointerDown);
+        host.removeEventListener("pointermove", onPointerMove);
+        host.removeEventListener("pointerup", onPointerEnd);
+        host.removeEventListener("pointercancel", onPointerEnd);
         resize.disconnect();
         live.current = null;
         chart.remove();

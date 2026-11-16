@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Instinct) — integration-review fixes for batch6 (PR #107)
+Did:      Owner's held-integration findings: Shield masks the Contracts input and subtitle in manual entry (quantity still saved); R strip exit marker coloured by money outcome, not classification; hindsight later-touch search stops at the assigned session close; Trade Card rebuilds after a pan/pinch settles (it never did); a tap no longer counts as a pan (6px drag); set levels are tappable to correct, undo restores the previous value; market-data accepts an anchored payload with inside gaps as partial (AC-07) and the chip reports them; Trade Card export keeps gold only on the RULES seal; the 640 KB sample-bars fixture lazy-loads as its own chunk.
+Files:    `components/AddTradeSheet.tsx`, `components/RStrip.tsx`, `lib/rstrip.ts`, `lib/hindsight.ts`, `components/TradeChart.tsx`, `components/TradeLevelEditor.tsx`, `app/globals.css`, `lib/shareCard.ts`, `lib/market-data/coverage.ts`, `app/api/market-data/route.ts`, `lib/candles.ts`, tests (`hindsight`, `rstrip`, `market-data-coverage`, `candle-cache`, `sample-bars`, `honest-box`), `NOTES.md`.
+Checked:  140/140 node --test, tsc, eslint, next build all pass. Phone behaviour still unverified (AC-11).
+Left:     PR targets `integration/batch6`, feeding #107. Do not merge or deploy. Browser-level regression test for the card-after-pan path still wanted; the repo has no browser test harness.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch6 default is the 45-bar trade window
 Did:      Opening visible range is the standard `fitWindow` (30% lead-in / 50% hold / 20% after-exit) at `max(45, the trade's own window)`. Removed the 2.5× zoom-out multiplier Chris rejected. Fit stays an optional View action. Held-range re-apply after setData is unchanged.
 Files:    `lib/trades.ts`, `lib/__tests__/core.test.ts`, `components/TradeChart.tsx`, `NOTES.md`.

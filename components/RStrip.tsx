@@ -37,7 +37,8 @@ export function RStrip({ trade, excursions, blind = false, size = "row" }: Props
   }
 
   const label = blind ? "Planned stop, entry and target" : rStripCaption(trade, layout);
-  const exitTone = layout.kind === "stopped-out" ? "var(--loss-text)" : layout.kind === "no-plan" ? "var(--text-primary)" : "var(--profit-text)";
+  // Colour follows the money, not the classification: a cut-early exit that lost is red (issue #81 review).
+  const exitTone = layout.exitOutcome === "favorable" ? "var(--profit-text)" : layout.exitOutcome === "adverse" ? "var(--loss-text)" : "var(--text-primary)";
   const trackFrom = layout.stop ?? Math.min(layout.entry, layout.exit ?? layout.entry, layout.target ?? layout.entry);
   const trackTo = layout.target ?? Math.max(layout.entry, layout.exit ?? layout.entry, layout.stop ?? layout.entry);
 

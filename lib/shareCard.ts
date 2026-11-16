@@ -103,7 +103,9 @@ export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, 
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 1080, 1350);
 
-    ctx.fillStyle = theme.goldMid;
+    // Gold is reserved for good process (#80): only the RULES seal below keeps it.
+    // Brand heading, the SHIELD badge and the PLAYBOOK label are neutral metadata.
+    ctx.fillStyle = theme.textMuted;
     ctx.font = "700 28px system-ui";
     ctx.fillText("MOGMINE / TRADE REVIEW", 68, 76);
     if (privacy) {
@@ -146,7 +148,7 @@ export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, 
 
     let metadataY = 1028;
     if (content.playbook) {
-      ctx.fillStyle = theme.goldMid;
+      ctx.fillStyle = theme.textMuted;
       ctx.font = "700 28px system-ui";
       ctx.fillText("PLAYBOOK", 68, metadataY);
       ctx.fillStyle = theme.textPrimary;

@@ -7,7 +7,7 @@ import { usePrefs } from "@/lib/prefs";
 import { addTrade } from "@/lib/store";
 import { fromZonedInput, toZonedInput, zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { FUTURES_SPECS, normalizeTrade, rMultiple, specFor, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { FUTURES_SPECS, isWholeQuantity, normalizeTrade, rMultiple, specFor, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeDirection } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft } from "@/lib/ui";
 
@@ -65,7 +65,10 @@ export function AddTradeSheet() {
   const entryPrice = toNumber(draft.entryPrice);
   const exitPrice = toNumber(draft.exitPrice);
   // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50).
-  const quantity = Number(draft.quantity);
+  // Under Shield the Contracts input is hidden, so an invalid draft quantity cannot be seen or
+  // fixed; fall back to 1 there and keep the typed draft untouched for when Shield turns off.
+  const typedQuantity = Number(draft.quantity);
+  const quantity = prefs.shield ? (isWholeQuantity(typedQuantity) ? typedQuantity : 1) : typedQuantity;
   const entry = fromZonedInput(draft.entryTime, zone);
   const exit = fromZonedInput(draft.exitTime, zone);
 
@@ -77,7 +80,7 @@ export function AddTradeSheet() {
   });
   const errors: Partial<Record<keyof Draft, string>> = {
     symbol: executionErrors.symbol,
-    quantity: executionErrors.quantity,
+    quantity: prefs.shield ? undefined : executionErrors.quantity,
     entryPrice: executionErrors.entry_price,
     exitPrice: executionErrors.exit_price,
   };
@@ -119,7 +122,7 @@ export function AddTradeSheet() {
     <div className="sheet-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeAddTrade()}>
       <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="add-trade-title">
         <div className="sheet-head">
-          <div><span className="eyebrow">Manual entry</span><h2 id="add-trade-title">Log the execution</h2><p>Side, size, prices and times make the chart. The rest can wait.</p></div>
+          <div><span className="eyebrow">Manual entry</span><h2 id="add-trade-title">Log the execution</h2><p>{prefs.shield ? "Side, prices and times make the chart. The rest can wait." : "Side, size, prices and times make the chart. The rest can wait."}</p></div>
           <button className="icon-button" onClick={closeAddTrade} aria-label="Close">×</button>
         </div>
         <form onSubmit={submit} noValidate>
@@ -130,10 +133,14 @@ export function AddTradeSheet() {
               </select>
               {show("symbol") && <span className="error">{show("symbol")}</span>}
             </label>
-            <label className="field"><span>Contracts</span>
-              <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} aria-invalid={!!show("quantity")} onChange={(event) => change({ quantity: event.target.value })} />
-              {show("quantity") && <span className="error">{show("quantity")}</span>}
-            </label>
+            {/* Shield hides position size (#15): the input is masked, the draft keeps the
+                quantity and the saved execution preserves it. The preview below never shows it. */}
+            {!prefs.shield && (
+              <label className="field"><span>Contracts</span>
+                <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} aria-invalid={!!show("quantity")} onChange={(event) => change({ quantity: event.target.value })} />
+                {show("quantity") && <span className="error">{show("quantity")}</span>}
+              </label>
+            )}
             <div className="field wide"><span>Side</span>
               <div className="segmented" role="group" aria-label="Side">
                 <button type="button" aria-pressed={draft.direction === "LONG"} onClick={() => change({ direction: "LONG" })}>▲ Long</button>

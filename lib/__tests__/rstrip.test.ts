@@ -53,3 +53,28 @@ test("works without candles and without a plan; Shield does not need dollars", (
 test("an unusable entry yields no strip", () => {
   assert.equal(rStripLayout({ direction: "LONG", entry: Number.NaN, exit: 1, stop: 0, target: 2 }), null);
 });
+
+test("the exit outcome follows the money, not the classification", () => {
+  // The review case: long 100, stop 99, target 103, exit 99.50 is cut-early but lost 0.5R —
+  // the marker must read adverse (red), never green.
+  const cutLoss = rStripLayout({ direction: "LONG", entry: 100, exit: 99.5, stop: 99, target: 103 });
+  assert.equal(cutLoss?.kind, "cut-early");
+  assert.equal(cutLoss?.exitOutcome, "adverse");
+
+  const cutWin = rStripLayout({ direction: "LONG", entry: 100, exit: 101, stop: 99, target: 103 });
+  assert.equal(cutWin?.kind, "cut-early");
+  assert.equal(cutWin?.exitOutcome, "favorable");
+
+  const scratch = rStripLayout({ direction: "LONG", entry: 100, exit: 100, stop: 99, target: 103 });
+  assert.equal(scratch?.exitOutcome, "breakeven");
+
+  const shortWin = rStripLayout({ direction: "SHORT", entry: 100, exit: 99.5, stop: 101, target: 97 });
+  assert.equal(shortWin?.kind, "cut-early");
+  assert.equal(shortWin?.exitOutcome, "favorable");
+
+  const shortLoss = rStripLayout({ direction: "SHORT", entry: 100, exit: 100.5, stop: 101, target: 97 });
+  assert.equal(shortLoss?.exitOutcome, "adverse");
+
+  // No exit price: no marker, no outcome.
+  assert.equal(rStripLayout({ direction: "LONG", entry: 100, exit: null, stop: 99, target: 103 })?.exitOutcome, null);
+});

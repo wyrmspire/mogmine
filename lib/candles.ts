@@ -5,13 +5,12 @@
 // Yahoo market candles and cache in IndexedDB. A missing fixture set or missing Yahoo response leaves
 // the trade details usable but renders no chart (docs/08 §4, issues #28, #89).
 import { useSyncExternalStore } from "react";
-import sampleBarsData from "../fixtures/sample-bars.json" with { type: "json" };
 import { idbGet, idbSet } from "./idb.ts";
 import { sessionCloseUtc } from "./session.ts";
 import { candleCacheKey, candleSignature, getTrade, updateTrade } from "./store.ts";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, buildSparkline } from "./trades.ts";
 import type { Candle, CandleSource, Timeframe, TradeRecord } from "./trades.ts";
-import { coversTradeWindow } from "./market-data/coverage.ts";
+import { anchorsTradeWindow, coversTradeWindow } from "./market-data/coverage.ts";
 
 export interface CandleEntry {
   status: "loading" | "ready" | "none";
@@ -35,6 +34,8 @@ export interface StoredCandles {
 interface CandleResponse {
   candles?: Candle[];
   baseTimeframe?: Timeframe;
+  /** True when the payload anchors the trade but skips bars inside the hold (AC-07). */
+  partial?: boolean;
 }
 
 export interface CandleLoadDependencies {
@@ -50,7 +51,7 @@ export interface CandleLoadDependencies {
 
 type RawBar = [number, number, number, number, number];
 
-interface SampleBarsPayload {
+export interface SampleBarsPayload {
   source?: string;
   fields?: string[];
   /** Shared Globex-week 1m series per canonical symbol, used by every sample of that contract. */
@@ -60,7 +61,16 @@ interface SampleBarsPayload {
   bars?: Record<string, RawBar[]>;
 }
 
-const sampleBarsFixture = sampleBarsData as unknown as SampleBarsPayload;
+// The fixture is ~640 KB of shared Globex-week bars. It loads on demand as its own chunk instead
+// of weighing down the trade-detail bundle, and only for sample trades (issue #89, review fix).
+let sampleBarsPromise: Promise<SampleBarsPayload> | null = null;
+
+export function loadSampleBarsPayload(): Promise<SampleBarsPayload> {
+  sampleBarsPromise ??= import("../fixtures/sample-bars.json", { with: { type: "json" } }).then(
+    (module) => module.default as unknown as SampleBarsPayload,
+  );
+  return sampleBarsPromise;
+}
 
 function asCandles(rawBars: RawBar[] | undefined): Candle[] | null {
   if (!Array.isArray(rawBars) || rawBars.length === 0) return null;
@@ -74,10 +84,10 @@ function asCandles(rawBars: RawBar[] | undefined): Candle[] | null {
   }));
 }
 
-export function getSampleCandles(tradeId: string): Candle[] | null {
-  const symbol = sampleBarsFixture.tradeSymbols?.[tradeId];
-  return asCandles(symbol ? sampleBarsFixture.shared?.[symbol] : undefined)
-    ?? asCandles(sampleBarsFixture.bars?.[tradeId]);
+export function getSampleCandles(tradeId: string, payload: SampleBarsPayload): Candle[] | null {
+  const symbol = payload.tradeSymbols?.[tradeId];
+  return asCandles(symbol ? payload.shared?.[symbol] : undefined)
+    ?? asCandles(payload.bars?.[tradeId]);
 }
 
 const entries = new Map<string, CandleEntry>();
@@ -97,8 +107,12 @@ function adopt(trade: TradeRecord, stored: StoredCandles) {
   put(trade.id, { status: "ready", candles: stored.candles, source: stored.source, baseTimeframe: stored.baseTimeframe, fetching: false, signature: stored.signature });
 }
 
-function loadSampleCandles(trade: TradeRecord, signature: string) {
-  const candles = getSampleCandles(trade.id);
+async function loadSampleCandles(trade: TradeRecord, signature: string) {
+  put(trade.id, { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: false, signature });
+  const payload = await loadSampleBarsPayload();
+  // A newer signature (edited trade, re-entry) wins over this in-flight load.
+  if (entries.get(trade.id)?.signature !== signature) return;
+  const candles = getSampleCandles(trade.id, payload);
   if (candles) {
     adopt(trade, {
       signature,
@@ -141,17 +155,21 @@ export async function loadCachedCandles(
   const exitMs = Date.parse(trade.exit_time);
   const covers = (candles: Candle[], timeframe: Timeframe | undefined): timeframe is Timeframe =>
     Boolean(timeframe && TIMEFRAMES.includes(timeframe) && coversTradeWindow(candles, entryMs, exitMs, timeframe, trade.symbol));
-  // Keep a signature-matching cache as a fallback, but only adopt it as complete when it
-  // covers the trade window (#90) and does not still need a post-exit refetch (#86).
+  // A payload anchors the trade when the entry and exit bars are present (AC-07): gaps inside
+  // the hold are drawn and counted on screen, never a reason to drop the whole chart (#90 follow-up).
+  const anchored = (candles: Candle[], timeframe: Timeframe | undefined): timeframe is Timeframe =>
+    Boolean(timeframe && TIMEFRAMES.includes(timeframe) && anchorsTradeWindow(candles, entryMs, exitMs, timeframe, trade.symbol));
+  // Keep a signature-matching cache as a fallback, adopt it straight away when it fully covers
+  // the trade window (#90), and only skip the network when it also needs no post-exit refetch (#86).
   const matching = cached?.signature === signature ? cached : undefined;
-  const usableCache = matching && covers(matching.candles, matching.baseTimeframe) ? matching : undefined;
-  if (usableCache && !cachedCandlesNeedRefetch(trade, usableCache, dependencies.now())) return usableCache;
+  const usableCache = matching && anchored(matching.candles, matching.baseTimeframe) ? matching : undefined;
+  if (usableCache && covers(usableCache.candles, usableCache.baseTimeframe) && !cachedCandlesNeedRefetch(trade, usableCache, dependencies.now())) return usableCache;
   if (matching) dependencies.onCoverageRefetch?.();
 
   try {
     const body = await dependencies.request(trade);
     const baseTimeframe = body.baseTimeframe;
-    if (!Array.isArray(body.candles) || !covers(body.candles, baseTimeframe)) throw new Error("incomplete");
+    if (!Array.isArray(body.candles) || !anchored(body.candles, baseTimeframe)) throw new Error("incomplete");
     if (dependencies.isCurrent?.() === false) return null;
     const stored: StoredCandles = {
       signature,
@@ -198,8 +216,7 @@ export function ensureCandles(trade: TradeRecord, force = false) {
   const existing = entries.get(trade.id);
   if (trade.is_sample) {
     if (existing && existing.signature === signature && !force) return;
-    loadSampleCandles(trade, signature);
-    return;
+    return loadSampleCandles(trade, signature);
   }
 
   if (typeof window === "undefined") return;
