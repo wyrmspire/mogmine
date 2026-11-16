@@ -174,4 +174,4 @@ export function AddTradeSheet() {
       </section>
     </div>
   );
-            }
+}
