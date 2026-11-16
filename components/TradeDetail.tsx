@@ -74,7 +74,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [cardOpen, setCardOpen] = useState(false);
   const [cardPrivacy, setCardPrivacy] = useState(prefs.shield);
   const [fitted, setFitted] = useState(false);
-  const [xray, setXray] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
@@ -162,7 +161,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     return () => window.removeEventListener("pointerdown", onPointer);
   }, [viewOpen]);
 
-  // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card. X (hold for X-Ray) lives in the chart.
+  // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || document.querySelector('[role="dialog"]')) return;
@@ -334,20 +333,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                     <button
                       type="button"
                       className="view-menu-item"
-                      role="menuitemcheckbox"
-                      aria-checked={xray}
-                      onClick={() => {
-                        chartRef.current?.setXray(!xray);
-                        setXray(!xray);
-                      }}
-                      title="Fade position box to read candles (hold X)"
-                    >
-                      <span>X-Ray {xray ? "on" : "off"}</span>
-                      <span className="shortcut">hold X</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="view-menu-item"
                       role="menuitem"
                       onClick={() => {
                         setFullscreen(!fullscreen);
@@ -391,7 +376,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="chart-frame">
             {ready ? (
               <>
-                <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} detailLevel={detailLevel} onExtensionChange={setExtension} />
+                <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
                 <button
                   type="button"
                   className="chart-edge-hit left"

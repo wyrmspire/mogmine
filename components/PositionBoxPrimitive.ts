@@ -4,7 +4,7 @@
 //   PLAN — faint red fill entry→stop, faint green fill entry→target.
 //   ACTUAL — a stronger fill entry→exit in the result colour: green win, red loss, gray scratch.
 //   PATH — a thin dotted line from the entry fill to the exit fill.
-//   KEY — an optional faint dotted level with a small low-contrast `KEY` pill at the right edge.
+//   KEY — an optional faint dotted level in the muted colour. No label or pill (chart rules, #80).
 //
 // Fills are drawn under the candles, so candles stay crisp at any opacity.
 // Colours and opacity arrive in the config from the theme store; draw() never reads CSS (AGENTS §3b-7).
@@ -38,12 +38,9 @@ export interface PositionBoxConfig {
   profitColor: string;
   riskColor: string;
   mutedColor: string;
-  /** Background for the small KEY pill. */
-  pillBackground: string;
   textColor: string;
-  /** Key level, drawn faint with a small pill. Null hides it. */
+  /** Key level, drawn as a faint dotted line with no label. Null hides it. */
   keyPrice: number | null;
-  keyColor: string;
   opacity: number;
   /** True when entry or exit was snapped to a nearby bar rather than a containing bar (issue #64 / OD-28). */
   approximate?: boolean;
@@ -67,10 +64,8 @@ interface Geometry {
   touches: Array<{ x: number; y: number; kind: "target" | "stop" }>;
 }
 
-const XRAY_OPACITY = 0.05;
 /** Plan fills stay clearly weaker than the actual band so they cannot be read as P&L. */
 const PLAN_FILL_RATIO = 0.28;
-const KEY_FONT = "600 9px ui-monospace, SFMono-Regular, Menlo, monospace";
 
 class FillRenderer implements IPrimitivePaneRenderer {
   constructor(private g: Geometry | null, private c: PositionBoxConfig, private opacity: number) {}
@@ -106,12 +101,12 @@ class FillRenderer implements IPrimitivePaneRenderer {
 }
 
 class StrokeRenderer implements IPrimitivePaneRenderer {
-  constructor(private g: Geometry | null, private c: PositionBoxConfig, private xray: boolean) {}
+  constructor(private g: Geometry | null, private c: PositionBoxConfig) {}
 
   draw(target: CanvasRenderingTarget2D) {
     const { g, c } = this;
     if (!g) return;
-    const strength = this.xray ? 0.35 : 1;
+    const strength = 1;
     const made = (c.exitPrice - c.entryPrice) * (c.isLong ? 1 : -1);
     const resultColor = c.scratch || made === 0 ? c.mutedColor : made > 0 ? c.profitColor : c.riskColor;
     target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: sx, verticalPixelRatio: sy }) => {
@@ -158,7 +153,7 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       // Faint cue for approximate nearby alignment: quiet tiny ≈ at entry marker (issue #64).
       if (c.approximate) {
-        const fade = this.xray ? 0.4 : 0.75;
+        const fade = 0.75;
         ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
         ctx.fillStyle = c.textColor;
         ctx.globalAlpha = fade;
@@ -172,7 +167,7 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
       if (c.showContinuation) {
         // Same colours as the plan zones: faint green target, faint red stop, faint gray entry.
         // No end labels and no "after exit" text on the chart (owner review of PR #72).
-        const fade = this.xray ? 0.28 : 0.5;
+        const fade = 0.5;
         const level = (y: number | null, fromX: number, toX: number, color: string) => {
           if (y == null || y < 0 || y > mediaSize.height) return;
           if (Math.abs(toX - fromX) < 6) return;
@@ -200,7 +195,7 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
           if (touch.x < 0 || touch.x > mediaSize.width) continue;
           ctx.strokeStyle = touch.kind === "stop" ? c.riskColor : c.profitColor;
           ctx.lineWidth = 1.25;
-          ctx.globalAlpha = this.xray ? 0.35 : 0.7;
+          ctx.globalAlpha = 0.7;
           ctx.beginPath();
           ctx.arc(touch.x, touch.y, 3, 0, Math.PI * 2);
           ctx.stroke();
@@ -208,10 +203,9 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
         }
       }
       if (g.yKey == null || g.yKey < 0 || g.yKey > mediaSize.height) return;
-      const fade = this.xray ? 0.5 : 1;
-      // Faint dotted key level across the pane.
-      ctx.globalAlpha = 0.45 * fade;
-      ctx.strokeStyle = c.keyColor;
+      // Faint dotted key level across the pane. No label or pill.
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = c.mutedColor;
       ctx.lineWidth = 1;
       ctx.setLineDash([2, 3]);
       ctx.beginPath();
@@ -219,26 +213,6 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
       ctx.lineTo(mediaSize.width, Math.round(g.yKey) + 0.5);
       ctx.stroke();
       ctx.setLineDash([]);
-      // Small low-contrast pill at the right edge of the pane, never over the price scale.
-      ctx.font = KEY_FONT;
-      const text = "KEY";
-      const width = Math.ceil(ctx.measureText(text).width) + 8;
-      const height = 12;
-      const x = mediaSize.width - width - 4;
-      const yPill = Math.round(g.yKey - height / 2);
-      ctx.globalAlpha = 0.85 * fade;
-      ctx.beginPath();
-      ctx.roundRect(x, yPill, width, height, 6);
-      ctx.fillStyle = c.pillBackground;
-      ctx.fill();
-      ctx.globalAlpha = 0.18 * fade;
-      ctx.fillStyle = c.keyColor;
-      ctx.fill();
-      ctx.globalAlpha = 0.8 * fade;
-      ctx.fillStyle = c.keyColor;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(text, x + width / 2, yPill + height / 2 + 0.5);
       ctx.globalAlpha = 1;
     });
   }
@@ -250,16 +224,15 @@ class PaneView implements IPrimitivePaneView {
   zOrder(): PrimitivePaneViewZOrder { return this.layer === "fill" ? "bottom" : "normal"; }
 
   renderer() {
-    const { geometry, config, xray } = this.source;
+    const { geometry, config } = this.source;
     return this.layer === "fill"
-      ? new FillRenderer(geometry, config, xray ? XRAY_OPACITY : config.opacity)
-      : new StrokeRenderer(geometry, config, xray);
+      ? new FillRenderer(geometry, config, config.opacity)
+      : new StrokeRenderer(geometry, config);
   }
 }
 
 export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   geometry: Geometry | null = null;
-  xray = false;
   private hidden = false;
   private chart?: IChartApi;
   private series?: ISeriesApi<SeriesType, Time>;
@@ -328,10 +301,4 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate?.();
   }
 
-  /** X-Ray: fade the box to 5% so the candles underneath can be read (UX-42). */
-  setXray(on: boolean) {
-    if (this.xray === on) return;
-    this.xray = on;
-    this.requestUpdate?.();
-  }
 }

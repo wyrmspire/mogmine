@@ -391,10 +391,16 @@ export function fitWindow(entryTime: string, exitTime: string, timeframe: Timefr
   };
 }
 
+/** Number of bars a logical range covers. Lightweight Charts uses `to - from` as the visible width. */
+export function visibleLogicalBars(range: { from: number; to: number }): number {
+  return Math.max(0, range.to - range.from);
+}
+
 /**
  * Zoomed-out default chart range (issue #82 / Chris decision).
  * Applies a wider default range than fitWindow (at least 45 bars, typically 2.5× the fitted window),
- * clamped to loaded bars [0, barCount - 1].
+ * clamped to the loaded candles. The range width is `to - from`; to show every loaded bar,
+ * `to` is `barCount` (not `barCount - 1`), so 45 loaded candles still yield 45 visible bars.
  */
 export function defaultVisibleRange(
   baseFitRange: { from: number; to: number },
@@ -402,12 +408,12 @@ export function defaultVisibleRange(
   multiplier = 2.5,
   minBars = MIN_FITTED_BARS,
 ): { from: number; to: number } {
-  const fittedBars = Math.max(1, baseFitRange.to - baseFitRange.from);
+  const fittedBars = Math.max(1, visibleLogicalBars(baseFitRange));
   const targetBars = Math.max(minBars, Math.round(fittedBars * multiplier));
-  const maxIndex = Math.max(0, barCount - 1);
+  const maxTo = Math.max(0, barCount);
 
   if (barCount <= targetBars) {
-    return { from: 0, to: maxIndex };
+    return { from: 0, to: maxTo };
   }
 
   const extraBars = targetBars - fittedBars;
@@ -417,23 +423,22 @@ export function defaultVisibleRange(
   let from = baseFitRange.from - extraBefore;
   let to = baseFitRange.to + extraAfter;
 
-  // Shift if out of bounds on the left
   if (from < 0) {
-    to = Math.min(maxIndex, to - from);
+    to = Math.min(maxTo, to - from);
     from = 0;
   }
-  // Shift if out of bounds on the right
-  if (to > maxIndex) {
-    from = Math.max(0, from - (to - maxIndex));
-    to = maxIndex;
+  if (to > maxTo) {
+    from = Math.max(0, from - (to - maxTo));
+    to = maxTo;
   }
 
-  // Ensure span is at least minBars if barCount allows
-  if (to - from < minBars && barCount >= minBars) {
+  if (visibleLogicalBars({ from, to }) < minBars && barCount >= minBars) {
     if (from === 0) {
-      to = Math.min(maxIndex, minBars - 1);
-    } else if (to === maxIndex) {
-      from = Math.max(0, maxIndex - minBars + 1);
+      to = Math.min(maxTo, minBars);
+    } else if (to === maxTo) {
+      from = Math.max(0, maxTo - minBars);
+    } else {
+      to = Math.min(maxTo, from + minBars);
     }
   }
 

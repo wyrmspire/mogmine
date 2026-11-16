@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — integration/batch6 follow-up (zoom, KEY, X-Ray)
+Did:      The zoomed-out default now re-applies after Lightweight Charts setData/layout so it is not replaced by an automatic tight fit. `defaultVisibleRange` shows at least 45 bars when that many candles are loaded (`to - from`, with `to = barCount` when showing the whole series). The gold KEY pill is gone; the key level is a faint muted dotted line with no label. X-Ray is removed (View toggle, hold-X, `setXray`, primitive fade).
+Files:    `lib/trades.ts`, `lib/__tests__/core.test.ts`, `components/TradeChart.tsx`, `components/TradeDetail.tsx`, `components/PositionBoxPrimitive.ts`, `NOTES.md`.
+Left:     Sample fixtures are often only as long as the hold, so a 5m view of `mnq-trend-hold` has ~14 candles even when fully zoomed out. Real Yahoo windows are already padded 15 hours.
+
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch6
 Did:      Draft integration of #80 (gold for good process only), #81 (R strip), #82 (slim toolbar, zoomed-out default, Fit as an option), #83 (data-notes chip), #84 (two-step entry), and #85 (11px type floor, Inter + JetBrains Mono). Chart opens wide (>= 45 bars via defaultVisibleRange); fitWindow goldens unchanged. View menu labels Simple / After exit. Data-notes chip is amber only for missing/partial coverage. Levels grid kept, with Add stop/target/key on Trade Detail. Kept #71 out.
 Left:     Draft PR against main, stacked on integration/batch5 (#100). Do not merge or deploy.
