@@ -48,6 +48,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Claude Haiku) — Data-notes chip (#83), branch `feat/83-data-notes-chip`
+Did:      Trade Detail data-quality notes (1m, continuous contract, coverage, same-bar, stop/target/exit) collapse into one "N data notes" chip (44px, tap to expand). Hindsight unchanged. No chip when there are no notes.
+Amber:    Only when bar coverage is missing or partial (MAE/MFE and bar check untrusted). All other notes muted. Chris to confirm (DECISIONS OD-36).
+Files:    `lib/data-notes.ts`, `components/DataNotesChip.tsx`, `components/TradeDetail.tsx`, `app/globals.css`, `lib/__tests__/data-notes.test.ts`, `docs/08`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` 122/122, `npm run typecheck` clean, `npm run lint` 0 errors (1 pre-existing PostCSS warning), `npm run build` OK.
+Left:     No browser check at 390px yet. Draft PR against integration/batch5, do-not-merge-without-Chris.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch5
 Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
 Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.
