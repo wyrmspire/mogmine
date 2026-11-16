@@ -48,16 +48,21 @@ export interface CandleLoadDependencies {
   onCoverageRefetch?(): void;
 }
 
+type RawBar = [number, number, number, number, number];
+
 interface SampleBarsPayload {
   source?: string;
   fields?: string[];
-  bars: Record<string, number[][]>;
+  /** Shared Globex-week 1m series per canonical symbol, used by every sample of that contract. */
+  shared?: Record<string, RawBar[]>;
+  tradeSymbols?: Record<string, string>;
+  /** Legacy per-trade bars; used only when a trade has no shared series. */
+  bars?: Record<string, RawBar[]>;
 }
 
 const sampleBarsFixture = sampleBarsData as unknown as SampleBarsPayload;
 
-export function getSampleCandles(tradeId: string): Candle[] | null {
-  const rawBars = sampleBarsFixture.bars?.[tradeId];
+function asCandles(rawBars: RawBar[] | undefined): Candle[] | null {
   if (!Array.isArray(rawBars) || rawBars.length === 0) return null;
   return rawBars.map(([time, open, high, low, close]) => ({
     time,
@@ -67,6 +72,12 @@ export function getSampleCandles(tradeId: string): Candle[] | null {
     close,
     volume: 1,
   }));
+}
+
+export function getSampleCandles(tradeId: string): Candle[] | null {
+  const symbol = sampleBarsFixture.tradeSymbols?.[tradeId];
+  return asCandles(symbol ? sampleBarsFixture.shared?.[symbol] : undefined)
+    ?? asCandles(sampleBarsFixture.bars?.[tradeId]);
 }
 
 const entries = new Map<string, CandleEntry>();

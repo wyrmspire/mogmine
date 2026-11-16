@@ -4,12 +4,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { demoTrades } from "../fixtures.ts";
 import { ensureCandles, getCandleEntry, getSampleCandles, resetCandlesForTest } from "../candles.ts";
-import { normalizeTrade } from "../trades.ts";
+import { aggregateCandles, normalizeTrade } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 import sampleBarsData from "../../fixtures/sample-bars.json" with { type: "json" };
 
 interface SampleBarsPayload {
-  bars: Record<string, [number, number, number, number, number][]>;
+  shared: Record<string, [number, number, number, number, number][]>;
+  tradeSymbols: Record<string, string>;
 }
 
 const fixtureData = sampleBarsData as unknown as SampleBarsPayload;
@@ -36,12 +37,17 @@ test("all ten sample trades load fixture bars from sample-bars.json with zero fe
       assert.equal(entry.baseTimeframe, "1m", `${trade.id} base timeframe must be 1m`);
       assert.equal(entry.fetching, false, `${trade.id} must not be in fetching state`);
 
-      const expectedRawBars = fixtureData.bars[trade.id];
-      assert.ok(expectedRawBars && expectedRawBars.length > 0, `Missing fixture bars for ${trade.id}`);
+      const symbol = fixtureData.tradeSymbols[trade.id];
+      const expectedRawBars = (symbol ? fixtureData.shared[symbol] : undefined) ?? [];
+      assert.ok(expectedRawBars.length > 0, `Missing shared fixture bars for ${trade.id} (${symbol})`);
       assert.equal(entry.candles.length, expectedRawBars.length, `${trade.id} candle count mismatch`);
 
       for (let i = 0; i < expectedRawBars.length; i += 1) {
-        const [time, open, high, low, close] = expectedRawBars[i];
+        const time = expectedRawBars[i][0];
+        const open = expectedRawBars[i][1];
+        const high = expectedRawBars[i][2];
+        const low = expectedRawBars[i][3];
+        const close = expectedRawBars[i][4];
         const barCandle: Candle = entry.candles[i];
         assert.equal(barCandle.time, time, `${trade.id} bar[${i}] time mismatch`);
         assert.equal(barCandle.open, open, `${trade.id} bar[${i}] open mismatch`);
@@ -55,6 +61,21 @@ test("all ten sample trades load fixture bars from sample-bars.json with zero fe
   } finally {
     globalThis.fetch = originalFetch;
     resetCandlesForTest();
+  }
+});
+
+test("shared Globex-week pad yields at least 45 bars on 1m, 5m, 15m, and 1h for every sample", () => {
+  for (const trade of demoTrades) {
+    const candles = getSampleCandles(trade.id);
+    assert.ok(candles, `${trade.id} must have fixture candles`);
+    assert.ok(candles.length >= 45, `${trade.id} 1m has ${candles.length} bars, need 45`);
+    for (const timeframe of ["5m", "15m", "1h"] as const) {
+      const aggregated = aggregateCandles(candles, timeframe);
+      assert.ok(
+        aggregated.length >= 45,
+        `${trade.id} ${timeframe} has ${aggregated.length} bars, need 45`,
+      );
+    }
   }
 });
 

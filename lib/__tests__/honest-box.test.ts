@@ -1,10 +1,10 @@
 // Golden tests for honest excursion math (#30) and the box display helpers (#31).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
 import { formatR } from "../format.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { demoTrades } from "../fixtures.ts";
+import { getSampleCandles } from "../candles.ts";
 import { applyFixtureRefresh } from "../store.ts";
 import { exitFlagReason, excursions, isScratch, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
@@ -240,14 +240,11 @@ test("planned R and exit flag reason", () => {
 
 // ---- Sample trades: plan fixed at entry, outcome walked from real Yahoo 1m bars ----
 
-const sampleBars = JSON.parse(readFileSync(new URL("../../fixtures/sample-bars.json", import.meta.url), "utf8")) as {
-  bars: Record<string, [number, number, number, number, number][]>;
-};
 const POINT_VALUE: Record<string, number> = { MES: 5, MNQ: 2 };
 const TICK = 0.25;
 
 function barsFor(id: string): Candle[] {
-  return (sampleBars.bars[id] ?? []).map(([time, open, high, low, close]) => bar(time, open, high, low, close));
+  return getSampleCandles(id) ?? [];
 }
 
 test("every sample trade has a realistic plan fixed at entry", () => {
@@ -274,8 +271,10 @@ test("every sample outcome is coherent with real 1m bars", () => {
   for (const trade of demoTrades) {
     const candles = barsFor(trade.id);
     assert.ok(candles.length >= 2, `${trade.id} needs recorded bars`);
-    assert.equal(candles[0].time, Date.parse(trade.entry_time), `${trade.id}: entry is the open of its first bar`);
-    assert.equal(candles[0].open, trade.entry_price, `${trade.id}: entry price is that bar's open`);
+    const entryBarTime = Date.parse(trade.entry_time);
+    const entryBar = candles.find((c) => c.time === entryBarTime);
+    assert.ok(entryBar, `${trade.id}: entry bar is recorded`);
+    assert.equal(entryBar.open, trade.entry_price, `${trade.id}: entry price is that bar's open`);
     const check = validateTradeAgainstBars(trade, candles);
     assert.equal(check.coverage, "complete", `${trade.id} should have complete bar coverage`);
     assert.deepEqual(check.issues, [], `${trade.id} must have no validator findings`);
@@ -284,8 +283,8 @@ test("every sample outcome is coherent with real 1m bars", () => {
     const stop = trade.stop_loss_price!;
     const target = trade.planned_target_price!;
     const exitBarTime = Math.floor(Date.parse(trade.exit_time) / minute) * minute;
-    // No bar before the exit bar touched either plan level (the exit bar is where it was hit, if at all).
-    for (const candle of candles.filter((c) => c.time < exitBarTime)) {
+    // During the hold, no bar before the exit bar touched either plan level (the exit bar is where it was hit, if at all).
+    for (const candle of candles.filter((c) => c.time >= entryBarTime && c.time < exitBarTime)) {
       const stopHit = sign > 0 ? candle.low <= stop : candle.high >= stop;
       const targetHit = sign > 0 ? candle.high >= target : candle.low <= target;
       assert.ok(!stopHit && !targetHit, `${trade.id}: a plan level traded at ${new Date(candle.time).toISOString()} before the exit`);

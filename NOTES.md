@@ -48,6 +48,11 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — integration/batch6 sample fixture pad
+Did:      Expanded `fixtures/sample-bars.json` with real unmodified Yahoo 1m bars for the Nov 8–13 Globex week (MES=F / MNQ=F), shared across the ten samples so 1m/5m/15m/1h all open with at least 45 bars. Existing hold-window OHLC is unchanged (fills still snap). `getSampleCandles` serves the shared series by symbol; samples still never fetch at runtime.
+Files:    `fixtures/sample-bars.json`, `lib/candles.ts`, `lib/__tests__/sample-bars.test.ts`, `lib/__tests__/honest-box.test.ts`, `NOTES.md`.
+Left:     Draft PR #107 against main, stacked on #100. Do not merge or deploy. Keep the fixture out of printcode/gitrdif dumps.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch6 follow-up (zoom, KEY, X-Ray)
 Did:      The zoomed-out default now re-applies after Lightweight Charts setData/layout so it is not replaced by an automatic tight fit. `defaultVisibleRange` shows at least 45 bars when that many candles are loaded (`to - from`, with `to = barCount` when showing the whole series). The gold KEY pill is gone; the key level is a faint muted dotted line with no label. X-Ray is removed (View toggle, hold-X, `setXray`, primitive fade).
 Files:    `lib/trades.ts`, `lib/__tests__/core.test.ts`, `components/TradeChart.tsx`, `components/TradeDetail.tsx`, `components/PositionBoxPrimitive.ts`, `NOTES.md`.
