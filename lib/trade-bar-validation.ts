@@ -1,5 +1,5 @@
-import type { Candle, TradeDirection, TradeRecord } from "./trades.ts";
 import { expectedInsideBarTimes } from "./session.ts";
+import type { Candle, TradeDirection, TradeRecord } from "./trades.ts";
 
 export type TradeBarIssueCode =
   | "stop_crossed_before_exit"
