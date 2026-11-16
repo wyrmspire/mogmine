@@ -557,6 +557,7 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .levels > .level-editor { padding: 0; }
 .level-editor > small { padding-top: 8px; }
 .level-add { width: 100%; min-height: 44px; border: 0; background: none; color: var(--text-primary); font: 800 0.6875rem/1 var(--font-sans); }
+.level-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .level-editor.editing { padding: 7px 5px; }
 .level-editor.editing > small { padding: 0; }
 .level-editor form { display: grid; gap: 5px; margin-top: 4px; }
