@@ -14,7 +14,7 @@ import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR
 import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
-import { buildShareCard } from "@/lib/shareCard";
+import { buildShareCard, shouldBuildShareCard } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -102,21 +102,35 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const go = useCallback((target: TradeRecord | undefined) => { if (target) router.push(`/trades/${target.id}`, { scroll: false }); }, [router]);
 
-  const onRendered = useCallback(() => {
+  const encodeCard = useCallback((reason: "sheet-open" | "share" | "privacy" | "view-change" | "chart-render") => {
+    if (!shouldBuildShareCard(reason, true)) return;
     const snapshot = chartRef.current?.screenshot();
     if (!snapshot) return;
     const build = ++cardBuild.current;
     setShareBlob(null);
-    void buildShareCard(snapshot, trade, zone, renderPrivacy)
+    void buildShareCard(snapshot, trade, zone, cardPrivacy)
       .then((blob) => { if (cardBuild.current === build) setShareBlob(blob); })
       .catch(() => { if (cardBuild.current === build) setShareBlob(null); });
-  }, [renderPrivacy, trade, zone]);
+  }, [cardPrivacy, trade, zone]);
+
+  // After pan, pinch, fit, or ‹30/30› the live chart redraws. If the sheet is
+  // open, rebuild the card from that current view (AC-10). Notes typing still
+  // does not encode: the sheet is a dialog, and shouldBuildShareCard("notes")
+  // stays false. A leftover blob is dropped when the sheet is closed.
+  const onRendered = useCallback(() => {
+    if (cardOpen && shouldBuildShareCard("view-change", true)) encodeCard("view-change");
+    else if (!cardOpen) setShareBlob((prev) => (prev ? null : prev));
+  }, [cardOpen, encodeCard]);
 
   const openCard = useCallback(() => {
-    if (!shareBlob) return;
     setCardPrivacy(prefs.shield);
+    setShareBlob(null);
     setCardOpen(true);
-  }, [prefs.shield, shareBlob]);
+  }, [prefs.shield]);
+
+  useEffect(() => {
+    if (cardOpen) encodeCard("sheet-open");
+  }, [cardOpen, cardPrivacy, encodeCard]);
 
   const closeCard = useCallback(() => {
     if (cardPrivacy !== prefs.shield) {
@@ -127,7 +141,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   }, [cardPrivacy, prefs.shield]);
 
   const changeCardPrivacy = useCallback((privacy: boolean) => {
-    cardBuild.current += 1;
     setShareBlob(null);
     setCardPrivacy(privacy);
   }, []);
@@ -298,7 +311,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
 
           <div className="detail-actions">
-            <button type="button" className="btn-primary" disabled={!shareBlob} onClick={openCard}>{shareBlob ? "Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
+            <button type="button" className="btn-primary" disabled={!ready} onClick={openCard}>{ready ? "Trade Card" : "Trade Card needs candles"}</button>
           </div>
         </>}
 
