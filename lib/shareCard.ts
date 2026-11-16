@@ -57,6 +57,36 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) 
   return `${shortened}…`;
 }
 
+/** Word-wrap a line instead of ellipsizing, so outcome R/points never clip. */
+function fillWrapped(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+) {
+  if (ctx.measureText(text).width <= maxWidth) {
+    ctx.fillText(text, x, y);
+    return y;
+  }
+  const words = text.split(/\s+/);
+  let line = "";
+  let cursor = y;
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > maxWidth) {
+      ctx.fillText(line, x, cursor);
+      line = word;
+      cursor += lineHeight;
+    } else {
+      line = next;
+    }
+  }
+  if (line) ctx.fillText(line, x, cursor);
+  return cursor;
+}
+
 export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, zone: string, privacy = false) {
   return new Promise<Blob>((resolve, reject) => {
     const theme = getTheme();
@@ -111,8 +141,8 @@ export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, 
       ctx.fillText(fitText(ctx, metricValues[index], 300), x, 922);
     });
     ctx.fillStyle = theme.textMuted;
-    ctx.font = "600 28px ui-monospace, monospace";
-    ctx.fillText(fitText(ctx, content.outcomeDetail, 300), 728, 970);
+    ctx.font = "600 24px ui-monospace, monospace";
+    fillWrapped(ctx, content.outcomeDetail, 728, 970, 1080 - 68 - 728, 32);
 
     let metadataY = 1028;
     if (content.playbook) {

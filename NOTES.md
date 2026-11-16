@@ -48,6 +48,10 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — integration/batch4 cleanup before merge
+Did:      Stripped UX/Invariant codes from Tune captions (plain wording only). Trade Card outcome subline now wraps instead of ellipsizing, so R and points stay visible in the preview.
+Left:     Ready for Chris's approved merge of PR #76. Do not squash. PR #71 stays open.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch4
 Did:      Draft integration of PRs #72 (after-the-exit), #73 (trade document spec, no-purple docs fix), #74 (Tune screen), and #75 (Trade Card sheet). Kept #71 (M0 archive) out. Resolved TradeDetail so hindsight (‹30/30›, Medium continuation, off-chart later-touch text) and the Trade Card sheet (privacy re-render, Share/Save/Copy) both land. NOTES handoffs from all four branches kept.
 Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy until Chris says so.

@@ -211,7 +211,7 @@ export function TuneScreen() {
               onChange={(event) => setPrefs({ boxOpacity: Number.parseFloat(event.target.value) })}
             />
             <span className="hint">
-              Invariant 5: Sets the Canvas fill alpha of profit and stop boxes (15% to 65%) so candles stay readable.
+              How strong the planned and actual boxes appear on the chart (15% to 65%), so the candles stay readable.
             </span>
           </div>
 
@@ -240,12 +240,12 @@ export function TuneScreen() {
               >
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6" }} aria-hidden="true" />
-                  Blue / Orange (UX-80)
+                  Blue / Orange
                 </span>
               </button>
             </div>
             <span className="hint">
-              UX-80: Blue/orange colour-blind safe pair replaces red/green for profit and risk across cards, badges, and candles.
+              A colour-blind safe pair: blue for profit and orange for risk, used on cards, badges, and candles.
             </span>
           </div>
         </div>
