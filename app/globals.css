@@ -374,6 +374,7 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
   background: var(--bg-inset); color: var(--text-primary); padding: 9px 10px; font-size: max(16px, 1rem); outline: none;
 }
 .field input[aria-invalid="true"] { border-color: var(--risk-crimson); }
+.field input:disabled, .field select:disabled { opacity: 0.6; cursor: not-allowed; color: var(--text-muted); -webkit-text-fill-color: var(--text-muted); }
 .field .hint { font-size: 0.6875rem; color: var(--text-muted); }
 .field .error { font-size: 0.6875rem; color: var(--loss-text); }
 .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--bg-inset); border: 1px solid var(--border-subtle); }

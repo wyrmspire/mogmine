@@ -96,3 +96,33 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 export function usePrefs() {
   return useSyncExternalStore(subscribe, () => prefs, () => DEFAULT_PREFS);
 }
+
+export interface TuneRiskBudgetDisplay {
+  label: string;
+  valueText: string;
+  inputValue: string;
+  inputAriaLabel: string;
+  isEditable: boolean;
+  hint: string;
+}
+
+export function getTuneRiskBudgetDisplay(shield: boolean, riskBudgetUsd: number): TuneRiskBudgetDisplay {
+  if (shield) {
+    return {
+      label: "Risk budget",
+      valueText: "Hidden",
+      inputValue: "Hidden",
+      inputAriaLabel: "Risk budget (hidden while Shield mode is on)",
+      isEditable: false,
+      hint: "Used by manual entry to suggest stop distance and by Trade Detail risk chips. Turn Shield mode off to change the dollar amount.",
+    };
+  }
+  return {
+    label: "Risk budget ($ USD)",
+    valueText: `$${riskBudgetUsd}`,
+    inputValue: String(riskBudgetUsd),
+    inputAriaLabel: "Risk budget in US dollars",
+    isEditable: true,
+    hint: "Used by manual entry to suggest stop distance and by Trade Detail risk chips (default $250).",
+  };
+}
