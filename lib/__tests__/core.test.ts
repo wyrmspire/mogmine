@@ -13,7 +13,7 @@ import { shareCardContent, shareCardFileName, shouldBuildShareCard } from "../sh
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
-import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, defaultVisibleRange, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks, visibleLogicalBars } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, defaultVisibleRange, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, isClosed, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks, visibleLogicalBars } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
@@ -155,7 +155,7 @@ test("defaultVisibleRange is the trade window with a 45-bar floor, not a 2.5x zo
 
 test("mnq-trend-hold 5m opening range is 45 to about 60 bars, not 100+", () => {
   const trade = demoTrades.find((item) => item.id === "mnq-trend-hold");
-  assert.ok(trade);
+  assert.ok(trade && isClosed(trade));
   const fitted = fitWindow(trade.entry_time, trade.exit_time, "5m");
   assert.ok(fitted.visibleBars >= 45 && fitted.visibleBars <= 60, `fit window is ${fitted.visibleBars} bars`);
   // Same conversion TradeChart uses: logical range starts before the entry bar.
@@ -183,6 +183,7 @@ test("all ten sample trades have deterministic fitted-window goldens", () => {
   };
   assert.equal(demoTrades.length, 10);
   for (const trade of demoTrades) {
+    assert.ok(isClosed(trade), `${trade.id} is a closed fixture`);
     assert.notEqual(trade.planned_target_price, null, `${trade.id} needs a planned target`);
     assert.deepEqual(trade.sparkline, [], `${trade.id} must not ship generated candles`);
     const golden = expected[trade.id];

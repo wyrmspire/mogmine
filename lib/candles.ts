@@ -135,6 +135,8 @@ async function loadSampleCandles(trade: TradeRecord, signature: string) {
 
 /** True only after the hindsight window has closed and the cached bars do not reach that close. */
 export function cachedCandlesNeedRefetch(trade: Pick<TradeRecord, "exit_time">, stored: StoredCandles, now: number) {
+  // An open trade has no hindsight window yet; its candles arrive with R-03c.
+  if (trade.exit_time == null) return false;
   const windowClose = sessionCloseUtc(trade.exit_time);
   if (now <= windowClose) return false;
   const lastBar = stored.candles.reduce((latest, bar) => Math.max(latest, bar.time), 0);
@@ -148,6 +150,8 @@ export async function loadCachedCandles(
   signature: string,
   dependencies: CandleLoadDependencies,
 ): Promise<StoredCandles | null> {
+  // Until R-03c, an open trade has no chart: market data needs an exit to anchor the window.
+  if (trade.exit_time == null) throw new Error("unavailable");
   const key = candleCacheKey(trade);
   const cached = await dependencies.read(key);
   if (dependencies.isCurrent?.() === false) return null;
@@ -193,6 +197,7 @@ async function load(trade: TradeRecord, signature: string) {
       read: (key) => idbGet<StoredCandles>(key),
       write: (key, value) => idbSet(key, value),
       request: async (requestedTrade) => {
+        if (requestedTrade.exit_time == null) throw new Error("unavailable");
         const params = new URLSearchParams({ symbol: requestedTrade.symbol, entry: requestedTrade.entry_time, exit: requestedTrade.exit_time });
         const response = await fetch(`/api/market-data?${params}`);
         if (!response.ok) throw new Error("unavailable");

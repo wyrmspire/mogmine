@@ -1,6 +1,6 @@
 // Pure list logic: grouping, filtering and day statistics. Lists never see candles (B-42).
 import { sessionDate } from "./session.ts";
-import { adherence, rMultiple, tradePnl } from "./trades.ts";
+import { adherence, isOpen, rMultiple, tradePnl } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
 
 export interface DayStats {
@@ -21,22 +21,29 @@ export interface DayStats {
   processFollowed: number;
   processGraded: number;
   needsReview: number;
+  /** Open trades (R-03): no result yet, so left out of P&L, win rate and R. Shown as a count only (OD-38). */
+  openCount: number;
 }
 
 export function dayStats(trades: TradeRecord[]): DayStats {
-  let wins = 0, gross = 0, pricedCount = 0, unpriceableCount = 0, netR = 0, withR = 0, processFollowed = 0, processGraded = 0, needsReview = 0;
+  let wins = 0, gross = 0, pricedCount = 0, unpriceableCount = 0, netR = 0, withR = 0, processFollowed = 0, processGraded = 0, needsReview = 0, openCount = 0;
   for (const trade of trades) {
-    // A trade that cannot be priced is counted, but adds nothing to the money totals.
-    const pnl = tradePnl(trade);
-    if (pnl != null) {
-      pricedCount += 1;
-      if (pnl > 0) wins += 1;
-      gross += pnl;
+    // An open trade has no result yet: counted apart, never in P&L, win rate or R (OD-38).
+    if (isOpen(trade)) {
+      openCount += 1;
     } else {
-      unpriceableCount += 1;
+      // A trade that cannot be priced is counted, but adds nothing to the money totals.
+      const pnl = tradePnl(trade);
+      if (pnl != null) {
+        pricedCount += 1;
+        if (pnl > 0) wins += 1;
+        gross += pnl;
+      } else {
+        unpriceableCount += 1;
+      }
+      const r = rMultiple(trade);
+      if (r != null) { netR += r; withR += 1; }
     }
-    const r = rMultiple(trade);
-    if (r != null) { netR += r; withR += 1; }
     const score = adherence(trade);
     if (score) { processGraded += 1; if (score.followed === score.total) processFollowed += 1; }
     if (trade.review_status !== "reviewed") needsReview += 1;
@@ -54,6 +61,7 @@ export function dayStats(trades: TradeRecord[]): DayStats {
     processFollowed,
     processGraded,
     needsReview,
+    openCount,
   };
 }
 

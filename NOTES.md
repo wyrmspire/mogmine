@@ -50,6 +50,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-16 — agent (Claude Code) — R-03a open-trade types and math, Core math lane
+Did:      `R-03a`: `TradeStatus` (`open`/`closed`), `status` on `TradeRecord`, nullable `exit_time`/`exit_price`, `isOpen`, `isClosed` (type guard) and `ClosedTradeRecord`. `normalizeTrade` defaults a missing status to `closed` and throws when status and exit fields disagree. Money functions return null for an open trade (`tradeTicks` → `tradePoints`, `tradePnl`, `rMultiple`; `isScratch` false; `exitFlagReason`, `excursions` null; sparkline empty); `initialRiskUsd`/`plannedR` unchanged. `holdSeconds(trade, now)` and `classifyTrade(entry, exit, now)` measure an open hold to `now`. `candleSignature` uses `open`. Store accepts an open record with null exits from device storage and backups, still drops a closed one with a missing exit, and drops (not crashes on) a record whose status and exits disagree. `dayStats` leaves open trades out of P&L, win rate and R and adds `openCount` (OD-38). `validateTradeInput` skips the exit only when it is `null`. Every null handled explicitly; no `!` or `as number`.
+Files:    `lib/trades.ts`, `lib/store.ts`, `lib/selectors.ts`, `lib/candles.ts`, `lib/describe.ts`, `lib/hindsight.ts`, `lib/shareCard.ts`, `lib/trade-bar-validation.ts`, `components/TradeChart.tsx`, `components/TradeDetail.tsx`, tests (`open-trade` new; `core`, `honest-box`, `hindsight`, `session-coverage` narrowed to closed fixtures), `docs/06-data-model-and-roadmap.md`, `NOTES.md`.
+Checked:  typecheck, lint, test, build (see PR). No UI change was intended; the form still requires an exit, so an open trade can only arrive from a backup file.
+Left:     `R-03b` (Still open / Closed in the entry sheet, Close trade on detail, `Open` label on rows and Today) and `R-03c` (open-trade candles and chart: until then `TradeChart` takes only a `ClosedTradeRecord` and an open trade shows no chart; `buildHindsight` takes a closed trade). `openCount` is computed but not shown yet.
+
 ### 2026-11-16 — agent (Claude Code) — floor roadmap, no lane
 Did:      Added `docs/16-floor-roadmap.md` (`R-01`–`R-09`) from the owner's review of the live app, with files, limits and done-when per step. Opened `OD-37` (challenges) and `OD-38` (open-trade display). Pointer rows in AGENTS and README; replaced Next up. Documentation only.
 Files:    `docs/16-floor-roadmap.md`, `AGENTS.md`, `README.md`, `DECISIONS.md`, `NOTES.md`.

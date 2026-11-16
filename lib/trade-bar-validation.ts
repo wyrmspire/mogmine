@@ -73,6 +73,9 @@ function coverageFor(
  * and no issues is a clean check.
  */
 export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[], barMinutes = 1): TradeBarValidation {
+  const exitPrice = trade.exit_price;
+  // An open trade has no exit to check against the bars yet (R-03).
+  if (trade.exit_time == null || exitPrice == null) return { coverage: "missing", issues: [], chronology: "unresolved" };
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) {
@@ -96,15 +99,15 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
   }
 
   const target = trade.planned_target_price;
-  const exitedWorseThanTarget = target != null && (trade.direction === "LONG" ? trade.exit_price < target : trade.exit_price > target);
+  const exitedWorseThanTarget = target != null && (trade.direction === "LONG" ? exitPrice < target : exitPrice > target);
   if (target != null && exitedWorseThanTarget) {
     const bar = completed.find((candidate) => targetTouched(trade.direction, target, candidate));
     if (bar) issues.push({ code: "target_crossed_before_exit", barTime: bar.time, price: target });
   }
 
   const exitBar = candles.find((bar) => bar.time === exitBarTime);
-  if (exitBar && (trade.exit_price < exitBar.low || trade.exit_price > exitBar.high)) {
-    issues.push({ code: "exit_outside_bar", barTime: exitBar.time, price: trade.exit_price });
+  if (exitBar && (exitPrice < exitBar.low || exitPrice > exitBar.high)) {
+    issues.push({ code: "exit_outside_bar", barTime: exitBar.time, price: exitPrice });
   }
 
   return { coverage, issues, chronology };

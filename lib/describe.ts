@@ -13,5 +13,5 @@ export function describeTrade(trade: TradeRecord, zone: string, privacy = false)
       ? "result not available"
       : `${points >= 0 ? "plus" : "minus"} ${Math.abs(points)} points, ${trade.stop_loss_price == null ? "no stop recorded" : "stop not usable for R"}`;
   const size = privacy ? "" : `, ${trade.quantity} ${trade.quantity === 1 ? "contract" : "contracts"}`;
-  return `${trade.direction === "LONG" ? "Long" : "Short"} ${trade.symbol}${size}, entered ${formatDetailTime(trade.entry_time, zone)} at ${formatPrice(trade.entry_price, trade.symbol)}, exited ${formatDetailTime(trade.exit_time, zone)} at ${formatPrice(trade.exit_price, trade.symbol)}, ${result}.`;
+  return `${trade.direction === "LONG" ? "Long" : "Short"} ${trade.symbol}${size}, entered ${formatDetailTime(trade.entry_time, zone)} at ${formatPrice(trade.entry_price, trade.symbol)}, ${trade.exit_time == null || trade.exit_price == null ? "still open, no result yet" : `exited ${formatDetailTime(trade.exit_time, zone)} at ${formatPrice(trade.exit_price, trade.symbol)}, ${result}`}.`;
 }
