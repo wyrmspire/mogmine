@@ -5,8 +5,9 @@
 // Yahoo response leaves the trade details usable but renders no chart (docs/08 §4, issue #28).
 import { useSyncExternalStore } from "react";
 import { idbGet, idbSet } from "./idb.ts";
+import { sessionCloseUtc } from "./session.ts";
 import { candleCacheKey, candleSignature, getTrade, updateTrade } from "./store.ts";
-import { TIMEFRAMES, buildSparkline } from "./trades.ts";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, buildSparkline } from "./trades.ts";
 import type { Candle, CandleSource, Timeframe, TradeRecord } from "./trades.ts";
 import { coversTradeWindow } from "./market-data/coverage.ts";
 
@@ -21,7 +22,7 @@ export interface CandleEntry {
   signature: string;
 }
 
-interface StoredCandles {
+export interface StoredCandles {
   signature: string;
   candles: Candle[];
   source: CandleSource;
@@ -29,7 +30,24 @@ interface StoredCandles {
   fetchedAt: number;
 }
 
+interface CandleResponse {
+  candles?: Candle[];
+  baseTimeframe?: Timeframe;
+}
+
+export interface CandleLoadDependencies {
+  read(key: string): Promise<StoredCandles | undefined>;
+  write(key: string, value: StoredCandles): Promise<unknown>;
+  request(trade: TradeRecord): Promise<CandleResponse>;
+  now(): number;
+  /** Prevent an older in-flight request from replacing candles after the trade signature changes. */
+  isCurrent?(): boolean;
+  /** Records that this runtime already attempted the coverage refresh, avoiding retry loops on partial responses. */
+  onCoverageRefetch?(): void;
+}
+
 const entries = new Map<string, CandleEntry>();
+const coverageAttempts = new Map<string, string>();
 const listeners = new Set<() => void>();
 
 function put(id: string, entry: CandleEntry) {
@@ -45,27 +63,71 @@ function adopt(trade: TradeRecord, stored: StoredCandles) {
   put(trade.id, { status: "ready", candles: stored.candles, source: stored.source, baseTimeframe: stored.baseTimeframe, fetching: false, signature: stored.signature });
 }
 
-async function load(trade: TradeRecord, signature: string) {
+/** True only after the hindsight window has closed and the cached bars do not reach that close. */
+export function cachedCandlesNeedRefetch(trade: Pick<TradeRecord, "exit_time">, stored: StoredCandles, now: number) {
+  const windowClose = sessionCloseUtc(trade.exit_time);
+  if (now <= windowClose) return false;
+  const lastBar = stored.candles.reduce((latest, bar) => Math.max(latest, bar.time), 0);
+  const barMs = TIMEFRAME_MINUTES[stored.baseTimeframe] * 60_000;
+  return lastBar + barMs < windowClose;
+}
+
+/** Resolve the one candle cache. Dependencies are injectable so coverage/refetch behavior is deterministic in tests. */
+export async function loadCachedCandles(
+  trade: TradeRecord,
+  signature: string,
+  dependencies: CandleLoadDependencies,
+): Promise<StoredCandles | null> {
   const key = candleCacheKey(trade);
-  const cached = await idbGet<StoredCandles>(key);
-  if (entries.get(trade.id)?.signature !== signature) return; // the trade changed while we waited
+  const cached = await dependencies.read(key);
+  if (dependencies.isCurrent?.() === false) return null;
   const entryMs = Date.parse(trade.entry_time);
   const exitMs = Date.parse(trade.exit_time);
-  // Same coverage test as the route (issue #90): a cached set must cover the window too.
-  if (cached?.signature === signature && coversTradeWindow(cached.candles, entryMs, exitMs, cached.baseTimeframe, trade.symbol)) return adopt(trade, cached);
+  const covers = (candles: Candle[], timeframe: Timeframe | undefined): timeframe is Timeframe =>
+    Boolean(timeframe && TIMEFRAMES.includes(timeframe) && coversTradeWindow(candles, entryMs, exitMs, timeframe, trade.symbol));
+  // Keep a signature-matching cache as a fallback, but only adopt it as complete when it
+  // covers the trade window (#90) and does not still need a post-exit refetch (#86).
+  const matching = cached?.signature === signature ? cached : undefined;
+  const usableCache = matching && covers(matching.candles, matching.baseTimeframe) ? matching : undefined;
+  if (usableCache && !cachedCandlesNeedRefetch(trade, usableCache, dependencies.now())) return usableCache;
+  if (matching) dependencies.onCoverageRefetch?.();
 
   try {
-    const params = new URLSearchParams({ symbol: trade.symbol, entry: trade.entry_time, exit: trade.exit_time });
-    const response = await fetch(`/api/market-data?${params}`);
-    if (!response.ok) throw new Error("unavailable");
-    const body = await response.json() as { candles?: Candle[]; baseTimeframe?: Timeframe };
+    const body = await dependencies.request(trade);
     const baseTimeframe = body.baseTimeframe;
-    if (!Array.isArray(body.candles) || !baseTimeframe || !TIMEFRAMES.includes(baseTimeframe)) throw new Error("incomplete");
-    if (!coversTradeWindow(body.candles, entryMs, exitMs, baseTimeframe, trade.symbol)) throw new Error("incomplete");
-    if (entries.get(trade.id)?.signature !== signature) return;
-    const stored: StoredCandles = { signature, candles: body.candles, source: "Yahoo Finance", baseTimeframe, fetchedAt: Date.now() };
-    void idbSet(key, stored);
-    adopt(trade, stored);
+    if (!Array.isArray(body.candles) || !covers(body.candles, baseTimeframe)) throw new Error("incomplete");
+    if (dependencies.isCurrent?.() === false) return null;
+    const stored: StoredCandles = {
+      signature,
+      candles: body.candles,
+      source: "Yahoo Finance",
+      baseTimeframe,
+      fetchedAt: dependencies.now(),
+    };
+    await dependencies.write(key, stored);
+    return stored;
+  } catch {
+    if (usableCache) return usableCache;
+    throw new Error("unavailable");
+  }
+}
+
+async function load(trade: TradeRecord, signature: string) {
+  try {
+    const stored = await loadCachedCandles(trade, signature, {
+      read: (key) => idbGet<StoredCandles>(key),
+      write: (key, value) => idbSet(key, value),
+      request: async (requestedTrade) => {
+        const params = new URLSearchParams({ symbol: requestedTrade.symbol, entry: requestedTrade.entry_time, exit: requestedTrade.exit_time });
+        const response = await fetch(`/api/market-data?${params}`);
+        if (!response.ok) throw new Error("unavailable");
+        return response.json() as Promise<CandleResponse>;
+      },
+      now: Date.now,
+      isCurrent: () => entries.get(trade.id)?.signature === signature,
+      onCoverageRefetch: () => coverageAttempts.set(trade.id, signature),
+    });
+    if (stored) adopt(trade, stored);
   } catch {
     const current = entries.get(trade.id);
     if (!current || current.signature !== signature) return;
@@ -78,8 +140,21 @@ export function ensureCandles(trade: TradeRecord, force = false) {
   if (typeof window === "undefined") return;
   const signature = candleSignature(trade);
   const existing = entries.get(trade.id);
-  if (existing && existing.signature === signature && !(force && !existing.fetching && existing.source !== "Yahoo Finance")) return;
-  put(trade.id, { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: true, signature });
+  const coverageRefresh = existing?.signature === signature && existing.status === "ready" && existing.source === "Yahoo Finance"
+    && cachedCandlesNeedRefetch(trade, {
+      signature,
+      candles: existing.candles,
+      source: existing.source,
+      baseTimeframe: existing.baseTimeframe,
+      fetchedAt: 0,
+    }, Date.now())
+    && coverageAttempts.get(trade.id) !== signature;
+  const forcedRetry = Boolean(force && existing && !existing.fetching);
+  if (existing && existing.signature === signature && !coverageRefresh && !forcedRetry) return;
+  if (coverageRefresh) coverageAttempts.set(trade.id, signature);
+  put(trade.id, existing?.signature === signature && existing.status === "ready"
+    ? { ...existing, fetching: true }
+    : { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: true, signature });
   void load(trade, signature);
 }
 

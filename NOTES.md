@@ -48,6 +48,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — Codex — Market data, branch `feat/86-candle-refetch` (#86)
+Did:      Refetch matching candle caches only after their 17:00 New York hindsight window closes and only when bar coverage is short; replace the same signature-keyed IndexedDB entry.
+Also:     Shared DST-safe session-close math with hindsight, made coarse final bars count through close, and extended overnight Yahoo request windows through the assigned close.
+Tests:    Fake cache/clock cases cover open, closed-partial, closed-complete, coarse bars, signature changes, DST, maintenance-hour and weekend assignment.
+Verified: `npm test` 88/88; typecheck and build pass; lint 0 errors/1 existing PostCSS warning.
+Left:     Nothing open for #86. No fixtures, chart styling, R, stats, deployment, M0 archive, or PR #71 changed.
+
 ### 2026-11-15 — agent (Claude Haiku 5.5) — docs stale cleanup, branch `feat/91-docs-stale` (#91)
 Did:      CONTRIBUTING §2 says the app is live on `main` (no "no code yet"). docs/14 intro and table show Phases 1–5 on `main`, Phase 6 not started. docs/12 §9 and `OD-23` restated to D-010 (faint red/green plan fills, stronger result-colour actual band, no outline, no purple or teal). `OD-33` marked restated, owner to review.
 Left:     PR for #91 is do-not-merge-without-Chris. Archived-box outline (docs/12 §9) is not covered by D-010 and is unchanged. docs/15 still lists an optional `PLAN` tag; D-010 does not.

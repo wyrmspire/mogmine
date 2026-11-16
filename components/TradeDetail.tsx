@@ -213,7 +213,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   }, [ready, candles, trade, baseMinutes]);
   const hindsight = useMemo(() => {
     if (!ready) return null;
-    return buildHindsight(trade, candles.candles);
+    return buildHindsight(trade, candles.candles, candles.baseTimeframe);
   }, [ready, trade, candles]);
   const barIssues = barCheck?.issues ?? [];
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
