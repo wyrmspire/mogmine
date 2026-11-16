@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Claude Haiku 5.5) — issue #85 type floor and fonts, branch `feat/85-type-floor-fonts`
+Did:      Raised every sub-11px font-size in `app/globals.css` (9px and 10px rules, incl. `font:` shorthands) to `0.6875rem`. Loaded Inter and JetBrains Mono with `next/font/google` in `app/layout.tsx`; `--font-sans`/`--font-mono` now start with those variables. Fallback stacks unchanged.
+Verified: `npm test` 112/112, `npm run typecheck` and `npm run build` exit 0. Lint: 0 errors, 1 pre-existing warning in `postcss.config.mjs`. Headless Chrome at 390×844 on Today, Feed, Review, Tune and Trade Detail: 0px horizontal overflow, no text under 11px, both fonts report `loaded`.
+Left:     Feed, Review and Tune were probed for overflow and small text only, not inspected visually. Not tested at 360px. Do not merge without Chris.
+Watch:    `next/font/google` fetches fonts at build time; a build with no network access will fail rather than fall back.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch5
 Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
 Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.
