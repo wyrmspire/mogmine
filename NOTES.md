@@ -48,6 +48,10 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Claude Haiku 5.5) — docs stale cleanup, branch `feat/91-docs-stale` (#91)
+Did:      CONTRIBUTING §2 says the app is live on `main` (no "no code yet"). docs/14 intro and table show Phases 1–5 on `main`, Phase 6 not started. docs/12 §9 and `OD-23` restated to D-010 (faint red/green plan fills, stronger result-colour actual band, no outline, no purple or teal). `OD-33` marked restated, owner to review.
+Left:     PR for #91 is do-not-merge-without-Chris. Archived-box outline (docs/12 §9) is not covered by D-010 and is unchanged. docs/15 still lists an optional `PLAN` tag; D-010 does not.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch4 cleanup before merge
 Did:      Stripped UX/Invariant codes from Tune captions (plain wording only). Trade Card outcome subline now wraps instead of ellipsizing, so R and points stay visible in the preview.
 Left:     Ready for Chris's approved merge of PR #76. Do not squash. PR #71 stays open.

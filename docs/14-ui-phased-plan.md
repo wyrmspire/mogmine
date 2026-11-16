@@ -1,6 +1,6 @@
 # 14 — UI & Experience: Phased Plan
 
-Originally written on `ui/phased-improvements` on 2026-11-14 after the owner asked for the plan to be on paper before more was built. **Phases 1–3 are committed there; Phase 4 is implemented on `feat/phase4-chart-windows`. Nothing is pushed or merged.**
+Originally written on `ui/phased-improvements` on 2026-11-14 after the owner asked for the plan to be on paper before more was built. **Phases 1–5 are on `main` and in production at `mogmine.vercel.app`.** Phases 1–3 were first committed on that branch; Phases 4 and 5 were merged later through the integration branches (last merge: PR #76). Phase 6 is not started.
 
 Scope is the "First" column of [08 §15](08-ux-notes-viewing-and-journaling.md#15-build-order-for-the-experience) (`OD-14`), on device storage and Yahoo data only (`D-009`). No Supabase, broker, CSV or AI work is in this plan.
 
@@ -13,9 +13,9 @@ Scope is the "First" column of [08 §15](08-ux-notes-viewing-and-journaling.md#1
 | 1 — Foundation, routes, Today and Feed | `c74bbae` | Done |
 | 2 — Chart craft | `685319b` | Done; its fitted-window fault is resolved in Phase 4 |
 | 3 — Pit Stop and review queue | `5a9f8c6` | Done |
-| 4 — Chart window from the trade's own duration | `feat/phase4-chart-windows` | **Done locally; not pushed** |
-| 5 — Shield mode, Trade Card sheet, Tune | — | Proposed |
-| 6 — Polish, measurements, spec reconciliation | — | Proposed |
+| 4 — Chart window from the trade's own duration | on `main` | Done |
+| 5 — Shield mode, Trade Card sheet, Tune | on `main` (via PR #76) | Done |
+| 6 — Polish, measurements, spec reconciliation | — | Not started (proposed in §5) |
 
 Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors (7 before; 1 old warning in `postcss.config.mjs`), `npm test` 10 of 10, `npm run build` passes. Screens were checked in headless Chrome at 390 × 844 and 1280 × 900: no horizontal overflow, no console errors, no tap target under 44 px except the chart library's own attribution logo. **Not checked: a real phone, iOS Safari, the share sheet.**
 
@@ -36,7 +36,7 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 
 ### Phase 2 — Chart craft
 
-- **Position Box** in the Actual style (`OD-23`): teal frame, solid profit border, dashed risk border (UX-80), fills under the candles so candles stay crisp, MAE and MFE marks, and a result pill drawn in the canvas that shows R and points only in Shield mode (UX-71).
+- **Position Box** in the Actual style (`OD-23`): fills under the candles so candles stay crisp, MAE and MFE marks, and a result pill drawn in the canvas that shows R and points only in Shield mode (UX-71). The frame of this first version was later removed; the box is fill-only (D-010, docs/15 §1).
 - **Timeframe switch swaps data in place.** The chart is no longer torn down, and the box is re-snapped to the new bars (UX-02, UX-20, B-23).
 - X-Ray on crosshair tracking (UX-42), Fit shown only when the view has moved, full-screen chart (UX-25), `J`/`K`/`F`/`N`/`C`/`X` keys (UX-69), swipe between trades on the header only (UX-40).
 - **States:** no chart area when there are no Yahoo candles, "showing 5m" notice, fills-off-the-bars notice (B-12), `—R` with one-tap risk chips (UX-36), `≈` on estimated MAE/MFE (B-33).
@@ -72,11 +72,11 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 
 ---
 
-## 4. Phase 5 (proposed) — Shield mode, Trade Card, Tune
+## 4. Phase 5 (on `main`) — Shield mode, Trade Card, Tune
 
-- **Shield mode** (UX-64) is half built: the header toggle, lists, the trade header and the chart pill already switch to R and points. Left: the Trade Card, the file name, and a sweep of every screen for a remaining dollar sign or size.
-- **Trade Card sheet** (08 §11): preview before sharing, privacy toggle that re-renders the chart (UX-71/72), Share / Save / Copy (UX-76), zone on every time (UX-75), playbook, tags and rules seal on the card, image ready before the tap (UX-70). The card today is the old one-button version, moved onto theme tokens.
-- **Tune** is a placeholder with only the time zone. Add: Position Box opacity (Invariant 5 asks for it from the start), gold preset and intensity, the blue/orange palette (UX-80), risk budget, show or hide samples, and a **journal backup** (download and restore a file). The whole journal lives in one browser's storage; clearing site data deletes it.
+- **Shield mode** (UX-64): the header toggle, lists, the trade header and the chart pill switch to R and points.
+- **Trade Card sheet** (08 §11): preview before sharing, privacy toggle that re-renders the chart (UX-71/72), Share / Save / Copy (UX-76), zone on every time (UX-75), image ready before the tap (UX-70).
+- **Tune**: gold preset and intensity, Position Box opacity, the profit and risk palette (Classic or Blue / Orange), and a **journal backup** (download and restore a file). The whole journal lives in one browser's storage; clearing site data deletes it.
 
 ## 5. Phase 6 (proposed) — Polish, measurement, reconciliation
 
