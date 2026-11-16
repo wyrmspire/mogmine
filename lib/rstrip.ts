@@ -15,6 +15,9 @@ export interface RStripInput {
   mfePrice?: number | null;
 }
 
+/** Whether the exit made or lost money against the entry, independent of the plan classification. */
+export type RStripOutcome = "favorable" | "adverse" | "breakeven";
+
 export interface RStripLayout {
   /** Normalised 0–1 positions along the strip (stop towards 0, target towards 1). */
   stop: number | null;
@@ -24,6 +27,8 @@ export interface RStripLayout {
   mae: number | null;
   mfe: number | null;
   kind: RStripKind;
+  /** Null when there is no exit marker (no exit price). Colours the exit marker, not the label. */
+  exitOutcome: RStripOutcome | null;
 }
 
 function favourable(direction: TradeDirection, price: number, entry: number) {
@@ -85,6 +90,16 @@ export function rStripLayout(input: RStripInput): RStripLayout | null {
   }
   const span = right - left;
 
+  // The exit marker's colour comes from money made or lost, never from the classification:
+  // a cut-early loss is red, a cut-early win is green, a scratch exit is neutral.
+  const exitOutcome: RStripOutcome | null = input.exit == null || !Number.isFinite(input.exit)
+    ? null
+    : favourable(input.direction, input.exit, input.entry) > 1e-9
+      ? "favorable"
+      : favourable(input.direction, input.exit, input.entry) < -1e-9
+        ? "adverse"
+        : "breakeven";
+
   return {
     stop: stopOffset == null ? null : project(stopOffset, left, span),
     target: targetOffset == null ? null : project(targetOffset, left, span),
@@ -93,6 +108,7 @@ export function rStripLayout(input: RStripInput): RStripLayout | null {
     mae: maeOffset == null ? null : project(maeOffset, left, span),
     mfe: mfeOffset == null ? null : project(mfeOffset, left, span),
     kind: classify(input, exitOffset),
+    exitOutcome,
   };
 }
 
