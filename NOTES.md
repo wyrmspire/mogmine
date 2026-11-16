@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Codex) — Core math, branch `feat/65-session-coverage`
+Did:      Issue #65: shared MES/MNQ expected-bar logic now omits the regular 17:00–18:00 ET halt and Friday 17:00–Sunday 18:00 ET weekend closure for coverage and excursions.
+Files:    `lib/session.ts`, `lib/{trade-bar-validation,trades}.ts`, `lib/__tests__/session-coverage.test.ts`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` 86/86; typecheck/build pass; lint 0 errors/1 existing PostCSS warning.
+Left:     Holidays and early closes still appear as missing evidence until an authoritative calendar is chosen (`OD-35`). Do not merge without Chris.
+
 ### 2026-11-15 — agent (Grok Bot) — Chart + App shell, branch `feat/87-trade-card-current-view` (#87)
 Did:      Trade Card now rebuilds from the live screenshot after pan, pinch, fit, or ‹30/30› when the sheet is already open (AC-10). Stacks on #88 (lazy build); notes typing still does not encode. A leftover blob is dropped on a closed-sheet redraw so the next open is current.
 Files:    `components/TradeDetail.tsx`, `NOTES.md`.
