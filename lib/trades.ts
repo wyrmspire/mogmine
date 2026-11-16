@@ -391,6 +391,55 @@ export function fitWindow(entryTime: string, exitTime: string, timeframe: Timefr
   };
 }
 
+/**
+ * Zoomed-out default chart range (issue #82 / Chris decision).
+ * Applies a wider default range than fitWindow (at least 45 bars, typically 2.5× the fitted window),
+ * clamped to loaded bars [0, barCount - 1].
+ */
+export function defaultVisibleRange(
+  baseFitRange: { from: number; to: number },
+  barCount: number,
+  multiplier = 2.5,
+  minBars = MIN_FITTED_BARS,
+): { from: number; to: number } {
+  const fittedBars = Math.max(1, baseFitRange.to - baseFitRange.from);
+  const targetBars = Math.max(minBars, Math.round(fittedBars * multiplier));
+  const maxIndex = Math.max(0, barCount - 1);
+
+  if (barCount <= targetBars) {
+    return { from: 0, to: maxIndex };
+  }
+
+  const extraBars = targetBars - fittedBars;
+  const extraBefore = Math.round(extraBars * 0.6);
+  const extraAfter = extraBars - extraBefore;
+
+  let from = baseFitRange.from - extraBefore;
+  let to = baseFitRange.to + extraAfter;
+
+  // Shift if out of bounds on the left
+  if (from < 0) {
+    to = Math.min(maxIndex, to - from);
+    from = 0;
+  }
+  // Shift if out of bounds on the right
+  if (to > maxIndex) {
+    from = Math.max(0, from - (to - maxIndex));
+    to = maxIndex;
+  }
+
+  // Ensure span is at least minBars if barCount allows
+  if (to - from < minBars && barCount >= minBars) {
+    if (from === 0) {
+      to = Math.min(maxIndex, minBars - 1);
+    } else if (to === maxIndex) {
+      from = Math.max(0, maxIndex - minBars + 1);
+    }
+  }
+
+  return { from, to };
+}
+
 export type ExcursionCoverage = "complete" | "partial";
 
 export interface Excursions {
