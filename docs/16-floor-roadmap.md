@@ -42,7 +42,7 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 | :--- | :--- | :--- | :--- |
 | `R-01` | Pinch zooms the chart, not the page | 1 line | — |
 | `R-02` | Fresh-trade candles retry and refresh | Small | — |
-| `R-03` | Log a trade that is still open | Medium | `OD-38` answered for the display part |
+| `R-03` | Log a trade that is still open | Medium | `OD-38` (decided: show `Open`) |
 | `R-04` | Turn on the candle archive | Owner task + merge | Supabase project |
 | `R-05` | Trades stored in Supabase | Large | `R-03`, `R-04` |
 | `R-06` | Read-only assistant endpoint | Medium | `R-05`, `OD-19` |
@@ -180,7 +180,7 @@ Invariant: `status === "open"` ⇔ `exit_time === null` ⇔ `exit_price === null
 - `lib/candles.ts`: an open trade always counts as needing a refresh, on the `R-02` five-minute rule. Never cache an open trade's candles as final.
 - `TradeChart.tsx` / `PositionBoxPrimitive.ts`: for an open trade the box starts at the entry bar and its right edge is the **last loaded bar**. Draw the stop and target fills as today. Draw no exit marker and no after-exit continuation. Hindsight (`lib/hindsight.ts`) returns `null`.
 - `lib/shareCard.ts`: the Trade Card for an open trade is labelled `OPEN` and shows no result.
-- What P&L, if any, shows while open is `OD-38`. Until the owner answers, show **none** (the interim rule).
+- `OD-38` (decided by the owner, 2026-11-16): an open trade shows `Open` and **no** P&L, realised or unrealised.
 
 **Do not:**
 - Compute an unrealised P&L from the last Yahoo bar and show it as the result. Yahoo is delayed; that number is not the trader's fill (guardrail 4).
