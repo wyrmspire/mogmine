@@ -3,7 +3,7 @@ import { FUTURES_SPECS, TIMEFRAME_MINUTES } from "@/lib/trades";
 import { sessionCloseUtc } from "@/lib/session";
 import type { Timeframe } from "@/lib/trades";
 import { YahooFinanceProvider } from "@/lib/market-data/yahoo";
-import { coversTradeWindow } from "@/lib/market-data/coverage";
+import { anchorsTradeWindow, coversTradeWindow, tradeWindowCoverage } from "@/lib/market-data/coverage";
 
 export const runtime = "nodejs";
 
@@ -39,9 +39,15 @@ export async function GET(request: NextRequest) {
       const closeCoverage = sessionCloseUtc(exitTime) + TIMEFRAME_MINUTES[timeframe] * 60_000;
       const to = new Date(Math.max(exitTime + padHours * 3_600_000, closeCoverage));
       const candles = await provider.getCandles({ symbol, timeframe, from, to });
-      // A thin or gapped set falls through to the next timeframe (issue #90, AC-07).
+      // A thin set or one missing a boundary bar falls through to the next timeframe (issue #90).
+      // Gaps inside the hold do not: when the entry and exit bars are present the payload anchors
+      // the trade (AC-07) and is served as partial, with the gaps drawn and counted on screen.
       if (coversTradeWindow(candles, entryTime, exitTime, timeframe, symbol)) {
         return NextResponse.json({ candles, source: "Yahoo Finance", ticker: provider.resolveProviderSymbol(symbol), baseTimeframe: timeframe });
+      }
+      if (anchorsTradeWindow(candles, entryTime, exitTime, timeframe, symbol)) {
+        const { missingInside } = tradeWindowCoverage(candles, entryTime, exitTime, timeframe, symbol);
+        return NextResponse.json({ candles, source: "Yahoo Finance", ticker: provider.resolveProviderSymbol(symbol), baseTimeframe: timeframe, partial: true, missingBars: missingInside.length });
       }
     }
     return NextResponse.json({ error: "Yahoo Finance has no candles for this range" }, { status: 404 });
