@@ -48,6 +48,17 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — integration/batch6
+Did:      Draft integration of #80 (gold for good process only), #81 (R strip), #82 (slim toolbar, zoomed-out default, Fit as an option), #83 (data-notes chip), #84 (two-step entry), and #85 (11px type floor, Inter + JetBrains Mono). Chart opens wide (>= 45 bars via defaultVisibleRange); fitWindow goldens unchanged. View menu labels Simple / After exit. Data-notes chip is amber only for missing/partial coverage. Levels grid kept, with Add stop/target/key on Trade Detail. Kept #71 out.
+Left:     Draft PR against main, stacked on integration/batch5 (#100). Do not merge or deploy.
+
+
+### 2026-11-15 — agent (Claude Haiku 5.5) — issue #85 type floor and fonts, branch `feat/85-type-floor-fonts`
+Did:      Raised every sub-11px font-size in `app/globals.css` (9px and 10px rules, incl. `font:` shorthands) to `0.6875rem`. Loaded Inter and JetBrains Mono with `next/font/google` in `app/layout.tsx`; `--font-sans`/`--font-mono` now start with those variables. Fallback stacks unchanged.
+Verified: `npm test` 112/112, `npm run typecheck` and `npm run build` exit 0. Lint: 0 errors, 1 pre-existing warning in `postcss.config.mjs`. Headless Chrome at 390×844 on Today, Feed, Review, Tune and Trade Detail: 0px horizontal overflow, no text under 11px, both fonts report `loaded`.
+Left:     Feed, Review and Tune were probed for overflow and small text only, not inspected visually. Not tested at 360px. Do not merge without Chris.
+Watch:    `next/font/google` fetches fonts at build time; a build with no network access will fail rather than fall back.
+
 ### 2026-11-15 — Codex — `feat/84-two-step-entry` (#84)
 Did:      Manual entry now saves only the required execution fields, keeps its draft on close, and opens the new trade detail route; stop, target and key remain nullable.
 Detail:   Trade Detail adds missing plan levels inline with existing tick/side validation; RiskChips remain for stop sizing and Shield masks dollars. Level controls remain available without candles.
