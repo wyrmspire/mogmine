@@ -113,4 +113,4 @@ export function TradeLevelEditor({ trade, field }: { trade: TradeRecord; field: 
       </form>
     </div>
   );
-      }
+}
