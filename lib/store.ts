@@ -94,8 +94,12 @@ function pickAnnotations(trade: TradeRecord) {
 }
 
 
-const serverState: JournalState = { trades: [...demoTrades].sort(byNewest), hydrated: false, saveState: "idle" };
-let state: JournalState = serverState;
+function emptyJournal(): JournalState {
+  return { trades: [...demoTrades].sort(byNewest), hydrated: false, saveState: "idle" };
+}
+
+const serverState: JournalState = emptyJournal();
+let state: JournalState = emptyJournal();
 const listeners = new Set<() => void>();
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -377,6 +381,16 @@ export function replaceTrades(trades: TradeRecord[]) {
 }
 
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+
+/** Test hook: restore the unhydrated demo journal. */
+export function resetJournalForTests() {
+  state = emptyJournal();
+}
+
+/** Test hook: read the in-memory journal after hydrate/persist. */
+export function getJournalState() {
+  return state;
+}
 
 export function useJournal() {
   return useSyncExternalStore(subscribe, () => state, () => serverState);

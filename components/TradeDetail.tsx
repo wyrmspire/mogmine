@@ -32,8 +32,11 @@ export function TradeDetail({ id }: { id: string }) {
   const context = useListContext();
   const trade = journal.trades.find((item) => item.id === id);
 
+  if (!journal.hydrated) {
+    return <div className="page" role="status" aria-label="Loading trade…"><div className="skeleton" style={{ height: 420 }} /></div>;
+  }
+
   if (!trade) {
-    if (!journal.hydrated) return <div className="page" role="status" aria-label="Loading trade…"><div className="skeleton" style={{ height: 420 }} /></div>;
     return (
       <div className="page"><div className="specular-card empty-state">
         <h3>This trade is not on this device</h3>

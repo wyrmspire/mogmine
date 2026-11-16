@@ -24,6 +24,10 @@ export function FeedScreen() {
   // Filters live in the URL, so back, reload and a deep link all restore the same list (UX-10).
   const setFilters = (patch: Partial<FeedFilters>) => router.replace(`${pathname}${filtersToQuery({ ...filters, ...patch })}`, { scroll: false });
 
+  if (!journal.hydrated) {
+    return <div className="page" role="status" aria-label="Loading your journal…"><div className="page-head"><div><span className="eyebrow">Feed</span><h1>Loading your journal…</h1></div></div>{[0, 1, 2].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>;
+  }
+
   const all = withSamples(journal.trades, prefs.showSamples);
   const shown = applyFilters(all, filters);
   const groups = groupByDay(shown);
