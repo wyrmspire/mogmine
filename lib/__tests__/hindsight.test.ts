@@ -91,6 +91,36 @@ test("the same later bar reaching both does not claim a first fill", () => {
   assert.match(fact.sentence, /both reached in the same later bar/);
 });
 
+test("a target reached only in the next session does not count", () => {
+  // The exit is Tuesday 15:00 ET; its assigned session closes 17:00 ET (22:00 UTC). A bar at
+  // 18:30 ET belongs to the evening session and must never count as a later touch.
+  const nextSessionTouch = Date.parse("2026-11-10T23:30:00.000Z");
+  const candles = [
+    bar(exit + 10 * minute, 5996, 6004),
+    bar(Date.parse("2026-11-10T22:00:00.000Z") - minute, 5997, 6003),
+    bar(nextSessionTouch, 6008, 6012),
+  ];
+  const fact = buildHindsight(trade, candles);
+  assert.equal(fact.target, null);
+  assert.equal(fact.outcome, "neither");
+  assert.equal(fact.incomplete, false);
+  assert.match(fact.sentence, /neither the target nor the stop was reached by the session close/);
+  // laterTouch honours the same boundary when a session close is passed.
+  assert.equal(laterTouch(candles, exit, 6010, "target", "LONG", Date.parse("2026-11-10T22:00:00.000Z")), null);
+});
+
+test("a stop reached only in the next session does not count", () => {
+  const nextSessionTouch = Date.parse("2026-11-10T23:30:00.000Z");
+  const candles = [
+    bar(exit + 10 * minute, 5996, 6004),
+    bar(Date.parse("2026-11-10T22:00:00.000Z") - minute, 5997, 6003),
+    bar(nextSessionTouch, 5986, 5992),
+  ];
+  const fact = buildHindsight(trade, candles);
+  assert.equal(fact.stop, null);
+  assert.equal(fact.outcome, "neither");
+});
+
 test("a bar at or before the exit is not a later touch", () => {
   const candles = [bar(exit, 5988, 6012), bar(exit - minute, 5988, 6012)];
   assert.equal(laterTouch(candles, exit, 6010, "target", "LONG"), null);

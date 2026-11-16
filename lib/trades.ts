@@ -391,6 +391,60 @@ export function fitWindow(entryTime: string, exitTime: string, timeframe: Timefr
   };
 }
 
+/** Number of bars a logical range covers. Lightweight Charts uses `to - from` as the visible width. */
+export function visibleLogicalBars(range: { from: number; to: number }): number {
+  return Math.max(0, range.to - range.from);
+}
+
+/**
+ * Opening chart range: the standard trade window (`fitWindow`), with modest
+ * lead-in and after-exit context, at `max(45, the trade's own window)`.
+ * No extra zoom-out multiplier. Clamped to the loaded candles. The range width
+ * is `to - from`; to show every loaded bar, `to` is `barCount` (not `barCount - 1`),
+ * so 45 loaded candles still yield 45 visible bars.
+ */
+export function defaultVisibleRange(
+  baseFitRange: { from: number; to: number },
+  barCount: number,
+  minBars = MIN_FITTED_BARS,
+): { from: number; to: number } {
+  const fittedBars = Math.max(1, visibleLogicalBars(baseFitRange));
+  const targetBars = Math.max(minBars, fittedBars);
+  const maxTo = Math.max(0, barCount);
+
+  if (barCount <= targetBars) {
+    return { from: 0, to: maxTo };
+  }
+
+  const extraBars = targetBars - fittedBars;
+  const extraBefore = Math.round(extraBars * 0.6);
+  const extraAfter = extraBars - extraBefore;
+
+  let from = baseFitRange.from - extraBefore;
+  let to = baseFitRange.to + extraAfter;
+
+  if (from < 0) {
+    to = Math.min(maxTo, to - from);
+    from = 0;
+  }
+  if (to > maxTo) {
+    from = Math.max(0, from - (to - maxTo));
+    to = maxTo;
+  }
+
+  if (visibleLogicalBars({ from, to }) < minBars && barCount >= minBars) {
+    if (from === 0) {
+      to = Math.min(maxTo, minBars);
+    } else if (to === maxTo) {
+      from = Math.max(0, maxTo - minBars);
+    } else {
+      to = Math.min(maxTo, from + minBars);
+    }
+  }
+
+  return { from, to };
+}
+
 export type ExcursionCoverage = "complete" | "partial";
 
 export interface Excursions {

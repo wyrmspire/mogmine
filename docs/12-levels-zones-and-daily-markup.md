@@ -332,12 +332,12 @@ export interface LevelSet {
 
 ### Sizing defaults (LV-17)
 
-1. The trader sets the entry and the quantity (default 1).
+1. The trader saves the execution first: side, symbol, quantity, entry/exit prices and entry/exit times. Stop, target and key level remain nullable and are set afterwards on Trade Detail.
 2. Default stop distance = `risk_budget_usd ÷ (qty × pointValueUsd)`. On `MES` that is 50 pts for 1 contract, 25 pts for 2, and 16.75 for 3 (tick-snapped), from `FUTURES_SPECS` (D-008).
 3. **Snap the stop to structure.** If a zone edge lies within ±25 % of the default distance, move the stop one tick beyond the far edge of that zone. Show the resulting risk in dollars, and never hide the change.
 4. **Target** = the first zone edge at or beyond `min_reward_risk × risk` (default 1.5R). If no zone edge is far enough, use exactly 1.5R and say so.
 
-The 4/6/8-point chips in UX-36 are far tighter than this owner's risk. Derive the chips from the plan's risk budget and the quantity instead. This applies to manual entry, the main trade source under `D-009`.
+The 4/6/8-point chips in UX-36 are far tighter than this owner's risk. Derive the chips from the plan's risk budget and the quantity instead. For manual trades under `D-009`, offer them on Trade Detail after the execution is saved, not in the execution sheet.
 
 ### Three box styles (LV-18)
 
@@ -504,7 +504,7 @@ The milestones are from [10 §7](10-yahoo-first-build-plan.md#build-order) (`OD-
 | Milestone | Levels work |
 | :--- | :--- |
 | **M0 — Archive** | None beyond the archive. Archive `MES=F` as well as `ES=F` (already in docs/10). Under `OD-15` (decided 2026-11-14), `MES` charts and computes levels on `MES=F`, matching the owner's TradingView levels. |
-| **M1 — One trade on one chart** | LV-17 sizing defaults in manual entry. The Actual box style. |
+| **M1 — One trade on one chart** | Two-step manual entry: save the execution, then apply LV-17 sizing defaults on Trade Detail. The Actual box style. |
 | **M3 — Context** | Level sets (§6), `SessionLevelsPrimitive` with LV-08/LV-09, the `levels_at_entry` snapshot, the Planned and Archived box styles. The engine computes §3A from the archive. |
 | **M4 — AI** | The levels block in the data-only review (§10). |
 | **After `OD-19`** | Assistant level-set drafts (§12), daily plan fields (§8). |

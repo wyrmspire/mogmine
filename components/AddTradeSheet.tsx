@@ -2,12 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
+import { formatMoney, formatPoints, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { addTrade } from "@/lib/store";
 import { fromZonedInput, toZonedInput, zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { FUTURES_SPECS, isWholeQuantity, normalizeTrade, rMultiple, snapToTick, specFor, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { FUTURES_SPECS, isWholeQuantity, normalizeTrade, rMultiple, specFor, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeDirection } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft } from "@/lib/ui";
 
@@ -19,10 +19,6 @@ interface Draft {
   exitTime: string;
   entryPrice: string;
   exitPrice: string;
-  stop: string;
-  target: string;
-  keyLevel: string;
-  note: string;
 }
 
 // Kept while the app is open, so closing the sheet by accident never loses what was typed.
@@ -31,7 +27,7 @@ const DRAFT_KEY = "add-trade";
 function freshDraft(zone: string): Draft {
   const exit = new Date();
   const entry = new Date(exit.getTime() - 30 * 60_000);
-  return { symbol: "MES", direction: "LONG", quantity: "1", entryTime: toZonedInput(entry, zone), exitTime: toZonedInput(exit, zone), entryPrice: "", exitPrice: "", stop: "", target: "", keyLevel: "", note: "" };
+  return { symbol: "MES", direction: "LONG", quantity: "1", entryTime: toZonedInput(entry, zone), exitTime: toZonedInput(exit, zone), entryPrice: "", exitPrice: "" };
 }
 
 const toNumber = (text: string) => (text.trim() === "" ? null : Number(text));
@@ -66,14 +62,13 @@ export function AddTradeSheet() {
   const change = (patch: Partial<Draft>) => setDraft((current) => keepDraft(DRAFT_KEY, { ...current, ...patch }));
 
   const spec = specFor(draft.symbol);
-  const sign = draft.direction === "LONG" ? 1 : -1;
   const entryPrice = toNumber(draft.entryPrice);
   const exitPrice = toNumber(draft.exitPrice);
-  const stop = toNumber(draft.stop);
-  const target = toNumber(draft.target);
-  const keyLevel = toNumber(draft.keyLevel);
   // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50).
-  const quantity = Number(draft.quantity);
+  // Under Shield the Contracts input is hidden, so an invalid draft quantity cannot be seen or
+  // fixed; fall back to 1 there and keep the typed draft untouched for when Shield turns off.
+  const typedQuantity = Number(draft.quantity);
+  const quantity = prefs.shield ? (isWholeQuantity(typedQuantity) ? typedQuantity : 1) : typedQuantity;
   const entry = fromZonedInput(draft.entryTime, zone);
   const exit = fromZonedInput(draft.exitTime, zone);
 
@@ -81,16 +76,13 @@ export function AddTradeSheet() {
   const executionErrors = validateTradeInput({
     symbol: draft.symbol, direction: draft.direction, quantity,
     entry_price: entryPrice ?? Number.NaN, exit_price: exitPrice ?? Number.NaN,
-    stop_loss_price: stop, planned_target_price: target, key_level_price: keyLevel,
+    stop_loss_price: null, planned_target_price: null, key_level_price: null,
   });
   const errors: Partial<Record<keyof Draft, string>> = {
     symbol: executionErrors.symbol,
-    quantity: executionErrors.quantity,
+    quantity: prefs.shield ? undefined : executionErrors.quantity,
     entryPrice: executionErrors.entry_price,
     exitPrice: executionErrors.exit_price,
-    stop: executionErrors.stop_loss_price,
-    target: executionErrors.planned_target_price,
-    keyLevel: executionErrors.key_level_price,
   };
   if (entryPrice != null && !(entryPrice > 0)) errors.entryPrice = "Enter the entry price";
   if (exitPrice != null && !(exitPrice > 0)) errors.exitPrice = "Enter the exit price";
@@ -101,15 +93,9 @@ export function AddTradeSheet() {
   const show = (key: keyof Draft) => (submitted ? errors[key] : undefined);
 
   const preview = entryPrice != null && exitPrice != null && entryPrice > 0 && exitPrice > 0
-    ? { symbol: draft.symbol, direction: draft.direction, quantity, entry_price: entryPrice, exit_price: exitPrice, stop_loss_price: stop != null && !errors.stop ? stop : null }
+    ? { symbol: draft.symbol, direction: draft.direction, quantity, entry_price: entryPrice, exit_price: exitPrice, stop_loss_price: null }
     : null;
   const previewPnl = preview ? tradePnl(preview) : null;
-
-  // Sizing defaults (docs/12 LV-17): stop distance from the risk budget, target at 1.5R.
-  const sized = !!spec && isWholeQuantity(quantity);
-  const budgetPoints = sized && spec ? prefs.riskBudgetUsd / (quantity * spec.pointValueUsd) : 0;
-  const suggestedStop = sized && entryPrice != null && entryPrice > 0 ? snapToTick(entryPrice - sign * budgetPoints, draft.symbol) : null;
-  const suggestedTarget = entryPrice != null && stop != null && !errors.stop ? snapToTick(entryPrice + sign * Math.abs(entryPrice - stop) * 1.5, draft.symbol) : null;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -119,8 +105,8 @@ export function AddTradeSheet() {
       id: crypto.randomUUID(), symbol: draft.symbol, direction: draft.direction, quantity,
       entry_time: entry.toISOString(), exit_time: exit.toISOString(),
       entry_price: entryPrice, exit_price: exitPrice,
-      stop_loss_price: stop, planned_target_price: target, key_level_price: keyLevel,
-      note: draft.note.trim(),
+      stop_loss_price: null, planned_target_price: null, key_level_price: null,
+      note: "",
     });
     addTrade(trade);
     keepDraft(DRAFT_KEY, null);
@@ -141,12 +127,14 @@ export function AddTradeSheet() {
         </div>
         <form onSubmit={submit} noValidate>
           <div className="form-grid">
-            <label className={`field${prefs.shield ? " wide" : ""}`}><span>Symbol</span>
+            <label className="field"><span>Symbol</span>
               <select ref={firstField} value={draft.symbol} onChange={(event) => change({ symbol: event.target.value })}>
                 {Object.keys(FUTURES_SPECS).map((symbol) => <option key={symbol}>{symbol}</option>)}
               </select>
               {show("symbol") && <span className="error">{show("symbol")}</span>}
             </label>
+            {/* Shield hides position size (#15): the input is masked, the draft keeps the
+                quantity and the saved execution preserves it. The preview below never shows it. */}
             {!prefs.shield && (
               <label className="field"><span>Contracts</span>
                 <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} aria-invalid={!!show("quantity")} onChange={(event) => change({ quantity: event.target.value })} />
@@ -174,29 +162,6 @@ export function AddTradeSheet() {
             <label className="field"><span>Exit price</span>
               <input inputMode="decimal" type="number" step={step} placeholder="6849.00" value={draft.exitPrice} aria-invalid={!!show("exitPrice")} onChange={(event) => change({ exitPrice: event.target.value })} />
               {show("exitPrice") && <span className="error">{show("exitPrice")}</span>}
-            </label>
-            <label className="field"><span>Stop <i>unlocks R</i></span>
-              <input inputMode="decimal" type="number" step={step} value={draft.stop} aria-invalid={!!errors.stop} onChange={(event) => change({ stop: event.target.value })} />
-              {errors.stop && <span className="error">{errors.stop}</span>}
-            </label>
-            <label className="field"><span>Target <i>optional</i></span>
-              <input inputMode="decimal" type="number" step={step} value={draft.target} aria-invalid={!!errors.target} onChange={(event) => change({ target: event.target.value })} />
-              {errors.target && <span className="error">{errors.target}</span>}
-            </label>
-            {(suggestedStop != null && draft.stop === "") || (suggestedTarget != null && draft.target === "") ? (
-              <div className="field wide"><span>{prefs.shield ? "Suggested from your risk budget" : `Suggested from your $${prefs.riskBudgetUsd} risk budget`}</span>
-                <div className="suggest">
-                  {suggestedStop != null && draft.stop === "" && <button type="button" onClick={() => change({ stop: String(suggestedStop) })}>Stop {formatPrice(suggestedStop, draft.symbol)} · {budgetPoints.toFixed(2)} pts</button>}
-                  {suggestedTarget != null && draft.target === "" && <button type="button" onClick={() => change({ target: String(suggestedTarget) })}>Target {formatPrice(suggestedTarget, draft.symbol)} · exactly 1.5R</button>}
-                </div>
-              </div>
-            ) : null}
-            <label className="field wide"><span>Key level <i>optional</i></span>
-              <input inputMode="decimal" type="number" step={step} value={draft.keyLevel} aria-invalid={!!errors.keyLevel} onChange={(event) => change({ keyLevel: event.target.value })} />
-              {errors.keyLevel && <span className="error">{errors.keyLevel}</span>}
-            </label>
-            <label className="field wide"><span>Private note <i>optional</i></span>
-              <textarea value={draft.note} onChange={(event) => change({ note: event.target.value })} placeholder="Why I took it / what I would change" />
             </label>
           </div>
           <div className="form-preview" aria-live="polite">

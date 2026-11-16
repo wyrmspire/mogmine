@@ -13,7 +13,7 @@ import { shareCardContent, shareCardFileName, shouldBuildShareCard } from "../sh
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
-import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, defaultVisibleRange, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks, visibleLogicalBars } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
@@ -121,6 +121,51 @@ test("coarser timeframes show wider clock-time context", () => {
   assert.equal(oneMinute.end - oneMinute.start, 180 * 60_000);
   assert.equal(fifteenMinute.end - fifteenMinute.start, 45 * 15 * 60_000);
   assert.ok(fifteenMinute.end - fifteenMinute.start > oneMinute.end - oneMinute.start);
+});
+
+test("defaultVisibleRange is the trade window with a 45-bar floor, not a 2.5x zoom-out", () => {
+  const baseFit = { from: 50, to: 95 }; // 45-bar fitted width
+  const opening = defaultVisibleRange(baseFit, 200);
+  assert.ok(visibleLogicalBars(opening) >= 45, "must never have fewer than 45 bars when data allows");
+  assert.equal(visibleLogicalBars(opening), 45, "must not apply a zoom-out multiplier");
+  assert.deepEqual(opening, baseFit);
+  assert.ok(opening.from >= 0 && opening.to <= 200, "must be clamped to the loaded series");
+
+  const nearStart = defaultVisibleRange({ from: 5, to: 50 }, 200);
+  assert.deepEqual(nearStart, { from: 5, to: 50 });
+  assert.equal(visibleLogicalBars(nearStart), 45);
+
+  const nearEnd = defaultVisibleRange({ from: 150, to: 195 }, 200);
+  assert.deepEqual(nearEnd, { from: 150, to: 195 });
+  assert.equal(visibleLogicalBars(nearEnd), 45);
+
+  // Fit window hangs off the end of a 60-bar series: clamp and keep 45 bars.
+  const shortHistory = defaultVisibleRange(baseFit, 60);
+  assert.deepEqual(shortHistory, { from: 15, to: 60 });
+  assert.equal(visibleLogicalBars(shortHistory), 45);
+
+  // Exactly 45 loaded candles still yield a 45-bar logical range, not 44.
+  const exact = defaultVisibleRange({ from: 0, to: 20 }, 45);
+  assert.equal(visibleLogicalBars(exact), 45);
+  assert.deepEqual(exact, { from: 0, to: 45 });
+
+  const thin = defaultVisibleRange({ from: 0, to: 8 }, 20);
+  assert.equal(visibleLogicalBars(thin), 20);
+});
+
+test("mnq-trend-hold 5m opening range is 45 to about 60 bars, not 100+", () => {
+  const trade = demoTrades.find((item) => item.id === "mnq-trend-hold");
+  assert.ok(trade);
+  const fitted = fitWindow(trade.entry_time, trade.exit_time, "5m");
+  assert.ok(fitted.visibleBars >= 45 && fitted.visibleBars <= 60, `fit window is ${fitted.visibleBars} bars`);
+  // Same conversion TradeChart uses: logical range starts before the entry bar.
+  const entryIndex = 800;
+  const fitFrom = entryIndex - fitted.beforeBars;
+  const baseFit = { from: fitFrom, to: fitFrom + fitted.visibleBars };
+  const opening = defaultVisibleRange(baseFit, 1372);
+  const bars = visibleLogicalBars(opening);
+  assert.ok(bars >= 45, `opening range is ${bars} bars, need at least 45`);
+  assert.ok(bars <= 60, `opening range is ${bars} bars, expected 45–60, not 100+`);
 });
 
 test("all ten sample trades have deterministic fitted-window goldens", () => {

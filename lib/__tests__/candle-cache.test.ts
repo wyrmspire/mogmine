@@ -101,6 +101,42 @@ test("the signature still keys the cache even while the hindsight window is open
   assert.deepEqual(fake.counts(), { requests: 1, writes: 1 });
 });
 
+test("a fresh payload missing one inside bar is accepted while entry and exit bars are present", async () => {
+  // AC-07 follow-up: one missing 1m bar must not drop the trade to a coarser timeframe or no chart.
+  const gapped = bars(close - minute).filter((bar) => bar.time !== exit - 5 * minute);
+  const fake = fakeDependencies(stored(bars(exit), "stale-signature"), close - minute, gapped);
+
+  const result = await loadCachedCandles(trade, candleSignature(trade), fake.dependencies);
+
+  assert.deepEqual(result?.candles, gapped);
+  assert.equal(result?.signature, candleSignature(trade));
+  assert.deepEqual(fake.cache.get(candleCacheKey(trade))?.candles, gapped);
+  assert.deepEqual(fake.counts(), { requests: 1, writes: 1 });
+});
+
+test("a gapped matching cache still renders when the refetch fails", async () => {
+  const gapped = stored(bars(close - minute).filter((bar) => bar.time !== exit - 5 * minute));
+  const cache = new Map([[candleCacheKey(trade), gapped]]);
+  const dependencies: CandleLoadDependencies = {
+    read: async (key) => cache.get(key),
+    write: async (key, value) => { cache.set(key, value); },
+    request: async () => { throw new Error("offline"); },
+    now: () => close - minute,
+  };
+
+  const result = await loadCachedCandles(trade, gapped.signature, dependencies);
+
+  // The partial chart is better than no chart: the gap is reported on screen, not thrown away.
+  assert.equal(result, gapped);
+});
+
+test("a fresh payload missing the exit bar is still rejected as incomplete", async () => {
+  const noExitBar = bars(close - minute).filter((bar) => bar.time !== exit);
+  const fake = fakeDependencies(stored(bars(exit), "stale-signature"), close - minute, noExitBar);
+
+  await assert.rejects(() => loadCachedCandles(trade, candleSignature(trade), fake.dependencies), /unavailable/);
+});
+
 test("session close stays at 17:00 New York across DST and follows evening session assignment", () => {
   assert.equal(sessionCloseUtc("2026-03-10T19:00:00.000Z"), Date.parse("2026-03-10T21:00:00.000Z"));
   assert.equal(sessionCloseUtc("2026-11-10T20:00:00.000Z"), Date.parse("2026-11-10T22:00:00.000Z"));

@@ -1,6 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import "./globals.css";
+
+// Loaded by next/font (self-hosted at build time, no runtime request to Google).
+// globals.css builds --font-sans / --font-mono on top of these variables.
+const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], display: "swap", variable: "--font-jetbrains-mono" });
 
 export const metadata: Metadata = {
   title: "MogMine — Trade Review",
@@ -29,7 +35,7 @@ const applyPrefs = `try{var p=JSON.parse(localStorage.getItem("mogmine-prefs-v1"
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" data-gold-preset="bullion" suppressHydrationWarning>
+    <html lang="en" data-gold-preset="bullion" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: applyPrefs }} /></head>
       <body><AppShell>{children}</AppShell></body>
     </html>

@@ -2,7 +2,7 @@
 // not when it merely has four bars.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { coversTradeWindow } from "../market-data/coverage.ts";
+import { anchorsTradeWindow, coversTradeWindow, tradeWindowCoverage } from "../market-data/coverage.ts";
 import type { Candle } from "../trades.ts";
 
 const minute = 60_000;
@@ -73,6 +73,29 @@ test("issue #90: invalid or empty trade times never count as covered", () => {
   assert.equal(coversTradeWindow(full, Number.NaN, exit, "1m"), false);
   assert.equal(coversTradeWindow(full, exit, entry, "1m"), false);
   assert.equal(coversTradeWindow([], entry, exit, "1m"), false);
+});
+
+test("AC-07 follow-up: entry and exit bars anchor the window even with an inside gap", () => {
+  const full = bars(entry - 5 * minute, exit + 5 * minute, minute);
+  const gapped = full.filter((bar) => bar.time !== entry + 30 * minute);
+  // One missing inside bar no longer drops the trade to a coarser timeframe or no chart:
+  // the payload anchors the window and the gap is drawn and counted on screen.
+  assert.equal(coversTradeWindow(gapped, entry, exit, "1m"), false);
+  assert.equal(anchorsTradeWindow(gapped, entry, exit, "1m"), true);
+  const coverage = tradeWindowCoverage(gapped, entry, exit, "1m");
+  assert.equal(coverage.entryBar, true);
+  assert.equal(coverage.exitBar, true);
+  assert.deepEqual(coverage.missingInside, [entry + 30 * minute]);
+});
+
+test("AC-07 follow-up: a payload missing a boundary bar never anchors the window", () => {
+  const full = bars(entry - 5 * minute, exit + 5 * minute, minute);
+  const noEntryBar = full.filter((bar) => bar.time !== Math.floor(entry / minute) * minute);
+  const noExitBar = full.filter((bar) => bar.time !== Math.floor(exit / minute) * minute);
+  assert.equal(anchorsTradeWindow(noEntryBar, entry, exit, "1m"), false);
+  assert.equal(anchorsTradeWindow(noExitBar, entry, exit, "1m"), false);
+  assert.equal(anchorsTradeWindow([], entry, exit, "1m"), false);
+  assert.equal(anchorsTradeWindow(full, Number.NaN, exit, "1m"), false);
 });
 
 test("a MES hold that spans the daily halt does not require the 17:00 ET bar (composes with #65)", () => {

@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
 import { TradeCardSheet } from "./TradeCardSheet";
+import { RStrip } from "./RStrip";
 import { TradeChart } from "./TradeChart";
+import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
 import { ensureCandles, useCandles } from "@/lib/candles";
@@ -23,6 +25,8 @@ import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInside
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
+import { DataNotesChip } from "./DataNotesChip";
+import { collectDataNotes } from "@/lib/data-notes";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
@@ -69,14 +73,15 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [cardOpen, setCardOpen] = useState(false);
   const [cardPrivacy, setCardPrivacy] = useState(prefs.shield);
-  const [fitted, setFitted] = useState(true);
-  const [xray, setXray] = useState(false);
+  const [fitted, setFitted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
   const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
   const candles = useCandles(trade.id);
   const chartRef = useRef<TradeChartHandle>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
   const cardBuild = useRef(0);
   const readoutRef = useRef<HTMLSpanElement>(null);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -145,12 +150,23 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     setCardPrivacy(privacy);
   }, []);
 
-  // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card. X (hold for X-Ray) lives in the chart.
+  useEffect(() => {
+    if (!viewOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
+        setViewOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointer);
+    return () => window.removeEventListener("pointerdown", onPointer);
+  }, [viewOpen]);
+
+  // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || document.querySelector('[role="dialog"]')) return;
       const target = event.target as HTMLElement | null;
-      if (event.key === "Escape") { setFullscreen(false); return; }
+      if (event.key === "Escape") { setFullscreen(false); setViewOpen(false); return; }
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
       const key = event.key.toLowerCase();
       if (key === "j") go(next);
@@ -217,6 +233,16 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   }, [ready, trade, candles]);
   const barIssues = barCheck?.issues ?? [];
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
+  // Issue #83: every data-quality note collapses into one chip. Hindsight is not a data note.
+  const dataNotes = collectDataNotes({
+    noCandles: candles?.status === "none" && !trade.is_sample,
+    base: ready ? base : null,
+    misaligned,
+    ticker: trade.yahoo_ticker,
+    coverage: barCoverage,
+    chronologyUnresolved: barCheck?.chronology === "unresolved",
+    issueCodes: barIssues.map((issue) => issue.code),
+  });
   const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
   const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
 
@@ -242,31 +268,136 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
-        {candles?.status === "none" && !trade.is_sample && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
+        {candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
         {candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
             <div className="timeframes" role="group" aria-label="Timeframe">
               {TIMEFRAMES.map((value) => <button key={value} type="button" aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
             </div>
-            <div className="chart-tools">
-              <button type="button" className="tool-button" disabled={!extension.canBefore} title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"} aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"} onClick={() => chartRef.current?.extend("before")}>‹ 30</button>
-              <button type="button" className="tool-button" disabled={!extension.canAfter} title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"} aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"} onClick={() => chartRef.current?.extend("after")}>30 ›</button>
-              {!fitted && <button type="button" className="tool-button attention" onClick={() => chartRef.current?.fit()} title="Fit the trade (F)">Fit</button>}
-              <div className="timeframes" role="group" aria-label="Chart detail">
-                {(["low", "medium"] as ChartDetailLevel[]).map((level) => (
-                  <button key={level} type="button" aria-pressed={detailLevel === level} onClick={() => setDetailLevel(level)}>{level === "low" ? "Low" : "Medium"}</button>
-                ))}
-              </div>
-              <button type="button" className="tool-button" aria-pressed={xray} aria-label="X-Ray: fade the position box" title="X-Ray: fade the box to read the candles (hold X)" onClick={() => { chartRef.current?.setXray(!xray); setXray(!xray); }}>X-Ray</button>
-              <button type="button" className="tool-button" aria-pressed={fullscreen} aria-label={fullscreen ? "Exit full screen" : "Full-screen chart"} onClick={() => setFullscreen(!fullscreen)}>
-                {fullscreen ? "Done" : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>}
+            <div className="view-menu-wrapper" ref={viewMenuRef}>
+              <button
+                type="button"
+                className="tool-button view-button"
+                aria-expanded={viewOpen}
+                aria-haspopup="true"
+                aria-label="Chart view options"
+                onClick={() => setViewOpen((open) => !open)}
+              >
+                <span>View</span>
+                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden="true">
+                  <path d="M4.5 6L8 9.5 11.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                </svg>
               </button>
+              {viewOpen && (
+                <div className="view-menu" role="menu" aria-label="Chart view options">
+                  <div className="view-menu-section">
+                    <button
+                      type="button"
+                      className="view-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        chartRef.current?.fit();
+                        setViewOpen(false);
+                      }}
+                      title="Fit the trade (F)"
+                    >
+                      <span>{fitted ? "Fitted ✓" : "Fit trade"}</span>
+                      <span className="shortcut">F</span>
+                    </button>
+                  </div>
+                  <div className="view-menu-section">
+                    <span className="view-menu-label">Continuation</span>
+                    <div className="view-menu-toggle-group" role="group" aria-label="Chart detail">
+                      <button
+                        type="button"
+                        aria-pressed={detailLevel === "low"}
+                        onClick={() => setDetailLevel("low")}
+                        title="No post-exit continuation"
+                      >
+                        <span>Simple</span>
+                        <small>No extra</small>
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={detailLevel === "medium"}
+                        onClick={() => setDetailLevel("medium")}
+                        title="Dotted continuation on"
+                      >
+                        <span>After exit</span>
+                        <small>Continuation</small>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="view-menu-section">
+                    <button
+                      type="button"
+                      className="view-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setFullscreen(!fullscreen);
+                        setViewOpen(false);
+                      }}
+                      title={fullscreen ? "Exit full screen" : "Full-screen chart"}
+                    >
+                      <span>{fullscreen ? "Exit full screen" : "Full screen"}</span>
+                      <span className="shortcut">{fullscreen ? "Esc" : ""}</span>
+                    </button>
+                  </div>
+                  <div className="view-menu-section">
+                    <span className="view-menu-label">Extend range</span>
+                    <div className="view-menu-row">
+                      <button
+                        type="button"
+                        className="tool-button"
+                        disabled={!extension.canBefore}
+                        title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"}
+                        aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"}
+                        onClick={() => chartRef.current?.extend("before")}
+                      >
+                        ‹ 30 earlier
+                      </button>
+                      <button
+                        type="button"
+                        className="tool-button"
+                        disabled={!extension.canAfter}
+                        title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"}
+                        aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"}
+                        onClick={() => chartRef.current?.extend("after")}
+                      >
+                        30 later ›
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="chart-frame">
             {ready ? (
-              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} detailLevel={detailLevel} onExtensionChange={setExtension} />
+              <>
+                <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
+                <button
+                  type="button"
+                  className="chart-edge-hit left"
+                  disabled={!extension.canBefore}
+                  title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"}
+                  aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"}
+                  onClick={() => chartRef.current?.extend("before")}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="chart-edge-hit right"
+                  disabled={!extension.canAfter}
+                  title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"}
+                  aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"}
+                  onClick={() => chartRef.current?.extend("after")}
+                >
+                  ›
+                </button>
+              </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
             )}
@@ -276,14 +407,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <span className="readout num" ref={readoutRef} aria-hidden="true" />
             <span className="source-text">{candles?.fetching ? "Checking Yahoo…" : ""}</span>
           </div>
-          {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
-          {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
-          {barCoverage === "missing" && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
-          {barCoverage === "partial" && <div className="chart-note"><span>Bar coverage is partial — some candles in the hold are missing, so this is not a complete check.</span></div>}
-          {barCoverage === "complete" && barCheck?.chronology === "unresolved" && <div className="chart-note"><span>Entry and exit sit in the same bar, so this check cannot establish order between them.</span></div>}
-          {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
-          {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
-          {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
+          <DataNotesChip notes={dataNotes} />
           {hindsight && detailLevel === "low" && (
             <div className="chart-note fact" aria-label="After the exit — hindsight">
               <button type="button" className={`hindsight-line${hindsightOpen ? " open" : ""}`} aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>
@@ -299,15 +423,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               <span>{hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, detailLevel)}</span>
             </div>
           )}
-          <div className="levels">
-            <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
-            <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
-            <div><small>STOP</small><b className={trade.stop_loss_price == null ? "empty" : ""}>{formatPrice(trade.stop_loss_price, trade.symbol)}</b></div>
-            <div><small>TARGET</small><b className={trade.planned_target_price == null ? "empty" : ""}>{trade.planned_target_price == null ? "No target set" : formatPrice(trade.planned_target_price, trade.symbol)}</b></div>
-            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
-            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
-          </div>
-          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
           </div>
 
 
@@ -315,6 +430,20 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <button type="button" className="btn-primary" disabled={!ready} onClick={openCard}>{ready ? "Trade Card" : "Trade Card needs candles"}</button>
           </div>
         </>}
+
+        <div className="trade-levels-card specular-card">
+          <RStrip trade={trade} excursions={ex} size="detail" />
+          <div className="levels">
+            <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
+            <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
+            <TradeLevelEditor trade={trade} field="stop_loss_price" />
+            <TradeLevelEditor trade={trade} field="planned_target_price" />
+            <TradeLevelEditor trade={trade} field="key_level_price" />
+            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
+            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
+          </div>
+          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
+        </div>
 
         <div className="pager">
           <button type="button" aria-label="Previous trade (K)" disabled={!previous} onClick={() => go(previous)}>‹ Prev</button>
