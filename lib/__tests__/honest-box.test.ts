@@ -5,6 +5,10 @@ import { formatR } from "../format.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
 import { demoTrades } from "../fixtures.ts";
 import { getSampleCandles } from "../candles.ts";
+import type { SampleBarsPayload } from "../candles.ts";
+import sampleBarsData from "../../fixtures/sample-bars.json" with { type: "json" };
+
+const sampleBars = sampleBarsData as unknown as SampleBarsPayload;
 import { applyFixtureRefresh } from "../store.ts";
 import { exitFlagReason, excursions, isScratch, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
@@ -244,7 +248,7 @@ const POINT_VALUE: Record<string, number> = { MES: 5, MNQ: 2 };
 const TICK = 0.25;
 
 function barsFor(id: string): Candle[] {
-  return getSampleCandles(id) ?? [];
+  return getSampleCandles(id, sampleBars) ?? [];
 }
 
 test("every sample trade has a realistic plan fixed at entry", () => {
