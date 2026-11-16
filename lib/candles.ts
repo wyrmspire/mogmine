@@ -250,4 +250,4 @@ export function getCandleEntry(tradeId: string | undefined): CandleEntry | undef
 
 export function resetCandlesForTest() {
   entries.clear();
-  }
+}
