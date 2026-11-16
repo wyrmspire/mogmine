@@ -23,14 +23,16 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ## Next up
 
-M0 and M1 are done only when their acceptance criteria hold: `AC-01` – `AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1).
+**Work the list in [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md), top to bottom** (owner order, 2026-11-16). Each step there names its files, its limits and its done-when.
 
-1. **Start the candle archive** ([docs/10 §3](docs/10-yahoo-first-build-plan.md#3-start-the-candle-archive-first)). It is the only task that loses data by waiting: `1m` bars older than 30 days cannot be fetched.
-2. Owner decides `OD-16` (build order) and `OD-2` (auth and RLS from the first migration).
-3. Scaffold one Next.js app with a Supabase project, RLS on, and `market_candles` (M0).
-4. Build the `core` money and session math with golden tests, then one trade on one chart (M1).
-5. Owner decides `OD-1`, then freeze or reconcile `mogprompt.md` using the drift register.
-6. When a TopstepX account exists: ask Topstep to confirm in writing that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
+1. `R-01` Pinch zooms the chart, not the page. One CSS line in `app/globals.css`.
+2. `R-02` Fresh-trade candles retry and refresh (`lib/candles.ts`, `components/TradeDetail.tsx`).
+3. `R-03` Log a trade that is still open (`status`, nullable exit). Three PRs: `R-03a` types and math, `R-03b` entry and close, `R-03c` chart and candles.
+4. `R-04` Owner turns on the candle archive (Supabase project and keys); an agent rebases `feat/m0-candle-archive` onto `main`. It loses a day of `1m` history for every day it waits.
+5. `R-05` Trades stored in Supabase. Needs `OD-30`. AI, cross-day stats and challenges are all blocked on this.
+6. `R-06` Read-only assistant endpoint (needs `OD-19`), `R-07` playbook editor, `R-08` running stats, `R-09` challenges (needs `OD-37`).
+
+Still open from before: `OD-1` (freeze or reconcile `mogprompt.md`), `OD-16`, and the M0/M1 acceptance criteria `AC-01`–`AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1), which `R-04` and `R-05` must satisfy. When a TopstepX account exists: get Topstep's written confirmation that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
 
 ## Lanes
 
@@ -47,6 +49,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-16 — agent (Claude Code) — floor roadmap, no lane
+Did:      Added `docs/16-floor-roadmap.md` (`R-01`–`R-09`) from the owner's review of the live app, with files, limits and done-when per step. Opened `OD-37` (challenges) and `OD-38` (open-trade display). Pointer rows in AGENTS and README; replaced Next up. Documentation only.
+Files:    `docs/16-floor-roadmap.md`, `AGENTS.md`, `README.md`, `DECISIONS.md`, `NOTES.md`.
+Found:    `.chart-host` has `touch-action: pan-y pinch-zoom`, so a pinch zooms page and chart together (UX-44 already says the chart owns pinch). A failed candle load never retries: no caller passes `force` to `ensureCandles`. An exit is required in the form, the type, the store import and `/api/market-data`, so an open trade cannot be logged. The planned trades SQL on `feat/m0-candle-archive` has `exit_time not null`, against docs/09 §8.
+Checked:  Read the code on `main` at `f8f9ff6`. Relative links in the new doc resolve. No code changed, nothing run on a phone.
+Left:     Nothing from the roadmap is built. Yahoo's live-session lag is still unmeasured (`R-02` asks for the number).
 
 ### 2026-11-15 — agent (Instinct) — integration-review fixes for batch6 (PR #107)
 Did:      Owner's held-integration findings: Shield masks the Contracts input and subtitle in manual entry (quantity still saved); R strip exit marker coloured by money outcome, not classification; hindsight later-touch search stops at the assigned session close; Trade Card rebuilds after a pan/pinch settles (it never did); a tap no longer counts as a pan (6px drag); set levels are tappable to correct, undo restores the previous value; market-data accepts an anchored payload with inside gaps as partial (AC-07) and the chip reports them; Trade Card export keeps gold only on the RULES seal; the 640 KB sample-bars fixture lazy-loads as its own chunk.
