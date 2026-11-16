@@ -11,7 +11,7 @@ import { TradeChart } from "./TradeChart";
 import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
-import { ensureCandles, useCandles } from "@/lib/candles";
+import { ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
@@ -91,6 +91,15 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const next = index >= 0 && index < list.length - 1 ? list[index + 1] : undefined;
 
   useEffect(() => { ensureCandles(trade); }, [trade]);
+  // Fresh trades: Yahoo publishes the newest bars late, so ask again while this trade is on screen and
+  // when the page comes back. ensureCandles only fetches when a retry is due (R-02). Samples never poll (#89).
+  useEffect(() => {
+    if (trade.is_sample) return;
+    const check = () => { if (document.visibilityState === "visible") ensureCandles(trade); };
+    const timer = window.setInterval(check, 60_000);
+    document.addEventListener("visibilitychange", check);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", check); };
+  }, [trade]);
   // Neighbours are warmed up so stepping through the list is instant (docs/08 §2).
   useEffect(() => { if (previous) ensureCandles(previous); if (next) ensureCandles(next); }, [previous, next]);
 
@@ -269,6 +278,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         </div>
 
         {candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
+        {candles?.status === "none" && !trade.is_sample && (
+          <div className="chart-note fact candle-retry" role="status">
+            <span>{exitIsFresh(trade, candles.lastAttemptAt) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
+            <button type="button" onClick={() => ensureCandles(trade, true)}>Retry</button>
+          </div>
+        )}
         {candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
