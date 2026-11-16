@@ -363,7 +363,7 @@ export function TuneScreen() {
           Your journal lives in this browser&apos;s storage ({realCount} {realCount === 1 ? "trade" : "trades"}
           {sampleCount > 0 ? ` + ${sampleCount} ${sampleCount === 1 ? "sample" : "samples"}` : ""}); clearing site data deletes it.
           Backups save your trades (notes, prices, tags, checklist, playbook) and preferences to a local JSON file with no network upload.
-          Candle caches stay in IndexedDB and are not inside the file—charts re-fetch candles from Yahoo Finance when opened (and samples keep their offline fixture bars).
+          Candle caches stay in IndexedDB and are not inside the file—charts for real trades re-fetch candles from Yahoo Finance when opened (and samples keep their offline fixture bars).
         </p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
@@ -403,7 +403,7 @@ export function TuneScreen() {
                 {pending.sampleCount > 0 ? ` and ${pending.sampleCount} labelled ${pending.sampleCount === 1 ? "sample" : "samples"}` : ""}
               </b>
               {pending.exportedAt ? ` exported ${formatDateTime(pending.exportedAt, prefs.timeZone)}` : ""}
-              {pending.prefs ? ", plus saved preferences" : ""}. Charts will re-fetch Yahoo Finance candles when opened.
+              {pending.prefs ? ", plus saved preferences" : ""}. Charts for real trades will re-fetch Yahoo Finance candles when opened (and samples keep their offline fixture bars).
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
               <button type="button" className="btn-primary" onClick={confirmRestore}>

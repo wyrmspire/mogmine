@@ -130,7 +130,7 @@ export interface JournalBackup {
   app: "mogmine";
   version: 1;
   exportedAt: string;
-  /** Backups store the trade journal only. Candles sit in IndexedDB and are re-fetched from Yahoo when a chart opens. */
+  /** Backups store the trade journal only. Candles sit in IndexedDB and are re-fetched from Yahoo when a chart opens (samples use offline fixture bars). */
   includesCandles: false;
   trades: TradeRecord[];
   prefs?: Partial<Prefs>;
