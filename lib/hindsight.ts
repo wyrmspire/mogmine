@@ -1,5 +1,6 @@
 // After-the-exit hindsight (issue #37). Pure: never changes R, outcome, or statistics (B-63, UX-52).
-// A later touch is the first bar after the exit whose range reaches a continued target or stop.
+// A later touch is the first bar after the exit whose range reaches a continued target or stop,
+// searching no further than the assigned session close: a touch in the next session never counts.
 // "Neither" is judged against the session close when those bars exist, otherwise against the bars on hand.
 
 import { sessionCloseUtc } from "./session.ts";
@@ -59,10 +60,14 @@ export function laterTouch(
   price: number,
   kind: "target" | "stop",
   direction: TradeDirection,
+  /** Bars opening at or after this instant belong to the next session and are never searched. */
+  sessionCloseMs?: number,
 ): LaterTouch | null {
   if (!Number.isFinite(exitTime) || !Number.isFinite(price) || candles.length === 0) return null;
   const side = touchSide(direction, kind);
-  const later = candles.filter((bar) => bar.time > exitTime).sort((a, b) => a.time - b.time);
+  const later = candles
+    .filter((bar) => bar.time > exitTime && (sessionCloseMs == null || bar.time < sessionCloseMs))
+    .sort((a, b) => a.time - b.time);
   for (const bar of later) {
     if (barReaches(bar, price, side)) {
       return { kind, time: bar.time, delayMs: bar.time - exitTime, price };
@@ -77,14 +82,14 @@ export function buildHindsight(
   timeframe: Timeframe = "1m",
 ): HindsightFact {
   const exitTime = Date.parse(trade.exit_time);
+  const sessionClose = sessionCloseUtc(trade.exit_time);
   const target = trade.planned_target_price == null
     ? null
-    : laterTouch(candles, exitTime, trade.planned_target_price, "target", trade.direction);
+    : laterTouch(candles, exitTime, trade.planned_target_price, "target", trade.direction, sessionClose);
   const stop = trade.stop_loss_price == null
     ? null
-    : laterTouch(candles, exitTime, trade.stop_loss_price, "stop", trade.direction);
+    : laterTouch(candles, exitTime, trade.stop_loss_price, "stop", trade.direction, sessionClose);
 
-  const sessionClose = sessionCloseUtc(trade.exit_time);
   const lastBar = candles.reduce((latest, bar) => (bar.time > latest ? bar.time : latest), 0);
   const incomplete = lastBar + TIMEFRAME_MINUTES[timeframe] * 60_000 < sessionClose;
 
