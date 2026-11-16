@@ -1,3 +1,4 @@
+import { expectedInsideBarTimes } from "./trades.ts";
 import type { Candle, TradeDirection, TradeRecord } from "./trades.ts";
 
 export type TradeBarIssueCode =
@@ -38,19 +39,6 @@ function stopTouched(direction: TradeDirection, stop: number, bar: Candle) {
 
 function targetTouched(direction: TradeDirection, target: number, bar: Candle) {
   return direction === "LONG" ? bar.high >= target : bar.low <= target;
-}
-
-/** Open times of bars that are entirely inside the hold, using execution timestamps only. */
-function expectedInsideBarTimes(entry: number, exit: number, barMs: number): number[] {
-  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMs <= 0) return [];
-  const times: number[] = [];
-  let time = Math.ceil(entry / barMs) * barMs;
-  if (time < entry) time += barMs;
-  while (time + barMs <= exit) {
-    times.push(time);
-    time += barMs;
-  }
-  return times;
 }
 
 function coverageFor(

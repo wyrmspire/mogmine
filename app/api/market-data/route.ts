@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FUTURES_SPECS } from "@/lib/trades";
 import type { Timeframe } from "@/lib/trades";
 import { YahooFinanceProvider } from "@/lib/market-data/yahoo";
+import { coversTradeWindow } from "@/lib/market-data/coverage";
 
 export const runtime = "nodejs";
 
@@ -34,7 +35,8 @@ export async function GET(request: NextRequest) {
       const from = new Date(entryTime - padHours * 3_600_000);
       const to = new Date(exitTime + padHours * 3_600_000);
       const candles = await provider.getCandles({ symbol, timeframe, from, to });
-      if (candles.length >= 4) {
+      // A thin or gapped set falls through to the next timeframe (issue #90, AC-07).
+      if (coversTradeWindow(candles, entryTime, exitTime, timeframe)) {
         return NextResponse.json({ candles, source: "Yahoo Finance", ticker: provider.resolveProviderSymbol(symbol), baseTimeframe: timeframe });
       }
     }

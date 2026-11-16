@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Claude Haiku) — issue #90 market-data coverage (branch `feat/90-market-data-coverage`)
+Did:      `/api/market-data` accepts a timeframe only when `coversTradeWindow` (new `lib/market-data/coverage.ts`) holds: entry bar, exit bar and every bar inside the hold from the shared `expectedInsideBarTimes`. Thin or gapped sets fall through, then 404. `lib/candles.ts` uses the same test for cached and fresh sets. `lib/trade-bar-validation.ts` now imports the shared helper instead of its private copy.
+Verified: `npm test` 89 pass (was 81); typecheck clean; lint 0 errors, 1 pre-existing warning; `npm run build` passes.
+Left:     Not run against live Yahoo. Trades that span the 17:00–18:00 ET maintenance break get no complete set until #65 narrows the expected bars to Globex hours, so they will 404 instead of showing a thin chart. Owner decides whether full-bar coverage is too strict.
+Watch:    Strict coverage can push a trade with one 1m gap to 5m or 1h. Chris to confirm before merge (PR is do-not-merge-without-Chris).
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch4 cleanup before merge
 Did:      Stripped UX/Invariant codes from Tune captions (plain wording only). Trade Card outcome subline now wraps instead of ellipsizing, so R and points stay visible in the preview.
 Left:     Ready for Chris's approved merge of PR #76. Do not squash. PR #71 stays open.

@@ -6,8 +6,9 @@
 import { useSyncExternalStore } from "react";
 import { idbGet, idbSet } from "./idb.ts";
 import { candleCacheKey, candleSignature, getTrade, updateTrade } from "./store.ts";
-import { buildSparkline } from "./trades.ts";
+import { TIMEFRAMES, buildSparkline } from "./trades.ts";
 import type { Candle, CandleSource, Timeframe, TradeRecord } from "./trades.ts";
+import { coversTradeWindow } from "./market-data/coverage.ts";
 
 export interface CandleEntry {
   status: "loading" | "ready" | "none";
@@ -48,16 +49,21 @@ async function load(trade: TradeRecord, signature: string) {
   const key = candleCacheKey(trade);
   const cached = await idbGet<StoredCandles>(key);
   if (entries.get(trade.id)?.signature !== signature) return; // the trade changed while we waited
-  if (cached?.signature === signature && cached.candles.length >= 4) return adopt(trade, cached);
+  const entryMs = Date.parse(trade.entry_time);
+  const exitMs = Date.parse(trade.exit_time);
+  // Same coverage test as the route (issue #90): a cached set must cover the window too.
+  if (cached?.signature === signature && coversTradeWindow(cached.candles, entryMs, exitMs, cached.baseTimeframe)) return adopt(trade, cached);
 
   try {
     const params = new URLSearchParams({ symbol: trade.symbol, entry: trade.entry_time, exit: trade.exit_time });
     const response = await fetch(`/api/market-data?${params}`);
     if (!response.ok) throw new Error("unavailable");
     const body = await response.json() as { candles?: Candle[]; baseTimeframe?: Timeframe };
-    if (!Array.isArray(body.candles) || body.candles.length < 4) throw new Error("incomplete");
+    const baseTimeframe = body.baseTimeframe;
+    if (!Array.isArray(body.candles) || !baseTimeframe || !TIMEFRAMES.includes(baseTimeframe)) throw new Error("incomplete");
+    if (!coversTradeWindow(body.candles, entryMs, exitMs, baseTimeframe)) throw new Error("incomplete");
     if (entries.get(trade.id)?.signature !== signature) return;
-    const stored: StoredCandles = { signature, candles: body.candles, source: "Yahoo Finance", baseTimeframe: body.baseTimeframe ?? "1m", fetchedAt: Date.now() };
+    const stored: StoredCandles = { signature, candles: body.candles, source: "Yahoo Finance", baseTimeframe, fetchedAt: Date.now() };
     void idbSet(key, stored);
     adopt(trade, stored);
   } catch {
