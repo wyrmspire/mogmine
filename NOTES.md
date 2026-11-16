@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agy (gemini-3.8-flash-high) — Chart toolbar slim & default zoom (#82)
+Did:      Issue #82: slimmed Trade Detail toolbar to 1 row at 390px (timeframe switch + View button). Folded Fit, detail level (Simple / After exit), X-Ray, fullscreen, and 30-bar extensions into View menu. Moved ‹ › to 44px edge hits on chart. Implemented Chris's decision: charts open zoomed out by default (wide context >= 45 bars via `defaultVisibleRange`), Fit is an option in View menu and reports not-fitted initially. Preserves user pan/zoom across timeframe changes. Zero gold used on toolbar chrome/View.
+Files:    `components/TradeDetail.tsx`, `components/TradeChart.tsx`, `lib/trades.ts`, `lib/__tests__/core.test.ts`, `app/globals.css`, `NOTES.md`.
+Verified: `npm test` (113/113 passed), `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning in postcss.config.mjs), `npm run build` (8/8 static pages).
+Left:     PR against integration/batch5 (do-not-merge-without-Chris). Simple / After exit visible labels open to owner preference.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch5
 Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
 Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.

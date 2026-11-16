@@ -69,14 +69,16 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [cardOpen, setCardOpen] = useState(false);
   const [cardPrivacy, setCardPrivacy] = useState(prefs.shield);
-  const [fitted, setFitted] = useState(true);
+  const [fitted, setFitted] = useState(false);
   const [xray, setXray] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
   const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
   const candles = useCandles(trade.id);
   const chartRef = useRef<TradeChartHandle>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
   const cardBuild = useRef(0);
   const readoutRef = useRef<HTMLSpanElement>(null);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -145,12 +147,23 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     setCardPrivacy(privacy);
   }, []);
 
+  useEffect(() => {
+    if (!viewOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
+        setViewOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointer);
+    return () => window.removeEventListener("pointerdown", onPointer);
+  }, [viewOpen]);
+
   // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card. X (hold for X-Ray) lives in the chart.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || document.querySelector('[role="dialog"]')) return;
       const target = event.target as HTMLElement | null;
-      if (event.key === "Escape") { setFullscreen(false); return; }
+      if (event.key === "Escape") { setFullscreen(false); setViewOpen(false); return; }
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
       const key = event.key.toLowerCase();
       if (key === "j") go(next);
@@ -249,24 +262,143 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div className="timeframes" role="group" aria-label="Timeframe">
               {TIMEFRAMES.map((value) => <button key={value} type="button" aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
             </div>
-            <div className="chart-tools">
-              <button type="button" className="tool-button" disabled={!extension.canBefore} title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"} aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"} onClick={() => chartRef.current?.extend("before")}>‹ 30</button>
-              <button type="button" className="tool-button" disabled={!extension.canAfter} title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"} aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"} onClick={() => chartRef.current?.extend("after")}>30 ›</button>
-              {!fitted && <button type="button" className="tool-button attention" onClick={() => chartRef.current?.fit()} title="Fit the trade (F)">Fit</button>}
-              <div className="timeframes" role="group" aria-label="Chart detail">
-                {(["low", "medium"] as ChartDetailLevel[]).map((level) => (
-                  <button key={level} type="button" aria-pressed={detailLevel === level} onClick={() => setDetailLevel(level)}>{level === "low" ? "Low" : "Medium"}</button>
-                ))}
-              </div>
-              <button type="button" className="tool-button" aria-pressed={xray} aria-label="X-Ray: fade the position box" title="X-Ray: fade the box to read the candles (hold X)" onClick={() => { chartRef.current?.setXray(!xray); setXray(!xray); }}>X-Ray</button>
-              <button type="button" className="tool-button" aria-pressed={fullscreen} aria-label={fullscreen ? "Exit full screen" : "Full-screen chart"} onClick={() => setFullscreen(!fullscreen)}>
-                {fullscreen ? "Done" : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>}
+            <div className="view-menu-wrapper" ref={viewMenuRef}>
+              <button
+                type="button"
+                className="tool-button view-button"
+                aria-expanded={viewOpen}
+                aria-haspopup="true"
+                aria-label="Chart view options"
+                onClick={() => setViewOpen((open) => !open)}
+              >
+                <span>View</span>
+                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden="true">
+                  <path d="M4.5 6L8 9.5 11.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                </svg>
               </button>
+              {viewOpen && (
+                <div className="view-menu" role="menu" aria-label="Chart view options">
+                  <div className="view-menu-section">
+                    <button
+                      type="button"
+                      className="view-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        chartRef.current?.fit();
+                        setViewOpen(false);
+                      }}
+                      title="Fit the trade (F)"
+                    >
+                      <span>{fitted ? "Fitted ✓" : "Fit trade"}</span>
+                      <span className="shortcut">F</span>
+                    </button>
+                  </div>
+                  <div className="view-menu-section">
+                    <span className="view-menu-label">Continuation</span>
+                    <div className="view-menu-toggle-group" role="group" aria-label="Chart detail">
+                      <button
+                        type="button"
+                        aria-pressed={detailLevel === "low"}
+                        onClick={() => setDetailLevel("low")}
+                        title="No post-exit continuation"
+                      >
+                        <span>Simple</span>
+                        <small>No extra</small>
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={detailLevel === "medium"}
+                        onClick={() => setDetailLevel("medium")}
+                        title="Dotted continuation on"
+                      >
+                        <span>After exit</span>
+                        <small>Continuation</small>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="view-menu-section">
+                    <button
+                      type="button"
+                      className="view-menu-item"
+                      role="menuitemcheckbox"
+                      aria-checked={xray}
+                      onClick={() => {
+                        chartRef.current?.setXray(!xray);
+                        setXray(!xray);
+                      }}
+                      title="Fade position box to read candles (hold X)"
+                    >
+                      <span>X-Ray {xray ? "on" : "off"}</span>
+                      <span className="shortcut">hold X</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="view-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setFullscreen(!fullscreen);
+                        setViewOpen(false);
+                      }}
+                      title={fullscreen ? "Exit full screen" : "Full-screen chart"}
+                    >
+                      <span>{fullscreen ? "Exit full screen" : "Full screen"}</span>
+                      <span className="shortcut">{fullscreen ? "Esc" : ""}</span>
+                    </button>
+                  </div>
+                  <div className="view-menu-section">
+                    <span className="view-menu-label">Extend range</span>
+                    <div className="view-menu-row">
+                      <button
+                        type="button"
+                        className="tool-button"
+                        disabled={!extension.canBefore}
+                        title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"}
+                        aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"}
+                        onClick={() => chartRef.current?.extend("before")}
+                      >
+                        ‹ 30 earlier
+                      </button>
+                      <button
+                        type="button"
+                        className="tool-button"
+                        disabled={!extension.canAfter}
+                        title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"}
+                        aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"}
+                        onClick={() => chartRef.current?.extend("after")}
+                      >
+                        30 later ›
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="chart-frame">
             {ready ? (
-              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} detailLevel={detailLevel} onExtensionChange={setExtension} />
+              <>
+                <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} detailLevel={detailLevel} onExtensionChange={setExtension} />
+                <button
+                  type="button"
+                  className="chart-edge-hit left"
+                  disabled={!extension.canBefore}
+                  title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"}
+                  aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"}
+                  onClick={() => chartRef.current?.extend("before")}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="chart-edge-hit right"
+                  disabled={!extension.canAfter}
+                  title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"}
+                  aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"}
+                  onClick={() => chartRef.current?.extend("after")}
+                >
+                  ›
+                </button>
+              </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
             )}

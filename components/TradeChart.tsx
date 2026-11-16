@@ -9,7 +9,7 @@ import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, alignTradeToBars, fitWindow, includeInPriceRange, isScratch, specFor } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, aggregateCandles, alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, isScratch, specFor } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import { buildHindsight } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
@@ -77,39 +77,27 @@ interface Live {
   extraAfter: number;
   baseFitRange: { from: number; to: number } | null;
   barCount: number;
+  userPanned: boolean;
+  programmaticRangeChange: boolean;
+  savedTimeRange: { from: UTCTimestamp; to: UTCTimestamp } | null;
 }
 
 const toTime = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
-
-
-
-function clampRange(from: number, to: number, barCount: number) {
-  const lo = 0;
-  const hi = Math.max(0, barCount - 1);
-  const nextFrom = Math.max(lo, from);
-  const nextTo = Math.min(hi, to);
-  return { from: nextFrom, to: Math.max(nextFrom + 1, nextTo) };
-}
 
 function reportExtension(state: Live, onExtensionChange?: (extension: ChartExtension) => void) {
   if (!state.baseFitRange) {
     onExtensionChange?.({ before: 0, after: 0, canBefore: false, canAfter: false });
     return;
   }
-  const view = clampRange(state.baseFitRange.from - state.extraBefore, state.baseFitRange.to + state.extraAfter, state.barCount);
+  const current = state.chart.timeScale().getVisibleLogicalRange();
+  const currentFrom = current ? current.from : (state.baseFitRange.from - state.extraBefore);
+  const currentTo = current ? current.to : (state.baseFitRange.to + state.extraAfter);
   onExtensionChange?.({
     before: state.extraBefore,
     after: state.extraAfter,
-    canBefore: view.from > 0,
-    canAfter: view.to < state.barCount - 1,
+    canBefore: currentFrom > 0.5,
+    canAfter: currentTo < state.barCount - 1.5,
   });
-}
-
-function applyExtendedRange(state: Live) {
-  if (!state.baseFitRange) return;
-  const view = clampRange(state.baseFitRange.from - state.extraBefore, state.baseFitRange.to + state.extraAfter, state.barCount);
-  state.fitRange = view;
-  state.chart.timeScale().setVisibleLogicalRange(view);
 }
 
 export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone, privacy, readout, onRendered, onFitChange, onXrayChange, detailLevel = "medium", onExtensionChange }: Props) {
@@ -126,32 +114,56 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
   useImperativeHandle(ref, () => ({
     fit: () => {
       const l = live.current;
-      if (!l) return;
+      if (!l || !l.baseFitRange) return;
+      l.userPanned = true;
       l.extraBefore = 0;
       l.extraAfter = 0;
       l.chart.priceScale("right").applyOptions({ autoScale: true });
-      if (l.baseFitRange) {
-        l.fitRange = l.baseFitRange;
+      l.fitRange = l.baseFitRange;
+      try {
+        l.programmaticRangeChange = true;
         l.chart.timeScale().setVisibleLogicalRange(l.baseFitRange);
+      } finally {
+        l.programmaticRangeChange = false;
       }
+      latest.current.onFitChange?.(true);
       reportExtension(l, latest.current.onExtensionChange);
     },
     extend: (side, bars = 30) => {
       const l = live.current;
       if (!l?.baseFitRange || bars <= 0) return { applied: 0, remaining: false };
-      const view = clampRange(l.baseFitRange.from - l.extraBefore, l.baseFitRange.to + l.extraAfter, l.barCount);
+      l.userPanned = true;
+      const current = l.chart.timeScale().getVisibleLogicalRange();
+      const currentFrom = current?.from ?? (l.baseFitRange.from - l.extraBefore);
+      const currentTo = current?.to ?? (l.baseFitRange.to + l.extraAfter);
       if (side === "after") {
-        const room = Math.max(0, (l.barCount - 1) - view.to);
+        const room = Math.max(0, (l.barCount - 1) - currentTo);
         const applied = Math.min(bars, room);
         l.extraAfter += applied;
-        applyExtendedRange(l);
+        const nextTo = Math.min(l.barCount - 1, currentTo + applied);
+        const view = { from: currentFrom, to: nextTo };
+        l.fitRange = view;
+        try {
+          l.programmaticRangeChange = true;
+          l.chart.timeScale().setVisibleLogicalRange(view);
+        } finally {
+          l.programmaticRangeChange = false;
+        }
         reportExtension(l, latest.current.onExtensionChange);
         return { applied, remaining: room - applied > 0 };
       }
-      const room = Math.max(0, view.from - 0);
+      const room = Math.max(0, currentFrom - 0);
       const applied = Math.min(bars, room);
       l.extraBefore += applied;
-      applyExtendedRange(l);
+      const nextFrom = Math.max(0, currentFrom - applied);
+      const view = { from: nextFrom, to: currentTo };
+      l.fitRange = view;
+      try {
+        l.programmaticRangeChange = true;
+        l.chart.timeScale().setVisibleLogicalRange(view);
+      } finally {
+        l.programmaticRangeChange = false;
+      }
       reportExtension(l, latest.current.onExtensionChange);
       return { applied, remaining: room - applied > 0 };
     },
@@ -239,20 +251,47 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     const fittedWindow = fitWindow(tr.entry_time, tr.exit_time, barTimeframe);
     const entryIndex = entryBar == null ? -1 : times.indexOf(entryBar);
     l.barCount = times.length;
-    if (refit || dataChanged) {
-      l.extraBefore = 0;
-      l.extraAfter = 0;
-    }
     if (entryIndex >= 0) {
       const fitFrom = entryIndex - fittedWindow.beforeBars;
       l.baseFitRange = { from: fitFrom, to: fitFrom + fittedWindow.visibleBars };
-      l.fitRange = clampRange(l.baseFitRange.from - l.extraBefore, l.baseFitRange.to + l.extraAfter, l.barCount);
-      if (refit || dataChanged) l.chart.timeScale().setVisibleLogicalRange(l.fitRange);
+      if (refit || dataChanged) {
+        l.extraBefore = 0;
+        l.extraAfter = 0;
+        let applied = false;
+        if (l.userPanned && l.savedTimeRange) {
+          try {
+            l.programmaticRangeChange = true;
+            l.chart.timeScale().setVisibleRange(l.savedTimeRange);
+            applied = true;
+          } catch {
+            applied = false;
+          } finally {
+            l.programmaticRangeChange = false;
+          }
+        }
+        if (!applied) {
+          const wide = defaultVisibleRange(l.baseFitRange, l.barCount);
+          l.fitRange = wide;
+          try {
+            l.programmaticRangeChange = true;
+            l.chart.timeScale().setVisibleLogicalRange(wide);
+          } finally {
+            l.programmaticRangeChange = false;
+          }
+        }
+      }
     } else {
       // Nothing to fit around: show the whole candle set rather than a window around a missing bar.
       l.baseFitRange = null;
       l.fitRange = null;
-      if (refit || dataChanged) l.chart.timeScale().fitContent();
+      if (refit || dataChanged) {
+        try {
+          l.programmaticRangeChange = true;
+          l.chart.timeScale().fitContent();
+        } finally {
+          l.programmaticRangeChange = false;
+        }
+      }
     }
     reportExtension(l, p.onExtensionChange);
 
@@ -290,7 +329,13 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         approximate: false,
       });
       series.attachPrimitive(primitive);
-      const state: Live = { lwc, chart, series, primitive, lines: [], fitRange: null, renderedKey: "", touchTracking: false, xrayPinned: false, xrayKey: false, extraBefore: 0, extraAfter: 0, baseFitRange: null, barCount: 0 };
+      const state: Live = {
+        lwc, chart, series, primitive, lines: [],
+        fitRange: null, renderedKey: "", touchTracking: false,
+        xrayPinned: false, xrayKey: false, extraBefore: 0, extraAfter: 0,
+        baseFitRange: null, barCount: 0,
+        userPanned: false, programmaticRangeChange: false, savedTimeRange: null,
+      };
       live.current = state;
       draw.current(true);
 
@@ -319,9 +364,13 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
 
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         if (!range || !state.baseFitRange) return;
+        if (!state.programmaticRangeChange) {
+          state.userPanned = true;
+        }
         const fitted = state.extraBefore === 0 && state.extraAfter === 0
           && Math.abs(range.from - state.baseFitRange.from) < 1.5 && Math.abs(range.to - state.baseFitRange.to) < 1.5;
         latest.current.onFitChange?.(fitted);
+        reportExtension(state, latest.current.onExtensionChange);
       });
 
       // Desktop: hold X for X-Ray (UX-69).
@@ -354,6 +403,13 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
   const previousTimeframe = useRef(timeframe);
   useEffect(() => {
     const refit = previousTimeframe.current !== timeframe;
+    if (refit && live.current?.userPanned) {
+      try {
+        live.current.savedTimeRange = live.current.chart.timeScale().getVisibleRange() as { from: UTCTimestamp; to: UTCTimestamp } | null;
+      } catch {
+        live.current.savedTimeRange = null;
+      }
+    }
     previousTimeframe.current = timeframe;
     draw.current(refit);
   }, [trade, timeframe, zone, privacy, theme, baseTimeframe, detailLevel]);

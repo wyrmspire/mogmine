@@ -13,7 +13,7 @@ import { shareCardContent, shareCardFileName, shouldBuildShareCard } from "../sh
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
-import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, defaultVisibleRange, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
@@ -121,6 +121,29 @@ test("coarser timeframes show wider clock-time context", () => {
   assert.equal(oneMinute.end - oneMinute.start, 180 * 60_000);
   assert.equal(fifteenMinute.end - fifteenMinute.start, 45 * 15 * 60_000);
   assert.ok(fifteenMinute.end - fifteenMinute.start > oneMinute.end - oneMinute.start);
+});
+
+test("issue #82: defaultVisibleRange opens zoomed out by default with at least 45 bars", () => {
+  const baseFit = { from: 50, to: 95 }; // 45 bars
+  const wide = defaultVisibleRange(baseFit, 200);
+  assert.ok(wide.to - wide.from >= 45, "must never have fewer than 45 bars");
+  assert.ok(wide.to - wide.from > baseFit.to - baseFit.from, "must be wider than fitted window");
+  assert.equal(wide.to - wide.from, Math.round(45 * 2.5));
+  assert.ok(wide.from >= 0 && wide.to < 200, "must be clamped to loaded bar indices");
+
+  // Clamped when near start
+  const nearStart = defaultVisibleRange({ from: 5, to: 50 }, 200);
+  assert.equal(nearStart.from, 0);
+  assert.equal(nearStart.to, Math.round(45 * 2.5));
+
+  // Clamped when near end
+  const nearEnd = defaultVisibleRange({ from: 150, to: 195 }, 200);
+  assert.equal(nearEnd.to, 199);
+  assert.equal(nearEnd.to - nearEnd.from, Math.round(45 * 2.5));
+
+  // Clamped when fewer bars available than target
+  const shortHistory = defaultVisibleRange(baseFit, 60);
+  assert.deepEqual(shortHistory, { from: 0, to: 59 });
 });
 
 test("all ten sample trades have deterministic fitted-window goldens", () => {
