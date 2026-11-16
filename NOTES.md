@@ -48,6 +48,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — Codex — `feat/84-two-step-entry` (#84)
+Did:      Manual entry now saves only the required execution fields, keeps its draft on close, and opens the new trade detail route; stop, target and key remain nullable.
+Detail:   Trade Detail adds missing plan levels inline with existing tick/side validation; RiskChips remain for stop sizing and Shield masks dollars. Level controls remain available without candles.
+Spec:     Updated docs/12 to put LV-17 sizing after the execution save. Chart renderer, formulas and fixtures are unchanged.
+Verified: `npm test` 113/113; typecheck; lint 0 errors/1 permitted PostCSS warning; build 8/8 pages; headless Chrome at 390px had zero horizontal overflow and passed draft/save/validation/Shield checks.
+Left:     No code items. Physical-phone verification was not available.
+
 ### 2026-11-15 — agent (Claude Haiku) — Data-notes chip (#83), branch `feat/83-data-notes-chip`
 Did:      Trade Detail data-quality notes (1m, continuous contract, coverage, same-bar, stop/target/exit) collapse into one "N data notes" chip (44px, tap to expand). Hindsight unchanged. No chip when there are no notes.
 Amber:    Only when bar coverage is missing or partial (MAE/MFE and bar check untrusted). All other notes muted. Chris to confirm (DECISIONS OD-36).
