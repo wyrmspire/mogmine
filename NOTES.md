@@ -50,6 +50,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-16 — agent (Claude Code) — R-01 pinch zoom, Chart lane
+Did:      `R-01`: `.chart-host` now has `touch-action: pan-y` (was `pan-y pinch-zoom`), so a two-finger pinch on the chart goes only to the chart (UX-44). Nothing else changed: viewport meta, `handleScroll`/`handleScale` and `vertTouchDrag: false` untouched.
+Files:    `app/globals.css`, `NOTES.md`.
+Checked:  `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning (`postcss.config.mjs`); `npm test` 140/140; `npm run build` ok. Not verified on a phone.
+Left:     The four done-when checks in docs/16 `R-01` need a real phone (iOS Safari and Android Chrome).
+
 ### 2026-11-16 — agent (Claude Code) — floor roadmap, no lane
 Did:      Added `docs/16-floor-roadmap.md` (`R-01`–`R-09`) from the owner's review of the live app, with files, limits and done-when per step. Opened `OD-37` (challenges) and `OD-38` (open-trade display). Pointer rows in AGENTS and README; replaced Next up. Documentation only.
 Files:    `docs/16-floor-roadmap.md`, `AGENTS.md`, `README.md`, `DECISIONS.md`, `NOTES.md`.
