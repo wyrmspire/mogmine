@@ -48,6 +48,11 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — integration/batch5
+Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
+Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.
+
+
 ### 2026-11-15 — agent (Antigravity) — Runtime sample bars from fixture (#89)
 Did:      Issue #89: sample trades render 1m bars from `fixtures/sample-bars.json` at runtime with no Yahoo or /api/market-data calls. Restored truthful CandleSource "Demo fixture" and updated Tune copy to match. Real trades continue fetching Yahoo and caching in IndexedDB. Added locking tests in `lib/__tests__/sample-bars.test.ts`.
 Files:    `lib/candles.ts`, `lib/trades.ts`, `lib/store.ts`, `components/TradeDetail.tsx`, `components/TuneScreen.tsx`, `lib/__tests__/sample-bars.test.ts`, `NOTES.md`.

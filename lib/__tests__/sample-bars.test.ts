@@ -152,12 +152,14 @@ test("real trades trigger market-data fetch when window is defined", async () =>
   resetCandlesForTest();
   const fetchedUrls: string[] = [];
   const originalFetch = globalThis.fetch;
-  const mockCandles = [
-    { time: 1000, open: 6000, high: 6005, low: 5995, close: 6002, volume: 10 },
-    { time: 2000, open: 6002, high: 6008, low: 6000, close: 6006, volume: 10 },
-    { time: 3000, open: 6006, high: 6010, low: 6004, close: 6009, volume: 10 },
-    { time: 4000, open: 6009, high: 6012, low: 6007, close: 6010, volume: 10 },
-  ];
+  // Must cover the trade window (#90), not merely four bars.
+  const entryMs = Date.parse("2026-11-10T15:00:00.000Z");
+  const exitMs = Date.parse("2026-11-10T15:30:00.000Z");
+  const minute = 60_000;
+  const mockCandles: Candle[] = [];
+  for (let time = entryMs - 5 * minute; time < exitMs + 5 * minute; time += minute) {
+    mockCandles.push({ time, open: 6000, high: 6005, low: 5995, close: 6002, volume: 10 });
+  }
 
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input);
@@ -195,7 +197,7 @@ test("real trades trigger market-data fetch when window is defined", async () =>
     assert.ok(entry);
     assert.equal(entry.status, "ready");
     assert.equal(entry.source, "Yahoo Finance");
-    assert.equal(entry.candles.length, 4);
+    assert.ok(entry.candles.length >= 4);
   } finally {
     globalThis.fetch = originalFetch;
     globalThis.window = originalWindow;
