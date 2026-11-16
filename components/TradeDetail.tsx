@@ -7,6 +7,7 @@ import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
 import { TradeCardSheet } from "./TradeCardSheet";
 import { TradeChart } from "./TradeChart";
+import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
 import { ensureCandles, useCandles } from "@/lib/candles";
@@ -299,15 +300,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               <span>{hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, detailLevel)}</span>
             </div>
           )}
-          <div className="levels">
-            <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
-            <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
-            <div><small>STOP</small><b className={trade.stop_loss_price == null ? "empty" : ""}>{formatPrice(trade.stop_loss_price, trade.symbol)}</b></div>
-            <div><small>TARGET</small><b className={trade.planned_target_price == null ? "empty" : ""}>{trade.planned_target_price == null ? "No target set" : formatPrice(trade.planned_target_price, trade.symbol)}</b></div>
-            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
-            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
-          </div>
-          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
           </div>
 
 
@@ -315,6 +307,19 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <button type="button" className="btn-primary" disabled={!ready} onClick={openCard}>{ready ? "Trade Card" : "Trade Card needs candles"}</button>
           </div>
         </>}
+
+        <div className="trade-levels-card specular-card">
+          <div className="levels">
+            <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
+            <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
+            <TradeLevelEditor trade={trade} field="stop_loss_price" />
+            <TradeLevelEditor trade={trade} field="planned_target_price" />
+            <TradeLevelEditor trade={trade} field="key_level_price" />
+            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
+            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
+          </div>
+          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
+        </div>
 
         <div className="pager">
           <button type="button" aria-label="Previous trade (K)" disabled={!previous} onClick={() => go(previous)}>‹ Prev</button>
