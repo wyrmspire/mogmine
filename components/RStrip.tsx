@@ -60,4 +60,4 @@ export function RStrip({ trade, excursions, blind = false, size = "row" }: Props
       )}
     </svg>
   );
-                                            }
+}
