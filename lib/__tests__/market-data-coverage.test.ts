@@ -74,3 +74,17 @@ test("issue #90: invalid or empty trade times never count as covered", () => {
   assert.equal(coversTradeWindow(full, exit, entry, "1m"), false);
   assert.equal(coversTradeWindow([], entry, exit, "1m"), false);
 });
+
+test("a MES hold that spans the daily halt does not require the 17:00 ET bar (composes with #65)", () => {
+  // Monday 2026-11-09 16:30–18:30 America/New_York. The 17:00–18:00 ET halt is not expected.
+  const haltEntry = Date.parse("2026-11-09T21:30:00.000Z");
+  const haltExit = Date.parse("2026-11-09T23:30:00.000Z");
+  const hour = 3_600_000;
+  const sixteen = Date.parse("2026-11-09T21:00:00.000Z"); // 16:00 ET
+  const withoutHalt = [bars(sixteen, sixteen + hour, hour)[0], bars(sixteen + 2 * hour, sixteen + 3 * hour, hour)[0]];
+  const withHalt = bars(sixteen, sixteen + 3 * hour, hour);
+  assert.equal(coversTradeWindow(withoutHalt, haltEntry, haltExit, "1h", "MES"), true);
+  assert.equal(coversTradeWindow(withHalt, haltEntry, haltExit, "1h", "MES"), true);
+  // Without a symbol the helper does not apply Globex hours, so the halt bar is still required.
+  assert.equal(coversTradeWindow(withoutHalt, haltEntry, haltExit, "1h"), false);
+});

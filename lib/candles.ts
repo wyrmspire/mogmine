@@ -52,7 +52,7 @@ async function load(trade: TradeRecord, signature: string) {
   const entryMs = Date.parse(trade.entry_time);
   const exitMs = Date.parse(trade.exit_time);
   // Same coverage test as the route (issue #90): a cached set must cover the window too.
-  if (cached?.signature === signature && coversTradeWindow(cached.candles, entryMs, exitMs, cached.baseTimeframe)) return adopt(trade, cached);
+  if (cached?.signature === signature && coversTradeWindow(cached.candles, entryMs, exitMs, cached.baseTimeframe, trade.symbol)) return adopt(trade, cached);
 
   try {
     const params = new URLSearchParams({ symbol: trade.symbol, entry: trade.entry_time, exit: trade.exit_time });
@@ -61,7 +61,7 @@ async function load(trade: TradeRecord, signature: string) {
     const body = await response.json() as { candles?: Candle[]; baseTimeframe?: Timeframe };
     const baseTimeframe = body.baseTimeframe;
     if (!Array.isArray(body.candles) || !baseTimeframe || !TIMEFRAMES.includes(baseTimeframe)) throw new Error("incomplete");
-    if (!coversTradeWindow(body.candles, entryMs, exitMs, baseTimeframe)) throw new Error("incomplete");
+    if (!coversTradeWindow(body.candles, entryMs, exitMs, baseTimeframe, trade.symbol)) throw new Error("incomplete");
     if (entries.get(trade.id)?.signature !== signature) return;
     const stored: StoredCandles = { signature, candles: body.candles, source: "Yahoo Finance", baseTimeframe, fetchedAt: Date.now() };
     void idbSet(key, stored);

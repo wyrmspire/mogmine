@@ -12,14 +12,14 @@ import type { Candle, Timeframe } from "../trades.ts";
  * Count is not coverage: four bars that miss the window fail, and so does a set with a gap.
  * Bar times are open times in UTC milliseconds, the same unit as `Candle.time`.
  */
-export function coversTradeWindow(candles: Candle[], entryMs: number, exitMs: number, timeframe: Timeframe): boolean {
+export function coversTradeWindow(candles: Candle[], entryMs: number, exitMs: number, timeframe: Timeframe, symbol?: string): boolean {
   if (!Number.isFinite(entryMs) || !Number.isFinite(exitMs) || exitMs <= entryMs) return false;
   const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
   const present = new Set(candles.map((bar) => bar.time));
   const required = new Set<number>([
     Math.floor(entryMs / barMs) * barMs,
     Math.floor(exitMs / barMs) * barMs,
-    ...expectedInsideBarTimes(entryMs, exitMs, barMs),
+    ...expectedInsideBarTimes(entryMs, exitMs, barMs, symbol),
   ]);
   for (const time of required) {
     if (!present.has(time)) return false;

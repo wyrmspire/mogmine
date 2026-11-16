@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       const to = new Date(exitTime + padHours * 3_600_000);
       const candles = await provider.getCandles({ symbol, timeframe, from, to });
       // A thin or gapped set falls through to the next timeframe (issue #90, AC-07).
-      if (coversTradeWindow(candles, entryTime, exitTime, timeframe)) {
+      if (coversTradeWindow(candles, entryTime, exitTime, timeframe, symbol)) {
         return NextResponse.json({ candles, source: "Yahoo Finance", ticker: provider.resolveProviderSymbol(symbol), baseTimeframe: timeframe });
       }
     }
