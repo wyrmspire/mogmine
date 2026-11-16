@@ -201,7 +201,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   }, [ready, detailLevel, trade, candles]);
   const barIssues = barCheck?.issues ?? [];
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
-  const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
+  const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
+  const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
 
   return <>
     <div className="detail-layout">

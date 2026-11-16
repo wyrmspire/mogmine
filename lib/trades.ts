@@ -5,7 +5,7 @@ export type TradeDirection = "LONG" | "SHORT";
 export type TradeStyle = "scalp" | "session_90m" | "investment";
 export type Timeframe = "1m" | "5m" | "15m" | "1h";
 export type ReviewStatus = "new" | "tagged" | "reviewed";
-export type CandleSource = "Yahoo Finance";
+export type CandleSource = "Yahoo Finance" | "Demo fixture";
 
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 export const TIMEFRAME_MINUTES: Record<Timeframe, number> = { "1m": 1, "5m": 5, "15m": 15, "1h": 60 };
@@ -595,7 +595,9 @@ export function annotationKey(trade: Partial<Pick<TradeRecord, "note" | "quick_t
 
 /** Fill in fields added after a record was stored, so old device data keeps loading. */
 export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id" | "symbol" | "direction" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): TradeRecord {
-  const hadNonMarketCandles = raw.candle_source != null && raw.candle_source !== "Yahoo Finance";
+  const isSample = raw.is_sample === true;
+  const validSource = raw.candle_source === "Yahoo Finance" || (raw.candle_source === "Demo fixture" && isSample);
+  const hadNonMarketCandles = raw.candle_source != null && !validSource;
   // `mes` and `MES` share one spec. An unknown symbol is kept as typed, and its money shows as null.
   const symbol = canonicalSymbol(raw.symbol) ?? raw.symbol;
   const canonicalTicker = specFor(symbol)?.yahooTicker;
@@ -626,7 +628,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;
-  if (trade.candle_source !== "Yahoo Finance") trade.candle_source = undefined;
+  if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
   return trade;
