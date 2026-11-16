@@ -54,6 +54,11 @@ Files:    `components/TradeDetail.tsx`, `components/TradeChart.tsx`, `lib/trades
 Verified: `npm test` (113/113 passed), `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning in postcss.config.mjs), `npm run build` (8/8 static pages).
 Left:     PR against integration/batch5 (do-not-merge-without-Chris). Simple / After exit visible labels open to owner preference.
 
+### 2026-11-15 — agent (Grok Bot) — follow-up on `feat/82-slim-toolbar` (#82)
+Did:      Raised View menu labels from 9–10px to the 11px floor (sibling #85). Programmatic range updates clear their flag on a microtask so the default zoomed-out view is not treated as a user pan.
+Files:    `app/globals.css`, `components/TradeChart.tsx`, `NOTES.md`.
+
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch5
 Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
 Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.

@@ -100,6 +100,16 @@ function reportExtension(state: Live, onExtensionChange?: (extension: ChartExten
   });
 }
 
+function setProgrammaticRange(state: Live, apply: () => void) {
+  state.programmaticRangeChange = true;
+  try {
+    apply();
+  } finally {
+    // Lightweight-charts may notify after this call returns; keep the flag until the next task.
+    queueMicrotask(() => { state.programmaticRangeChange = false; });
+  }
+}
+
 export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone, privacy, readout, onRendered, onFitChange, onXrayChange, detailLevel = "medium", onExtensionChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
@@ -120,12 +130,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       l.extraAfter = 0;
       l.chart.priceScale("right").applyOptions({ autoScale: true });
       l.fitRange = l.baseFitRange;
-      try {
-        l.programmaticRangeChange = true;
-        l.chart.timeScale().setVisibleLogicalRange(l.baseFitRange);
-      } finally {
-        l.programmaticRangeChange = false;
-      }
+      setProgrammaticRange(l, () => { l.chart.timeScale().setVisibleLogicalRange(l.baseFitRange!); });
       latest.current.onFitChange?.(true);
       reportExtension(l, latest.current.onExtensionChange);
     },
@@ -143,12 +148,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         const nextTo = Math.min(l.barCount - 1, currentTo + applied);
         const view = { from: currentFrom, to: nextTo };
         l.fitRange = view;
-        try {
-          l.programmaticRangeChange = true;
-          l.chart.timeScale().setVisibleLogicalRange(view);
-        } finally {
-          l.programmaticRangeChange = false;
-        }
+        setProgrammaticRange(l, () => { l.chart.timeScale().setVisibleLogicalRange(view); });
         reportExtension(l, latest.current.onExtensionChange);
         return { applied, remaining: room - applied > 0 };
       }
@@ -158,12 +158,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       const nextFrom = Math.max(0, currentFrom - applied);
       const view = { from: nextFrom, to: currentTo };
       l.fitRange = view;
-      try {
-        l.programmaticRangeChange = true;
-        l.chart.timeScale().setVisibleLogicalRange(view);
-      } finally {
-        l.programmaticRangeChange = false;
-      }
+      setProgrammaticRange(l, () => { l.chart.timeScale().setVisibleLogicalRange(view); });
       reportExtension(l, latest.current.onExtensionChange);
       return { applied, remaining: room - applied > 0 };
     },
@@ -260,24 +255,16 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         let applied = false;
         if (l.userPanned && l.savedTimeRange) {
           try {
-            l.programmaticRangeChange = true;
-            l.chart.timeScale().setVisibleRange(l.savedTimeRange);
+            setProgrammaticRange(l, () => { l.chart.timeScale().setVisibleRange(l.savedTimeRange!); });
             applied = true;
           } catch {
             applied = false;
-          } finally {
-            l.programmaticRangeChange = false;
           }
         }
         if (!applied) {
           const wide = defaultVisibleRange(l.baseFitRange, l.barCount);
           l.fitRange = wide;
-          try {
-            l.programmaticRangeChange = true;
-            l.chart.timeScale().setVisibleLogicalRange(wide);
-          } finally {
-            l.programmaticRangeChange = false;
-          }
+          setProgrammaticRange(l, () => { l.chart.timeScale().setVisibleLogicalRange(wide); });
         }
       }
     } else {
@@ -285,12 +272,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       l.baseFitRange = null;
       l.fitRange = null;
       if (refit || dataChanged) {
-        try {
-          l.programmaticRangeChange = true;
-          l.chart.timeScale().fitContent();
-        } finally {
-          l.programmaticRangeChange = false;
-        }
+        setProgrammaticRange(l, () => { l.chart.timeScale().fitContent(); });
       }
     }
     reportExtension(l, p.onExtensionChange);
