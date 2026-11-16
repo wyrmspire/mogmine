@@ -308,6 +308,9 @@ h1, h2, h3, p { margin: 0; }
 .chart-note button { min-height: 44px; min-width: 44px; padding: 0 12px; border-radius: 9px; border: 1px solid currentColor; background: none; font-weight: 800; font-size: 0.6875rem; }
 .chart-note.fact { color: var(--text-muted); line-height: 1.45; }
 .chart-note.fact a { color: var(--gold-light); text-decoration: underline; text-underline-offset: 2px; }
+/* Low detail: the hindsight block is one compact line; tap reveals the full text (wraps when open). */
+.chart-note .hindsight-line { display: block; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.45; }
+.chart-note .hindsight-line.open { white-space: normal; overflow: visible; }
 .levels { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--border-subtle); }
 .levels > div { padding: 9px 4px; text-align: center; border-right: 1px solid var(--border-subtle); font-family: var(--font-mono); font-variant-numeric: tabular-nums; min-width: 0; }
 .levels > div:last-child { border-right: 0; }

@@ -23,7 +23,7 @@ import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInside
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
-import { buildHindsight, laterTouchLabel } from "@/lib/hindsight";
+import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
 export function TradeDetail({ id }: { id: string }) {
@@ -199,9 +199,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
   }, [ready, candles, trade, baseMinutes]);
   const hindsight = useMemo(() => {
-    if (!ready || detailLevel === "low") return null;
+    if (!ready) return null;
     return buildHindsight(trade, candles.candles);
-  }, [ready, detailLevel, trade, candles]);
+  }, [ready, trade, candles]);
   const barIssues = barCheck?.issues ?? [];
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
   const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
@@ -270,20 +270,19 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
           {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
           {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
-          {hindsight && (
+          {hindsight && detailLevel === "low" && (
+            <div className="chart-note fact" aria-label="After the exit — hindsight">
+              <button type="button" className={`hindsight-line${hindsightOpen ? " open" : ""}`} aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>
+                {hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, "low")}
+              </button>
+            </div>
+          )}
+          {hindsight && detailLevel !== "low" && (
             <div className="chart-note fact" aria-label="After the exit — hindsight">
               <button type="button" className="tool-button" aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>
                 After the exit — hindsight
               </button>
-              {hindsightOpen ? (
-                <span>
-                  {hindsight.sentence}
-                  {hindsight.target ? ` ${laterTouchLabel(hindsight.target)}.` : ""}
-                  {hindsight.stop ? ` ${laterTouchLabel(hindsight.stop)}.` : ""}
-                </span>
-              ) : (
-                <span>Hindsight is one tap away and never changes R or the grade of the decision.</span>
-              )}
+              <span>{hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, detailLevel)}</span>
             </div>
           )}
           <div className="levels">
