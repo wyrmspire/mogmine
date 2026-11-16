@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { PitStop } from "./PitStop";
-import { Sparkline } from "./Sparkline";
+import { RStrip } from "./RStrip";
 import { formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
@@ -87,7 +87,7 @@ function Queue() {
               {formatSessionDate(sessionDate(trade.entry_time))} · {formatListTime(trade.entry_time, prefs.timeZone)} · in at {formatPrice(trade.entry_price, trade.symbol)}{sealed ? "" : ` · ${formatDuration(holdSeconds(trade))}`}
             </span>
           </span>
-          <span className={sealed ? "sealed" : ""} aria-hidden={sealed}><Sparkline points={trade.sparkline} /></span>
+          <span className={sealed ? "sealed" : ""} aria-hidden={sealed}><RStrip trade={trade} blind={sealed} /></span>
           <span className={`row-result num ${sealed ? "sealed" : ""}`} aria-hidden={sealed} style={{ textAlign: "right" }}>
             <b className={(pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
             <span className="muted" style={{ fontSize: 11 }}>{prefs.shield ? (r != null ? points : "") : formatR(r)}</span>

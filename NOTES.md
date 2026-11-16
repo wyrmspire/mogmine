@@ -48,6 +48,11 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — App shell, branch `feat/81-r-strip` (#81)
+Did:      Replaced the Feed and Review sparkline with an R strip (stop left, target right, entry tick, exit marker, faint MAE/MFE). A larger copy sits under the Trade Detail chart; the six-cell levels grid is kept. Works in Shield and with no candles. Blind review hides the exit/MAE/MFE. Layout is a pure helper with unit tests.
+Files:    `lib/rstrip.ts`, `lib/__tests__/rstrip.test.ts`, `components/RStrip.tsx`, `components/TradeRow.tsx`, `components/ReviewScreen.tsx`, `components/TradeDetail.tsx`, `app/globals.css`, `NOTES.md`.
+Left:     Sparkline component is unused by Feed/Review but left in the tree.
+
 ### 2026-11-15 — agent (Grok Bot) — App shell, branch `feat/80-gold-good-process` (#80)
 Did:      Gold is reserved for good process only: the full-rules seal, checked checklist rules, Today's "By the rules" / day-head process score, and the clean-process header glow. Selected and active chrome (timeframes, pills, dock, focus rings, primary buttons, brand mark, Shield switch) now use plain white. Tune gold preset and intensity still preview the process gold.
 Files:    `app/globals.css`, `components/TuneScreen.tsx`, `NOTES.md`.

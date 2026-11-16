@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
 import { TradeCardSheet } from "./TradeCardSheet";
+import { RStrip } from "./RStrip";
 import { TradeChart } from "./TradeChart";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
@@ -243,6 +244,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         </div>
 
         {candles?.status === "none" && !trade.is_sample && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
+        {candles?.status === "none" && <div className="specular-card" style={{ padding: "8px 12px" }}><RStrip trade={trade} excursions={ex} size="detail" /></div>}
         {candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
@@ -299,6 +301,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               <span>{hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, detailLevel)}</span>
             </div>
           )}
+          <RStrip trade={trade} excursions={ex} size="detail" />
           <div className="levels">
             <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
             <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>

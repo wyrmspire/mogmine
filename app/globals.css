@@ -270,6 +270,16 @@ h1, h2, h3, p { margin: 0; }
 .sparkline path { fill: none; stroke: var(--text-faint); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
 .sparkline circle { fill: var(--text-primary); }
 
+.rstrip { width: 64px; height: 30px; display: block; flex: none; overflow: visible; }
+.rstrip.detail { width: 100%; height: 44px; margin: 0; }
+.rstrip-track { stroke: var(--text-faint); stroke-width: 2; stroke-linecap: round; }
+.rstrip-entry { stroke: var(--text-primary); stroke-width: 2; stroke-linecap: round; }
+.rstrip-stop { stroke: var(--loss-text); stroke-width: 2; stroke-linecap: round; }
+.rstrip-target { stroke: var(--profit-text); stroke-width: 2; stroke-linecap: round; }
+.rstrip-extent { stroke: var(--text-muted); stroke-width: 1; opacity: 0.7; }
+.rstrip-exit { stroke: none; }
+
+
 /* ───────────────────────── Trade detail ───────────────────────── */
 .detail-layout { max-width: 1500px; margin: 0 auto; }
 .detail-rail, .detail-side-title { display: none; }

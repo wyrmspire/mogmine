@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkline } from "./Sparkline";
+import { RStrip } from "./RStrip";
 import { formatDuration, formatMoney, formatPoints, formatR } from "@/lib/format";
 import { playbookName } from "@/lib/playbooks";
 import { formatListTime } from "@/lib/time";
@@ -48,7 +48,7 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
         <span className="row-meta">{formatListTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}</span>
         <span className={`row-context ${info.todo ? "todo" : ""}`}>{info.text}</span>
       </span>
-      <Sparkline points={trade.sparkline} />
+      <RStrip trade={trade} />
       <span className="row-result">
         <b className={tone}>{headline}</b>
         <span>{secondary}</span>
