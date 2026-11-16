@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_PREFS, GOLD_PRESETS, getPrefs, setPrefs } from "../prefs.ts";
+import { DEFAULT_PREFS, GOLD_PRESETS, getPrefs, getTuneRiskBudgetDisplay, setPrefs } from "../prefs.ts";
 import { withSamples } from "../selectors.ts";
 import { normalizeTrade } from "../trades.ts";
 
@@ -130,4 +130,44 @@ test("shield toggle updates prefs correctly", () => {
 
   // Restore defaults
   setPrefs(DEFAULT_PREFS);
+});
+
+test("getTuneRiskBudgetDisplay masks amounts and disables editing when Shield is on", () => {
+  const shielded = getTuneRiskBudgetDisplay(true, 250);
+  assert.equal(shielded.isEditable, false);
+  assert.equal(shielded.label, "Risk budget");
+  assert.equal(shielded.valueText, "Hidden");
+  assert.equal(shielded.inputValue, "Hidden");
+  assert.equal(shielded.inputAriaLabel, "Risk budget (hidden while Shield mode is on)");
+  assert.equal(
+    shielded.hint,
+    "Used by manual entry to suggest stop distance and by Trade Detail risk chips. Turn Shield mode off to change the dollar amount."
+  );
+
+  // Strict check: no dollar signs, no numbers (e.g. 250), and no "USD"
+  const allShieldedText = [
+    shielded.label,
+    shielded.valueText,
+    shielded.inputValue,
+    shielded.inputAriaLabel,
+    shielded.hint,
+  ].join(" ");
+  assert.doesNotMatch(allShieldedText, /\$|\b250\b|usd/i);
+});
+
+test("getTuneRiskBudgetDisplay preserves editable dollar amounts when Shield is off", () => {
+  const unshielded = getTuneRiskBudgetDisplay(false, 250);
+  assert.equal(unshielded.isEditable, true);
+  assert.equal(unshielded.label, "Risk budget ($ USD)");
+  assert.equal(unshielded.valueText, "$250");
+  assert.equal(unshielded.inputValue, "250");
+  assert.equal(unshielded.inputAriaLabel, "Risk budget in US dollars");
+  assert.equal(
+    unshielded.hint,
+    "Used by manual entry to suggest stop distance and by Trade Detail risk chips (default $250)."
+  );
+
+  const custom = getTuneRiskBudgetDisplay(false, 500);
+  assert.equal(custom.valueText, "$500");
+  assert.equal(custom.inputValue, "500");
 });

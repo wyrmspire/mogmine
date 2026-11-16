@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Antigravity) — App shell and notes, branch `feat/17-tune-shield-risk`
+Did:      Shield mode masks Tune risk budget: heading hides ($ USD), readout and input display "Hidden", quick chips omitted, and hint explains turning Shield off changes the dollar amount. Input is disabled/readOnly with accessible label. Pure display helper added with focused tests.
+Files:    `lib/prefs.ts`, `components/TuneScreen.tsx`, `app/globals.css`, `lib/__tests__/tune-prefs.test.ts`, `NOTES.md`.
+Verified: `npm test` 83/83 passed; `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning), `npm run build` passed.
+Left:     PR against main, do-not-merge-without-Chris.
+
 ### 2026-11-15 — agent (Claude Haiku) — issue #90 market-data coverage (branch `feat/90-market-data-coverage`)
 Did:      `/api/market-data` accepts a timeframe only when `coversTradeWindow` (new `lib/market-data/coverage.ts`) holds: entry bar, exit bar and every bar inside the hold from the shared `expectedInsideBarTimes`. Thin or gapped sets fall through, then 404. `lib/candles.ts` uses the same test for cached and fresh sets. `lib/trade-bar-validation.ts` now imports the shared helper instead of its private copy.
 Verified: `npm test` 89 pass (was 81); typecheck clean; lint 0 errors, 1 pre-existing warning; `npm run build` passes.
