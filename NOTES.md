@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — App shell, branch `feat/81-r-strip` (#81)
+Did:      Replaced the Feed and Review sparkline with an R strip (stop left, target right, entry tick, exit marker, faint MAE/MFE). A larger copy sits under the Trade Detail chart; the six-cell levels grid is kept. Works in Shield and with no candles. Blind review hides the exit/MAE/MFE. Layout is a pure helper with unit tests.
+Files:    `lib/rstrip.ts`, `lib/__tests__/rstrip.test.ts`, `components/RStrip.tsx`, `components/TradeRow.tsx`, `components/ReviewScreen.tsx`, `components/TradeDetail.tsx`, `app/globals.css`, `NOTES.md`.
+Left:     Sparkline component is unused by Feed/Review but left in the tree.
+
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch5
 Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
 Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.
