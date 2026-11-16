@@ -24,6 +24,8 @@ import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInside
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
+import { DataNotesChip } from "./DataNotesChip";
+import { collectDataNotes } from "@/lib/data-notes";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
@@ -231,6 +233,16 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   }, [ready, trade, candles]);
   const barIssues = barCheck?.issues ?? [];
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
+  // Issue #83: every data-quality note collapses into one chip. Hindsight is not a data note.
+  const dataNotes = collectDataNotes({
+    noCandles: candles?.status === "none" && !trade.is_sample,
+    base: ready ? base : null,
+    misaligned,
+    ticker: trade.yahoo_ticker,
+    coverage: barCoverage,
+    chronologyUnresolved: barCheck?.chronology === "unresolved",
+    issueCodes: barIssues.map((issue) => issue.code),
+  });
   const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
   const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
 
@@ -256,7 +268,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
-        {candles?.status === "none" && !trade.is_sample && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
+        {candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
         {candles?.status === "none" && <div className="specular-card" style={{ padding: "8px 12px" }}><RStrip trade={trade} excursions={ex} size="detail" /></div>}
         {candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
@@ -410,14 +422,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <span className="readout num" ref={readoutRef} aria-hidden="true" />
             <span className="source-text">{candles?.fetching ? "Checking Yahoo…" : ""}</span>
           </div>
-          {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
-          {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
-          {barCoverage === "missing" && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
-          {barCoverage === "partial" && <div className="chart-note"><span>Bar coverage is partial — some candles in the hold are missing, so this is not a complete check.</span></div>}
-          {barCoverage === "complete" && barCheck?.chronology === "unresolved" && <div className="chart-note"><span>Entry and exit sit in the same bar, so this check cannot establish order between them.</span></div>}
-          {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
-          {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
-          {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
+          <DataNotesChip notes={dataNotes} />
           {hindsight && detailLevel === "low" && (
             <div className="chart-note fact" aria-label="After the exit — hindsight">
               <button type="button" className={`hindsight-line${hindsightOpen ? " open" : ""}`} aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>

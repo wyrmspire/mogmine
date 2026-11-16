@@ -48,6 +48,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Claude Haiku) — Data-notes chip (#83), branch `feat/83-data-notes-chip`
+Did:      Trade Detail data-quality notes (1m, continuous contract, coverage, same-bar, stop/target/exit) collapse into one "N data notes" chip (44px, tap to expand). Hindsight unchanged. No chip when there are no notes.
+Amber:    Only when bar coverage is missing or partial (MAE/MFE and bar check untrusted). All other notes muted. Chris to confirm (DECISIONS OD-36).
+Files:    `lib/data-notes.ts`, `components/DataNotesChip.tsx`, `components/TradeDetail.tsx`, `app/globals.css`, `lib/__tests__/data-notes.test.ts`, `docs/08`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` 122/122, `npm run typecheck` clean, `npm run lint` 0 errors (1 pre-existing PostCSS warning), `npm run build` OK.
+Left:     No browser check at 390px yet. Draft PR against integration/batch5, do-not-merge-without-Chris.
+
 ### 2026-11-15 — agy (gemini-3.8-flash-high) — Chart toolbar slim & default zoom (#82)
 Did:      Issue #82: slimmed Trade Detail toolbar to 1 row at 390px (timeframe switch + View button). Folded Fit, detail level (Simple / After exit), X-Ray, fullscreen, and 30-bar extensions into View menu. Moved ‹ › to 44px edge hits on chart. Implemented Chris's decision: charts open zoomed out by default (wide context >= 45 bars via `defaultVisibleRange`), Fit is an option in View menu and reports not-fitted initially. Preserves user pan/zoom across timeframe changes. Zero gold used on toolbar chrome/View.
 Files:    `components/TradeDetail.tsx`, `components/TradeChart.tsx`, `lib/trades.ts`, `lib/__tests__/core.test.ts`, `app/globals.css`, `NOTES.md`.

@@ -364,6 +364,13 @@ h1, h2, h3, p { margin: 0; }
 /* Low detail: the hindsight block is one compact line; tap reveals the full text (wraps when open). */
 .chart-note .hindsight-line { display: block; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.45; }
 .chart-note .hindsight-line.open { white-space: normal; overflow: visible; }
+/* Issue #83: data-quality notes collapse into one quiet chip. Amber only when coverage is untrusted. */
+.data-notes { padding: 6px 10px 8px; border-top: 1px solid var(--border-subtle); display: grid; gap: 6px; justify-items: start; }
+.data-notes-chip { min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--border-subtle); background: none; color: var(--text-muted); font: inherit; font-size: 0.6875rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.data-notes-chip.untrusted { color: var(--warn-amber); border-color: color-mix(in srgb, var(--warn-amber) 40%, transparent); }
+.data-notes-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; width: 100%; font-size: 0.6875rem; line-height: 1.45; }
+.data-notes-list li { color: var(--text-muted); }
+.data-notes-list li.untrusted { color: var(--warn-amber); }
 .levels { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--border-subtle); }
 .levels > div { padding: 9px 4px; text-align: center; border-right: 1px solid var(--border-subtle); font-family: var(--font-mono); font-variant-numeric: tabular-nums; min-width: 0; }
 .levels > div:last-child { border-right: 0; }
