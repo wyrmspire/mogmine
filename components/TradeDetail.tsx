@@ -110,13 +110,14 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       .catch(() => { if (cardBuild.current === build) setShareBlob(null); });
   }, [cardPrivacy, trade, zone]);
 
-  // Do not encode on every redraw (notes pauses used to re-screenshot and
-  // re-encode a 1080×1350 PNG here). Retry only if the sheet is already open
-  // and the first lazy build had no screenshot yet.
+  // After pan, pinch, fit, or ‹30/30› the live chart redraws. If the sheet is
+  // open, rebuild the card from that current view (AC-10). Notes typing still
+  // does not encode: the sheet is a dialog, and shouldBuildShareCard("notes")
+  // stays false. A leftover blob is dropped when the sheet is closed.
   const onRendered = useCallback(() => {
-    if (cardOpen && !shareBlob && shouldBuildShareCard("sheet-open", true)) encodeCard("sheet-open");
+    if (cardOpen && shouldBuildShareCard("view-change", true)) encodeCard("view-change");
     else if (!cardOpen) setShareBlob((prev) => (prev ? null : prev));
-  }, [cardOpen, shareBlob, encodeCard]);
+  }, [cardOpen, encodeCard]);
 
   const openCard = useCallback(() => {
     setCardPrivacy(prefs.shield);
