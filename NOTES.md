@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Claude Haiku 5.5) — `feat/hindsight-low-summary`
+Did:      Low chart detail no longer hides the after-exit hindsight. It now shows the hindsight sentence as one compact line (tap reveals the full text, sentence plus `TP +Nm` / `SL +Nm`). Medium is unchanged (button, one-tap helper, expand). Hindsight is computed whenever the chart is ready. Chart primitive untouched: Low still hides the dotted continuation.
+Files:    `lib/hindsight.ts` (`hindsightCollapsedText`, `hindsightExpandedText`), `lib/__tests__/hindsight.test.ts`, `components/TradeDetail.tsx`, `app/globals.css` (`.hindsight-line`), `NOTES.md`.
+Watch:    Low one-liner truncates with an ellipsis on phones; the full text is one tap away. Still does not change R, P&L, outcome or stats.
+Open:    Do-not-merge without Chris (PR title and body say so).
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch4 cleanup before merge
 Did:      Stripped UX/Invariant codes from Tune captions (plain wording only). Trade Card outcome subline now wraps instead of ellipsizing, so R and points stay visible in the preview.
 Left:     Ready for Chris's approved merge of PR #76. Do not squash. PR #71 stays open.

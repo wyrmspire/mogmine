@@ -142,3 +142,20 @@ export function laterTouchLabel(touch: LaterTouch): string {
   const minutes = Math.max(1, Math.round(touch.delayMs / 60_000));
   return `${tag} +${minutes}m`;
 }
+
+/** Full text shown when the hindsight block is expanded (same at Low and Medium). */
+export function hindsightExpandedText(fact: Pick<HindsightFact, "sentence" | "target" | "stop">): string {
+  return [
+    fact.sentence,
+    fact.target ? `${laterTouchLabel(fact.target)}.` : "",
+    fact.stop ? `${laterTouchLabel(fact.stop)}.` : "",
+  ].filter(Boolean).join(" ");
+}
+
+/**
+ * Collapsed copy for the hindsight block. Low shows the one-line summary (the sentence itself);
+ * Medium keeps the helper line that points at the one-tap expand. Display only: never affects R or stats.
+ */
+export function hindsightCollapsedText(fact: Pick<HindsightFact, "sentence">, detailLevel: ChartDetailLevel): string {
+  return detailLevel === "low" ? fact.sentence : "Hindsight is one tap away and never changes R or the grade of the decision.";
+}
