@@ -1,5 +1,8 @@
-// Core trade types and money math. Pure: no I/O, no DOM, no imports.
+// Core trade types and money math. Pure: no I/O, no DOM.
 // Names follow docs/06 (interim canonical under OD-1).
+
+import { expectedInsideBarTimes } from "./session.ts";
+export { expectedInsideBarTimes } from "./session.ts";
 
 export type TradeDirection = "LONG" | "SHORT";
 export type TradeStyle = "scalp" | "session_90m" | "investment";
@@ -403,19 +406,6 @@ export interface Excursions {
   coverage: ExcursionCoverage;
 }
 
-/** Open times of bars that are entirely inside the hold, using execution timestamps only. */
-export function expectedInsideBarTimes(entry: number, exit: number, barMs: number): number[] {
-  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMs <= 0) return [];
-  const times: number[] = [];
-  let time = Math.ceil(entry / barMs) * barMs;
-  if (time < entry) time += barMs;
-  while (time + barMs <= exit) {
-    times.push(time);
-    time += barMs;
-  }
-  return times;
-}
-
 /**
  * MAE and MFE from bars that are fully inside the hold.
  *
@@ -439,7 +429,7 @@ export function excursions(
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) return null;
   const barMs = barMinutes * 60_000;
-  const expected = expectedInsideBarTimes(entry, exit, barMs);
+  const expected = expectedInsideBarTimes(entry, exit, barMs, trade.symbol);
 
   const byTime = new Map<number, Candle>();
   for (const bar of candles) {

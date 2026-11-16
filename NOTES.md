@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Codex) — Core math, branch `feat/65-session-coverage`
+Did:      Issue #65: shared MES/MNQ expected-bar logic now omits the regular 17:00–18:00 ET halt and Friday 17:00–Sunday 18:00 ET weekend closure for coverage and excursions.
+Files:    `lib/session.ts`, `lib/{trade-bar-validation,trades}.ts`, `lib/__tests__/session-coverage.test.ts`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` 86/86; typecheck/build pass; lint 0 errors/1 existing PostCSS warning.
+Left:     Holidays and early closes still appear as missing evidence until an authoritative calendar is chosen (`OD-35`). Do not merge without Chris.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch4 cleanup before merge
 Did:      Stripped UX/Invariant codes from Tune captions (plain wording only). Trade Card outcome subline now wraps instead of ellipsizing, so R and points stay visible in the preview.
 Left:     Ready for Chris's approved merge of PR #76. Do not squash. PR #71 stays open.
