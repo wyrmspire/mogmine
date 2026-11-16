@@ -63,6 +63,12 @@ test("later touch: neither by the session close", () => {
   assert.match(fact.sentence, /neither the target nor the stop was reached by the session close/);
 });
 
+test("a coarse final bar covers through the session close", () => {
+  const candles = [bar(Date.parse("2026-11-10T21:55:00.000Z"), 5997, 6003)];
+  const fact = buildHindsight(trade, candles, "5m");
+  assert.equal(fact.incomplete, false);
+});
+
 test("later touch: neither in the bars on hand when the session close is not covered", () => {
   const candles = after([[5, 5996, 6004]]);
   const fact = buildHindsight(trade, candles);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { FUTURES_SPECS } from "@/lib/trades";
+import { FUTURES_SPECS, TIMEFRAME_MINUTES } from "@/lib/trades";
+import { sessionCloseUtc } from "@/lib/session";
 import type { Timeframe } from "@/lib/trades";
 import { YahooFinanceProvider } from "@/lib/market-data/yahoo";
 
@@ -32,7 +33,10 @@ export async function GET(request: NextRequest) {
   try {
     for (const { timeframe, padHours } of ATTEMPTS) {
       const from = new Date(entryTime - padHours * 3_600_000);
-      const to = new Date(exitTime + padHours * 3_600_000);
+      // Evening-session exits can be more than 15 hours before their assigned session close.
+      // Include one full bar beyond 17:00 ET because Yahoo's period2 is an exclusive boundary.
+      const closeCoverage = sessionCloseUtc(exitTime) + TIMEFRAME_MINUTES[timeframe] * 60_000;
+      const to = new Date(Math.max(exitTime + padHours * 3_600_000, closeCoverage));
       const candles = await provider.getCandles({ symbol, timeframe, from, to });
       if (candles.length >= 4) {
         return NextResponse.json({ candles, source: "Yahoo Finance", ticker: provider.resolveProviderSymbol(symbol), baseTimeframe: timeframe });
