@@ -397,19 +397,19 @@ export function visibleLogicalBars(range: { from: number; to: number }): number 
 }
 
 /**
- * Zoomed-out default chart range (issue #82 / Chris decision).
- * Applies a wider default range than fitWindow (at least 45 bars, typically 2.5× the fitted window),
- * clamped to the loaded candles. The range width is `to - from`; to show every loaded bar,
- * `to` is `barCount` (not `barCount - 1`), so 45 loaded candles still yield 45 visible bars.
+ * Opening chart range: the standard trade window (`fitWindow`), with modest
+ * lead-in and after-exit context, at `max(45, the trade's own window)`.
+ * No extra zoom-out multiplier. Clamped to the loaded candles. The range width
+ * is `to - from`; to show every loaded bar, `to` is `barCount` (not `barCount - 1`),
+ * so 45 loaded candles still yield 45 visible bars.
  */
 export function defaultVisibleRange(
   baseFitRange: { from: number; to: number },
   barCount: number,
-  multiplier = 2.5,
   minBars = MIN_FITTED_BARS,
 ): { from: number; to: number } {
   const fittedBars = Math.max(1, visibleLogicalBars(baseFitRange));
-  const targetBars = Math.max(minBars, Math.round(fittedBars * multiplier));
+  const targetBars = Math.max(minBars, fittedBars);
   const maxTo = Math.max(0, barCount);
 
   if (barCount <= targetBars) {

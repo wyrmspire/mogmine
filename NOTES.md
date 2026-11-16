@@ -48,6 +48,11 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — integration/batch6 default is the 45-bar trade window
+Did:      Opening visible range is the standard `fitWindow` (30% lead-in / 50% hold / 20% after-exit) at `max(45, the trade's own window)`. Removed the 2.5× zoom-out multiplier Chris rejected. Fit stays an optional View action. Held-range re-apply after setData is unchanged.
+Files:    `lib/trades.ts`, `lib/__tests__/core.test.ts`, `components/TradeChart.tsx`, `NOTES.md`.
+Left:     Draft PR #107 against main, stacked on #100. Do not merge or deploy.
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch6 sample fixture pad
 Did:      Expanded `fixtures/sample-bars.json` with real unmodified Yahoo 1m bars for the Nov 8–13 Globex week (MES=F / MNQ=F), shared across the ten samples so 1m/5m/15m/1h all open with at least 45 bars. Existing hold-window OHLC is unchanged (fills still snap). `getSampleCandles` serves the shared series by symbol; samples still never fetch at runtime.
 Files:    `fixtures/sample-bars.json`, `lib/candles.ts`, `lib/__tests__/sample-bars.test.ts`, `lib/__tests__/honest-box.test.ts`, `NOTES.md`.

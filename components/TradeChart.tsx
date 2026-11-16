@@ -363,7 +363,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
             && Math.abs(range.from - wanted.from) < 1
             && Math.abs(range.to - wanted.to) < 1;
           if (wanted && !state.userPanned && !matchesDefault) {
-            // The library re-fitted after setData or a resize; put the zoomed-out default back.
+            // The library overwrote the range after setData or a resize; put the default trade window back.
             setProgrammaticRange(state, () => { state.chart.timeScale().setVisibleLogicalRange(wanted); });
             writeVisibleCount(state, wanted);
           } else if (!matchesDefault) {
