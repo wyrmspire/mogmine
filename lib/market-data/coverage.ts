@@ -4,6 +4,45 @@
 import { TIMEFRAME_MINUTES, expectedInsideBarTimes } from "../trades.ts";
 import type { Candle, Timeframe } from "../trades.ts";
 
+export interface TradeWindowCoverage {
+  /** The bar that holds the entry fill is present. */
+  entryBar: boolean;
+  /** The bar that holds the exit fill is present. */
+  exitBar: boolean;
+  /** Open times of expected fully-inside bars that are missing, in order. */
+  missingInside: number[];
+}
+
+/**
+ * Break a payload down against the trade window: the bar that holds the entry fill, the bar that
+ * holds the exit fill, and every bar that is entirely inside the hold (from the shared
+ * `expectedInsideBarTimes`). Bar times are open times in UTC milliseconds, the same unit as
+ * `Candle.time`. Invalid trade times report nothing present.
+ */
+export function tradeWindowCoverage(candles: Candle[], entryMs: number, exitMs: number, timeframe: Timeframe, symbol?: string): TradeWindowCoverage {
+  if (!Number.isFinite(entryMs) || !Number.isFinite(exitMs) || exitMs <= entryMs) {
+    return { entryBar: false, exitBar: false, missingInside: [] };
+  }
+  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
+  const present = new Set(candles.map((bar) => bar.time));
+  const missingInside = expectedInsideBarTimes(entryMs, exitMs, barMs, symbol).filter((time) => !present.has(time));
+  return {
+    entryBar: present.has(Math.floor(entryMs / barMs) * barMs),
+    exitBar: present.has(Math.floor(exitMs / barMs) * barMs),
+    missingInside,
+  };
+}
+
+/**
+ * True when the payload anchors the trade: the entry bar and the exit bar are both present
+ * (AC-07). A payload can anchor the trade and still have gaps inside the hold; those are drawn
+ * as gaps and counted on screen, not rejected.
+ */
+export function anchorsTradeWindow(candles: Candle[], entryMs: number, exitMs: number, timeframe: Timeframe, symbol?: string): boolean {
+  const coverage = tradeWindowCoverage(candles, entryMs, exitMs, timeframe, symbol);
+  return coverage.entryBar && coverage.exitBar;
+}
+
 /**
  * True when the payload has every bar needed to chart the trade window at this timeframe:
  * the bar that holds the entry fill, the bar that holds the exit fill, and every bar that is
@@ -14,15 +53,6 @@ import type { Candle, Timeframe } from "../trades.ts";
  */
 export function coversTradeWindow(candles: Candle[], entryMs: number, exitMs: number, timeframe: Timeframe, symbol?: string): boolean {
   if (!Number.isFinite(entryMs) || !Number.isFinite(exitMs) || exitMs <= entryMs) return false;
-  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
-  const present = new Set(candles.map((bar) => bar.time));
-  const required = new Set<number>([
-    Math.floor(entryMs / barMs) * barMs,
-    Math.floor(exitMs / barMs) * barMs,
-    ...expectedInsideBarTimes(entryMs, exitMs, barMs, symbol),
-  ]);
-  for (const time of required) {
-    if (!present.has(time)) return false;
-  }
-  return true;
+  const coverage = tradeWindowCoverage(candles, entryMs, exitMs, timeframe, symbol);
+  return coverage.entryBar && coverage.exitBar && coverage.missingInside.length === 0;
 }
