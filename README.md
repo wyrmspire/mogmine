@@ -89,6 +89,8 @@ Read the planning documents in order for the complete technical and product spec
    The `ui/phased-improvements` branch: what phases 1–3 built, the proposed phases 4–6 (starting with a chart window sized from each trade's own duration), and the questions waiting for the owner.
 15. **[15 — Trade Document & Render Grammar](docs/15-trade-document-and-render-grammar.md)**  
    The `mogmine.trade.v1` event document, how it becomes marks for the chart, Trade Card and AI review, the plan, actual and excursion layers, stop paths, hindsight and the seven example trades in `fixtures/trades/`. Open decisions `OD-30`–`OD-34`.
+16. **[16 — Floor Roadmap](docs/16-floor-roadmap.md)**  
+   The ordered work list from the owner's 2026-11-16 review (`R-01`–`R-09`): pinch zoom, fresh-candle retry, open trades, then the archive, trades in Supabase, the assistant endpoint, playbooks, stats and challenges. Each step names its files, its limits and its done-when.
 
 ---
 
