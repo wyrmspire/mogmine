@@ -2,8 +2,9 @@
 // A later touch is the first bar after the exit whose range reaches a continued target or stop.
 // "Neither" is judged against the session close when those bars exist, otherwise against the bars on hand.
 
-import { sessionDate } from "./session.ts";
-import type { Candle, TradeDirection, TradeRecord } from "./trades.ts";
+import { sessionCloseUtc } from "./session.ts";
+import { TIMEFRAME_MINUTES } from "./trades.ts";
+import type { Candle, Timeframe, TradeDirection, TradeRecord } from "./trades.ts";
 
 export type ChartDetailLevel = "low" | "medium";
 
@@ -27,26 +28,6 @@ export interface HindsightFact {
   /** First later touch, if exactly one kind is reached first. */
   first: LaterTouch | null;
   sentence: string;
-}
-
-function zonedCloseUtc(session: string): number {
-  // Session close is 17:00 America/New_York on the session date (same convention as the archive coverage).
-  const [year, month, day] = session.split("-").map(Number);
-  const utcGuess = Date.UTC(year, month - 1, day, 17, 0);
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const asIfUtc = (ms: number) => {
-    const parts = Object.fromEntries(fmt.formatToParts(new Date(ms)).map((part) => [part.type, part.value]));
-    return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour) % 24, Number(parts.minute));
-  };
-  return utcGuess - (asIfUtc(utcGuess) - utcGuess);
 }
 
 function barReaches(bar: Candle, price: number, side: "high" | "low"): boolean {
@@ -90,7 +71,11 @@ export function laterTouch(
   return null;
 }
 
-export function buildHindsight(trade: Pick<TradeRecord, "direction" | "exit_time" | "stop_loss_price" | "planned_target_price">, candles: Candle[]): HindsightFact {
+export function buildHindsight(
+  trade: Pick<TradeRecord, "direction" | "exit_time" | "stop_loss_price" | "planned_target_price">,
+  candles: Candle[],
+  timeframe: Timeframe = "1m",
+): HindsightFact {
   const exitTime = Date.parse(trade.exit_time);
   const target = trade.planned_target_price == null
     ? null
@@ -99,9 +84,9 @@ export function buildHindsight(trade: Pick<TradeRecord, "direction" | "exit_time
     ? null
     : laterTouch(candles, exitTime, trade.stop_loss_price, "stop", trade.direction);
 
-  const sessionClose = zonedCloseUtc(sessionDate(trade.exit_time));
+  const sessionClose = sessionCloseUtc(trade.exit_time);
   const lastBar = candles.reduce((latest, bar) => (bar.time > latest ? bar.time : latest), 0);
-  const incomplete = lastBar < sessionClose - 60_000;
+  const incomplete = lastBar + TIMEFRAME_MINUTES[timeframe] * 60_000 < sessionClose;
 
   let outcome: HindsightOutcome;
   let first: LaterTouch | null = null;
@@ -141,4 +126,21 @@ export function laterTouchLabel(touch: LaterTouch): string {
   const tag = touch.kind === "target" ? "TP" : "SL";
   const minutes = Math.max(1, Math.round(touch.delayMs / 60_000));
   return `${tag} +${minutes}m`;
+}
+
+/** Full text shown when the hindsight block is expanded (same at Low and Medium). */
+export function hindsightExpandedText(fact: Pick<HindsightFact, "sentence" | "target" | "stop">): string {
+  return [
+    fact.sentence,
+    fact.target ? `${laterTouchLabel(fact.target)}.` : "",
+    fact.stop ? `${laterTouchLabel(fact.stop)}.` : "",
+  ].filter(Boolean).join(" ");
+}
+
+/**
+ * Collapsed copy for the hindsight block. Low shows the one-line summary (the sentence itself);
+ * Medium keeps the helper line that points at the one-tap expand. Display only: never affects R or stats.
+ */
+export function hindsightCollapsedText(fact: Pick<HindsightFact, "sentence">, detailLevel: ChartDetailLevel): string {
+  return detailLevel === "low" ? fact.sentence : "Hindsight is one tap away and never changes R or the grade of the decision.";
 }

@@ -48,6 +48,69 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — integration/batch5
+Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
+Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.
+
+
+### 2026-11-15 — agent (Antigravity) — Runtime sample bars from fixture (#89)
+Did:      Issue #89: sample trades render 1m bars from `fixtures/sample-bars.json` at runtime with no Yahoo or /api/market-data calls. Restored truthful CandleSource "Demo fixture" and updated Tune copy to match. Real trades continue fetching Yahoo and caching in IndexedDB. Added locking tests in `lib/__tests__/sample-bars.test.ts`.
+Files:    `lib/candles.ts`, `lib/trades.ts`, `lib/store.ts`, `components/TradeDetail.tsx`, `components/TuneScreen.tsx`, `lib/__tests__/sample-bars.test.ts`, `NOTES.md`.
+Verified: `npm test` 85/85, `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing PostCSS warning), `npm run build` (8/8 static pages).
+Left:     Draft PR against main (#89), do-not-merge-without-Chris.
+
+### 2026-11-15 — Codex — Market data, branch `feat/86-candle-refetch` (#86)
+Did:      Refetch matching candle caches only after their 17:00 New York hindsight window closes and only when bar coverage is short; replace the same signature-keyed IndexedDB entry.
+Also:     Shared DST-safe session-close math with hindsight, made coarse final bars count through close, and extended overnight Yahoo request windows through the assigned close.
+Tests:    Fake cache/clock cases cover open, closed-partial, closed-complete, coarse bars, signature changes, DST, maintenance-hour and weekend assignment.
+Verified: `npm test` 88/88; typecheck and build pass; lint 0 errors/1 existing PostCSS warning.
+Left:     Nothing open for #86. No fixtures, chart styling, R, stats, deployment, M0 archive, or PR #71 changed.
+
+### 2026-11-15 — agent (Claude Haiku 5.5) — docs stale cleanup, branch `feat/91-docs-stale` (#91)
+Did:      CONTRIBUTING §2 says the app is live on `main` (no "no code yet"). docs/14 intro and table show Phases 1–5 on `main`, Phase 6 not started. docs/12 §9 and `OD-23` restated to D-010 (faint red/green plan fills, stronger result-colour actual band, no outline, no purple or teal). `OD-33` marked restated, owner to review.
+Left:     PR for #91 is do-not-merge-without-Chris. Archived-box outline (docs/12 §9) is not covered by D-010 and is unchanged. docs/15 still lists an optional `PLAN` tag; D-010 does not.
+
+### 2026-11-15 — agent (Antigravity) — App shell and notes, branch `feat/17-tune-shield-risk`
+Did:      Shield mode masks Tune risk budget: heading hides ($ USD), readout and input display "Hidden", quick chips omitted, and hint explains turning Shield off changes the dollar amount. Input is disabled/readOnly with accessible label. Pure display helper added with focused tests.
+Files:    `lib/prefs.ts`, `components/TuneScreen.tsx`, `app/globals.css`, `lib/__tests__/tune-prefs.test.ts`, `NOTES.md`.
+Verified: `npm test` 83/83 passed; `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning), `npm run build` passed.
+Left:     PR against main, do-not-merge-without-Chris.
+
+### 2026-11-15 — agent (Claude Haiku) — issue #90 market-data coverage (branch `feat/90-market-data-coverage`)
+Did:      `/api/market-data` accepts a timeframe only when `coversTradeWindow` (new `lib/market-data/coverage.ts`) holds: entry bar, exit bar and every bar inside the hold from the shared `expectedInsideBarTimes`. Thin or gapped sets fall through, then 404. `lib/candles.ts` uses the same test for cached and fresh sets. `lib/trade-bar-validation.ts` now imports the shared helper instead of its private copy.
+Verified: `npm test` 89 pass (was 81); typecheck clean; lint 0 errors, 1 pre-existing warning; `npm run build` passes.
+Left:     Not run against live Yahoo. Trades that span the 17:00–18:00 ET maintenance break get no complete set until #65 narrows the expected bars to Globex hours, so they will 404 instead of showing a thin chart. Owner decides whether full-bar coverage is too strict.
+Watch:    Strict coverage can push a trade with one 1m gap to 5m or 1h. Chris to confirm before merge (PR is do-not-merge-without-Chris).
+
+### 2026-11-15 — agent (Codex) — Core math, branch `feat/65-session-coverage`
+Did:      Issue #65: shared MES/MNQ expected-bar logic now omits the regular 17:00–18:00 ET halt and Friday 17:00–Sunday 18:00 ET weekend closure for coverage and excursions.
+Files:    `lib/session.ts`, `lib/{trade-bar-validation,trades}.ts`, `lib/__tests__/session-coverage.test.ts`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` 86/86; typecheck/build pass; lint 0 errors/1 existing PostCSS warning.
+Left:     Holidays and early closes still appear as missing evidence until an authoritative calendar is chosen (`OD-35`). Do not merge without Chris.
+
+### 2026-11-15 — agent (Grok Bot) — Chart + App shell, branch `feat/87-trade-card-current-view` (#87)
+Did:      Trade Card now rebuilds from the live screenshot after pan, pinch, fit, or ‹30/30› when the sheet is already open (AC-10). Stacks on #88 (lazy build); notes typing still does not encode. A leftover blob is dropped on a closed-sheet redraw so the next open is current.
+Files:    `components/TradeDetail.tsx`, `NOTES.md`.
+Verified: `npm test` / typecheck / lint / build to be recorded in the PR.
+Left:     None for AC-10. Native share on a real phone is still AC-11.
+
+### 2026-11-15 — agent (Grok Bot) — Chart + App shell, branch `feat/88-trade-card-lazy` (#88)
+Did:      Trade Card PNG is built lazily when the sheet opens (or when Shield is toggled on an open sheet), not on every Trade Detail redraw. A notes typation pause no longer re-screenshots the chart or re-encodes the 1080×1350 card. The Trade Card button is enabled once candles are ready; the sheet shows its existing preparing state until the blob lands.
+Files:    `lib/shareCard.ts`, `lib/__tests__/core.test.ts`, `components/TradeDetail.tsx`, `NOTES.md`.
+Verified: `npm test` / typecheck / lint / build to be recorded in the PR.
+Left:     After pan, pinch, or ‹30/30› an already-open (or previously prepared) card can still be stale until the sheet is opened again — that is issue #87 (AC-10), a sibling branch.
+
+### 2026-11-15 — agent (Claude Haiku 5.5) — `feat/hindsight-low-summary`
+Did:      Low chart detail no longer hides the after-exit hindsight. It now shows the hindsight sentence as one compact line (tap reveals the full text, sentence plus `TP +Nm` / `SL +Nm`). Medium is unchanged (button, one-tap helper, expand). Hindsight is computed whenever the chart is ready. Chart primitive untouched: Low still hides the dotted continuation.
+Files:    `lib/hindsight.ts` (`hindsightCollapsedText`, `hindsightExpandedText`), `lib/__tests__/hindsight.test.ts`, `components/TradeDetail.tsx`, `app/globals.css` (`.hindsight-line`), `NOTES.md`.
+Watch:    Low one-liner truncates with an ellipsis on phones; the full text is one tap away. Still does not change R, P&L, outcome or stats.
+Open:    Do-not-merge without Chris (PR title and body say so).
+
+### 2026-11-15 — agent (Grok Bot) — Chart + App shell, branch `feat/77-pnl-first-load` (#77)
+Did:      First-load P&L flicker. Trade Detail (and Feed) painted `serverState` sample money before `hydrateJournal` ran in `useEffect`, so a stale device copy could replace — or be replaced by — the fixture P&L after first paint. Both screens now wait for hydration (as Today/Review already did). Hydration runs in `useLayoutEffect`. Stale sample prices are still refreshed in one `hydrateJournal` update; tested with an MNQ copy that priced at $140 vs the fixture $720.
+Left:     PR against main, do-not-merge-without-Chris. The reported $140 then $171 pair is not a current fixture P&L; the locked case is stale-device $140 vs current fixture math, with no post-paint jump.
+
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch4 cleanup before merge
 Did:      Stripped UX/Invariant codes from Tune captions (plain wording only). Trade Card outcome subline now wraps instead of ellipsizing, so R and points stay visible in the preview.
 Left:     Ready for Chris's approved merge of PR #76. Do not squash. PR #71 stays open.

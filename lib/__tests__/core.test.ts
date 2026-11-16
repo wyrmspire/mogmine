@@ -8,7 +8,7 @@ import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, dayStats, filtersToQuery, parseFilters } from "../selectors.ts";
 import { demoTrades } from "../fixtures.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
-import { shareCardContent, shareCardFileName } from "../shareCard.ts";
+import { shareCardContent, shareCardFileName, shouldBuildShareCard } from "../shareCard.ts";
 
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
@@ -509,6 +509,18 @@ test("Shield / privacy mode omits dollars and contract size in descriptions and 
   assert.match(openCard.direction, /3 contracts/);
 });
 
+test("encodes the Trade Card lazily, never on a notes keystroke", () => {
+  assert.equal(shouldBuildShareCard("notes", false), false);
+  assert.equal(shouldBuildShareCard("notes", true), false);
+  assert.equal(shouldBuildShareCard("sheet-open", false), true);
+  assert.equal(shouldBuildShareCard("share", false), true);
+  assert.equal(shouldBuildShareCard("privacy", true), true);
+  assert.equal(shouldBuildShareCard("chart-render", false), false);
+  assert.equal(shouldBuildShareCard("view-change", false), false);
+  assert.equal(shouldBuildShareCard("view-change", true), true);
+  assert.equal(shouldBuildShareCard("chart-render", true), true);
+});
+
 test("journal backup round-trips trades (notes, prices, tags, checklist, playbook) and preserves sample labels", () => {
   const realTrade = normalizeTrade({
     id: "real-trade-1",
@@ -536,6 +548,7 @@ test("journal backup round-trips trades (notes, prices, tags, checklist, playboo
     review_status: "reviewed",
     is_sample: false,
   });
+
   const sampleTrade = normalizeTrade({
     id: "mes-opening-scalp",
     symbol: "MES",

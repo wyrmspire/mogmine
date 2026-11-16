@@ -1,11 +1,14 @@
-// Core trade types and money math. Pure: no I/O, no DOM, no imports.
+// Core trade types and money math. Pure: no I/O, no DOM.
 // Names follow docs/06 (interim canonical under OD-1).
+
+import { expectedInsideBarTimes } from "./session.ts";
+export { expectedInsideBarTimes } from "./session.ts";
 
 export type TradeDirection = "LONG" | "SHORT";
 export type TradeStyle = "scalp" | "session_90m" | "investment";
 export type Timeframe = "1m" | "5m" | "15m" | "1h";
 export type ReviewStatus = "new" | "tagged" | "reviewed";
-export type CandleSource = "Yahoo Finance";
+export type CandleSource = "Yahoo Finance" | "Demo fixture";
 
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 export const TIMEFRAME_MINUTES: Record<Timeframe, number> = { "1m": 1, "5m": 5, "15m": 15, "1h": 60 };
@@ -403,19 +406,6 @@ export interface Excursions {
   coverage: ExcursionCoverage;
 }
 
-/** Open times of bars that are entirely inside the hold, using execution timestamps only. */
-export function expectedInsideBarTimes(entry: number, exit: number, barMs: number): number[] {
-  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMs <= 0) return [];
-  const times: number[] = [];
-  let time = Math.ceil(entry / barMs) * barMs;
-  if (time < entry) time += barMs;
-  while (time + barMs <= exit) {
-    times.push(time);
-    time += barMs;
-  }
-  return times;
-}
-
 /**
  * MAE and MFE from bars that are fully inside the hold.
  *
@@ -439,7 +429,7 @@ export function excursions(
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) return null;
   const barMs = barMinutes * 60_000;
-  const expected = expectedInsideBarTimes(entry, exit, barMs);
+  const expected = expectedInsideBarTimes(entry, exit, barMs, trade.symbol);
 
   const byTime = new Map<number, Candle>();
   for (const bar of candles) {
@@ -595,7 +585,9 @@ export function annotationKey(trade: Partial<Pick<TradeRecord, "note" | "quick_t
 
 /** Fill in fields added after a record was stored, so old device data keeps loading. */
 export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id" | "symbol" | "direction" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): TradeRecord {
-  const hadNonMarketCandles = raw.candle_source != null && raw.candle_source !== "Yahoo Finance";
+  const isSample = raw.is_sample === true;
+  const validSource = raw.candle_source === "Yahoo Finance" || (raw.candle_source === "Demo fixture" && isSample);
+  const hadNonMarketCandles = raw.candle_source != null && !validSource;
   // `mes` and `MES` share one spec. An unknown symbol is kept as typed, and its money shows as null.
   const symbol = canonicalSymbol(raw.symbol) ?? raw.symbol;
   const canonicalTicker = specFor(symbol)?.yahooTicker;
@@ -626,7 +618,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;
-  if (trade.candle_source !== "Yahoo Finance") trade.candle_source = undefined;
+  if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
   return trade;

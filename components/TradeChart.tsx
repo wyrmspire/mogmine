@@ -212,7 +212,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       const isLong = tr.direction === "LONG";
       const scratch = isScratch(tr);
       const showContinuation = p.detailLevel !== "low";
-      const fact = showContinuation ? buildHindsight(tr, bars) : null;
+      const fact = showContinuation ? buildHindsight(tr, bars, barTimeframe) : null;
       const laterTouches = [fact?.target, fact?.stop].flatMap((touch) => touch ? [{ time: toTime(touch.time), kind: touch.kind }] : []);
       const config: PositionBoxConfig = {
         entryTime: toTime(alignment.entryBar), exitTime: toTime(alignment.exitBar),

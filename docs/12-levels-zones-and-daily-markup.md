@@ -343,12 +343,12 @@ The 4/6/8-point chips in UX-36 are far tighter than this owner's risk. Derive th
 
 | Style | When | Look | Price axis | Markers and path |
 | :--- | :--- | :--- | :--- | :--- |
-| **Planned / theoretical** | A plan scenario, a "what if" or a missed-move box | Purple frame (`--box-planned`), **solid** strokes with a `PLAN` tag, profit and risk fills at half the user opacity | Off | No fill markers. Entry, stop and target ticks only. |
-| **Actual** | A trade built from fills (manual entry included) | Teal frame (`--box-actual`), **solid** strokes, fills at `--position-box-opacity` | On for the selected trade only | Fill markers, execution path, P&L or R pill |
+| **Planned / theoretical** | A plan scenario, a "what if" or a missed-move box. Faint red (stop) and faint green (target) fills only, no outline, no purple. Fills are weaker than the actual band (D-010, [docs/15 §1](15-trade-document-and-render-grammar.md)). | Off | No fill markers. Entry, stop and target ticks only. |
+| **Actual** | A trade built from fills (manual entry included) | Stronger fill in the result colour (green, red or gray), no frame, at `--position-box-opacity` (D-010) | On for the selected trade only | Fill markers, execution path, P&L or R pill |
 | **Archived / history** | Older trades on a day or week chart | Thin dotted neutral outline, fill alpha ≤ 0.10, no labels | **Never** (`priceAxisViews()` returns `[]`) | None. Tap to expand to Actual. |
 
 > [!NOTE]
-> **No dash conflict with UX-80.** Planned versus actual is carried by colour (purple vs teal) plus the `PLAN` tag, never by dash pattern, so UX-80's solid-profit / dashed-risk borders stay as written. Owner accepted this on 2026-11-14 (`OD-23`).
+> **Restated to D-010 (issue #91).** Planned versus actual is carried by fill strength and result colour, with no outline on either, so there is no dash pattern to conflict with UX-80. The earlier purple-versus-teal outlined look and its `PLAN` tag were superseded by D-010; `OD-23` and `OD-33` in [DECISIONS.md](../DECISIONS.md) record the change.
 
 Missed-move and test-tool trades never appear in the journal feed or its statistics. They use `is_sample` ([10 §5](10-yahoo-first-build-plan.md#5-trades-without-a-broker)) or the planned style. The owner does not want automated-strategy trades in the review tool.
 

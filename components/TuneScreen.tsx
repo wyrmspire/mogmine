@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, KeyboardEvent, useRef, useState } from "react";
-import { GOLD_PRESETS, setPrefs, usePrefs } from "@/lib/prefs";
+import { GOLD_PRESETS, getTuneRiskBudgetDisplay, setPrefs, usePrefs } from "@/lib/prefs";
 import type { GoldPreset } from "@/lib/prefs";
 import { buildBackup, parseBackupFile, replaceTrades, useJournal } from "@/lib/store";
 import type { ParseBackupResult } from "@/lib/store";
@@ -44,6 +44,7 @@ export function TuneScreen() {
 
   const [draftRisk, setDraftRisk] = useState<string | null>(null);
   const riskDisplay = draftRisk ?? String(prefs.riskBudgetUsd);
+  const riskBudgetDisplay = getTuneRiskBudgetDisplay(prefs.shield, prefs.riskBudgetUsd);
 
   const onRiskChange = (event: ChangeEvent<HTMLInputElement>) => {
     const val = event.target.value;
@@ -259,39 +260,51 @@ export function TuneScreen() {
         <div className="form-grid">
           <div className="field wide">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Risk budget ($ USD)</span>
+              <span>{riskBudgetDisplay.label}</span>
               <b className="num" style={{ fontVariantNumeric: "tabular-nums", color: "var(--gold-light)", fontSize: "0.8125rem" }}>
-                ${prefs.riskBudgetUsd}
+                {riskBudgetDisplay.valueText}
               </b>
             </div>
-            <input
-              type="number"
-              min="10"
-              max="100000"
-              step="25"
-              value={riskDisplay}
-              aria-label="Risk budget in US dollars"
-              onChange={onRiskChange}
-              onBlur={onRiskBlur}
-              onKeyDown={onRiskKeyDown}
-            />
-            <div className="suggest" style={{ marginTop: 4 }}>
-              {RISK_SUGGESTIONS.map((amount) => (
-                <button
-                  key={amount}
-                  type="button"
-                  aria-pressed={prefs.riskBudgetUsd === amount}
-                  onClick={() => {
-                    setDraftRisk(null);
-                    setPrefs({ riskBudgetUsd: amount });
-                  }}
-                >
-                  ${amount}
-                </button>
-              ))}
-            </div>
+            {riskBudgetDisplay.isEditable ? (
+              <input
+                type="number"
+                min="10"
+                max="100000"
+                step="25"
+                value={riskDisplay}
+                aria-label={riskBudgetDisplay.inputAriaLabel}
+                onChange={onRiskChange}
+                onBlur={onRiskBlur}
+                onKeyDown={onRiskKeyDown}
+              />
+            ) : (
+              <input
+                type="text"
+                value={riskBudgetDisplay.inputValue}
+                disabled
+                readOnly
+                aria-label={riskBudgetDisplay.inputAriaLabel}
+              />
+            )}
+            {riskBudgetDisplay.isEditable && (
+              <div className="suggest" style={{ marginTop: 4 }}>
+                {RISK_SUGGESTIONS.map((amount) => (
+                  <button
+                    key={amount}
+                    type="button"
+                    aria-pressed={prefs.riskBudgetUsd === amount}
+                    onClick={() => {
+                      setDraftRisk(null);
+                      setPrefs({ riskBudgetUsd: amount });
+                    }}
+                  >
+                    ${amount}
+                  </button>
+                ))}
+              </div>
+            )}
             <span className="hint">
-              Used by manual entry to suggest stop distance and by Trade Detail risk chips (default $250).
+              {riskBudgetDisplay.hint}
             </span>
           </div>
 
@@ -350,7 +363,7 @@ export function TuneScreen() {
           Your journal lives in this browser&apos;s storage ({realCount} {realCount === 1 ? "trade" : "trades"}
           {sampleCount > 0 ? ` + ${sampleCount} ${sampleCount === 1 ? "sample" : "samples"}` : ""}); clearing site data deletes it.
           Backups save your trades (notes, prices, tags, checklist, playbook) and preferences to a local JSON file with no network upload.
-          Candle caches stay in IndexedDB and are not inside the file—charts re-fetch candles from Yahoo Finance when opened (and samples keep their offline fixture bars).
+          Candle caches stay in IndexedDB and are not inside the file—charts for real trades re-fetch candles from Yahoo Finance when opened (and samples keep their offline fixture bars).
         </p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
@@ -390,7 +403,7 @@ export function TuneScreen() {
                 {pending.sampleCount > 0 ? ` and ${pending.sampleCount} labelled ${pending.sampleCount === 1 ? "sample" : "samples"}` : ""}
               </b>
               {pending.exportedAt ? ` exported ${formatDateTime(pending.exportedAt, prefs.timeZone)}` : ""}
-              {pending.prefs ? ", plus saved preferences" : ""}. Charts will re-fetch Yahoo Finance candles when opened.
+              {pending.prefs ? ", plus saved preferences" : ""}. Charts for real trades will re-fetch Yahoo Finance candles when opened (and samples keep their offline fixture bars).
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
               <button type="button" className="btn-primary" onClick={confirmRestore}>

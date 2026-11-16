@@ -1,7 +1,7 @@
 // Issue #37: after-the-exit later touches and the held-to-plan hindsight fact. Never changes R.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildHindsight, laterTouch, laterTouchLabel } from "../hindsight.ts";
+import { buildHindsight, hindsightCollapsedText, hindsightExpandedText, laterTouch, laterTouchLabel } from "../hindsight.ts";
 import { rMultiple, tradePnl } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
 
@@ -63,6 +63,12 @@ test("later touch: neither by the session close", () => {
   assert.match(fact.sentence, /neither the target nor the stop was reached by the session close/);
 });
 
+test("a coarse final bar covers through the session close", () => {
+  const candles = [bar(Date.parse("2026-11-10T21:55:00.000Z"), 5997, 6003)];
+  const fact = buildHindsight(trade, candles, "5m");
+  assert.equal(fact.incomplete, false);
+});
+
 test("later touch: neither in the bars on hand when the session close is not covered", () => {
   const candles = after([[5, 5996, 6004]]);
   const fact = buildHindsight(trade, candles);
@@ -109,4 +115,17 @@ test("hindsight never changes R or P&L", () => {
   assert.equal(rMultiple(record), before.r);
   assert.equal(tradePnl(record), before.pnl);
   assert.equal(before.r, 0.2);
+});
+
+test("low detail: collapsed copy is the one-line sentence, medium keeps the one-tap helper", () => {
+  const fact = buildHindsight(trade, after([[38, 6008, 6012]]));
+  assert.equal(hindsightCollapsedText(fact, "low"), fact.sentence);
+  assert.equal(hindsightCollapsedText(fact, "medium"), "Hindsight is one tap away and never changes R or the grade of the decision.");
+});
+
+test("expanded text is sentence plus later-touch labels, identical at both detail levels", () => {
+  const fact = buildHindsight(trade, after([[5, 5998, 6004], [38, 6008, 6012], [50, 5988, 6000]]));
+  assert.equal(hindsightExpandedText(fact), `${fact.sentence} TP +38m. SL +50m.`);
+  const none = buildHindsight({ ...trade, stop_loss_price: null, planned_target_price: null }, []);
+  assert.equal(hindsightExpandedText(none), none.sentence);
 });

@@ -28,7 +28,7 @@ For every developer and every AI agent. [AGENTS.md](AGENTS.md) holds the rules t
 
 ## 2. Lanes
 
-There is no code yet. This layout is proposed so that parallel work does not collide. Confirm it when scaffolding, then update this table.
+The app is live: `main` holds the code, deployed at `mogmine.vercel.app`. Today it is one Next.js app at the repo root (`app/`, `components/`, `lib/`), not the folders below. The table is the layout to split into when a second deployable exists (see the note below). Claim a lane in [NOTES.md](NOTES.md) before you start.
 
 > **Start smaller.** With no broker account and no listener (`D-009`), there is only one deployable. Begin as a single Next.js app with a `core` folder of pure functions, and split into the layout below when a second deployable exists ([docs/10 §7](docs/10-yahoo-first-build-plan.md#7-step-back-is-this-the-right-way-to-build-it), `OD-16`). The lanes still apply as folders.
 

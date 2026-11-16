@@ -179,3 +179,18 @@ export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, 
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Image export failed")), "image/png");
   });
 }
+
+/** Why a Trade Card encode was requested. Notes typing must never encode a PNG. */
+export type ShareCardBuildReason = "sheet-open" | "share" | "privacy" | "view-change" | "notes" | "chart-render";
+
+/**
+ * Encode the 1080×1350 Trade Card only when the trader is looking at or sharing it,
+ * or when an already-open sheet must pick up a new chart view. A notes keystroke
+ * never encodes. A background chart redraw encodes only if the sheet is open.
+ */
+export function shouldBuildShareCard(reason: ShareCardBuildReason, sheetOpen: boolean): boolean {
+  if (reason === "notes") return false;
+  if (reason === "sheet-open" || reason === "share" || reason === "privacy") return true;
+  if (reason === "view-change" || reason === "chart-render") return sheetOpen;
+  return false;
+}

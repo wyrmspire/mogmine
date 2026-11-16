@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { AddTradeSheet } from "./AddTradeSheet";
 import { HomeScreenHint } from "./HomeScreenHint";
 import { hydratePrefs, setPrefs, usePrefs } from "@/lib/prefs";
@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const toast = useToast();
   const online = useOnline();
 
-  useEffect(() => { hydratePrefs(); hydrateJournal(); }, []);
+  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); }, []);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   const waiting = journal.hydrated ? withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status === "new").length : 0;
