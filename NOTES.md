@@ -50,6 +50,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-16 — agent (Claude Code) — R-02 fresh-trade candles retry, Market data lane
+Did:      `R-02`: pure `nextCandleRetryAt` and `exitIsFresh` in `lib/candles.ts`; `lastAttemptAt` on `CandleEntry`, set when a load starts; `ensureCandles` starts a new load when a retry is due (never while one is in flight) and a due refresh skips the "cache is final for now" shortcut; a refetch with fewer bars keeps the cache. Trade Detail calls `ensureCandles` every 60 s while open and on `visibilitychange`, never for samples; a `none` state shows "Yahoo has not published these bars yet" (exit < 60 min) or "No candles loaded for this trade" and a 44px `Retry`. `anchorsTradeWindow` is unchanged.
+Files:    `lib/candles.ts`, `components/TradeDetail.tsx`, `lib/__tests__/candle-cache.test.ts`, `docs/08-ux-notes-viewing-and-journaling.md` (§4 state row), `NOTES.md`.
+Checked:  typecheck, lint, test, build (see PR). Not verified on a phone or against a live session.
+Left:     Yahoo's live-session lag for `MES=F` `1m` is still unmeasured: the work ran at 17:15 ET, inside the daily maintenance break. docs/10 §2 still lists it as unknown.
+
 ### 2026-11-16 — agent (Claude Code) — R-01 pinch zoom, Chart lane
 Did:      `R-01`: `.chart-host` now has `touch-action: pan-y` (was `pan-y pinch-zoom`), so a two-finger pinch on the chart goes only to the chart (UX-44). Nothing else changed: viewport meta, `handleScroll`/`handleScale` and `vertTouchDrag: false` untouched.
 Files:    `app/globals.css`, `NOTES.md`.

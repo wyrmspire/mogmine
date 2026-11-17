@@ -1,7 +1,7 @@
 // Issue #86 / AC-06: a matching cache is reusable, but it is not final until the hindsight window closes.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadCachedCandles } from "../candles.ts";
+import { exitIsFresh, loadCachedCandles, nextCandleRetryAt } from "../candles.ts";
 import type { CandleLoadDependencies, StoredCandles } from "../candles.ts";
 import { sessionCloseUtc } from "../session.ts";
 import { candleCacheKey, candleSignature } from "../trades.ts";
@@ -142,4 +142,64 @@ test("session close stays at 17:00 New York across DST and follows evening sessi
   assert.equal(sessionCloseUtc("2026-11-10T20:00:00.000Z"), Date.parse("2026-11-10T22:00:00.000Z"));
   assert.equal(sessionCloseUtc("2026-11-10T22:30:00.000Z"), Date.parse("2026-11-11T22:00:00.000Z"));
   assert.equal(sessionCloseUtc("2026-11-13T23:30:00.000Z"), Date.parse("2026-11-16T22:00:00.000Z"));
+});
+
+// R-02 (docs/16): fresh-trade candles retry and refresh.
+const noneEntry = { status: "none" as const, candles: [] as Candle[], baseTimeframe: "1m" as const };
+const readyEntry = (candles: Candle[]) => ({ status: "ready" as const, candles, baseTimeframe: "1m" as const });
+
+test("R-02: a finished, complete ready set never retries", () => {
+  assert.equal(nextCandleRetryAt(trade, readyEntry(bars(close - minute)), close + minute, close + 2 * minute), null);
+  assert.equal(nextCandleRetryAt(trade, readyEntry(bars(close - minute)), close + minute, close + 24 * 60 * minute), null);
+});
+
+test("R-02: a none entry with an exit under 60 minutes ago retries each minute", () => {
+  const attempt = exit + 2 * minute;
+  assert.equal(nextCandleRetryAt(trade, noneEntry, attempt, attempt + 10_000), attempt + minute);
+  assert.equal(exitIsFresh(trade, exit + 59 * minute), true);
+});
+
+test("R-02: a none entry with an older exit retries every 15 minutes", () => {
+  const attempt = exit + 90 * minute;
+  assert.equal(nextCandleRetryAt(trade, noneEntry, attempt, attempt + minute), attempt + 15 * minute);
+  assert.equal(exitIsFresh(trade, exit + 60 * minute), false);
+  // Days later the backoff stays at 15 minutes, never faster.
+  const later = close + 3 * 24 * 60 * minute;
+  assert.equal(nextCandleRetryAt(trade, noneEntry, later, later), later + 15 * minute);
+});
+
+test("R-02: a ready entry refreshes every 5 minutes while the session is open", () => {
+  const attempt = exit + 10 * minute;
+  assert.equal(nextCandleRetryAt(trade, readyEntry(bars(exit + 8 * minute)), attempt, attempt + minute), attempt + 5 * minute);
+});
+
+test("R-02: a ready set that misses the close after it falls back to the once-per-load refetch", () => {
+  assert.equal(nextCandleRetryAt(trade, readyEntry(bars(exit + 3 * minute)), close + minute, close + 2 * minute), null);
+});
+
+test("R-02: a loading entry is never retried on top of itself", () => {
+  const loading = { status: "loading" as const, candles: [] as Candle[], baseTimeframe: "1m" as const };
+  assert.equal(nextCandleRetryAt(trade, loading, exit, exit + 30 * minute), null);
+});
+
+test("R-02: a due refresh asks the network even when the matching cache covers the trade", async () => {
+  const partial = stored(bars(exit + 3 * minute));
+  const more = bars(exit + 20 * minute);
+  const fake = fakeDependencies(partial, exit + 21 * minute, more);
+
+  const result = await loadCachedCandles(trade, partial.signature, { ...fake.dependencies, refresh: true });
+
+  assert.deepEqual(result?.candles, more);
+  assert.deepEqual(fake.counts(), { requests: 1, writes: 1 });
+});
+
+test("R-02: a refetch with fewer bars keeps the cache", async () => {
+  const cached = stored(bars(exit + 20 * minute));
+  const fewer = bars(exit + 5 * minute);
+  const fake = fakeDependencies(cached, exit + 21 * minute, fewer);
+
+  const result = await loadCachedCandles(trade, cached.signature, { ...fake.dependencies, refresh: true });
+
+  assert.equal(result, cached);
+  assert.deepEqual(fake.counts(), { requests: 1, writes: 0 });
 });
