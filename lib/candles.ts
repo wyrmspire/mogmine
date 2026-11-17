@@ -103,12 +103,14 @@ function put(id: string, entry: CandleEntry) {
   listeners.forEach((listener) => listener());
 }
 
-function adopt(trade: TradeRecord, stored: StoredCandles) {
+function adopt(trade: TradeRecord, stored: StoredCandles, servedFromCache = false) {
   const live = getTrade(trade.id) ?? trade;
   const patch: Partial<TradeRecord> = { candle_source: stored.source };
   patch.sparkline = buildSparkline({ ...live, ...patch }, stored.candles);
   updateTrade(trade.id, patch);
-  const lastAttemptAt = entries.get(trade.id)?.lastAttemptAt ?? Date.now();
+  // A set served from the device cache dates from when it was fetched, so a same-day trade opened
+  // cold refreshes on the next check instead of showing old bars for another 5 minutes (R-02).
+  const lastAttemptAt = servedFromCache ? stored.fetchedAt : entries.get(trade.id)?.lastAttemptAt ?? Date.now();
   put(trade.id, { status: "ready", candles: stored.candles, source: stored.source, baseTimeframe: stored.baseTimeframe, fetching: false, signature: stored.signature, lastAttemptAt });
 }
 
@@ -238,12 +240,14 @@ export async function loadCachedCandles(
 
 async function load(trade: TradeRecord, signature: string, refresh: boolean) {
   if (trade.is_sample) return; // Safeguard: samples never fetch from the network (issue #89)
+  let askedNetwork = false;
   try {
     const stored = await loadCachedCandles(trade, signature, {
       read: (key) => idbGet<StoredCandles>(key),
       write: (key, value) => idbSet(key, value),
       request: async (requestedTrade) => {
         if (requestedTrade.exit_time == null) throw new Error("unavailable");
+        askedNetwork = true;
         const params = new URLSearchParams({ symbol: requestedTrade.symbol, entry: requestedTrade.entry_time, exit: requestedTrade.exit_time });
         const response = await fetch(`/api/market-data?${params}`);
         if (!response.ok) throw new Error("unavailable");
@@ -254,7 +258,7 @@ async function load(trade: TradeRecord, signature: string, refresh: boolean) {
       onCoverageRefetch: () => coverageAttempts.set(trade.id, signature),
       refresh,
     });
-    if (stored) adopt(trade, stored);
+    if (stored) adopt(trade, stored, !askedNetwork);
   } catch {
     const current = entries.get(trade.id);
     if (!current || current.signature !== signature) return;
@@ -292,8 +296,11 @@ export function ensureCandles(trade: TradeRecord, force = false) {
   const retryDue = retryAt !== null && retryAt <= now;
   if (existing && existing.signature === signature && !coverageRefresh && !forcedRetry && !retryDue) return;
   if (coverageRefresh) coverageAttempts.set(trade.id, signature);
-  // A ready chart stays on screen while it refreshes.
-  put(trade.id, existing?.signature === signature && existing.status === "ready"
+  // A ready chart stays on screen while it refreshes. A scheduled retry of a missing set stays "none",
+  // so the screen does not flash a skeleton every minute; only the Retry button shows a fetch is on.
+  const keepShowing = existing?.signature === signature
+    && (existing.status === "ready" || (existing.status === "none" && !forcedRetry));
+  put(trade.id, keepShowing && existing
     ? { ...existing, fetching: true, lastAttemptAt: now }
     : { status: "loading", candles: [], source: null, baseTimeframe: "1m", fetching: true, signature, lastAttemptAt: now });
   void load(trade, signature, forcedRetry || retryDue);

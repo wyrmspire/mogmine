@@ -283,7 +283,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         {candles?.status === "none" && !trade.is_sample && (
           <div className="chart-note fact candle-retry" role="status">
             <span>{exitIsFresh(trade, candles.lastAttemptAt) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
-            <button type="button" onClick={() => ensureCandles(trade, true)}>Retry</button>
+            <button type="button" disabled={candles.fetching} onClick={() => ensureCandles(trade, true)}>{candles.fetching ? "Checking…" : "Retry"}</button>
           </div>
         )}
         {candles?.status === "none" ? null : <>
