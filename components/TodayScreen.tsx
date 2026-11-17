@@ -18,7 +18,7 @@ function DaySummary({ group, shield }: { group: DayGroup; shield: boolean }) {
   return (
     <div className="specular-card stat-row">
       <div className="stat"><small>Gross</small><b className={grossValue > 0 ? "positive" : grossValue < 0 ? "negative" : ""}>{shield ? formatR(stats.netR) : formatMoney(stats.gross)}</b></div>
-      <div className="stat"><small>Trades</small><b>{stats.count}</b>{stats.incomplete && <small className="incomplete"> · {stats.unpriceableCount} unpriced</small>}</div>
+      <div className="stat"><small>Trades</small><b>{stats.count}</b>{stats.incomplete && <small className="incomplete"> · {stats.unpriceableCount} unpriced</small>}{stats.openCount > 0 && <small className="incomplete"> · {stats.openCount} open</small>}</div>
       <div className="stat"><small>Win rate</small><b>{winText}</b></div>
       <div className="stat"><small>By the rules</small><b className="gold">{stats.processGraded ? `${stats.processFollowed}/${stats.processGraded}` : "—"}</b></div>
     </div>
