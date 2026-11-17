@@ -156,6 +156,8 @@ export const FRESH_EXIT_MS = 60 * MINUTE_MS;
 
 /** True while Yahoo may still be catching up to this exit: under 60 minutes ago. */
 export function exitIsFresh(trade: Pick<TradeRecord, "exit_time">, now: number) {
+  // An open trade has no exit yet (R-03a); its live candles arrive with R-03c.
+  if (trade.exit_time == null) return false;
   return now - Date.parse(trade.exit_time) < FRESH_EXIT_MS;
 }
 
@@ -166,6 +168,8 @@ export function nextCandleRetryAt(
   lastAttemptAt: number,
   now: number,
 ): number | null {
+  // An open trade has no exit to anchor a retry to yet (R-03a); R-03c adds open-trade candles.
+  if (trade.exit_time == null) return null;
   const sessionClosed = now > sessionCloseUtc(trade.exit_time);
   const reachesClose = !cachedCandlesNeedRefetch(trade, {
     signature: "",
