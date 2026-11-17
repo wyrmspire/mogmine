@@ -40,7 +40,8 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 | Daily levels and zones, ADR, pivots, level colours and labels, risk-sized box defaults, planned/actual/archived box styles, missed moves | [12 — Levels, Zones & the Daily Markup](docs/12-levels-zones-and-daily-markup.md) (proposals `OD-20`–`OD-23`) |
 | Interface ideas beyond the current notes: Zone Ladder, day-as-unit feed, blind review, draw-the-trade entry, desk mode, execution diff | [13 — Bold UI Bets](docs/13-bold-ui-bets.md) (bets, not scope) |
 | The UI branch: what phases 1–3 built, what is proposed next, what waits for the owner | [14 — UI & Experience: Phased Plan](docs/14-ui-phased-plan.md) |
-| **What to build next, in order**: pinch zoom, fresh-candle retry, open trades, the archive, trades in Supabase, the assistant endpoint, playbooks, stats, challenges | [16 — Floor Roadmap](docs/16-floor-roadmap.md) (`R-01`–`R-09`) |
+| **What to build next, in order**: pinch zoom, fresh-candle retry, open trades, the archive, trades in Supabase, the assistant endpoint, playbooks, stats, challenges | [16 — Floor Roadmap](docs/16-floor-roadmap.md) (`R-01`–`R-10`) |
+| Challenges: Drawdown Defender, Clean Run, the evaluator contract, golden test cases, the Today card and detail screen | [17 — Challenges](docs/17-challenges.md) (`R-09`, `OD-37`) |
 | Trade document (`mogmine.trade.v1`), plan/actual/excursion box layers, stop paths, hindsight, the deriver and display list (`buildMarks`) | [15 — Trade Document & Render Grammar](docs/15-trade-document-and-render-grammar.md) (open decisions `OD-30`–`OD-34`) |
 | A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
 | Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |
