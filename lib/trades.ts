@@ -788,6 +788,39 @@ export function validateTradeInput(input: TradeExecutionInput): TradeInputErrors
   return errors;
 }
 
+export type CloseTradeErrors = Partial<Record<"exit_time" | "exit_price", string>>;
+
+/**
+ * Check the exit typed to close an open trade (R-03b). Same price rules as the entry form
+ * (`validateTradeInput`), and the exit must come after the entry. `exitPrice` null means empty.
+ */
+export function validateClose(
+  trade: Pick<TradeRecord, "symbol" | "direction" | "quantity" | "entry_time" | "entry_price">,
+  exitTime: Date,
+  exitPrice: number | null,
+): CloseTradeErrors {
+  const errors: CloseTradeErrors = {};
+  const priceErrors = validateTradeInput({
+    symbol: trade.symbol, direction: trade.direction, quantity: trade.quantity,
+    entry_price: trade.entry_price, exit_price: exitPrice ?? Number.NaN,
+    stop_loss_price: null, planned_target_price: null, key_level_price: null,
+  });
+  if (exitPrice == null || !(exitPrice > 0)) errors.exit_price = "Enter the exit price";
+  else if (priceErrors.exit_price) errors.exit_price = priceErrors.exit_price;
+  if (Number.isNaN(exitTime.getTime())) errors.exit_time = "Enter the exit time";
+  else if (exitTime.getTime() <= Date.parse(trade.entry_time)) errors.exit_time = "The exit must be after the entry";
+  return errors;
+}
+
+/** The patch that closes an open trade: status, both exit fields, and the style from the real hold (R-03b). */
+export function closeTradePatch(
+  trade: Pick<TradeRecord, "entry_time">,
+  exitTime: string,
+  exitPrice: number,
+): Pick<TradeRecord, "status" | "exit_time" | "exit_price" | "trade_style"> {
+  return { status: "closed", exit_time: exitTime, exit_price: exitPrice, trade_style: classifyTrade(trade.entry_time, exitTime) };
+}
+
 /** Tags that record a broken process, whatever the trade made. */
 export const VIOLATION_TAGS = ["Chased Entry", "Moved Stop", "Revenge"];
 

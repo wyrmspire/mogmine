@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CloseTradeSheet } from "./CloseTradeSheet";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
 import { TradeCardSheet } from "./TradeCardSheet";
@@ -21,7 +22,7 @@ import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
-import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, isClosed, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, isClosed, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
@@ -79,6 +80,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closeSheet = useCallback(() => setClosing(false), []);
   const candles = useCandles(trade.id);
   // Until R-03c an open trade has no chart: its candles never load, so this stays null for it.
   const closedTrade = isClosed(trade) ? trade : null;
@@ -214,8 +217,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const sign = trade.direction === "LONG" ? 1 : -1;
   const points = formatPoints(tradePoints(trade), trade.symbol);
-  const headline = prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl);
-  const secondary = prefs.shield ? (r != null ? points : "—R") : formatR(r);
+  // An open trade shows `Open` where the result goes, and nothing else (OD-38).
+  const open = isOpen(trade);
+  const headline = open ? "Open" : prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl);
+  const secondary = open ? "" : prefs.shield ? (r != null ? points : "—R") : formatR(r);
 
   const ready = candles?.status === "ready";
   const baseMinutes = TIMEFRAME_MINUTES[base];
@@ -243,10 +248,11 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     return buildHindsight(closedTrade, candles.candles, candles.baseTimeframe);
   }, [ready, closedTrade, candles]);
   const barIssues = barCheck?.issues ?? [];
-  const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
+  // An open trade has no candles until R-03c: that is not a data problem, so it raises no note.
+  const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample && !open ? "missing" as const : null);
   // Issue #83: every data-quality note collapses into one chip. Hindsight is not a data note.
   const dataNotes = collectDataNotes({
-    noCandles: candles?.status === "none" && !trade.is_sample,
+    noCandles: candles?.status === "none" && !trade.is_sample && !open,
     base: ready ? base : null,
     misaligned,
     ticker: trade.yahoo_ticker,
@@ -280,7 +286,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         </div>
 
         {candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
-        {candles?.status === "none" && !trade.is_sample && (
+        {candles?.status === "none" && open && (
+          <div className="chart-note fact" role="status"><span>The chart for an open trade is not available yet. Close the trade to see it.</span></div>
+        )}
+        {candles?.status === "none" && !trade.is_sample && !open && (
           <div className="chart-note fact candle-retry" role="status">
             <span>{exitIsFresh(trade, candles.lastAttemptAt) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
             <button type="button" disabled={candles.fetching} onClick={() => ensureCandles(trade, true)}>{candles.fetching ? "Checking…" : "Retry"}</button>
@@ -448,6 +457,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
         </>}
 
+        {open && (
+          <div className="detail-actions">
+            <button type="button" className="btn-primary" onClick={() => setClosing(true)}>Close trade</button>
+          </div>
+        )}
+
         <div className="trade-levels-card specular-card">
           <RStrip trade={trade} excursions={ex} size="detail" />
           <div className="levels">
@@ -484,6 +499,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         {!trade.is_sample && <button type="button" className="btn-danger-ghost" onClick={removeThis}>Remove this trade</button>}
       </aside>
     </div>
+    {closing && open && <CloseTradeSheet trade={trade} zone={zone} onClose={closeSheet} />}
     {cardOpen && <TradeCardSheet trade={trade} blob={shareBlob} privacy={cardPrivacy} onPrivacyChange={changeCardPrivacy} onClose={closeCard} />}
   </>;
 }

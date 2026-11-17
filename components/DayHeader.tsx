@@ -17,6 +17,7 @@ export function DayHeader({ group, shield, sticky = true }: { group: DayGroup; s
       <b className={`net num ${grossValue > 0 ? "positive" : grossValue < 0 ? "negative" : ""}`} title="Gross P&L, before fees and commissions">{gross}{!shield && <span className="gross-label"> gross</span>}</b>
       <p className="day-sub">
         {stats.count} {stats.count === 1 ? "trade" : "trades"}
+        {stats.openCount > 0 && <> · {stats.openCount} open</>}
         {stats.incomplete && <> · {stats.pricedCount} priced</>}
         {" · "}{winText}
         {stats.incomplete && <> · <span className="incomplete">incomplete</span></>}
