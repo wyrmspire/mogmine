@@ -56,6 +56,18 @@ Files:    `lib/trades.ts`, `lib/store.ts`, `lib/selectors.ts`, `lib/candles.ts`,
 Checked:  typecheck, lint, test, build (see PR). No UI change was intended; the form still requires an exit, so an open trade can only arrive from a backup file.
 Left:     `R-03b` (Still open / Closed in the entry sheet, Close trade on detail, `Open` label on rows and Today) and `R-03c` (open-trade candles and chart: until then `TradeChart` takes only a `ClosedTradeRecord` and an open trade shows no chart; `buildHindsight` takes a closed trade). `openCount` is computed but not shown yet.
 
+### 2026-11-16 — agent (Claude Code) — R-02 fresh-trade candles retry, Market data lane
+Did:      `R-02`: pure `nextCandleRetryAt` and `exitIsFresh` in `lib/candles.ts`; `lastAttemptAt` on `CandleEntry`, set when a load starts; `ensureCandles` starts a new load when a retry is due (never while one is in flight) and a due refresh skips the "cache is final for now" shortcut; a refetch with fewer bars keeps the cache. Trade Detail calls `ensureCandles` every 60 s while open and on `visibilitychange`, never for samples; a `none` state shows "Yahoo has not published these bars yet" (exit < 60 min) or "No candles loaded for this trade" and a 44px `Retry`. `anchorsTradeWindow` is unchanged.
+Files:    `lib/candles.ts`, `components/TradeDetail.tsx`, `lib/__tests__/candle-cache.test.ts`, `docs/08-ux-notes-viewing-and-journaling.md` (§4 state row), `NOTES.md`.
+Checked:  typecheck, lint, test, build (see PR). Not verified on a phone or against a live session.
+Left:     Yahoo's live-session lag for `MES=F` `1m` is still unmeasured: the work ran at 17:15 ET, inside the daily maintenance break. docs/10 §2 still lists it as unknown.
+
+### 2026-11-16 — agent (Claude Code) — R-01 pinch zoom, Chart lane
+Did:      `R-01`: `.chart-host` now has `touch-action: pan-y` (was `pan-y pinch-zoom`), so a two-finger pinch on the chart goes only to the chart (UX-44). Nothing else changed: viewport meta, `handleScroll`/`handleScale` and `vertTouchDrag: false` untouched.
+Files:    `app/globals.css`, `NOTES.md`.
+Checked:  `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning (`postcss.config.mjs`); `npm test` 140/140; `npm run build` ok. Not verified on a phone.
+Left:     The four done-when checks in docs/16 `R-01` need a real phone (iOS Safari and Android Chrome).
+
 ### 2026-11-16 — agent (Claude Code) — floor roadmap, no lane
 Did:      Added `docs/16-floor-roadmap.md` (`R-01`–`R-09`) from the owner's review of the live app, with files, limits and done-when per step. Opened `OD-37` (challenges) and `OD-38` (open-trade display). Pointer rows in AGENTS and README; replaced Next up. Documentation only.
 Files:    `docs/16-floor-roadmap.md`, `AGENTS.md`, `README.md`, `DECISIONS.md`, `NOTES.md`.
