@@ -23,16 +23,17 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ## Next up
 
-**Work the list in [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md), top to bottom** (owner order, 2026-11-16). Each step there names its files, its limits and its done-when.
+**Work the list in [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md)** (owner order, 2026-11-16). Each step names its files, its limits and its done-when.
 
-1. `R-01` Pinch zooms the chart, not the page. One CSS line in `app/globals.css`.
-2. `R-02` Fresh-trade candles retry and refresh (`lib/candles.ts`, `components/TradeDetail.tsx`).
-3. `R-03` Log a trade that is still open (`status`, nullable exit). Three PRs: `R-03a` types and math, `R-03b` entry and close, `R-03c` chart and candles.
-4. `R-04` Owner turns on the candle archive (Supabase project and keys); an agent rebases `feat/m0-candle-archive` onto `main`. It loses a day of `1m` history for every day it waits.
-5. `R-05` Trades stored in Supabase. Needs `OD-30`. AI, cross-day stats and challenges are all blocked on this.
-6. `R-06` Read-only assistant endpoint (needs `OD-19`), `R-07` playbook editor, `R-08` running stats, `R-09` challenges (needs `OD-37`).
+Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math.
 
-Still open from before: `OD-1` (freeze or reconcile `mogprompt.md`), `OD-16`, and the M0/M1 acceptance criteria `AC-01`–`AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1), which `R-04` and `R-05` must satisfy. When a TopstepX account exists: get Topstep's written confirmation that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
+1. `R-03b` Entry and close for an open trade (`AddTradeSheet.tsx`, `TradeDetail.tsx`, the list rows), with `R-10` in the same form: an optional stop at entry, frozen as `initial_stop_price`.
+2. `R-03c` Chart and candles for an open trade.
+3. `R-09a`–`R-09d` Challenges, to the design in [docs/17](docs/17-challenges.md). `R-09a` (the pure evaluator and its golden tests) needs nothing else and can start now.
+4. `R-04` Owner turns on the candle archive (Supabase project and keys); an agent rebases `feat/m0-candle-archive`. It loses a day of `1m` history for every day it waits.
+5. `R-05` Trades stored in Supabase (needs `OD-30`), then `R-06` assistant endpoint (`OD-19`), `R-07` playbook editor, `R-08` running stats.
+
+Still open from before: `OD-37` (four challenge choices, docs/17 §8), `OD-1`, `OD-16`, and `AC-01`–`AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1). When a TopstepX account exists: get Topstep's written confirmation that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
 
 ## Lanes
 
@@ -49,6 +50,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-16 — agent (Claude Code) — challenges design and roadmap update, no lane
+Did:      Added `docs/17-challenges.md`: Drawdown Defender and Clean Run, with rules, math, golden test cases, the `lib/challenges.ts` contract, storage, the Today card, setup sheet and detail screen, and build steps `R-09a`–`R-09d`. In `docs/16`: rewrote `R-09` to point at it and unblocked it from `R-05`; added `R-10` (optional stop at entry, frozen as `initial_stop_price`); corrected the status table (open trades are in the model since `R-03a`) and marked `R-01`, `R-02`, `R-03a` merged. Restated `OD-37`. Documentation only.
+Files:    `docs/17-challenges.md`, `docs/16-floor-roadmap.md`, `DECISIONS.md`, `AGENTS.md`, `README.md`, `NOTES.md`.
+Checked:  Golden drawdown and Clean Run cases worked by hand; every dollar amount is a whole number of `MES` ticks. Relative links resolve. No code changed.
+Left:     The owner's four `OD-37` choices. Profit-target and R-scored challenges are deferred on purpose (docs/17 §1).
 
 ### 2026-11-16 — agent (Claude Code) — R-02 follow-up, Chart lane (released)
 Did:      Two fixes on top of the merged R-02. A scheduled retry of a missing set keeps the no-chart state (Retry shows `Checking…`, disabled) instead of flashing the loading skeleton each minute. A same-day set served from the device cache records its `fetchedAt` as the last attempt, so it refreshes on the next check instead of after 5 minutes. Added end-to-end `ensureCandles` tests (stubbed fetch and clock).

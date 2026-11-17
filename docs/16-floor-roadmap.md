@@ -30,27 +30,31 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 | Trades | Stored **only on the device** in `localStorage` key `mogmine-trades-v3` (`lib/store.ts`). No server copy. |
 | Candles | Fetched per trade from `/api/market-data` (Yahoo), cached in IndexedDB (`lib/candles.ts`). |
 | Candle archive | Built on branch `feat/m0-candle-archive`. **Not merged.** Off until Supabase keys exist. |
-| Open trades | **Cannot be logged.** An exit time and price are required everywhere (see `R-03`). |
+| Open trades | The model and the money math accept an open trade (`R-03a`, merged). **The entry form and the chart do not yet** (`R-03b`, `R-03c`). |
 | AI | No AI code and no endpoint an assistant can call. The only API route is `/api/market-data`. |
 | Playbooks | Four hardcoded setups sharing one checklist (`lib/playbooks.ts`). No editor. |
 | Stats | Per-day only (`dayStats` in `lib/selectors.ts`). Nothing across days. |
-| Challenges | Not specified anywhere. |
+| Challenges | Designed in [docs/17](17-challenges.md). Not built. |
+| Stop at entry | The entry form has no stop field; a stop is added later and stays editable, so R can change after the fact (`R-10`). |
 
 ## 2. The order
 
 | Step | What | Size | Needs |
 | :--- | :--- | :--- | :--- |
-| `R-01` | Pinch zooms the chart, not the page | 1 line | — |
-| `R-02` | Fresh-trade candles retry and refresh | Small | — |
-| `R-03` | Log a trade that is still open | Medium | `OD-38` (decided: show `Open`) |
+| `R-01` | Pinch zooms the chart, not the page | **Merged** (phone check still owed) | — |
+| `R-02` | Fresh-trade candles retry and refresh | **Merged** | — |
+| `R-03` | Log a trade that is still open | `R-03a` **merged**; `R-03b`, `R-03c` to do | `OD-38` (decided: show `Open`) |
 | `R-04` | Turn on the candle archive | Owner task + merge | Supabase project |
 | `R-05` | Trades stored in Supabase | Large | `R-03`, `R-04` |
 | `R-06` | Read-only assistant endpoint | Medium | `R-05`, `OD-19` |
 | `R-07` | Playbook editor | Medium | `R-05` |
 | `R-08` | Running stats across days | Medium | `R-05` |
-| `R-09` | Process challenges | Medium | `R-07`, `R-08`, `OD-37` |
+| `R-09` | Challenges: Drawdown Defender and Clean Run ([docs/17](17-challenges.md)) | Medium, four PRs | `OD-37`. **Not** blocked on `R-05`: it runs on the device. |
+| `R-10` | Stop at entry, frozen | Small | `R-03b` |
 
-`R-01`–`R-03` need no backend and can ship now. `R-04` onward is the data layer. **AI, cross-day stats and challenges are all blocked on `R-05`**, because today the trades never leave the phone.
+`R-01`–`R-03`, `R-09` and `R-10` need no backend. `R-04` onward is the data layer. **AI and cross-day stats are blocked on `R-05`**, because today the trades never leave the phone. Challenges are not: they are recomputed from the trades on the device, and only follow you to a second device after `R-05`.
+
+**Order from here:** `R-03b`, `R-10` (same form, do them together), `R-03c`, `R-09a`–`R-09d`, with the owner's `R-04` running alongside.
 
 ---
 
@@ -287,14 +291,44 @@ Extend `lib/selectors.ts`. Pure functions with tests, then a screen.
 
 ---
 
-## R-09 — Process challenges
+## R-09 — Challenges: Drawdown Defender and Clean Run
 
-A challenge is a target on **process**, for example "10 trades in a row that match a playbook with every rule checked". It is not specified anywhere yet. The definition is `OD-37`; the owner decides before any code.
+The full design, with the math, golden test cases, the code contract and the screens, is **[docs/17 — Challenges](17-challenges.md)**. Read it before writing anything. Build it as `R-09a` to `R-09d` in [docs/17 §7](17-challenges.md#7-build-order).
 
-Fixed constraints whatever the answer:
-- Built on rule adherence and setup match, never on dollar wins. No confetti, sounds or streak counters for money (UX-66).
-- Gold stays reserved for good process (#80).
-- Progress is computed by code from stored trades. An AI may comment on it; it never computes it.
+- **Drawdown Defender:** trade N sessions without giving back more than a dollar limit from the high point. Gross dollars, closed trades.
+- **Clean Run:** N trades in a row by the rules. Losing trades count; P&L is not an input.
+
+Fixed constraints:
+- Scored by code from stored trades. An AI may comment on a result; it never computes one (guardrail 11).
+- Sample trades and open trades never count. A trade that cannot be scored blocks a pass and is named; it is never treated as `0`.
+- Gold is for good process only (#80): Clean Run may use it, Drawdown Defender may not. No confetti, sounds or streak counters for money (UX-66).
+- No profit-target challenge, no R-scored challenge and no custom builder in this step. [docs/17 §1](17-challenges.md#1-what-is-in-what-is-out) lists what each one waits for.
+
+---
+
+## R-10 — Stop at entry, frozen
+
+**Problem.** `components/AddTradeSheet.tsx` saves every trade with `stop_loss_price: null`. The stop is added later on Trade Detail and stays editable, so `rMultiple` and `initialRiskUsd` can change after the trade is over. Nothing records what the risk was when the trade was taken. Any R-based stat or challenge is only as honest as that edit.
+
+**Change.**
+1. `lib/trades.ts` `TradeRecord`: add `initial_stop_price: number | null` and `initial_stop_set_at: string | null`. `normalizeTrade` defaults both to `null` for records saved before this change.
+2. `AddTradeSheet.tsx`: add an **optional** `Stop` price field, validated by the existing `validateTradeInput` stop-side rule (below the entry for a long, above for a short, on the tick grid). Empty is allowed.
+3. On save with a stop: set `stop_loss_price` and `initial_stop_price` to it, and `initial_stop_set_at` to the save time.
+4. A trade saved without a stop: the **first** time a stop is set on Trade Detail (`TradeLevelEditor.tsx`), copy it to `initial_stop_price` and stamp `initial_stop_set_at`. Later edits change `stop_loss_price` only.
+5. Add `initialRMultiple(trade)` beside `rMultiple`: the same math on `initial_stop_price`, `null` without one. Do not change what `rMultiple` returns.
+6. Trade Detail shows "Initial stop 6841.25, set 09:42" as a quiet fact when the current stop differs from the initial one.
+
+**Do not:**
+- Make the stop required. Logging must stay fast.
+- Back-fill `initial_stop_price` from `stop_loss_price` on old trades. It is unknown; leave it `null`.
+- Ever overwrite `initial_stop_price` once set, including from a backup restore of the same trade.
+- Switch existing screens from `rMultiple` to `initialRMultiple` in this step. That is a separate decision.
+
+**Tests:** a saved stop sets all three fields; a later edit moves only `stop_loss_price`; the first stop on a stop-less trade is captured once; `initialRMultiple` is `null` with no initial stop; an old record normalises with both new fields `null`.
+
+**Done when:** a trade can be logged with a stop in one pass, and editing the stop afterwards leaves the initial one visible and unchanged.
+
+**Spec.** [docs/06 §2](06-data-model-and-roadmap.md) `trades`; and the planned Supabase table in `R-05` gains the two columns.
 
 ---
 
