@@ -27,9 +27,11 @@ import { includeInPriceRange } from "@/lib/trades";
 export interface PositionBoxConfig {
   /** Fill times already snapped to bar open times for the active timeframe (B-23). */
   entryTime: Time;
+  /** For an open trade: the last loaded bar, so the box runs to it (R-03c). */
   exitTime: Time;
   entryPrice: number;
-  exitPrice: number;
+  /** Null for an open trade: no exit marker, no execution path and no result band (OD-38). */
+  exitPrice: number | null;
   stopPrice: number | null;
   targetPrice: number | null;
   isLong: boolean;
@@ -57,7 +59,8 @@ interface Geometry {
   x1: number;
   x2: number;
   yEntry: number;
-  yExit: number;
+  /** Null for an open trade. */
+  yExit: number | null;
   yStop: number | null;
   yTarget: number | null;
   yKey: number | null;
@@ -87,6 +90,8 @@ class FillRenderer implements IPrimitivePaneRenderer {
       // PLAN fills first, faint, so the actual band (if any) paints over them.
       if (g.yTarget != null) rect(g.yEntry, g.yTarget, c.profitColor, planAlpha);
       if (g.yStop != null) rect(g.yEntry, g.yStop, c.riskColor, planAlpha);
+      // An open trade has no result, so there is no actual band (OD-38: no unrealised P&L).
+      if (g.yExit == null || c.exitPrice == null) { ctx.globalAlpha = 1; return; }
       // ACTUAL: one stronger fill in the result colour. A scratch is gray, and at least 2px tall
       // so a flat exit is still visible. Nothing outlines it.
       const made = (c.exitPrice - c.entryPrice) * (c.isLong ? 1 : -1);
@@ -107,22 +112,25 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
     const { g, c } = this;
     if (!g) return;
     const strength = 1;
-    const made = (c.exitPrice - c.entryPrice) * (c.isLong ? 1 : -1);
+    const made = c.exitPrice == null ? 0 : (c.exitPrice - c.entryPrice) * (c.isLong ? 1 : -1);
     const resultColor = c.scratch || made === 0 ? c.mutedColor : made > 0 ? c.profitColor : c.riskColor;
     target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: sx, verticalPixelRatio: sy }) => {
       const line = Math.max(1, Math.floor(sx));
 
       // Execution path: thin dotted line from the entry fill to the exit fill, no text.
       // An approximate alignment uses a fainter, thinner dash (issue #64).
-      ctx.globalAlpha = (c.approximate ? 0.6 : 0.85) * strength;
-      ctx.strokeStyle = c.textColor;
-      ctx.lineWidth = line;
-      ctx.setLineDash(c.approximate ? [1.5 * sx, 3 * sx] : [3 * sx, 3 * sx]);
-      ctx.beginPath();
-      ctx.moveTo(g.x1 * sx, g.yEntry * sy);
-      ctx.lineTo(g.x2 * sx, g.yExit * sy);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      // An open trade has no exit fill, so no path (R-03c).
+      if (g.yExit != null) {
+        ctx.globalAlpha = (c.approximate ? 0.6 : 0.85) * strength;
+        ctx.strokeStyle = c.textColor;
+        ctx.lineWidth = line;
+        ctx.setLineDash(c.approximate ? [1.5 * sx, 3 * sx] : [3 * sx, 3 * sx]);
+        ctx.beginPath();
+        ctx.moveTo(g.x1 * sx, g.yEntry * sy);
+        ctx.lineTo(g.x2 * sx, g.yExit * sy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       // Entry and exit flags at the fill prices. Entry is neutral; the exit takes the result colour.
       const flag = (x: number, yValue: number, pointUp: boolean, color: string) => {
@@ -145,7 +153,7 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
         ctx.fill();
       };
       flag(g.x1, g.yEntry, c.isLong, c.textColor);
-      flag(g.x2, g.yExit, !c.isLong, resultColor);
+      if (g.yExit != null) flag(g.x2, g.yExit, !c.isLong, resultColor);
 
       ctx.globalAlpha = 1;
     });
@@ -164,7 +172,7 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
         ctx.fillText("≈", xApprox, yApprox);
         ctx.globalAlpha = 1;
       }
-      if (c.showContinuation) {
+      if (c.showContinuation && g.yExit != null) {
         // Same colours as the plan zones: faint green target, faint red stop, faint gray entry.
         // No end labels and no "after exit" text on the chart (owner review of PR #72).
         const fade = 0.5;
@@ -262,7 +270,8 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
     const price = (value: number | null): Coordinate | null => (value == null ? null : series.priceToCoordinate(value));
     const yEntry = price(config.entryPrice);
     const yExit = price(config.exitPrice);
-    if (x1 == null || x2 == null || yEntry == null || yExit == null) { this.geometry = null; return; }
+    // A closed trade needs its exit coordinate; an open trade has none by design (R-03c).
+    if (x1 == null || x2 == null || yEntry == null || (config.exitPrice != null && yExit == null)) { this.geometry = null; return; }
     // Cover the whole entry and exit bars, so a trade inside one bar is still a visible box.
     const half = Math.max(3, timeScale.options().barSpacing / 2);
     const yStop = price(config.stopPrice);

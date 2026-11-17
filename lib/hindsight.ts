@@ -76,12 +76,16 @@ export function laterTouch(
   return null;
 }
 
+type HindsightTrade = Pick<TradeRecord, "direction" | "stop_loss_price" | "planned_target_price" | "exit_time">;
+export function buildHindsight(trade: HindsightTrade & { exit_time: string }, candles: Candle[], timeframe?: Timeframe): HindsightFact;
+export function buildHindsight(trade: HindsightTrade, candles: Candle[], timeframe?: Timeframe): HindsightFact | null;
 export function buildHindsight(
-  // Closed trades only: an open trade has no "after the exit" (R-03).
-  trade: Pick<TradeRecord, "direction" | "stop_loss_price" | "planned_target_price"> & { exit_time: string },
+  trade: HindsightTrade,
   candles: Candle[],
   timeframe: Timeframe = "1m",
-): HindsightFact {
+): HindsightFact | null {
+  // An open trade has no "after the exit" (R-03c).
+  if (trade.exit_time == null) return null;
   const exitTime = Date.parse(trade.exit_time);
   const sessionClose = sessionCloseUtc(trade.exit_time);
   const target = trade.planned_target_price == null

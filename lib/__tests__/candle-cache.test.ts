@@ -182,10 +182,17 @@ test("R-02: a loading entry is never retried on top of itself", () => {
   assert.equal(nextCandleRetryAt(trade, loading, exit, exit + 30 * minute), null);
 });
 
-test("R-02 with R-03a: an open trade (no exit) is never fresh and never retried", () => {
-  const open = { exit_time: null };
+test("R-03c: an open trade is never exit-fresh, and its candles are never final", () => {
+  const open = { exit_time: null, entry_time: new Date(exit).toISOString() };
   assert.equal(exitIsFresh(open, exit), false);
-  assert.equal(nextCandleRetryAt(open, noneEntry, exit, exit + 30 * minute), null);
+  // Missing: each minute for the first hour after the entry, then every 15 minutes.
+  assert.equal(nextCandleRetryAt(open, noneEntry, exit + 2 * minute, exit + 2 * minute), exit + 3 * minute);
+  assert.equal(nextCandleRetryAt(open, noneEntry, exit + 90 * minute, exit + 90 * minute), exit + 105 * minute);
+  // Loaded: refresh every five minutes, even after the session close.
+  assert.equal(nextCandleRetryAt(open, readyEntry(bars(exit)), exit + 10 * minute, exit + 11 * minute), exit + 15 * minute);
+  assert.equal(nextCandleRetryAt(open, readyEntry(bars(close - minute)), close + minute, close + 2 * minute), close + 6 * minute);
+  const loading = { status: "loading" as const, candles: [] as Candle[], baseTimeframe: "1m" as const };
+  assert.equal(nextCandleRetryAt(open, loading, exit, exit + 30 * minute), null);
 });
 
 test("R-02: a due refresh asks the network even when the matching cache covers the trade", async () => {
@@ -208,4 +215,39 @@ test("R-02: a refetch with fewer bars keeps the cache", async () => {
 
   assert.equal(result, cached);
   assert.deepEqual(fake.counts(), { requests: 1, writes: 0 });
+});
+
+const openTrade = { ...trade, id: "cache-open", status: "open", exit_time: null, exit_price: null } as TradeRecord;
+
+test("R-03c: an open trade's matching cache is shown but never final: the network is always asked", async () => {
+  const cached = stored(bars(exit), candleSignature(openTrade));
+  const more = bars(exit + 10 * minute);
+  const cache = new Map([[candleCacheKey(openTrade), cached]]);
+  let requests = 0;
+  const result = await loadCachedCandles(openTrade, cached.signature, {
+    read: async (key) => cache.get(key),
+    write: async (key, value) => { cache.set(key, value); },
+    request: async () => { requests += 1; return { candles: more, baseTimeframe: "1m" }; },
+    now: () => exit + 11 * minute,
+  });
+  assert.equal(requests, 1);
+  assert.deepEqual(result?.candles, more);
+});
+
+test("R-03c: an open trade needs only its entry bar; a payload without it keeps the cache", async () => {
+  const cached = stored(bars(exit), candleSignature(openTrade));
+  const noEntry = bars(exit).filter((bar) => bar.time > Date.parse(trade.entry_time));
+  const result = await loadCachedCandles(openTrade, cached.signature, {
+    read: async () => cached,
+    write: async () => undefined,
+    request: async () => ({ candles: noEntry, baseTimeframe: "1m" }),
+    now: () => exit,
+  });
+  assert.equal(result, cached);
+  await assert.rejects(loadCachedCandles(openTrade, cached.signature, {
+    read: async () => undefined,
+    write: async () => undefined,
+    request: async () => ({ candles: noEntry, baseTimeframe: "1m" }),
+    now: () => exit,
+  }));
 });

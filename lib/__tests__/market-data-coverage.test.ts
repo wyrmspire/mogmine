@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { anchorsTradeWindow, coversTradeWindow, tradeWindowCoverage } from "../market-data/coverage.ts";
+import { dropLiveRow } from "../market-data/yahoo.ts";
 import type { Candle } from "../trades.ts";
 
 const minute = 60_000;
@@ -110,4 +111,23 @@ test("a MES hold that spans the daily halt does not require the 17:00 ET bar (co
   assert.equal(coversTradeWindow(withHalt, haltEntry, haltExit, "1h", "MES"), true);
   // Without a symbol the helper does not apply Globex hours, so the halt bar is still required.
   assert.equal(coversTradeWindow(withoutHalt, haltEntry, haltExit, "1h"), false);
+});
+
+test("R-03c: entry-only mode (open trade) needs just the entry bar", () => {
+  const fromEntry = bars(Math.floor(entry / minute) * minute, entry + 30 * minute, minute);
+  assert.equal(anchorsTradeWindow(fromEntry, entry, null, "1m"), true);
+  const afterEntry = fromEntry.slice(1);
+  assert.equal(anchorsTradeWindow(afterEntry, entry, null, "1m"), false);
+  assert.equal(anchorsTradeWindow(fromEntry, Number.NaN, null, "1m"), false);
+});
+
+test("R-03c: Yahoo's in-progress last row (off the bar grid) is dropped; on-grid rows are kept", () => {
+  const start = Math.floor(entry / minute) * minute;
+  const onGrid = bars(start, start + 5 * minute, minute);
+  const live = { ...onGrid[0], time: start + 5 * minute + 59_000 };
+  assert.deepEqual(dropLiveRow([...onGrid, live], minute), onGrid);
+  assert.deepEqual(dropLiveRow(onGrid, minute), onGrid);
+  // A series that is off-grid throughout is left alone.
+  const shifted = onGrid.map((bar) => ({ ...bar, time: bar.time + 30_000 }));
+  assert.deepEqual(dropLiveRow(shifted, minute), shifted);
 });

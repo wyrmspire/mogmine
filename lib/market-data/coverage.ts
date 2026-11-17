@@ -37,8 +37,16 @@ export function tradeWindowCoverage(candles: Candle[], entryMs: number, exitMs: 
  * True when the payload anchors the trade: the entry bar and the exit bar are both present
  * (AC-07). A payload can anchor the trade and still have gaps inside the hold; those are drawn
  * as gaps and counted on screen, not rejected.
+ *
+ * Entry-only mode (R-03c): `exitMs` null is an open trade, which needs only its entry bar.
  */
-export function anchorsTradeWindow(candles: Candle[], entryMs: number, exitMs: number, timeframe: Timeframe, symbol?: string): boolean {
+export function anchorsTradeWindow(candles: Candle[], entryMs: number, exitMs: number | null, timeframe: Timeframe, symbol?: string): boolean {
+  if (exitMs == null) {
+    if (!Number.isFinite(entryMs)) return false;
+    const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
+    const entryBar = Math.floor(entryMs / barMs) * barMs;
+    return candles.some((bar) => bar.time === entryBar);
+  }
   const coverage = tradeWindowCoverage(candles, entryMs, exitMs, timeframe, symbol);
   return coverage.entryBar && coverage.exitBar;
 }

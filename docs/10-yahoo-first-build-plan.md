@@ -41,6 +41,7 @@ Each was observed directly. Saving a response as-is produces broken charts.
 | A closed-market window (a weekend) returns **HTTP 200 with no bars**. | Not an error and not missing data. Coverage checks need the session calendar (B-21). |
 | About **3% of rows have null open/high/low/close** (38 of 1,394 in one session). | Drop any row with a null price. |
 | Every response for a past window ends with **one extra row outside the requested window** (the latest quote). | Drop rows outside the requested window, or the chart draws a line to a phantom bar. |
+| A window that ends at **now during a live session** ends with the in-progress bar stamped with the request second (`MES=F` `1m`, 2026-11-17 01:07:59 UTC, volume 0), off the bar grid. | Drop a last row that is off the bar grid when the row before it is on it (`dropLiveRow`, R-03c). The bar arrives on the next refresh. |
 | One-minute gaps occur on normal days (the 23:59 ET bar was missing in every futures series sampled). | Bar-count checks tolerate small gaps. |
 | `meta.shortName` names the contract month behind the continuous ticker (`E-Mini S&P 500 Dec 26`). | Store it with each session. A change marks the roll date (B-12). |
 | Volume was present on all but 2 bars of a sampled `ES=F` session. `^VIX` volume is always zero. | VWAP from futures volume is usable. Never compute VWAP for an index. |
