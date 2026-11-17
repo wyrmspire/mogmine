@@ -139,7 +139,7 @@ test("hindsight never changes R or P&L", () => {
     stop_loss_price: 5990,
     planned_target_price: 6010,
     quantity: 1,
-  } satisfies Partial<TradeRecord> as TradeRecord;
+  } satisfies Partial<TradeRecord> as TradeRecord & { exit_time: string; exit_price: number };
   const before = { r: rMultiple(record), pnl: tradePnl(record) };
   buildHindsight(record, after([[38, 6008, 6012]]));
   assert.equal(rMultiple(record), before.r);

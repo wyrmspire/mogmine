@@ -141,6 +141,8 @@ async function loadSampleCandles(trade: TradeRecord, signature: string) {
 
 /** True only after the hindsight window has closed and the cached bars do not reach that close. */
 export function cachedCandlesNeedRefetch(trade: Pick<TradeRecord, "exit_time">, stored: StoredCandles, now: number) {
+  // An open trade has no hindsight window yet; its candles arrive with R-03c.
+  if (trade.exit_time == null) return false;
   const windowClose = sessionCloseUtc(trade.exit_time);
   if (now <= windowClose) return false;
   const lastBar = stored.candles.reduce((latest, bar) => Math.max(latest, bar.time), 0);
@@ -154,6 +156,8 @@ export const FRESH_EXIT_MS = 60 * MINUTE_MS;
 
 /** True while Yahoo may still be catching up to this exit: under 60 minutes ago. */
 export function exitIsFresh(trade: Pick<TradeRecord, "exit_time">, now: number) {
+  // An open trade has no exit yet (R-03a); its live candles arrive with R-03c.
+  if (trade.exit_time == null) return false;
   return now - Date.parse(trade.exit_time) < FRESH_EXIT_MS;
 }
 
@@ -164,6 +168,8 @@ export function nextCandleRetryAt(
   lastAttemptAt: number,
   now: number,
 ): number | null {
+  // An open trade has no exit to anchor a retry to yet (R-03a); R-03c adds open-trade candles.
+  if (trade.exit_time == null) return null;
   const sessionClosed = now > sessionCloseUtc(trade.exit_time);
   const reachesClose = !cachedCandlesNeedRefetch(trade, {
     signature: "",
@@ -188,6 +194,8 @@ export async function loadCachedCandles(
   signature: string,
   dependencies: CandleLoadDependencies,
 ): Promise<StoredCandles | null> {
+  // Until R-03c, an open trade has no chart: market data needs an exit to anchor the window.
+  if (trade.exit_time == null) throw new Error("unavailable");
   const key = candleCacheKey(trade);
   const cached = await dependencies.read(key);
   if (dependencies.isCurrent?.() === false) return null;
@@ -235,6 +243,7 @@ async function load(trade: TradeRecord, signature: string, refresh: boolean) {
       read: (key) => idbGet<StoredCandles>(key),
       write: (key, value) => idbSet(key, value),
       request: async (requestedTrade) => {
+        if (requestedTrade.exit_time == null) throw new Error("unavailable");
         const params = new URLSearchParams({ symbol: requestedTrade.symbol, entry: requestedTrade.entry_time, exit: requestedTrade.exit_time });
         const response = await fetch(`/api/market-data?${params}`);
         if (!response.ok) throw new Error("unavailable");

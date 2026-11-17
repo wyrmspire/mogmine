@@ -182,6 +182,12 @@ test("R-02: a loading entry is never retried on top of itself", () => {
   assert.equal(nextCandleRetryAt(trade, loading, exit, exit + 30 * minute), null);
 });
 
+test("R-02 with R-03a: an open trade (no exit) is never fresh and never retried", () => {
+  const open = { exit_time: null };
+  assert.equal(exitIsFresh(open, exit), false);
+  assert.equal(nextCandleRetryAt(open, noneEntry, exit, exit + 30 * minute), null);
+});
+
 test("R-02: a due refresh asks the network even when the matching cache covers the trade", async () => {
   const partial = stored(bars(exit + 3 * minute));
   const more = bars(exit + 20 * minute);

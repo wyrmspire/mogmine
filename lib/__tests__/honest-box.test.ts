@@ -10,7 +10,7 @@ import sampleBarsData from "../../fixtures/sample-bars.json" with { type: "json"
 
 const sampleBars = sampleBarsData as unknown as SampleBarsPayload;
 import { applyFixtureRefresh } from "../store.ts";
-import { exitFlagReason, excursions, isScratch, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
+import { exitFlagReason, excursions, isClosed, isScratch, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
 
 const minute = 60_000;
@@ -273,6 +273,7 @@ test("every sample trade has a realistic plan fixed at entry", () => {
 test("every sample outcome is coherent with real 1m bars", () => {
   const kinds = new Set<string>();
   for (const trade of demoTrades) {
+    assert.ok(isClosed(trade), `${trade.id} is a closed fixture`);
     const candles = barsFor(trade.id);
     assert.ok(candles.length >= 2, `${trade.id} needs recorded bars`);
     const entryBarTime = Date.parse(trade.entry_time);
@@ -314,6 +315,7 @@ test("every sample outcome is coherent with real 1m bars", () => {
 
 test("sample refresh preserves user notes, checklist, tags and playbook", () => {
   const fixture = demoTrades[0];
+  assert.ok(isClosed(fixture));
   const stored = normalizeTrade({
     ...fixture,
     note: "My review of this scenario.",

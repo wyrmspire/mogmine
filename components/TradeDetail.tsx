@@ -21,7 +21,7 @@ import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
-import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, isClosed, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
@@ -80,6 +80,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
   const candles = useCandles(trade.id);
+  // Until R-03c an open trade has no chart: its candles never load, so this stays null for it.
+  const closedTrade = isClosed(trade) ? trade : null;
   const chartRef = useRef<TradeChartHandle>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const cardBuild = useRef(0);
@@ -227,9 +229,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     const barMs = baseMinutes * 60_000;
     const barAt = (iso: string) => { const time = Math.floor(Date.parse(iso) / barMs) * barMs; return candles.candles.find((bar) => bar.time === time); };
     const entryBar = barAt(trade.entry_time);
-    const exitBar = barAt(trade.exit_time);
+    const exitBar = trade.exit_time == null ? undefined : barAt(trade.exit_time);
     const entryOff = Boolean(entryBar) && !fillInsideBar(trade.entry_price, entryBar, trade.symbol);
-    const exitOff = Boolean(exitBar) && !fillInsideBar(trade.exit_price, exitBar, trade.symbol);
+    const exitOff = Boolean(exitBar) && trade.exit_price != null && !fillInsideBar(trade.exit_price, exitBar, trade.symbol);
     return entryOff || exitOff;
   }, [ready, candles, trade, baseMinutes]);
   const barCheck = useMemo(() => {
@@ -237,9 +239,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
   }, [ready, candles, trade, baseMinutes]);
   const hindsight = useMemo(() => {
-    if (!ready) return null;
-    return buildHindsight(trade, candles.candles, candles.baseTimeframe);
-  }, [ready, trade, candles]);
+    if (!ready || !closedTrade) return null;
+    return buildHindsight(closedTrade, candles.candles, candles.baseTimeframe);
+  }, [ready, closedTrade, candles]);
   const barIssues = barCheck?.issues ?? [];
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
   // Issue #83: every data-quality note collapses into one chip. Hindsight is not a data note.
@@ -389,9 +391,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
           </div>
           <div className="chart-frame">
-            {ready ? (
+            {ready && closedTrade ? (
               <>
-                <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
+                <TradeChart ref={chartRef} trade={closedTrade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
                 <button
                   type="button"
                   className="chart-edge-hit left"

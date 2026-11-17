@@ -10,7 +10,7 @@ import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
 import { TIMEFRAME_MINUTES, aggregateCandles, alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, isScratch, specFor, visibleLogicalBars } from "@/lib/trades";
-import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
+import type { Candle, ClosedTradeRecord, Timeframe } from "@/lib/trades";
 import { buildHindsight } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
@@ -40,7 +40,8 @@ export interface TradeChartHandle {
 
 interface Props {
   ref?: Ref<TradeChartHandle>;
-  trade: TradeRecord;
+  /** Closed trades only until R-03c draws an open trade to the last bar. */
+  trade: ClosedTradeRecord;
   candles: Candle[];
   /** Minutes per bar of `candles` (1 unless Yahoo no longer serves 1m for this trade). */
   baseTimeframe: Timeframe;

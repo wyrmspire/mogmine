@@ -158,6 +158,13 @@ function sanitizeChecklist(value: unknown): ChecklistItem[] {
   });
 }
 
+/** An open record has both exit fields null; any other record (closed or legacy, no status) needs both (R-03). */
+function hasValidExit(item: LegacyTrade): boolean {
+  if (item.status === "open") return item.exit_time == null && item.exit_price == null;
+  if (item.status !== undefined && item.status !== "closed") return false;
+  return isValidTime(item.exit_time) && isFiniteNumber(item.exit_price);
+}
+
 function parseTradeItem(raw: unknown): TradeRecord | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as LegacyTrade;
@@ -165,9 +172,8 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
     typeof item.id !== "string" || !item.id.trim() ||
     typeof item.symbol !== "string" || !item.symbol.trim() ||
     !isValidTime(item.entry_time) ||
-    !isValidTime(item.exit_time) ||
+    !hasValidExit(item) ||
     !isFiniteNumber(item.entry_price) ||
-    !isFiniteNumber(item.exit_price) ||
     (item.direction !== "LONG" && item.direction !== "SHORT")
   ) {
     return null;
@@ -188,9 +194,10 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
     symbol: item.symbol,
     direction: item.direction as TradeDirection,
     entry_time: item.entry_time,
-    exit_time: item.exit_time,
+    // hasValidExit: both present, or both null on an open trade.
+    exit_time: item.exit_time ?? null,
     entry_price: item.entry_price,
-    exit_price: item.exit_price,
+    exit_price: item.exit_price ?? null,
     stop_loss_price: stopLoss,
     planned_target_price: plannedTarget,
     key_level_price: keyLevel,
@@ -296,9 +303,16 @@ function readStored(): TradeRecord[] | null {
   const parsed = JSON.parse(raw) as LegacyTrade[];
   if (!Array.isArray(parsed)) return null;
   return parsed.flatMap((item) => {
-    if (!item?.id || !item.symbol || !item.entry_time || !item.exit_time || item.entry_price == null || item.exit_price == null || !item.direction) return [];
+    // An open trade (R-03) has null exits. A closed or legacy record with a missing exit is still dropped.
+    const exitOk = item?.status === "open" || (item?.exit_time && item.exit_price != null);
+    if (!item?.id || !item.symbol || !item.entry_time || !exitOk || item.entry_price == null || !item.direction) return [];
     const { candles, ...rest } = item;
-    let trade = normalizeTrade({ ...(rest as TradeRecord), is_sample: rest.is_sample ?? DEMO_TRADE_IDS.has(item.id) });
+    let trade: TradeRecord;
+    try {
+      trade = normalizeTrade({ ...(rest as TradeRecord), is_sample: rest.is_sample ?? DEMO_TRADE_IDS.has(item.id) });
+    } catch {
+      return []; // status and exit fields disagree: drop this one record, keep the rest
+    }
     // Refresh fixture-owned facts. Samples now carry a plan fixed at entry and an outcome walked from Yahoo bars;
     // stale device copies must not preserve the old impossible exits. Real trades are never changed.
     const currentDemo = demoById.get(trade.id);

@@ -77,7 +77,8 @@ export function laterTouch(
 }
 
 export function buildHindsight(
-  trade: Pick<TradeRecord, "direction" | "exit_time" | "stop_loss_price" | "planned_target_price">,
+  // Closed trades only: an open trade has no "after the exit" (R-03).
+  trade: Pick<TradeRecord, "direction" | "stop_loss_price" | "planned_target_price"> & { exit_time: string },
   candles: Candle[],
   timeframe: Timeframe = "1m",
 ): HindsightFact {

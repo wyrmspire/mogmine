@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isRegularTradingBarInterval } from "../session.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
-import { excursions, expectedInsideBarTimes, normalizeTrade } from "../trades.ts";
+import { excursions, expectedInsideBarTimes, isClosed, normalizeTrade } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 
 const minute = 60_000;
@@ -12,7 +12,7 @@ function bar(time: number, high = 101, low = 99): Candle {
 }
 
 function trade(entry: number, exit: number, symbol = "MES") {
-  return normalizeTrade({
+  const record = normalizeTrade({
     id: "session-coverage",
     symbol,
     direction: "LONG",
@@ -21,6 +21,8 @@ function trade(entry: number, exit: number, symbol = "MES") {
     entry_price: 100,
     exit_price: 100.25,
   });
+  assert.ok(isClosed(record));
+  return record;
 }
 
 test("weekday intra-session expected bars and excursions are unchanged", () => {
