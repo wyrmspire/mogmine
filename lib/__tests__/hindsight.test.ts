@@ -159,3 +159,7 @@ test("expanded text is sentence plus later-touch labels, identical at both detai
   const none = buildHindsight({ ...trade, stop_loss_price: null, planned_target_price: null }, []);
   assert.equal(hindsightExpandedText(none), none.sentence);
 });
+
+test("R-03c: an open trade has no hindsight", () => {
+  assert.equal(buildHindsight({ ...trade, exit_time: null }, after([[5, 5998, 6012]])), null);
+});

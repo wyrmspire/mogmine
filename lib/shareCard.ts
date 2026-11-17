@@ -41,8 +41,9 @@ export function shareCardContent(trade: TradeRecord, zone: string, privacy: bool
     direction: `${trade.direction === "LONG" ? "▲" : "▼"} ${trade.direction} · ${privacy ? "" : `${quantity} · `}${formatDuration(holdSeconds(trade))}`,
     entry: `ENTRY ${formatDateTime(trade.entry_time, zone)}`,
     exit: trade.exit_time == null ? "OPEN" : `EXIT ${formatDateTime(trade.exit_time, zone)}`,
-    outcome: privacy ? r : formatMoney(tradePnl(trade)),
-    outcomeDetail: privacy ? points : `${r} · ${points}`,
+    // An open trade is labelled OPEN and shows no result (OD-38, R-03c).
+    outcome: trade.exit_time == null ? "OPEN" : privacy ? r : formatMoney(tradePnl(trade)),
+    outcomeDetail: trade.exit_time == null ? "" : privacy ? points : `${r} · ${points}`,
     playbook: playbookName(trade.playbook_id),
     tags: trade.quick_tags,
     rules: trade.checklist_state,

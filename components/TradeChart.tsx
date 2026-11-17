@@ -10,7 +10,7 @@ import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
 import { TIMEFRAME_MINUTES, aggregateCandles, alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, isScratch, specFor, visibleLogicalBars } from "@/lib/trades";
-import type { Candle, ClosedTradeRecord, Timeframe } from "@/lib/trades";
+import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import { buildHindsight } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
@@ -40,8 +40,8 @@ export interface TradeChartHandle {
 
 interface Props {
   ref?: Ref<TradeChartHandle>;
-  /** Closed trades only until R-03c draws an open trade to the last bar. */
-  trade: ClosedTradeRecord;
+  /** An open trade (R-03c) is drawn from its entry bar to the last loaded bar, with no exit. */
+  trade: TradeRecord;
   candles: Candle[];
   /** Minutes per bar of `candles` (1 unless Yahoo no longer serves 1m for this trade). */
   baseTimeframe: Timeframe;
@@ -83,6 +83,13 @@ interface Live {
 }
 
 const toTime = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
+
+/** Where the box ends: the exit, or for an open trade the last loaded bar (R-03c). Never "now" or a guess. */
+function boxEnd(trade: Pick<TradeRecord, "entry_time" | "exit_time">, bars: Candle[]): string {
+  if (trade.exit_time != null) return trade.exit_time;
+  const last = bars.length ? bars[bars.length - 1].time : Date.parse(trade.entry_time);
+  return new Date(Math.max(last, Date.parse(trade.entry_time))).toISOString();
+}
 
 function reportExtension(state: Live, onExtensionChange?: (extension: ChartExtension) => void) {
   if (!state.baseFitRange) {
@@ -143,7 +150,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
   const latest = useRef({ trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticTimeframe = TIMEFRAME_MINUTES[timeframe] <= TIMEFRAME_MINUTES[baseTimeframe] ? baseTimeframe : timeframe;
-  const diagnosticWindow = fitWindow(trade.entry_time, trade.exit_time, diagnosticTimeframe);
+  const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, candles), diagnosticTimeframe);
 
   useEffect(() => { latest.current = { trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange }; });
 
@@ -239,13 +246,15 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     const times = bars.map((bar) => bar.time);
     // A fill with no bar within tolerance is unresolved (issue #51): no box is drawn at a far-off bar.
     // When a fill snaps to a nearby bar rather than containing bar, alignment is approximate (issue #64 / OD-28).
-    const alignment = alignTradeToBars(times, tr.entry_time, tr.exit_time, barTimeframe);
+    const end = boxEnd(tr, bars);
+    const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.setHidden(alignment == null);
     if (alignment) {
       const isLong = tr.direction === "LONG";
       const scratch = isScratch(tr);
-      const showContinuation = p.detailLevel !== "low";
+      // An open trade has no after-exit continuation (R-03c).
+      const showContinuation = p.detailLevel !== "low" && tr.exit_time != null;
       const fact = showContinuation ? buildHindsight(tr, bars, barTimeframe) : null;
       const laterTouches = [fact?.target, fact?.stop].flatMap((touch) => touch ? [{ time: toTime(touch.time), kind: touch.kind }] : []);
       const config: PositionBoxConfig = {
@@ -270,7 +279,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     l.lines = [];
 
     // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
-    const fittedWindow = fitWindow(tr.entry_time, tr.exit_time, barTimeframe);
+    const fittedWindow = fitWindow(tr.entry_time, end, barTimeframe);
     const entryIndex = entryBar == null ? -1 : times.indexOf(entryBar);
     l.barCount = times.length;
     if (entryIndex >= 0) {

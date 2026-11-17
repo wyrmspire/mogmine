@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dayStats } from "../selectors.ts";
 import { parseBackupFile } from "../store.ts";
+import { shareCardContent } from "../shareCard.ts";
 import {
   buildSparkline, candleSignature, classifyTrade, excursions, exitFlagReason, holdSeconds, initialRiskUsd,
   isClosed, isOpen, isScratch, normalizeTrade, plannedR, rMultiple, tradePnl, tradePoints, tradeTicks, validateTradeInput,
@@ -114,4 +115,14 @@ test("R-03a: validation skips the exit price only when it is null (open)", () =>
   const base = { symbol: "MES", direction: "LONG" as const, quantity: 1, entry_price: 6000, stop_loss_price: null, planned_target_price: null, key_level_price: null };
   assert.equal(validateTradeInput({ ...base, exit_price: null }).exit_price, undefined);
   assert.ok(validateTradeInput({ ...base, exit_price: Number.NaN }).exit_price);
+});
+
+test("R-03c: the Trade Card of an open trade is labelled OPEN and shows no result (OD-38)", () => {
+  for (const privacy of [false, true]) {
+    const card = shareCardContent(open, "America/Chicago", privacy);
+    assert.equal(card.exit, "OPEN");
+    assert.equal(card.outcome, "OPEN");
+    assert.equal(card.outcomeDetail, "");
+    assert.doesNotMatch(JSON.stringify(card), /\$|pts|R\b/);
+  }
 });

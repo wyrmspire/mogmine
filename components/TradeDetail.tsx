@@ -12,7 +12,7 @@ import { TradeChart } from "./TradeChart";
 import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
-import { ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
+import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
@@ -22,7 +22,7 @@ import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
-import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, isClosed, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
@@ -83,8 +83,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [closing, setClosing] = useState(false);
   const closeSheet = useCallback(() => setClosing(false), []);
   const candles = useCandles(trade.id);
-  // Until R-03c an open trade has no chart: its candles never load, so this stays null for it.
-  const closedTrade = isClosed(trade) ? trade : null;
   const chartRef = useRef<TradeChartHandle>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const cardBuild = useRef(0);
@@ -217,7 +215,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const sign = trade.direction === "LONG" ? 1 : -1;
   const points = formatPoints(tradePoints(trade), trade.symbol);
-  // An open trade shows `Open` where the result goes, and nothing else (OD-38).
+  // An open trade shows `Open` where the result goes, and nothing else (OD-38). Its chart runs
+  // from the entry bar to the last loaded bar, with no exit (R-03c).
   const open = isOpen(trade);
   const headline = open ? "Open" : prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl);
   const secondary = open ? "" : prefs.shield ? (r != null ? points : "—R") : formatR(r);
@@ -240,19 +239,20 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     return entryOff || exitOff;
   }, [ready, candles, trade, baseMinutes]);
   const barCheck = useMemo(() => {
-    if (!ready || trade.is_sample) return null;
+    // The exit-bar checks have nothing to test on an open trade; its entry bar anchors the load (R-03c).
+    if (!ready || trade.is_sample || open) return null;
     return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
-  }, [ready, candles, trade, baseMinutes]);
+  }, [ready, candles, trade, baseMinutes, open]);
+  // Null for an open trade: there is no "after the exit" yet.
   const hindsight = useMemo(() => {
-    if (!ready || !closedTrade) return null;
-    return buildHindsight(closedTrade, candles.candles, candles.baseTimeframe);
-  }, [ready, closedTrade, candles]);
+    if (!ready) return null;
+    return buildHindsight(trade, candles.candles, candles.baseTimeframe);
+  }, [ready, trade, candles]);
   const barIssues = barCheck?.issues ?? [];
-  // An open trade has no candles until R-03c: that is not a data problem, so it raises no note.
-  const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample && !open ? "missing" as const : null);
+  const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
   // Issue #83: every data-quality note collapses into one chip. Hindsight is not a data note.
   const dataNotes = collectDataNotes({
-    noCandles: candles?.status === "none" && !trade.is_sample && !open,
+    noCandles: candles?.status === "none" && !trade.is_sample,
     base: ready ? base : null,
     misaligned,
     ticker: trade.yahoo_ticker,
@@ -286,12 +286,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         </div>
 
         {candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
-        {candles?.status === "none" && open && (
-          <div className="chart-note fact" role="status"><span>The chart for an open trade is not available yet. Close the trade to see it.</span></div>
-        )}
-        {candles?.status === "none" && !trade.is_sample && !open && (
+        {candles?.status === "none" && !trade.is_sample && (
           <div className="chart-note fact candle-retry" role="status">
-            <span>{exitIsFresh(trade, candles.lastAttemptAt) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
+            <span>{(open ? candles.lastAttemptAt - Date.parse(trade.entry_time) < FRESH_EXIT_MS : exitIsFresh(trade, candles.lastAttemptAt)) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
             <button type="button" onClick={() => ensureCandles(trade, true)}>Retry</button>
           </div>
         )}
@@ -332,7 +329,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                       <span className="shortcut">F</span>
                     </button>
                   </div>
-                  <div className="view-menu-section">
+                  {!open && <div className="view-menu-section">
                     <span className="view-menu-label">Continuation</span>
                     <div className="view-menu-toggle-group" role="group" aria-label="Chart detail">
                       <button
@@ -354,7 +351,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                         <small>Continuation</small>
                       </button>
                     </div>
-                  </div>
+                  </div>}
                   <div className="view-menu-section">
                     <button
                       type="button"
@@ -400,9 +397,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
           </div>
           <div className="chart-frame">
-            {ready && closedTrade ? (
+            {ready ? (
               <>
-                <TradeChart ref={chartRef} trade={closedTrade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
+                <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
                 <button
                   type="button"
                   className="chart-edge-hit left"

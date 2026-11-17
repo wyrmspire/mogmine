@@ -21,17 +21,32 @@ export async function GET(request: NextRequest) {
   const symbol = request.nextUrl.searchParams.get("symbol")?.toUpperCase();
   const entry = request.nextUrl.searchParams.get("entry");
   const exit = request.nextUrl.searchParams.get("exit");
-  if (!symbol || !FUTURES_SPECS[symbol] || !entry || !exit) {
-    return NextResponse.json({ error: "A supported symbol, entry and exit are required" }, { status: 400 });
+  if (!symbol || !FUTURES_SPECS[symbol] || !entry) {
+    return NextResponse.json({ error: "A supported symbol and entry are required" }, { status: 400 });
   }
 
   const entryTime = Date.parse(entry);
-  const exitTime = Date.parse(exit);
-  if (!Number.isFinite(entryTime) || !Number.isFinite(exitTime) || exitTime <= entryTime) {
+  // No exit is an open trade (R-03c). A present exit must still be valid and after the entry.
+  const exitTime = exit == null ? null : Date.parse(exit);
+  if (!Number.isFinite(entryTime) || (exitTime != null && (!Number.isFinite(exitTime) || exitTime <= entryTime))) {
     return NextResponse.json({ error: "The trade time range is invalid" }, { status: 400 });
   }
 
   try {
+    if (exitTime == null) {
+      // Open trade: from 15 hours before the entry to now, and only the entry bar is required.
+      const to = new Date();
+      if (entryTime >= to.getTime()) return NextResponse.json({ error: "The entry is in the future" }, { status: 400 });
+      for (const { timeframe, padHours } of ATTEMPTS) {
+        const from = new Date(entryTime - padHours * 3_600_000);
+        const candles = await provider.getCandles({ symbol, timeframe, from, to });
+        if (anchorsTradeWindow(candles, entryTime, null, timeframe, symbol)) {
+          return NextResponse.json({ candles, source: "Yahoo Finance", ticker: provider.resolveProviderSymbol(symbol), baseTimeframe: timeframe });
+        }
+      }
+      return NextResponse.json({ error: "Yahoo Finance has no candles for this range" }, { status: 404 });
+    }
+
     for (const { timeframe, padHours } of ATTEMPTS) {
       const from = new Date(entryTime - padHours * 3_600_000);
       // Evening-session exits can be more than 15 hours before their assigned session close.

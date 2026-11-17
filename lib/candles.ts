@@ -141,7 +141,7 @@ async function loadSampleCandles(trade: TradeRecord, signature: string) {
 
 /** True only after the hindsight window has closed and the cached bars do not reach that close. */
 export function cachedCandlesNeedRefetch(trade: Pick<TradeRecord, "exit_time">, stored: StoredCandles, now: number) {
-  // An open trade has no hindsight window yet; its candles arrive with R-03c.
+  // An open trade has no hindsight window: it refreshes on the R-02 five-minute rule instead (R-03c).
   if (trade.exit_time == null) return false;
   const windowClose = sessionCloseUtc(trade.exit_time);
   if (now <= windowClose) return false;
@@ -163,13 +163,19 @@ export function exitIsFresh(trade: Pick<TradeRecord, "exit_time">, now: number) 
 
 /** When a trade's candles should be requested again, or null for never. Pure, for tests. (R-02, docs/16) */
 export function nextCandleRetryAt(
-  trade: Pick<TradeRecord, "exit_time">,
+  trade: Pick<TradeRecord, "exit_time"> & Partial<Pick<TradeRecord, "entry_time">>,
   entry: Pick<CandleEntry, "status" | "candles" | "baseTimeframe">,
   lastAttemptAt: number,
   now: number,
 ): number | null {
-  // An open trade has no exit to anchor a retry to yet (R-03a); R-03c adds open-trade candles.
-  if (trade.exit_time == null) return null;
+  // An open trade is never final (R-03c): refresh every five minutes once loaded, and retry a
+  // missing set each minute for the first hour after entry (Yahoo publishes late), then every 15.
+  if (trade.exit_time == null) {
+    if (entry.status === "ready") return lastAttemptAt + 5 * MINUTE_MS;
+    if (entry.status !== "none") return null;
+    const entryFresh = trade.entry_time != null && now - Date.parse(trade.entry_time) < FRESH_EXIT_MS;
+    return lastAttemptAt + (entryFresh ? MINUTE_MS : 15 * MINUTE_MS);
+  }
   const sessionClosed = now > sessionCloseUtc(trade.exit_time);
   const reachesClose = !cachedCandlesNeedRefetch(trade, {
     signature: "",
@@ -194,15 +200,14 @@ export async function loadCachedCandles(
   signature: string,
   dependencies: CandleLoadDependencies,
 ): Promise<StoredCandles | null> {
-  // Until R-03c, an open trade has no chart: market data needs an exit to anchor the window.
-  if (trade.exit_time == null) throw new Error("unavailable");
   const key = candleCacheKey(trade);
   const cached = await dependencies.read(key);
   if (dependencies.isCurrent?.() === false) return null;
   const entryMs = Date.parse(trade.entry_time);
-  const exitMs = Date.parse(trade.exit_time);
+  // An open trade (R-03c) is anchored by its entry bar alone, and its cache is never final.
+  const exitMs = trade.exit_time == null ? null : Date.parse(trade.exit_time);
   const covers = (candles: Candle[], timeframe: Timeframe | undefined): timeframe is Timeframe =>
-    Boolean(timeframe && TIMEFRAMES.includes(timeframe) && coversTradeWindow(candles, entryMs, exitMs, timeframe, trade.symbol));
+    Boolean(exitMs != null && timeframe && TIMEFRAMES.includes(timeframe) && coversTradeWindow(candles, entryMs, exitMs, timeframe, trade.symbol));
   // A payload anchors the trade when the entry and exit bars are present (AC-07): gaps inside
   // the hold are drawn and counted on screen, never a reason to drop the whole chart (#90 follow-up).
   const anchored = (candles: Candle[], timeframe: Timeframe | undefined): timeframe is Timeframe =>
@@ -243,8 +248,9 @@ async function load(trade: TradeRecord, signature: string, refresh: boolean) {
       read: (key) => idbGet<StoredCandles>(key),
       write: (key, value) => idbSet(key, value),
       request: async (requestedTrade) => {
-        if (requestedTrade.exit_time == null) throw new Error("unavailable");
-        const params = new URLSearchParams({ symbol: requestedTrade.symbol, entry: requestedTrade.entry_time, exit: requestedTrade.exit_time });
+        // No exit for an open trade: the route fetches from before the entry to now (R-03c).
+        const params = new URLSearchParams({ symbol: requestedTrade.symbol, entry: requestedTrade.entry_time });
+        if (requestedTrade.exit_time != null) params.set("exit", requestedTrade.exit_time);
         const response = await fetch(`/api/market-data?${params}`);
         if (!response.ok) throw new Error("unavailable");
         return response.json() as Promise<CandleResponse>;
