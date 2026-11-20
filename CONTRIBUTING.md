@@ -12,6 +12,7 @@ For every developer and every AI agent. [AGENTS.md](AGENTS.md) holds the rules t
 | [docs/01 – 09](docs/) | What exactly are we building? | With the feature |
 | [docs/10](docs/10-yahoo-first-build-plan.md) | What do I build first, and on what data? | When the build order or the data source changes |
 | [docs/11](docs/11-product-workflows-and-api-context.md) | Which daily workflows, chart context and assistant API behaviors are proposed? | With owner review of `OD-17`–`OD-19` |
+| [docs/15](docs/15-trade-document-and-render-grammar.md) | What is a trade document, how is it drawn on the chart, and which trade examples are fixtures? | With owner review of `OD-30`–`OD-34` |
 | [docs/12](docs/12-levels-zones-and-daily-markup.md) | How are daily levels, zones and the markup computed, drawn and stored? | With owner review of `OD-20`–`OD-23` |
 | [docs/13](docs/13-bold-ui-bets.md) | Which bolder interface ideas are on the table, and which three to try first? | When a bet is adopted or dropped |
 | [DECISIONS.md](DECISIONS.md) | What is decided? What is open? Which name is canonical? | When a decision is made |
@@ -27,7 +28,7 @@ For every developer and every AI agent. [AGENTS.md](AGENTS.md) holds the rules t
 
 ## 2. Lanes
 
-There is no code yet. This layout is proposed so that parallel work does not collide. Confirm it when scaffolding, then update this table.
+The app is live: `main` holds the code, deployed at `mogmine.vercel.app`. Today it is one Next.js app at the repo root (`app/`, `components/`, `lib/`), not the folders below. The table is the layout to split into when a second deployable exists (see the note below). Claim a lane in [NOTES.md](NOTES.md) before you start.
 
 > **Start smaller.** With no broker account and no listener (`D-009`), there is only one deployable. Begin as a single Next.js app with a `core` folder of pure functions, and split into the layout below when a second deployable exists ([docs/10 §7](docs/10-yahoo-first-build-plan.md#7-step-back-is-this-the-right-way-to-build-it), `OD-16`). The lanes still apply as folders.
 

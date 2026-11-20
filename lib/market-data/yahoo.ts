@@ -1,4 +1,4 @@
-import { FUTURES_SPECS } from "../trades.ts";
+import { FUTURES_SPECS, TIMEFRAME_MINUTES } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 import type { MarketDataProvider, MarketDataQuery } from "./types.ts";
 
@@ -59,7 +59,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
     if (!result?.timestamp || !quote) return [];
 
     // Clean before use: drop null-price rows and the stray row outside the window (AGENTS §3b-8).
-    return result.timestamp.flatMap((timestamp, index): Candle[] => {
+    const cleaned = result.timestamp.flatMap((timestamp, index): Candle[] => {
       const open = quote.open?.[index];
       const high = quote.high?.[index];
       const low = quote.low?.[index];
@@ -69,5 +69,18 @@ export class YahooFinanceProvider implements MarketDataProvider {
       if (time < from.getTime() || time > to.getTime()) return [];
       return [{ time, open, high, low, close, volume: quote.volume?.[index] ?? 0 }];
     });
+    return dropLiveRow(cleaned, TIMEFRAME_MINUTES[timeframe] * 60_000);
   }
+}
+
+/**
+ * During a session Yahoo appends the in-progress bar as a last row stamped "now" (e.g. 01:07:59),
+ * off the bar grid. An open trade's range always ends at now, so it always gets one (R-03c).
+ * Drop it when the row before it sits on the grid; the bar arrives properly on the next refresh.
+ */
+export function dropLiveRow(candles: Candle[], barMs: number): Candle[] {
+  if (candles.length < 2) return candles;
+  const last = candles[candles.length - 1];
+  const previous = candles[candles.length - 2];
+  return last.time % barMs !== 0 && previous.time % barMs === 0 ? candles.slice(0, -1) : candles;
 }

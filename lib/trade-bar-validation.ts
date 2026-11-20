@@ -1,3 +1,4 @@
+import { expectedInsideBarTimes } from "./session.ts";
 import type { Candle, TradeDirection, TradeRecord } from "./trades.ts";
 
 export type TradeBarIssueCode =
@@ -29,7 +30,7 @@ export interface TradeBarValidation {
 }
 
 type ValidatedTrade = Pick<TradeRecord,
-  "direction" | "entry_time" | "exit_time" | "exit_price" | "stop_loss_price" | "planned_target_price"
+  "symbol" | "direction" | "entry_time" | "exit_time" | "exit_price" | "stop_loss_price" | "planned_target_price"
 >;
 
 function stopTouched(direction: TradeDirection, stop: number, bar: Candle) {
@@ -38,19 +39,6 @@ function stopTouched(direction: TradeDirection, stop: number, bar: Candle) {
 
 function targetTouched(direction: TradeDirection, target: number, bar: Candle) {
   return direction === "LONG" ? bar.high >= target : bar.low <= target;
-}
-
-/** Open times of bars that are entirely inside the hold, using execution timestamps only. */
-function expectedInsideBarTimes(entry: number, exit: number, barMs: number): number[] {
-  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMs <= 0) return [];
-  const times: number[] = [];
-  let time = Math.ceil(entry / barMs) * barMs;
-  if (time < entry) time += barMs;
-  while (time + barMs <= exit) {
-    times.push(time);
-    time += barMs;
-  }
-  return times;
 }
 
 function coverageFor(
@@ -85,6 +73,9 @@ function coverageFor(
  * and no issues is a clean check.
  */
 export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[], barMinutes = 1): TradeBarValidation {
+  const exitPrice = trade.exit_price;
+  // An open trade has no exit to check against the bars yet (R-03).
+  if (trade.exit_time == null || exitPrice == null) return { coverage: "missing", issues: [], chronology: "unresolved" };
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) {
@@ -92,7 +83,7 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
   }
 
   const barMs = barMinutes * 60_000;
-  const expected = expectedInsideBarTimes(entry, exit, barMs);
+  const expected = expectedInsideBarTimes(entry, exit, barMs, trade.symbol);
   const entryBarTime = Math.floor(entry / barMs) * barMs;
   const exitBarTime = Math.floor(exit / barMs) * barMs;
   const coverage = coverageFor(candles, expected, entryBarTime, exitBarTime);
@@ -108,15 +99,15 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
   }
 
   const target = trade.planned_target_price;
-  const exitedWorseThanTarget = target != null && (trade.direction === "LONG" ? trade.exit_price < target : trade.exit_price > target);
+  const exitedWorseThanTarget = target != null && (trade.direction === "LONG" ? exitPrice < target : exitPrice > target);
   if (target != null && exitedWorseThanTarget) {
     const bar = completed.find((candidate) => targetTouched(trade.direction, target, candidate));
     if (bar) issues.push({ code: "target_crossed_before_exit", barTime: bar.time, price: target });
   }
 
   const exitBar = candles.find((bar) => bar.time === exitBarTime);
-  if (exitBar && (trade.exit_price < exitBar.low || trade.exit_price > exitBar.high)) {
-    issues.push({ code: "exit_outside_bar", barTime: exitBar.time, price: trade.exit_price });
+  if (exitBar && (exitPrice < exitBar.low || exitPrice > exitBar.high)) {
+    issues.push({ code: "exit_outside_bar", barTime: exitBar.time, price: exitPrice });
   }
 
   return { coverage, issues, chronology };

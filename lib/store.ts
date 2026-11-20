@@ -4,6 +4,8 @@
 import { useSyncExternalStore } from "react";
 import { DEMO_TRADE_IDS, demoTrades } from "./fixtures.ts";
 import { idbSet } from "./idb.ts";
+import { sanitizeMoodBackup } from "./mood-store.ts";
+import type { MoodBackup } from "./mood-store.ts";
 import type { Prefs } from "./prefs.ts";
 import { annotationKey, candleCacheKey, candleSignature, deriveReviewStatus, normalizeTrade } from "./trades.ts";
 import type { Candle, ChecklistItem, TradeDirection, TradeRecord } from "./trades.ts";
@@ -94,8 +96,12 @@ function pickAnnotations(trade: TradeRecord) {
 }
 
 
-const serverState: JournalState = { trades: [...demoTrades].sort(byNewest), hydrated: false, saveState: "idle" };
-let state: JournalState = serverState;
+function emptyJournal(): JournalState {
+  return { trades: [...demoTrades].sort(byNewest), hydrated: false, saveState: "idle" };
+}
+
+const serverState: JournalState = emptyJournal();
+let state: JournalState = emptyJournal();
 const listeners = new Set<() => void>();
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -126,14 +132,16 @@ export interface JournalBackup {
   app: "mogmine";
   version: 1;
   exportedAt: string;
-  /** Backups store the trade journal only. Candles sit in IndexedDB and are re-fetched from Yahoo when a chart opens. */
+  /** Backups store the trade journal only. Candles sit in IndexedDB and are re-fetched from Yahoo when a chart opens (samples use offline fixture bars). */
   includesCandles: false;
   trades: TradeRecord[];
   prefs?: Partial<Prefs>;
+  /** Mood Shape records, spoke registry and candidates (docs/18). Absent in older backups. */
+  mood?: MoodBackup;
 }
 
 export type ParseBackupResult =
-  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; realCount: number; sampleCount: number; exportedAt: string | null }
+  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; mood?: MoodBackup; realCount: number; sampleCount: number; exportedAt: string | null }
   | { ok: false; error: string };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -154,6 +162,13 @@ function sanitizeChecklist(value: unknown): ChecklistItem[] {
   });
 }
 
+/** An open record has both exit fields null; any other record (closed or legacy, no status) needs both (R-03). */
+function hasValidExit(item: LegacyTrade): boolean {
+  if (item.status === "open") return item.exit_time == null && item.exit_price == null;
+  if (item.status !== undefined && item.status !== "closed") return false;
+  return isValidTime(item.exit_time) && isFiniteNumber(item.exit_price);
+}
+
 function parseTradeItem(raw: unknown): TradeRecord | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as LegacyTrade;
@@ -161,9 +176,8 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
     typeof item.id !== "string" || !item.id.trim() ||
     typeof item.symbol !== "string" || !item.symbol.trim() ||
     !isValidTime(item.entry_time) ||
-    !isValidTime(item.exit_time) ||
+    !hasValidExit(item) ||
     !isFiniteNumber(item.entry_price) ||
-    !isFiniteNumber(item.exit_price) ||
     (item.direction !== "LONG" && item.direction !== "SHORT")
   ) {
     return null;
@@ -184,9 +198,10 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
     symbol: item.symbol,
     direction: item.direction as TradeDirection,
     entry_time: item.entry_time,
-    exit_time: item.exit_time,
+    // hasValidExit: both present, or both null on an open trade.
+    exit_time: item.exit_time ?? null,
     entry_price: item.entry_price,
-    exit_price: item.exit_price,
+    exit_price: item.exit_price ?? null,
     stop_loss_price: stopLoss,
     planned_target_price: plannedTarget,
     key_level_price: keyLevel,
@@ -208,7 +223,7 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
 }
 
 /** Build a local backup payload of the trade journal and device preferences (no candles, no secrets). */
-export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs): JournalBackup {
+export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs, mood?: MoodBackup): JournalBackup {
   const cleanTrades = trades.map((trade) => {
     const rest: TradeRecord & { candles?: Candle[] } = { ...trade };
     delete rest.candles;
@@ -221,6 +236,7 @@ export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs)
     includesCandles: false,
     trades: cleanTrades,
     ...(prefs ? { prefs } : {}),
+    ...(mood ? { mood } : {}),
   };
 }
 
@@ -238,6 +254,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
 
   let rawTrades: unknown[];
   let rawPrefs: Partial<Prefs> | undefined;
+  let mood: MoodBackup | undefined;
   let exportedAt: string | null = null;
 
   if (Array.isArray(parsed)) {
@@ -254,6 +271,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
     if (obj.prefs && typeof obj.prefs === "object" && !Array.isArray(obj.prefs)) {
       rawPrefs = obj.prefs as Partial<Prefs>;
     }
+    mood = sanitizeMoodBackup(obj.mood) ?? undefined;
     if (typeof obj.exportedAt === "string" && Number.isFinite(Date.parse(obj.exportedAt))) {
       exportedAt = obj.exportedAt;
     }
@@ -282,7 +300,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
   const sampleCount = trades.filter((t) => t.is_sample).length;
   const realCount = trades.length - sampleCount;
 
-  return { ok: true, trades, prefs: rawPrefs, realCount, sampleCount, exportedAt };
+  return { ok: true, trades, prefs: rawPrefs, ...(mood ? { mood } : {}), realCount, sampleCount, exportedAt };
 }
 
 function readStored(): TradeRecord[] | null {
@@ -292,9 +310,16 @@ function readStored(): TradeRecord[] | null {
   const parsed = JSON.parse(raw) as LegacyTrade[];
   if (!Array.isArray(parsed)) return null;
   return parsed.flatMap((item) => {
-    if (!item?.id || !item.symbol || !item.entry_time || !item.exit_time || item.entry_price == null || item.exit_price == null || !item.direction) return [];
+    // An open trade (R-03) has null exits. A closed or legacy record with a missing exit is still dropped.
+    const exitOk = item?.status === "open" || (item?.exit_time && item.exit_price != null);
+    if (!item?.id || !item.symbol || !item.entry_time || !exitOk || item.entry_price == null || !item.direction) return [];
     const { candles, ...rest } = item;
-    let trade = normalizeTrade({ ...(rest as TradeRecord), is_sample: rest.is_sample ?? DEMO_TRADE_IDS.has(item.id) });
+    let trade: TradeRecord;
+    try {
+      trade = normalizeTrade({ ...(rest as TradeRecord), is_sample: rest.is_sample ?? DEMO_TRADE_IDS.has(item.id) });
+    } catch {
+      return []; // status and exit fields disagree: drop this one record, keep the rest
+    }
     // Refresh fixture-owned facts. Samples now carry a plan fixed at entry and an outcome walked from Yahoo bars;
     // stale device copies must not preserve the old impossible exits. Real trades are never changed.
     const currentDemo = demoById.get(trade.id);
@@ -377,6 +402,16 @@ export function replaceTrades(trades: TradeRecord[]) {
 }
 
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+
+/** Test hook: restore the unhydrated demo journal. */
+export function resetJournalForTests() {
+  state = emptyJournal();
+}
+
+/** Test hook: read the in-memory journal after hydrate/persist. */
+export function getJournalState() {
+  return state;
+}
 
 export function useJournal() {
   return useSyncExternalStore(subscribe, () => state, () => serverState);

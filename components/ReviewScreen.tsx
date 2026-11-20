@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { PitStop } from "./PitStop";
-import { Sparkline } from "./Sparkline";
+import { RStrip } from "./RStrip";
+import { MoodShape, useTradeMood } from "./MoodShape";
+import { describeMood } from "@/lib/mood";
 import { formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
@@ -87,7 +89,7 @@ function Queue() {
               {formatSessionDate(sessionDate(trade.entry_time))} · {formatListTime(trade.entry_time, prefs.timeZone)} · in at {formatPrice(trade.entry_price, trade.symbol)}{sealed ? "" : ` · ${formatDuration(holdSeconds(trade))}`}
             </span>
           </span>
-          <span className={sealed ? "sealed" : ""} aria-hidden={sealed}><Sparkline points={trade.sparkline} /></span>
+          <span className={sealed ? "sealed" : ""} aria-hidden={sealed}><RStrip trade={trade} blind={sealed} /></span>
           <span className={`row-result num ${sealed ? "sealed" : ""}`} aria-hidden={sealed} style={{ textAlign: "right" }}>
             <b className={(pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
             <span className="muted" style={{ fontSize: 11 }}>{prefs.shield ? (r != null ? points : "") : formatR(r)}</span>
@@ -98,6 +100,7 @@ function Queue() {
           <div className="blind-ask">
             <h3>Take it again?</h3>
             <p>Judge the entry before you see how it ended. The result stays hidden until you answer.</p>
+            <SealedMood trade={trade} />
             <div className="choices">
               <button type="button" className="btn-secondary" onClick={() => grade("yes")}>Yes</button>
               <button type="button" className="btn-secondary" onClick={() => grade("smaller")}>Smaller</button>
@@ -121,6 +124,18 @@ function Queue() {
           <button type="button" className="switch-hit" role="switch" aria-checked={prefs.blindReview} aria-label="Blind review" onClick={() => setPrefs({ blindReview: !prefs.blindReview })}><span className="switch" data-checked={prefs.blindReview} aria-hidden="true" /></button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Blind review keeps the Mood Shape visible: judge the trade by the state of mind, not the result. */
+function SealedMood({ trade }: { trade: TradeRecord }) {
+  const vector = useTradeMood(trade);
+  if (!vector.values.some((value) => value != null)) return null;
+  return (
+    <div className="blind-mood">
+      <MoodShape vector={vector} size={96} />
+      <span>How it felt: {describeMood(vector)}</span>
     </div>
   );
 }

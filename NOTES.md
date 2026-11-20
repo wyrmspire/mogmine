@@ -23,14 +23,17 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ## Next up
 
-M0 and M1 are done only when their acceptance criteria hold: `AC-01` – `AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1).
+**Work the list in [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md)** (owner order, 2026-11-16). Each step names its files, its limits and its done-when.
 
-1. **Owner turns on the candle archive** (issue #70 / README §6): create a Supabase project, apply `supabase/migrations/`, put keys in `.env.local`, and run `npm run archive:ingest -- --backfill`. The code is on `feat/m0-candle-archive` and is not merged to `main`.
-2. Owner decides `OD-16` (build order). `OD-2` is followed in the M0 migration (RLS on, authenticated read, service-role write). `OD-4` is implemented as bar-level `market_candles` but stays open for confirmation.
-3. Live `AC-05` recovery against the real project, and issue #65 (session calendar / holiday coverage), after the archive is on.
-4. Build the `core` money and session math with golden tests, then one trade on one chart (M1).
-5. Owner decides `OD-1`, then freeze or reconcile `mogprompt.md` using the drift register.
-6. When a TopstepX account exists: ask Topstep to confirm in writing that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
+Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math.
+
+1. `R-03b` Entry and close for an open trade (`AddTradeSheet.tsx`, `TradeDetail.tsx`, the list rows), with `R-10` in the same form: an optional stop at entry, frozen as `initial_stop_price`.
+2. `R-03c` Chart and candles for an open trade.
+3. `R-09a`–`R-09d` Challenges, to the design in [docs/17](docs/17-challenges.md). `R-09a` (the pure evaluator and its golden tests) needs nothing else and can start now.
+4. `R-04` Owner turns on the candle archive (Supabase project and keys); an agent rebases `feat/m0-candle-archive`. It loses a day of `1m` history for every day it waits.
+5. `R-05` Trades stored in Supabase (needs `OD-30`), then `R-06` assistant endpoint (`OD-19`), `R-07` playbook editor, `R-08` running stats.
+
+Still open from before: `OD-37` (four challenge choices, docs/17 §8), `OD-1`, `OD-16`, and `AC-01`–`AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1). When a TopstepX account exists: get Topstep's written confirmation that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
 
 ## Lanes
 
@@ -48,12 +51,243 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-20 — agent (Tappy) — M0 candle archive (#71) merged up to current main, Market data lane
+Did:      Resolved the #71 merge against current main (Mood Shape, R-10, chart polish had landed since the branch forked). The resolver (`lib/market-data/resolve.ts`) now judges archive payloads by main's route rules (issue #90, AC-07, R-03c): a payload must cover the trade window or anchor it (partial, gaps counted), an open trade needs only its entry bar, and the archive is tried first per attempt — being stored no longer makes a thin set servable. Archive read failures degrade to Yahoo instead of failing the chart. `CandleSource` gains `"Archive"` alongside `"Demo fixture"`; `normalizeTrade` accepts Archive for any trade. Client cache threads the served source through main's R-02 load path. Archive Status card kept alongside the gold-preset Tune UI.
+Files:    merge resolutions in `lib/trades.ts`, `lib/candles.ts`, `lib/market-data/resolve.ts`, `app/api/market-data/route.ts`, `components/TuneScreen.tsx`, `lib/__tests__/candle-archive.test.ts` (resolver fixtures now span the window), `NOTES.md`.
+Checked:  typecheck clean; lint 0 errors (1 pre-existing warning); test 218/218; build passes (see PR comment). Not verified on a phone.
+Left:     The archive is still OFF: no Supabase project, keys or ingest run — that stays the owner's step (README §6). Until then the route is the Yahoo-only path with archive checks that find nothing configured.
+
+### 2026-11-19 — agent (Tappy) — R-10 stop at entry, frozen, Core math + App shell lanes
+Did:      `R-10`: `TradeRecord` gains `initial_stop_price` / `initial_stop_set_at` (null on old records, never back-filled); `stopPatch()` freezes the first stop once and later edits move `stop_loss_price` only; `initialRMultiple()` added beside an unchanged `rMultiple`. `AddTradeSheet` gains an optional Stop field (existing `validateTradeInput` stop-side rule) that sets all three fields on save; `TradeLevelEditor` captures the first stop via `stopPatch` (undo restores the working stop only, never the frozen one). Trade Detail shows a quiet "Initial stop 6841.25, set 09:42" line only when the working stop differs.
+Files:    `lib/trades.ts`, `lib/__tests__/initial-stop.test.ts`, `components/AddTradeSheet.tsx`, `components/TradeLevelEditor.tsx`, `components/TradeDetail.tsx`, `app/globals.css`, `docs/06-data-model-and-roadmap.md`, `docs/16-floor-roadmap.md` (R-05 planned columns), `NOTES.md`.
+Checked:  typecheck clean; lint 0 errors (1 pre-existing postcss warning); test 180/180 (7 new R-10 tests); build passes. Headless Chrome at 390×844: no horizontal overflow on home, sheet or detail; saved a trade with a stop (stored stop = initial = 6841.25, set-at stamped, preview +2.0R), edited the stop to 6845 and the stored initial stayed 6841.25 with the quiet line reading "Initial stop 6841.25, set 22:36". Not verified on a phone.
+Left:     PR open as do-not-merge-without-Chris. No screen switched from `rMultiple` to `initialRMultiple` (separate decision, per the step's Do-not list). Fixture/sample trades keep a null initial stop — theirs was never captured at entry.
+### 2026-11-19 — agent (Claude Code) — Mood Shape (docs/18), App shell + Core math lanes
+Did:      Mood Shape on the device: pure `lib/mood.ts` (`moodVector`, `moodPath`, `similarTrades`, `moodOutcomeStats`, phrase-matcher suggestions, `parseMoodSuggestion` AI contract, candidates, `addSpoke` + `rescoreForNewSpoke`), `lib/mood-store.ts` (`mogmine-mood-v1`, append-only records, in backups). UI: shape beside the R strip and a Mood card on Trade Detail, editor sheet (drag/arrow keys, Accept/Dismiss suggestions, "Add spoke?"), 40px feed thumbnails, shape kept visible in sealed blind review, Trade Card PNG, "Mood and result" card on Feed. Fixtures `ex-tp`/`ex-sl`/`ex-trail` got note events and `mood_records`; `fixtures/mood/spokes-v2.json`.
+Files:    `lib/mood.ts`, `lib/mood-store.ts`, `lib/store.ts`, `lib/shareCard.ts`, `components/Mood*.tsx`, `TradeDetail`, `TradeRow`, `ReviewScreen`, `FeedScreen`, `TuneScreen`, `AppShell`, `app/globals.css`, `lib/__tests__/mood.test.ts`, fixtures, `docs/18` (new), docs/03, 06, 15, `DECISIONS.md` (`OD-39`, drift row), `AGENTS.md`, `README.md`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test, build. Headless Chrome at 390×844: no horizontal overflow on feed, detail, editor, review, card; handle hit targets 55px; a drag writes one `user` record; Accept writes `voice_ai` only. Not checked on a real phone.
+Left:     `OD-39` (spokes, N = 3, pre-exit capture moment). No AI parser and no voice memo exist: "Suggest from notes" uses the on-device phrase matcher. No table until `OD-30`. Stats exclude samples, so on the demo journal they read "not enough data yet".
+
+### 2026-11-16 — agent (Claude Code) — R-03c open-trade chart and candles, Chart + Market data lanes
+Did:      `R-03c`: `/api/market-data` takes `exit` as optional; without it the range is entry − 15h to now and only the entry bar is required (`anchorsTradeWindow` entry-only mode when `exitMs` is null); a present but invalid `exit` is still `400`. `lib/candles.ts`: an open trade's cache is never final (the network is always asked; a payload without the entry bar keeps the cache), a loaded set refreshes every 5 min (R-02 rule), a missing set retries each minute for the first hour after entry then every 15. `TradeChart` takes any `TradeRecord`: an open trade's box runs from the entry bar to the last loaded bar, stop and target fills as before, no exit flag, no execution path, no actual band, no continuation. `PositionBoxPrimitive.exitPrice` is nullable. `buildHindsight` returns null for an open trade; the Continuation menu item is hidden for one; no exit-bar data notes. Trade Card for an open trade reads `OPEN` with no result (OD-38). `YahooFinanceProvider` drops the in-progress last row Yahoo appends during a live session (docs/10 §2).
+Files:    `app/api/market-data/route.ts`, `lib/market-data/coverage.ts`, `lib/market-data/yahoo.ts`, `lib/candles.ts`, `lib/hindsight.ts`, `lib/shareCard.ts`, `components/TradeChart.tsx`, `components/PositionBoxPrimitive.ts`, `components/TradeDetail.tsx`, tests (`candle-cache`, `market-data-coverage`, `hindsight`, `open-trade`), `docs/10-yahoo-first-build-plan.md`, `NOTES.md`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test, build. Live `MES=F` open trade (entry 25 min ago) drawn in headless Chrome at 390×844: 45 bars visible, box to the last bar, Trade Card `OPEN`, no horizontal overflow. Not checked on a real phone.
+Left:     Stacked on R-03b (#112): merge that first. Removed R-03b's interim "chart not available" note: an open trade now loads candles, and a failed load shows the normal Retry. Each 5-minute refresh rebuilds the chart, so a pan or zoom resets then (same as R-02 for fresh closed trades).
+
+### 2026-11-16 — agent (Claude Code) — challenges design and roadmap update, no lane
+Did:      Added `docs/17-challenges.md`: Drawdown Defender and Clean Run, with rules, math, golden test cases, the `lib/challenges.ts` contract, storage, the Today card, setup sheet and detail screen, and build steps `R-09a`–`R-09d`. In `docs/16`: rewrote `R-09` to point at it and unblocked it from `R-05`; added `R-10` (optional stop at entry, frozen as `initial_stop_price`); corrected the status table (open trades are in the model since `R-03a`) and marked `R-01`, `R-02`, `R-03a` merged. Restated `OD-37`. Documentation only.
+Files:    `docs/17-challenges.md`, `docs/16-floor-roadmap.md`, `DECISIONS.md`, `AGENTS.md`, `README.md`, `NOTES.md`.
+Checked:  Golden drawdown and Clean Run cases worked by hand; every dollar amount is a whole number of `MES` ticks. Relative links resolve. No code changed.
+Left:     The owner's four `OD-37` choices. Profit-target and R-scored challenges are deferred on purpose (docs/17 §1).
+
+### 2026-11-16 — agent (Claude Code) — R-02 follow-up, Chart lane (released)
+Did:      Two fixes on top of the merged R-02. A scheduled retry of a missing set keeps the no-chart state (Retry shows `Checking…`, disabled) instead of flashing the loading skeleton each minute. A same-day set served from the device cache records its `fetchedAt` as the last attempt, so it refreshes on the next check instead of after 5 minutes. Added end-to-end `ensureCandles` tests (stubbed fetch and clock).
+Files:    `lib/candles.ts`, `components/TradeDetail.tsx`, `lib/__tests__/candle-retry.test.ts`, `NOTES.md`.
+Checked:  163/163 `npm test`; the no-flash test fails against `main`'s loader. Typecheck clean, lint 0 errors, `next build` OK. The cache-served path has no automated test (no IndexedDB in Node). Nothing checked on a phone.
+Watch:    My parallel `chart/r01-pinch-chart-only` and `chart/r02-candle-retry` duplicate what is on `main`; do not merge them. A just-closed trade often opens on `1h` bars (route fallback) until the refresh brings `1m`.
+### 2026-11-16 — agent (Claude Code) — R-03b log and close an open trade, App shell lane
+Did:      `R-03b`: entry sheet has `Still open` / `Closed` at the top (default `Closed`); `Still open` hides the exit fields, skips their checks, sets the entry time to now unless one was typed, and the button reads `Save open trade and open chart`. Trade Detail for an open trade shows `Open` as the headline (no P&L, OD-38) and a 46px `Close trade` button that opens `CloseTradeSheet` (exit time default now, exit price; `validateClose` uses the `validateTradeInput` price rules and exit > entry); saving applies `closeTradePatch` (status, exits, trade style) through `updateTrade`. Rows on Today and Feed show `Open` where the result goes. Today's stat card and the day header show `· N open`. An open trade raises no "no candles" data note; until R-03c it shows "The chart for an open trade is not available yet."
+Files:    `components/AddTradeSheet.tsx`, `components/CloseTradeSheet.tsx` (new), `components/TradeDetail.tsx`, `components/TradeRow.tsx`, `components/TodayScreen.tsx`, `components/DayHeader.tsx`, `lib/trades.ts` (`validateClose`, `closeTradePatch`), `lib/__tests__/close-trade.test.ts` (new), `NOTES.md`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test, build. Driven in headless Chrome at 390×844: open trade saved, `Open` on detail, Today and Feed, Close trade fills in the result, no horizontal overflow. Not checked on a real phone.
+Left:     Without the R-03c chart the `Close trade` button sits in the upper half of the detail screen; with the chart above it, it lands in the lower half. The interim chart message goes away with R-03c.
+
+### 2026-11-16 — agent (Claude Code) — R-03a open-trade types and math, Core math lane
+Did:      `R-03a`: `TradeStatus` (`open`/`closed`), `status` on `TradeRecord`, nullable `exit_time`/`exit_price`, `isOpen`, `isClosed` (type guard) and `ClosedTradeRecord`. `normalizeTrade` defaults a missing status to `closed` and throws when status and exit fields disagree. Money functions return null for an open trade (`tradeTicks` → `tradePoints`, `tradePnl`, `rMultiple`; `isScratch` false; `exitFlagReason`, `excursions` null; sparkline empty); `initialRiskUsd`/`plannedR` unchanged. `holdSeconds(trade, now)` and `classifyTrade(entry, exit, now)` measure an open hold to `now`. `candleSignature` uses `open`. Store accepts an open record with null exits from device storage and backups, still drops a closed one with a missing exit, and drops (not crashes on) a record whose status and exits disagree. `dayStats` leaves open trades out of P&L, win rate and R and adds `openCount` (OD-38). `validateTradeInput` skips the exit only when it is `null`. Every null handled explicitly; no `!` or `as number`.
+Files:    `lib/trades.ts`, `lib/store.ts`, `lib/selectors.ts`, `lib/candles.ts`, `lib/describe.ts`, `lib/hindsight.ts`, `lib/shareCard.ts`, `lib/trade-bar-validation.ts`, `components/TradeChart.tsx`, `components/TradeDetail.tsx`, tests (`open-trade` new; `core`, `honest-box`, `hindsight`, `session-coverage` narrowed to closed fixtures), `docs/06-data-model-and-roadmap.md`, `NOTES.md`.
+Checked:  typecheck, lint, test, build (see PR). After merging main (R-01, R-02), `exitIsFresh` and `nextCandleRetryAt` got a null-exit guard (open trade: not fresh, no retry) so the merge typechecks. No UI change was intended; the form still requires an exit, so an open trade can only arrive from a backup file.
+Left:     `R-03b` (Still open / Closed in the entry sheet, Close trade on detail, `Open` label on rows and Today) and `R-03c` (open-trade candles and chart: until then `TradeChart` takes only a `ClosedTradeRecord` and an open trade shows no chart; `buildHindsight` takes a closed trade). `openCount` is computed but not shown yet.
+
+### 2026-11-16 — agent (Claude Code) — R-02 fresh-trade candles retry, Market data lane
+Did:      `R-02`: pure `nextCandleRetryAt` and `exitIsFresh` in `lib/candles.ts`; `lastAttemptAt` on `CandleEntry`, set when a load starts; `ensureCandles` starts a new load when a retry is due (never while one is in flight) and a due refresh skips the "cache is final for now" shortcut; a refetch with fewer bars keeps the cache. Trade Detail calls `ensureCandles` every 60 s while open and on `visibilitychange`, never for samples; a `none` state shows "Yahoo has not published these bars yet" (exit < 60 min) or "No candles loaded for this trade" and a 44px `Retry`. `anchorsTradeWindow` is unchanged.
+Files:    `lib/candles.ts`, `components/TradeDetail.tsx`, `lib/__tests__/candle-cache.test.ts`, `docs/08-ux-notes-viewing-and-journaling.md` (§4 state row), `NOTES.md`.
+Checked:  typecheck, lint, test, build (see PR). Not verified on a phone or against a live session.
+Left:     Yahoo's live-session lag for `MES=F` `1m` is still unmeasured: the work ran at 17:15 ET, inside the daily maintenance break. docs/10 §2 still lists it as unknown.
+
+### 2026-11-16 — agent (Claude Code) — R-01 pinch zoom, Chart lane
+Did:      `R-01`: `.chart-host` now has `touch-action: pan-y` (was `pan-y pinch-zoom`), so a two-finger pinch on the chart goes only to the chart (UX-44). Nothing else changed: viewport meta, `handleScroll`/`handleScale` and `vertTouchDrag: false` untouched.
+Files:    `app/globals.css`, `NOTES.md`.
+Checked:  `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning (`postcss.config.mjs`); `npm test` 140/140; `npm run build` ok. Not verified on a phone.
+Left:     The four done-when checks in docs/16 `R-01` need a real phone (iOS Safari and Android Chrome).
+
+### 2026-11-16 — agent (Claude Code) — floor roadmap, no lane
+Did:      Added `docs/16-floor-roadmap.md` (`R-01`–`R-09`) from the owner's review of the live app, with files, limits and done-when per step. Opened `OD-37` (challenges) and `OD-38` (open-trade display). Pointer rows in AGENTS and README; replaced Next up. Documentation only.
+Files:    `docs/16-floor-roadmap.md`, `AGENTS.md`, `README.md`, `DECISIONS.md`, `NOTES.md`.
+Found:    `.chart-host` has `touch-action: pan-y pinch-zoom`, so a pinch zooms page and chart together (UX-44 already says the chart owns pinch). A failed candle load never retries: no caller passes `force` to `ensureCandles`. An exit is required in the form, the type, the store import and `/api/market-data`, so an open trade cannot be logged. The planned trades SQL on `feat/m0-candle-archive` has `exit_time not null`, against docs/09 §8.
+Checked:  Read the code on `main` at `f8f9ff6`. Relative links in the new doc resolve. No code changed, nothing run on a phone.
+Left:     Nothing from the roadmap is built. Yahoo's live-session lag is still unmeasured (`R-02` asks for the number).
+
 ### 2026-11-15 — agent (Grok Bot) — Data, branch `feat/m0-candle-archive` (#70)
 Did:      M0 Supabase candle archive. Bar-level `market_candles` (unique symbol, timeframe, ts), `market_coverage`, `market_archive_jobs`, RLS. Typed `lib/candle-archive.ts`. Chart prefers the archive and falls back to Yahoo; empty env is unchanged. Idempotent `npm run archive:ingest` (Yahoo 1m, 8-day batches, coverage report, no-op without keys). Planned trades/notes/annotations SQL is documented and not applied. Tune shows last ingest status.
 Files:    `supabase/migrations/`, `supabase/planned/`, `lib/candle-archive.ts`, `lib/archive-*.ts`, `lib/market-data/resolve.ts`, `scripts/ingest-yahoo-archive.ts`, `app/api/{market-data,archive-status}/`, `components/TuneScreen.tsx`, `lib/{candles,trades,store}.ts`, `lib/__tests__/candle-archive.test.ts`, README, DECISIONS, NOTES, `.env.example`.
 Verified: see the PR description for command output.
 Left:     Do not merge without Chris. No keys, no Vercel changes, no push to main. Local `supabase start` was not run: the box has the CLI (3.1.0) but no Docker and no Postgres server. Live AC-05 waits on the owner's project. #65 remains open. OD-4 stays open.
 Watch:    Service role is server-only. Never fill or commit `.env` values.
+
+### 2026-11-15 — agent (Instinct) — integration-review fixes for batch6 (PR #107)
+Did:      Owner's held-integration findings: Shield masks the Contracts input and subtitle in manual entry (quantity still saved); R strip exit marker coloured by money outcome, not classification; hindsight later-touch search stops at the assigned session close; Trade Card rebuilds after a pan/pinch settles (it never did); a tap no longer counts as a pan (6px drag); set levels are tappable to correct, undo restores the previous value; market-data accepts an anchored payload with inside gaps as partial (AC-07) and the chip reports them; Trade Card export keeps gold only on the RULES seal; the 640 KB sample-bars fixture lazy-loads as its own chunk.
+Files:    `components/AddTradeSheet.tsx`, `components/RStrip.tsx`, `lib/rstrip.ts`, `lib/hindsight.ts`, `components/TradeChart.tsx`, `components/TradeLevelEditor.tsx`, `app/globals.css`, `lib/shareCard.ts`, `lib/market-data/coverage.ts`, `app/api/market-data/route.ts`, `lib/candles.ts`, tests (`hindsight`, `rstrip`, `market-data-coverage`, `candle-cache`, `sample-bars`, `honest-box`), `NOTES.md`.
+Checked:  140/140 node --test, tsc, eslint, next build all pass. Phone behaviour still unverified (AC-11).
+Left:     PR targets `integration/batch6`, feeding #107. Do not merge or deploy. Browser-level regression test for the card-after-pan path still wanted; the repo has no browser test harness.
+
+### 2026-11-15 — agent (Grok Bot) — integration/batch6 default is the 45-bar trade window
+Did:      Opening visible range is the standard `fitWindow` (30% lead-in / 50% hold / 20% after-exit) at `max(45, the trade's own window)`. Removed the 2.5× zoom-out multiplier Chris rejected. Fit stays an optional View action. Held-range re-apply after setData is unchanged.
+Files:    `lib/trades.ts`, `lib/__tests__/core.test.ts`, `components/TradeChart.tsx`, `NOTES.md`.
+Left:     Draft PR #107 against main, stacked on #100. Do not merge or deploy.
+
+### 2026-11-15 — agent (Grok Bot) — integration/batch6 sample fixture pad
+Did:      Expanded `fixtures/sample-bars.json` with real unmodified Yahoo 1m bars for the Nov 8–13 Globex week (MES=F / MNQ=F), shared across the ten samples so 1m/5m/15m/1h all open with at least 45 bars. Existing hold-window OHLC is unchanged (fills still snap). `getSampleCandles` serves the shared series by symbol; samples still never fetch at runtime.
+Files:    `fixtures/sample-bars.json`, `lib/candles.ts`, `lib/__tests__/sample-bars.test.ts`, `lib/__tests__/honest-box.test.ts`, `NOTES.md`.
+Left:     Draft PR #107 against main, stacked on #100. Do not merge or deploy. Keep the fixture out of printcode/gitrdif dumps.
+
+### 2026-11-15 — agent (Grok Bot) — integration/batch6 follow-up (zoom, KEY, X-Ray)
+Did:      The zoomed-out default now re-applies after Lightweight Charts setData/layout so it is not replaced by an automatic tight fit. `defaultVisibleRange` shows at least 45 bars when that many candles are loaded (`to - from`, with `to = barCount` when showing the whole series). The gold KEY pill is gone; the key level is a faint muted dotted line with no label. X-Ray is removed (View toggle, hold-X, `setXray`, primitive fade).
+Files:    `lib/trades.ts`, `lib/__tests__/core.test.ts`, `components/TradeChart.tsx`, `components/TradeDetail.tsx`, `components/PositionBoxPrimitive.ts`, `NOTES.md`.
+Left:     Sample fixtures are often only as long as the hold, so a 5m view of `mnq-trend-hold` has ~14 candles even when fully zoomed out. Real Yahoo windows are already padded 15 hours.
+
+
+### 2026-11-15 — agent (Grok Bot) — integration/batch6
+Did:      Draft integration of #80 (gold for good process only), #81 (R strip), #82 (slim toolbar, zoomed-out default, Fit as an option), #83 (data-notes chip), #84 (two-step entry), and #85 (11px type floor, Inter + JetBrains Mono). Chart opens wide (>= 45 bars via defaultVisibleRange); fitWindow goldens unchanged. View menu labels Simple / After exit. Data-notes chip is amber only for missing/partial coverage. Levels grid kept, with Add stop/target/key on Trade Detail. Kept #71 out.
+Left:     Draft PR against main, stacked on integration/batch5 (#100). Do not merge or deploy.
+
+
+### 2026-11-15 — agent (Claude Haiku 5.5) — issue #85 type floor and fonts, branch `feat/85-type-floor-fonts`
+Did:      Raised every sub-11px font-size in `app/globals.css` (9px and 10px rules, incl. `font:` shorthands) to `0.6875rem`. Loaded Inter and JetBrains Mono with `next/font/google` in `app/layout.tsx`; `--font-sans`/`--font-mono` now start with those variables. Fallback stacks unchanged.
+Verified: `npm test` 112/112, `npm run typecheck` and `npm run build` exit 0. Lint: 0 errors, 1 pre-existing warning in `postcss.config.mjs`. Headless Chrome at 390×844 on Today, Feed, Review, Tune and Trade Detail: 0px horizontal overflow, no text under 11px, both fonts report `loaded`.
+Left:     Feed, Review and Tune were probed for overflow and small text only, not inspected visually. Not tested at 360px. Do not merge without Chris.
+Watch:    `next/font/google` fetches fonts at build time; a build with no network access will fail rather than fall back.
+
+### 2026-11-15 — Codex — `feat/84-two-step-entry` (#84)
+Did:      Manual entry now saves only the required execution fields, keeps its draft on close, and opens the new trade detail route; stop, target and key remain nullable.
+Detail:   Trade Detail adds missing plan levels inline with existing tick/side validation; RiskChips remain for stop sizing and Shield masks dollars. Level controls remain available without candles.
+Spec:     Updated docs/12 to put LV-17 sizing after the execution save. Chart renderer, formulas and fixtures are unchanged.
+Verified: `npm test` 113/113; typecheck; lint 0 errors/1 permitted PostCSS warning; build 8/8 pages; headless Chrome at 390px had zero horizontal overflow and passed draft/save/validation/Shield checks.
+Left:     No code items. Physical-phone verification was not available.
+
+### 2026-11-15 — agent (Claude Haiku) — Data-notes chip (#83), branch `feat/83-data-notes-chip`
+Did:      Trade Detail data-quality notes (1m, continuous contract, coverage, same-bar, stop/target/exit) collapse into one "N data notes" chip (44px, tap to expand). Hindsight unchanged. No chip when there are no notes.
+Amber:    Only when bar coverage is missing or partial (MAE/MFE and bar check untrusted). All other notes muted. Chris to confirm (DECISIONS OD-36).
+Files:    `lib/data-notes.ts`, `components/DataNotesChip.tsx`, `components/TradeDetail.tsx`, `app/globals.css`, `lib/__tests__/data-notes.test.ts`, `docs/08`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` 122/122, `npm run typecheck` clean, `npm run lint` 0 errors (1 pre-existing PostCSS warning), `npm run build` OK.
+Left:     No browser check at 390px yet. Draft PR against integration/batch5, do-not-merge-without-Chris.
+
+### 2026-11-15 — agy (gemini-3.8-flash-high) — Chart toolbar slim & default zoom (#82)
+Did:      Issue #82: slimmed Trade Detail toolbar to 1 row at 390px (timeframe switch + View button). Folded Fit, detail level (Simple / After exit), X-Ray, fullscreen, and 30-bar extensions into View menu. Moved ‹ › to 44px edge hits on chart. Implemented Chris's decision: charts open zoomed out by default (wide context >= 45 bars via `defaultVisibleRange`), Fit is an option in View menu and reports not-fitted initially. Preserves user pan/zoom across timeframe changes. Zero gold used on toolbar chrome/View.
+Files:    `components/TradeDetail.tsx`, `components/TradeChart.tsx`, `lib/trades.ts`, `lib/__tests__/core.test.ts`, `app/globals.css`, `NOTES.md`.
+Verified: `npm test` (113/113 passed), `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning in postcss.config.mjs), `npm run build` (8/8 static pages).
+Left:     PR against integration/batch5 (do-not-merge-without-Chris). Simple / After exit visible labels open to owner preference.
+
+### 2026-11-15 — agent (Grok Bot) — follow-up on `feat/82-slim-toolbar` (#82)
+Did:      Raised View menu labels from 9–10px to the 11px floor (sibling #85). Programmatic range updates clear their flag on a microtask so the default zoomed-out view is not treated as a user pan.
+Files:    `app/globals.css`, `components/TradeChart.tsx`, `NOTES.md`.
+
+### 2026-11-15 — agent (Grok Bot) — App shell, branch `feat/81-r-strip` (#81)
+Did:      Replaced the Feed and Review sparkline with an R strip (stop left, target right, entry tick, exit marker, faint MAE/MFE). A larger copy sits under the Trade Detail chart; the six-cell levels grid is kept. Works in Shield and with no candles. Blind review hides the exit/MAE/MFE. Layout is a pure helper with unit tests.
+Files:    `lib/rstrip.ts`, `lib/__tests__/rstrip.test.ts`, `components/RStrip.tsx`, `components/TradeRow.tsx`, `components/ReviewScreen.tsx`, `components/TradeDetail.tsx`, `app/globals.css`, `NOTES.md`.
+Left:     Sparkline component is unused by Feed/Review but left in the tree.
+
+### 2026-11-15 — agent (Grok Bot) — App shell, branch `feat/80-gold-good-process` (#80)
+Did:      Gold is reserved for good process only: the full-rules seal, checked checklist rules, Today's "By the rules" / day-head process score, and the clean-process header glow. Selected and active chrome (timeframes, pills, dock, focus rings, primary buttons, brand mark, Shield switch) now use plain white. Tune gold preset and intensity still preview the process gold.
+Files:    `app/globals.css`, `components/TuneScreen.tsx`, `NOTES.md`.
+Left:     Share-card RULES seal stays gold (good process). Gold presets remain a Tune control.
+
+
+### 2026-11-15 — agent (Grok Bot) — integration/batch5
+Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
+Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.
+
+
+### 2026-11-15 — agent (Antigravity) — Runtime sample bars from fixture (#89)
+Did:      Issue #89: sample trades render 1m bars from `fixtures/sample-bars.json` at runtime with no Yahoo or /api/market-data calls. Restored truthful CandleSource "Demo fixture" and updated Tune copy to match. Real trades continue fetching Yahoo and caching in IndexedDB. Added locking tests in `lib/__tests__/sample-bars.test.ts`.
+Files:    `lib/candles.ts`, `lib/trades.ts`, `lib/store.ts`, `components/TradeDetail.tsx`, `components/TuneScreen.tsx`, `lib/__tests__/sample-bars.test.ts`, `NOTES.md`.
+Verified: `npm test` 85/85, `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing PostCSS warning), `npm run build` (8/8 static pages).
+Left:     Draft PR against main (#89), do-not-merge-without-Chris.
+
+### 2026-11-15 — Codex — Market data, branch `feat/86-candle-refetch` (#86)
+Did:      Refetch matching candle caches only after their 17:00 New York hindsight window closes and only when bar coverage is short; replace the same signature-keyed IndexedDB entry.
+Also:     Shared DST-safe session-close math with hindsight, made coarse final bars count through close, and extended overnight Yahoo request windows through the assigned close.
+Tests:    Fake cache/clock cases cover open, closed-partial, closed-complete, coarse bars, signature changes, DST, maintenance-hour and weekend assignment.
+Verified: `npm test` 88/88; typecheck and build pass; lint 0 errors/1 existing PostCSS warning.
+Left:     Nothing open for #86. No fixtures, chart styling, R, stats, deployment, M0 archive, or PR #71 changed.
+
+### 2026-11-15 — agent (Claude Haiku 5.5) — docs stale cleanup, branch `feat/91-docs-stale` (#91)
+Did:      CONTRIBUTING §2 says the app is live on `main` (no "no code yet"). docs/14 intro and table show Phases 1–5 on `main`, Phase 6 not started. docs/12 §9 and `OD-23` restated to D-010 (faint red/green plan fills, stronger result-colour actual band, no outline, no purple or teal). `OD-33` marked restated, owner to review.
+Left:     PR for #91 is do-not-merge-without-Chris. Archived-box outline (docs/12 §9) is not covered by D-010 and is unchanged. docs/15 still lists an optional `PLAN` tag; D-010 does not.
+
+### 2026-11-15 — agent (Antigravity) — App shell and notes, branch `feat/17-tune-shield-risk`
+Did:      Shield mode masks Tune risk budget: heading hides ($ USD), readout and input display "Hidden", quick chips omitted, and hint explains turning Shield off changes the dollar amount. Input is disabled/readOnly with accessible label. Pure display helper added with focused tests.
+Files:    `lib/prefs.ts`, `components/TuneScreen.tsx`, `app/globals.css`, `lib/__tests__/tune-prefs.test.ts`, `NOTES.md`.
+Verified: `npm test` 83/83 passed; `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning), `npm run build` passed.
+Left:     PR against main, do-not-merge-without-Chris.
+
+### 2026-11-15 — agent (Claude Haiku) — issue #90 market-data coverage (branch `feat/90-market-data-coverage`)
+Did:      `/api/market-data` accepts a timeframe only when `coversTradeWindow` (new `lib/market-data/coverage.ts`) holds: entry bar, exit bar and every bar inside the hold from the shared `expectedInsideBarTimes`. Thin or gapped sets fall through, then 404. `lib/candles.ts` uses the same test for cached and fresh sets. `lib/trade-bar-validation.ts` now imports the shared helper instead of its private copy.
+Verified: `npm test` 89 pass (was 81); typecheck clean; lint 0 errors, 1 pre-existing warning; `npm run build` passes.
+Left:     Not run against live Yahoo. Trades that span the 17:00–18:00 ET maintenance break get no complete set until #65 narrows the expected bars to Globex hours, so they will 404 instead of showing a thin chart. Owner decides whether full-bar coverage is too strict.
+Watch:    Strict coverage can push a trade with one 1m gap to 5m or 1h. Chris to confirm before merge (PR is do-not-merge-without-Chris).
+
+### 2026-11-15 — agent (Codex) — Core math, branch `feat/65-session-coverage`
+Did:      Issue #65: shared MES/MNQ expected-bar logic now omits the regular 17:00–18:00 ET halt and Friday 17:00–Sunday 18:00 ET weekend closure for coverage and excursions.
+Files:    `lib/session.ts`, `lib/{trade-bar-validation,trades}.ts`, `lib/__tests__/session-coverage.test.ts`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` 86/86; typecheck/build pass; lint 0 errors/1 existing PostCSS warning.
+Left:     Holidays and early closes still appear as missing evidence until an authoritative calendar is chosen (`OD-35`). Do not merge without Chris.
+
+### 2026-11-15 — agent (Grok Bot) — Chart + App shell, branch `feat/87-trade-card-current-view` (#87)
+Did:      Trade Card now rebuilds from the live screenshot after pan, pinch, fit, or ‹30/30› when the sheet is already open (AC-10). Stacks on #88 (lazy build); notes typing still does not encode. A leftover blob is dropped on a closed-sheet redraw so the next open is current.
+Files:    `components/TradeDetail.tsx`, `NOTES.md`.
+Verified: `npm test` / typecheck / lint / build to be recorded in the PR.
+Left:     None for AC-10. Native share on a real phone is still AC-11.
+
+### 2026-11-15 — agent (Grok Bot) — Chart + App shell, branch `feat/88-trade-card-lazy` (#88)
+Did:      Trade Card PNG is built lazily when the sheet opens (or when Shield is toggled on an open sheet), not on every Trade Detail redraw. A notes typation pause no longer re-screenshots the chart or re-encodes the 1080×1350 card. The Trade Card button is enabled once candles are ready; the sheet shows its existing preparing state until the blob lands.
+Files:    `lib/shareCard.ts`, `lib/__tests__/core.test.ts`, `components/TradeDetail.tsx`, `NOTES.md`.
+Verified: `npm test` / typecheck / lint / build to be recorded in the PR.
+Left:     After pan, pinch, or ‹30/30› an already-open (or previously prepared) card can still be stale until the sheet is opened again — that is issue #87 (AC-10), a sibling branch.
+
+### 2026-11-15 — agent (Claude Haiku 5.5) — `feat/hindsight-low-summary`
+Did:      Low chart detail no longer hides the after-exit hindsight. It now shows the hindsight sentence as one compact line (tap reveals the full text, sentence plus `TP +Nm` / `SL +Nm`). Medium is unchanged (button, one-tap helper, expand). Hindsight is computed whenever the chart is ready. Chart primitive untouched: Low still hides the dotted continuation.
+Files:    `lib/hindsight.ts` (`hindsightCollapsedText`, `hindsightExpandedText`), `lib/__tests__/hindsight.test.ts`, `components/TradeDetail.tsx`, `app/globals.css` (`.hindsight-line`), `NOTES.md`.
+Watch:    Low one-liner truncates with an ellipsis on phones; the full text is one tap away. Still does not change R, P&L, outcome or stats.
+Open:    Do-not-merge without Chris (PR title and body say so).
+
+### 2026-11-15 — agent (Grok Bot) — Chart + App shell, branch `feat/77-pnl-first-load` (#77)
+Did:      First-load P&L flicker. Trade Detail (and Feed) painted `serverState` sample money before `hydrateJournal` ran in `useEffect`, so a stale device copy could replace — or be replaced by — the fixture P&L after first paint. Both screens now wait for hydration (as Today/Review already did). Hydration runs in `useLayoutEffect`. Stale sample prices are still refreshed in one `hydrateJournal` update; tested with an MNQ copy that priced at $140 vs the fixture $720.
+Left:     PR against main, do-not-merge-without-Chris. The reported $140 then $171 pair is not a current fixture P&L; the locked case is stale-device $140 vs current fixture math, with no post-paint jump.
+
+
+### 2026-11-15 — agent (Grok Bot) — integration/batch4 cleanup before merge
+Did:      Stripped UX/Invariant codes from Tune captions (plain wording only). Trade Card outcome subline now wraps instead of ellipsizing, so R and points stay visible in the preview.
+Left:     Ready for Chris's approved merge of PR #76. Do not squash. PR #71 stays open.
+
+### 2026-11-15 — agent (Grok Bot) — integration/batch4
+Did:      Draft integration of PRs #72 (after-the-exit), #73 (trade document spec, no-purple docs fix), #74 (Tune screen), and #75 (Trade Card sheet). Kept #71 (M0 archive) out. Resolved TradeDetail so hindsight (‹30/30›, Medium continuation, off-chart later-touch text) and the Trade Card sheet (privacy re-render, Share/Save/Copy) both land. NOTES handoffs from all four branches kept.
+Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy until Chris says so.
+
+### 2026-11-15 — agent (Codex) — Chart + App shell, branch `feat/16-trade-card-sheet`
+Did:      Issue #16: preview sheet, Shield re-render, prepared Share/Save/Copy, zoned entry/exit, playbook/tags/frozen-rules card copy.
+Files:    `lib/shareCard.ts`, `components/{TradeCardSheet,TradeDetail}.tsx`, `app/globals.css`, `lib/__tests__/core.test.ts`, `NOTES.md`.
+Verified: `npm test` 64/64; typecheck/build pass; lint 0 errors/1 existing PostCSS warning; 390×844 Chrome had 390px scroll width and working preview/privacy/actions.
+Left:     Native iOS share-sheet remains untested, as allowed by issue #16. No publish, deployment or primitive rebuild.
+
+### 2026-11-15 — agent (Antigravity) — App shell and notes, branch `feat/17-tune-screen`
+Did:      Issue #17 (Phase 5: Real Tune screen). Wired controls on `/tune` for Position Box opacity (Invariant 5), gold preset and intensity (`GOLD_PRESETS`: bullion, champagne, amber, platinum), blue/orange palette (UX-80), risk budget ($10–$100,000, default $250 with quick chips), show/hide samples, and Shield mode toggle; kept time zone and backup intact.
+Files:    `components/TuneScreen.tsx`, `lib/prefs.ts`, `app/globals.css`, `lib/__tests__/tune-prefs.test.ts`, `NOTES.md`.
+Verified: `npm test` (73/73 passed), `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning), `npm run build` (8/8 static pages), 390×844 Chrome render check.
+Left:     PR against main (#17), do-not-merge-without-Chris.
+
+### 2026-11-15 — agent (Grok Bot) — Chart, branch `feat/37-after-the-exit` (#37)
+Did:      After-the-exit hindsight. Medium detail (the default) draws dotted faint-gray entry, faint-red stop, and faint-green target lines past the exit, with hollow later-touch dots and no on-chart text. Low detail hides them. ‹ 30 / 30 › widen the view by 30 bars of the current timeframe ([ / ], Fit restores). The "held to plan" sentence is computed in `lib/hindsight.ts` and shown one tap away under "After the exit — hindsight". Never changes R, outcome, or stats.
+Files:    `lib/hindsight.ts`, `lib/__tests__/hindsight.test.ts`, `components/{PositionBoxPrimitive.ts,TradeChart.tsx,TradeDetail.tsx}`, `NOTES.md`.
+Verified: see the PR description for command output.
+Left:     Do not merge without Chris. #34 (buildMarks) can later absorb the continuation segments. Extra candles are not fetched when a tap runs out; the button says "No more candles". Optional post-exit excursion bracket stays off.
+Watch:    Dotted continuation is on by default at Medium, per the owner's 2026-11-15 decision on #37. No purple, no end labels, no 'after exit' chart text; later-touch times live in the hindsight block.
+
+### 2026-11-15 — agent (Claude Haiku 5.5) — Trade document spec (docs only), branch `feat/32-trade-document-spec` (#32)
+Did:      Added `docs/15-trade-document-and-render-grammar.md` (design §2 and §5 with the 2026-11-15 owner decisions, hindsight summary, open items `OD-30`–`OD-34`). Updated `docs/02` §2 to the box as built. Committed seven examples to `fixtures/trades/`. Index pointers in README, AGENTS, CONTRIBUTING; DECISIONS D-010 and OD-30–34. Follow-up commits restated D-010 / docs/15 to fills-only (no purple, no outlines) to match the owner's standing chart rule and the PR #72 review.
+Verified: `npm test` 64/64; `typecheck` and `build` exit 0; `lint` 0 errors, 1 pre-existing warning (`postcss.config.mjs`).
+Left:     PR against main, do-not-merge-without-Chris. `OD-30`–`OD-34` await the owner. No code. `deriveTrade` and `buildMarks` are #33 and #34.
+Watch:    The design file on the box is `trades-on-chart-design-and-plan.md`, not the `position-box-answer.md` the issue cites. Its §2.3 dollar figures assumed five contracts; doc 15 uses the two-contract examples.
+
+
 
 ### 2026-11-15 — agent (Grok Bot) — Core math + App shell, branch `feat/batch3-coverage-daystats`
 Did:      Issues #60 and #61. `validateTradeAgainstBars` now requires both entry and exit candles for `complete` coverage, and reports `chronology` separately (`unresolved` when entry and exit fall in the same bar). `fillInsideBar` returns false when the bar is missing. `dayStats` exposes `gross` (not `net`), priced/unpriceable counts, an `incomplete` flag, and a win rate over priced trades only. Today and the day header label the total "gross" and show a quiet incomplete cue.

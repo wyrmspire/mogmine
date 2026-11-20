@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkline } from "./Sparkline";
+import { RStrip } from "./RStrip";
+import { TradeMoodThumb } from "./MoodShape";
 import { formatDuration, formatMoney, formatPoints, formatR } from "@/lib/format";
 import { playbookName } from "@/lib/playbooks";
 import { formatListTime } from "@/lib/time";
-import { adherence, holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { adherence, holdSeconds, isOpen, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 
@@ -32,8 +33,10 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
   const info = context(trade);
   const score = adherence(trade);
   // Shield mode shows skill, not money: R when there is a stop, points otherwise (UX-64).
-  const headline = shield ? (r != null ? formatR(r) : formatPoints(tradePoints(trade), trade.symbol)) : formatMoney(pnl);
-  const secondary = shield ? (r != null ? formatPoints(tradePoints(trade), trade.symbol) : "") : formatR(r);
+  // An open trade shows `Open` where the result goes, and nothing else (OD-38).
+  const open = isOpen(trade);
+  const headline = open ? "Open" : shield ? (r != null ? formatR(r) : formatPoints(tradePoints(trade), trade.symbol)) : formatMoney(pnl);
+  const secondary = open ? "" : shield ? (r != null ? formatPoints(tradePoints(trade), trade.symbol) : "") : formatR(r);
   return (
     <Link href={`/trades/${trade.id}`} className="trade-row" aria-current={current ? "true" : undefined} onClick={onOpen} scroll={!current}>
       <span className="row-main">
@@ -48,7 +51,8 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
         <span className="row-meta">{formatListTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}</span>
         <span className={`row-context ${info.todo ? "todo" : ""}`}>{info.text}</span>
       </span>
-      <Sparkline points={trade.sparkline} />
+      <TradeMoodThumb trade={trade} />
+      <RStrip trade={trade} />
       <span className="row-result">
         <b className={tone}>{headline}</b>
         <span>{secondary}</span>

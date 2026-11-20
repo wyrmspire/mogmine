@@ -21,21 +21,16 @@ For a day trader reviewing executions on a phone, the **chart is the product**. 
 
 Every trade automatically renders a TradingView-style **Position Box** directly over the candlesticks using a custom `ISeriesPrimitive` plugin attached to the candlestick series.
 
-### Visual Anatomy of a Trade Box
-1. **Profit / Target Zone (Upper Box for Long, Lower Box for Short):**
-   - **Time Span:** `entry_time` → `exit_time` (plus an optional `2–4 bar` right padding option so the box never looks cramped on quick scalps).
-   - **Price Span:** `entry_price` → `exit_price` (or `planned_target_price` if logged, with a thin solid line marking actual `exit_price`).
-   - **Fill Style:** Translucent emerald/gold gradient (`rgba(16, 185, 129, alpha)` or gold-tinted on `A+` trades), controlled dynamically by the user's **Position Box Opacity Slider** (`15%` to `65%`).
-2. **Risk / Stop / MAE Zone (Lower Box for Long, Upper Box for Short):**
-   - **Time Span:** Matches the trade duration (`entry_time` → `exit_time`).
-   - **Price Span:** `entry_price` → `stop_loss_price` (if a hard stop was logged) **OR** `entry_price` → `mae_price` (Maximum Adverse Excursion observed in the 1m candles during the hold). If `stop_loss_price` exists, `MAE` is drawn as a subtle dashed inner watermark so you see how close price came to your stop.
-   - **Fill Style:** Translucent crimson (`rgba(239, 68, 68, alpha)`), sharing the adjustable opacity slider so candles behind the box remain legible.
-3. **Execution Path & Fill Markers:**
-   - **Diagonal Connector:** Dashed crisp line connecting `(entry_time, entry_price)` to `(exit_time, exit_price)`.
-   - **Multi-Fill Markers:** Small directional triangles for every scale-in and scale-out execution from TopstepX, with an unobtrusive floating pill showing `+2.4R • +$312.50`.
-4. **Living Position Box Anatomy (Excursion & Post-Exit Insights):**
-   - **MAE & MFE Inner Watermarks:** Inside the Risk Box, a darker inner shade marks the actual **MAE (Heat Taken)** relative to the full hard Stop Loss; inside the Profit Box, a subtle tick line marks the **MFE Peak** so you immediately see how much heat you absorbed and how much open profit existed before exit.
-   - **Post-Exit "Ghost Box" Toggle (`[ 👻 +15m Ghost ]`):** Extends a faint, dotted projection of your Entry, Stop, and Target levels `15–30 bars` past `exit_time`. One tap shows whether exiting early saved you from a reversal or left `+2R` on the table.
+### Visual Anatomy of a Trade Box (as built on `main`)
+
+This is what `components/PositionBoxPrimitive.ts` draws today. It is fills only: no outline or frame on any box, no P&L pill and no price-axis tags. The layers are painted under the candles, so candles stay crisp at any opacity.
+
+1. **PLAN (faint):** a faint red fill from entry to the planned stop, and a faint green fill from entry to the planned target. Both are drawn at `0.28` of the box opacity, so they stay clearly weaker than the actual band. A missing stop or target draws no fill on that side.
+2. **ACTUAL:** one stronger fill from the entry fill to the exit fill, in the result colour: green for a win, red for a loss, gray for a scratch (at least 2 px tall, so a flat exit is still visible). Fill opacity follows the **Position Box Opacity** slider (`15%` to `65%`).
+3. **PATH and flags:** a thin dotted line from the entry fill to the exit fill, with a flag at each fill price (entry neutral, exit in the result colour). An approximate alignment (issue #64) gets a finer, fainter dash and a `≈` mark.
+4. **KEY level (optional):** a faint dotted line across the pane with a small low-contrast `KEY` pill at the right edge.
+
+The target design is in [15 — Trade Document & Render Grammar](15-trade-document-and-render-grammar.md) §2: a purple outline on the plan, a teal frame on the actual, a stepped stop path, MFE and MAE brackets (never rectangles), dotted hindsight continuation, and the archived style. Where this section and doc 15 differ, this section describes what is built and doc 15 describes what is intended. The owner decisions of 2026-11-15 that change the box are in doc 15 §1.
 
 The price autoscale always includes the planned target, planned stop and actual exit in addition to the visible candles. The primitive exposes those bounds and the candlestick series merges them into its own autoscale range; **Fit** restores price autoscale as well as the duration-derived time window. A missing planned target is labelled “No target set” and does not invent a profit zone.
 

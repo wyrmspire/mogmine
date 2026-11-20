@@ -87,6 +87,14 @@ Read the planning documents in order for the complete technical and product spec
    Interface bets shaped by how the owner trades: the Zone Ladder, days instead of trades in the feed, blind review, drawing a trade on the chart, desk mode and the plan-versus-actual execution diff. Bets, not scope (`BET-nn`).
 14. **[14 — UI & Experience: Phased Plan](docs/14-ui-phased-plan.md)**  
    The `ui/phased-improvements` branch: what phases 1–3 built, the proposed phases 4–6 (starting with a chart window sized from each trade's own duration), and the questions waiting for the owner.
+15. **[15 — Trade Document & Render Grammar](docs/15-trade-document-and-render-grammar.md)**  
+   The `mogmine.trade.v1` event document, how it becomes marks for the chart, Trade Card and AI review, the plan, actual and excursion layers, stop paths, hindsight and the seven example trades in `fixtures/trades/`. Open decisions `OD-30`–`OD-34`.
+16. **[16 — Floor Roadmap](docs/16-floor-roadmap.md)**  
+   The ordered work list from the owner's 2026-11-16 review (`R-01`–`R-09`): pinch zoom, fresh-candle retry, open trades, then the archive, trades in Supabase, the assistant endpoint, playbooks, stats and challenges. Each step names its files, its limits and its done-when.
+17. **[17 — Challenges](docs/17-challenges.md)**  
+   The design for roadmap step `R-09`: Drawdown Defender (do not give back more than a dollar limit) and Clean Run (N trades in a row by the rules). Rules, math, golden test cases, the code contract, the screens and what is deferred.
+18. **[18 — Mood Shape](docs/18-mood-shape.md)**  
+   The trader's emotional state on a trade as a radar blob: spokes, derived and versioned score records, suggestions from notes that never overwrite the trader, adding a spoke and re-scoring, and comparing shapes with outcomes. Open decision `OD-39`.
 
 ---
 

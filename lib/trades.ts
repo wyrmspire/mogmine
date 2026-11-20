@@ -1,11 +1,16 @@
-// Core trade types and money math. Pure: no I/O, no DOM, no imports.
+// Core trade types and money math. Pure: no I/O, no DOM.
 // Names follow docs/06 (interim canonical under OD-1).
+
+import { expectedInsideBarTimes } from "./session.ts";
+export { expectedInsideBarTimes } from "./session.ts";
 
 export type TradeDirection = "LONG" | "SHORT";
 export type TradeStyle = "scalp" | "session_90m" | "investment";
 export type Timeframe = "1m" | "5m" | "15m" | "1h";
 export type ReviewStatus = "new" | "tagged" | "reviewed";
-export type CandleSource = "Yahoo Finance" | "Archive";
+/** `open`: no exit yet, both exit fields are null (R-03, docs/09 §8). Only these two values. */
+export type TradeStatus = "open" | "closed";
+export type CandleSource = "Yahoo Finance" | "Archive" | "Demo fixture";
 
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 export const TIMEFRAME_MINUTES: Record<Timeframe, number> = { "1m": 1, "5m": 5, "15m": 15, "1h": 60 };
@@ -51,11 +56,23 @@ export interface TradeRecord {
   yahoo_ticker: string;
   direction: TradeDirection;
   trade_style: TradeStyle;
+  /** `open` ⇔ `exit_time === null` ⇔ `exit_price === null` (enforced by `normalizeTrade`). */
+  status: TradeStatus;
   entry_time: string;
-  exit_time: string;
+  /** Null while the trade is open (R-03). Never a stand-in such as `""` or the entry. */
+  exit_time: string | null;
   entry_price: number;
-  exit_price: number;
+  /** Null while the trade is open (R-03). Never `0` or the entry price. */
+  exit_price: number | null;
   stop_loss_price: number | null;
+  /**
+   * The first stop this trade ever had, frozen when it was set (R-10). Later edits move
+   * `stop_loss_price` only. Null until a stop is first set; records saved before R-10 stay null —
+   * their initial stop is unknown and is never back-filled from `stop_loss_price`.
+   */
+  initial_stop_price: number | null;
+  /** When `initial_stop_price` was captured (ISO). Null with it. */
+  initial_stop_set_at: string | null;
   planned_target_price: number | null;
   key_level_price: number | null;
   quantity: number;
@@ -175,7 +192,8 @@ function sideSign(direction: string): 1 | -1 | null {
  * is not a whole number of 1 or more, or the direction is not LONG or SHORT (issue #50, #63).
  */
 export function tradeTicks(trade: Priced): number | null {
-  if (!isWholeQuantity(trade.quantity)) return null;
+  // An open trade has no result yet: no unrealised P&L from delayed bars (OD-38, B-30).
+  if (trade.exit_price == null || !isWholeQuantity(trade.quantity)) return null;
   const sign = sideSign(trade.direction);
   const entry = toTicks(trade.entry_price, trade.symbol);
   const exit = toTicks(trade.exit_price, trade.symbol);
@@ -230,12 +248,49 @@ export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price">):
   return ticks / riskTicks;
 }
 
-export function holdSeconds(trade: Pick<TradeRecord, "entry_time" | "exit_time">) {
-  return Math.max(1, Math.round((Date.parse(trade.exit_time) - Date.parse(trade.entry_time)) / 1000));
+/**
+ * The patch for setting or changing a trade's stop (R-10). The first stop a trade ever has is
+ * also frozen as its initial stop, stamped with `now` (ISO). Once an initial stop exists this
+ * returns a `stop_loss_price`-only patch, so no later edit — including a backup restore of the
+ * same trade — ever overwrites it.
+ */
+export function stopPatch(
+  trade: Pick<TradeRecord, "initial_stop_price">,
+  price: number | null,
+  now: string,
+): Partial<TradeRecord> {
+  if (price == null || trade.initial_stop_price != null) return { stop_loss_price: price };
+  return { stop_loss_price: price, initial_stop_price: price, initial_stop_set_at: now };
 }
 
-export function classifyTrade(entry: string, exit: string): TradeStyle {
-  const elapsedMs = Date.parse(exit) - Date.parse(entry);
+/** R against the frozen initial stop (R-10): the same math as `rMultiple`, on `initial_stop_price`. `null` without one. */
+export function initialRMultiple(trade: Priced & Pick<TradeRecord, "initial_stop_price">): number | null {
+  if (trade.initial_stop_price == null) return null;
+  return rMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
+}
+
+/** A trade with both exit fields set. The chart draws only these until R-03c. */
+export type ClosedTradeRecord = TradeRecord & { status: "closed"; exit_time: string; exit_price: number };
+
+/** Narrow to a closed trade: both exit fields present. */
+export function isClosed(trade: TradeRecord): trade is ClosedTradeRecord {
+  return trade.status === "closed" && trade.exit_time != null && trade.exit_price != null;
+}
+
+/** True while the trade has no exit (R-03). */
+export function isOpen(trade: Pick<TradeRecord, "exit_time"> & Partial<Pick<TradeRecord, "status">>) {
+  return trade.status === "open" || trade.exit_time == null;
+}
+
+/** Seconds held. An open trade is measured up to `now`. */
+export function holdSeconds(trade: Pick<TradeRecord, "entry_time" | "exit_time">, now = Date.now()) {
+  const exit = trade.exit_time == null ? now : Date.parse(trade.exit_time);
+  return Math.max(1, Math.round((exit - Date.parse(trade.entry_time)) / 1000));
+}
+
+/** Style from the hold. An open trade (null exit) is classified by its hold so far, up to `now`. */
+export function classifyTrade(entry: string, exit: string | null, now = Date.now()): TradeStyle {
+  const elapsedMs = (exit == null ? now : Date.parse(exit)) - Date.parse(entry);
   if (elapsedMs < 15 * 60 * 1000) return "scalp";
   if (elapsedMs <= 2 * 60 * 60 * 1000) return "session_90m";
   return "investment";
@@ -388,6 +443,60 @@ export function fitWindow(entryTime: string, exitTime: string, timeframe: Timefr
   };
 }
 
+/** Number of bars a logical range covers. Lightweight Charts uses `to - from` as the visible width. */
+export function visibleLogicalBars(range: { from: number; to: number }): number {
+  return Math.max(0, range.to - range.from);
+}
+
+/**
+ * Opening chart range: the standard trade window (`fitWindow`), with modest
+ * lead-in and after-exit context, at `max(45, the trade's own window)`.
+ * No extra zoom-out multiplier. Clamped to the loaded candles. The range width
+ * is `to - from`; to show every loaded bar, `to` is `barCount` (not `barCount - 1`),
+ * so 45 loaded candles still yield 45 visible bars.
+ */
+export function defaultVisibleRange(
+  baseFitRange: { from: number; to: number },
+  barCount: number,
+  minBars = MIN_FITTED_BARS,
+): { from: number; to: number } {
+  const fittedBars = Math.max(1, visibleLogicalBars(baseFitRange));
+  const targetBars = Math.max(minBars, fittedBars);
+  const maxTo = Math.max(0, barCount);
+
+  if (barCount <= targetBars) {
+    return { from: 0, to: maxTo };
+  }
+
+  const extraBars = targetBars - fittedBars;
+  const extraBefore = Math.round(extraBars * 0.6);
+  const extraAfter = extraBars - extraBefore;
+
+  let from = baseFitRange.from - extraBefore;
+  let to = baseFitRange.to + extraAfter;
+
+  if (from < 0) {
+    to = Math.min(maxTo, to - from);
+    from = 0;
+  }
+  if (to > maxTo) {
+    from = Math.max(0, from - (to - maxTo));
+    to = maxTo;
+  }
+
+  if (visibleLogicalBars({ from, to }) < minBars && barCount >= minBars) {
+    if (from === 0) {
+      to = Math.min(maxTo, minBars);
+    } else if (to === maxTo) {
+      from = Math.max(0, maxTo - minBars);
+    } else {
+      to = Math.min(maxTo, from + minBars);
+    }
+  }
+
+  return { from, to };
+}
+
 export type ExcursionCoverage = "complete" | "partial";
 
 export interface Excursions {
@@ -401,19 +510,6 @@ export interface Excursions {
    * Unavailable (fewer than two inside bars) is represented by a null return.
    */
   coverage: ExcursionCoverage;
-}
-
-/** Open times of bars that are entirely inside the hold, using execution timestamps only. */
-export function expectedInsideBarTimes(entry: number, exit: number, barMs: number): number[] {
-  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMs <= 0) return [];
-  const times: number[] = [];
-  let time = Math.ceil(entry / barMs) * barMs;
-  if (time < entry) time += barMs;
-  while (time + barMs <= exit) {
-    times.push(time);
-    time += barMs;
-  }
-  return times;
 }
 
 /**
@@ -435,11 +531,13 @@ export function excursions(
   candles: Candle[],
   barMinutes = 1,
 ): Excursions | null {
+  // An open trade has no exit to measure up to (R-03); its excursions are not a result yet.
+  if (trade.exit_time == null) return null;
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) return null;
   const barMs = barMinutes * 60_000;
-  const expected = expectedInsideBarTimes(entry, exit, barMs);
+  const expected = expectedInsideBarTimes(entry, exit, barMs, trade.symbol);
 
   const byTime = new Map<number, Candle>();
   for (const bar of candles) {
@@ -497,6 +595,7 @@ export function isScratch(trade: Priced & Partial<Pick<TradeRecord, "stop_loss_p
 
 /** Exit flag text: TP or SL when the exit price equals that planned level, otherwise none. */
 export function exitFlagReason(trade: Pick<TradeRecord, "symbol" | "exit_price" | "stop_loss_price" | "planned_target_price">): "TP" | "SL" | null {
+  if (trade.exit_price == null) return null;
   const exit = toTicks(trade.exit_price, trade.symbol);
   if (exit == null) return null;
   if (trade.planned_target_price != null && exit === toTicks(trade.planned_target_price, trade.symbol)) return "TP";
@@ -506,6 +605,8 @@ export function exitFlagReason(trade: Pick<TradeRecord, "symbol" | "exit_price" 
 
 /** ~`points` closes from just before the entry to just after the exit. */
 export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_time">, candles: Candle[], points = 40) {
+  // An open trade has no exit to frame yet; its thumbnail comes with R-03c.
+  if (trade.exit_time == null) return [];
   const entry = Date.parse(trade.entry_time);
   const exit = Date.parse(trade.exit_time);
   const pad = Math.max(10 * 60_000, (exit - entry) * 0.6);
@@ -574,7 +675,8 @@ export function candleCacheKey(trade: Pick<TradeRecord, "id" | "symbol"> & Parti
 
 export function candleSignature(trade: Pick<TradeRecord, "symbol" | "entry_time" | "exit_time"> & Partial<Pick<TradeRecord, "yahoo_ticker">>) {
   const ticker = specFor(trade.symbol)?.yahooTicker || trade.yahoo_ticker || trade.symbol;
-  return `${trade.symbol}|${ticker}|${trade.entry_time}|${trade.exit_time}`;
+  // `open` in place of the exit, so closing the trade changes the signature and reloads candles (R-03).
+  return `${trade.symbol}|${ticker}|${trade.entry_time}|${trade.exit_time ?? "open"}`;
 }
 
 /**
@@ -593,9 +695,24 @@ export function annotationKey(trade: Partial<Pick<TradeRecord, "note" | "quick_t
   ]);
 }
 
-/** Fill in fields added after a record was stored, so old device data keeps loading. */
+/**
+ * Fill in fields added after a record was stored, so old device data keeps loading. A record with no
+ * `status` is `closed` (every record saved before R-03 has an exit). Throws when the status and the exit
+ * fields disagree: `open` ⇔ `exit_time === null` ⇔ `exit_price === null`.
+ */
 export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id" | "symbol" | "direction" | "entry_time" | "exit_time" | "entry_price" | "exit_price">): TradeRecord {
-  const hadNonMarketCandles = raw.candle_source != null && raw.candle_source !== "Yahoo Finance" && raw.candle_source !== "Archive";
+  const status: TradeStatus = raw.status ?? "closed";
+  if (status !== "open" && status !== "closed") throw new Error(`Trade ${raw.id}: unknown status`);
+  const noExitTime = raw.exit_time == null;
+  const noExitPrice = raw.exit_price == null;
+  if (status === "open" ? !(noExitTime && noExitPrice) : (noExitTime || noExitPrice)) {
+    throw new Error(`Trade ${raw.id}: status ${status} does not match its exit fields`);
+  }
+  const isSample = raw.is_sample === true;
+  // "Archive" is real market data served from the candle archive (M0), valid for any trade;
+  // "Demo fixture" bars are invented, so they only survive on sample trades.
+  const validSource = raw.candle_source === "Yahoo Finance" || raw.candle_source === "Archive" || (raw.candle_source === "Demo fixture" && isSample);
+  const hadNonMarketCandles = raw.candle_source != null && !validSource;
   // `mes` and `MES` share one spec. An unknown symbol is kept as typed, and its money shows as null.
   const symbol = canonicalSymbol(raw.symbol) ?? raw.symbol;
   const canonicalTicker = specFor(symbol)?.yahooTicker;
@@ -604,6 +721,8 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     yahoo_ticker: canonicalTicker || raw.yahoo_ticker || symbol,
     trade_style: classifyTrade(raw.entry_time, raw.exit_time),
     stop_loss_price: null,
+    initial_stop_price: null,
+    initial_stop_set_at: null,
     planned_target_price: null,
     key_level_price: null,
     quantity: 1,
@@ -621,12 +740,13 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     is_sample: false,
     sparkline: [],
     ...raw,
+    status,
   };
   trade.symbol = symbol;
   if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;
-  if (trade.candle_source !== "Yahoo Finance" && trade.candle_source !== "Archive") trade.candle_source = undefined;
+  if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
   return trade;
@@ -641,7 +761,8 @@ export interface TradeExecutionInput {
   quantity: number;
   /** NaN means the field is empty or not a number. */
   entry_price: number;
-  exit_price: number;
+  /** NaN means empty. `null` means the trade is still open, so there is no exit to check (R-03). */
+  exit_price: number | null;
   stop_loss_price: number | null;
   planned_target_price: number | null;
   key_level_price: number | null;
@@ -673,7 +794,7 @@ export function validateTradeInput(input: TradeExecutionInput): TradeInputErrors
     return undefined;
   };
   const entryError = priceError("entry_price", input.entry_price);
-  const exitError = priceError("exit_price", input.exit_price);
+  const exitError = input.exit_price == null ? undefined : priceError("exit_price", input.exit_price);
   if (entryError) errors.entry_price = entryError;
   if (exitError) errors.exit_price = exitError;
 
@@ -698,6 +819,39 @@ export function validateTradeInput(input: TradeExecutionInput): TradeInputErrors
     if (keyError) errors.key_level_price = keyError;
   }
   return errors;
+}
+
+export type CloseTradeErrors = Partial<Record<"exit_time" | "exit_price", string>>;
+
+/**
+ * Check the exit typed to close an open trade (R-03b). Same price rules as the entry form
+ * (`validateTradeInput`), and the exit must come after the entry. `exitPrice` null means empty.
+ */
+export function validateClose(
+  trade: Pick<TradeRecord, "symbol" | "direction" | "quantity" | "entry_time" | "entry_price">,
+  exitTime: Date,
+  exitPrice: number | null,
+): CloseTradeErrors {
+  const errors: CloseTradeErrors = {};
+  const priceErrors = validateTradeInput({
+    symbol: trade.symbol, direction: trade.direction, quantity: trade.quantity,
+    entry_price: trade.entry_price, exit_price: exitPrice ?? Number.NaN,
+    stop_loss_price: null, planned_target_price: null, key_level_price: null,
+  });
+  if (exitPrice == null || !(exitPrice > 0)) errors.exit_price = "Enter the exit price";
+  else if (priceErrors.exit_price) errors.exit_price = priceErrors.exit_price;
+  if (Number.isNaN(exitTime.getTime())) errors.exit_time = "Enter the exit time";
+  else if (exitTime.getTime() <= Date.parse(trade.entry_time)) errors.exit_time = "The exit must be after the entry";
+  return errors;
+}
+
+/** The patch that closes an open trade: status, both exit fields, and the style from the real hold (R-03b). */
+export function closeTradePatch(
+  trade: Pick<TradeRecord, "entry_time">,
+  exitTime: string,
+  exitPrice: number,
+): Pick<TradeRecord, "status" | "exit_time" | "exit_price" | "trade_style"> {
+  return { status: "closed", exit_time: exitTime, exit_price: exitPrice, trade_style: classifyTrade(trade.entry_time, exitTime) };
 }
 
 /** Tags that record a broken process, whatever the trade made. */

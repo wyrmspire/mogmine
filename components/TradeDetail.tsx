@@ -3,25 +3,36 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CloseTradeSheet } from "./CloseTradeSheet";
+import { MoodCard } from "./MoodCard";
+import { MoodEditorSheet } from "./MoodEditorSheet";
+import { MoodShape, useTradeMood } from "./MoodShape";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
+import { TradeCardSheet } from "./TradeCardSheet";
+import { RStrip } from "./RStrip";
 import { TradeChart } from "./TradeChart";
-import type { TradeChartHandle } from "./TradeChart";
+import { TradeLevelEditor } from "./TradeLevelEditor";
+import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
-import { ensureCandles, useCandles } from "@/lib/candles";
+import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
-import { buildShareCard, shareCardFileName } from "@/lib/shareCard";
+import { buildShareCard, shouldBuildShareCard } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
-import { formatDetailTime } from "@/lib/time";
+import { formatDetailTime, formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
-import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
+import { DataNotesChip } from "./DataNotesChip";
+import { collectDataNotes } from "@/lib/data-notes";
+import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
+import type { ChartDetailLevel } from "@/lib/hindsight";
 
 export function TradeDetail({ id }: { id: string }) {
   const journal = useJournal();
@@ -29,8 +40,11 @@ export function TradeDetail({ id }: { id: string }) {
   const context = useListContext();
   const trade = journal.trades.find((item) => item.id === id);
 
+  if (!journal.hydrated) {
+    return <div className="page" role="status" aria-label="Loading trade…"><div className="skeleton" style={{ height: 420 }} /></div>;
+  }
+
   if (!trade) {
-    if (!journal.hydrated) return <div className="page" role="status" aria-label="Loading trade…"><div className="skeleton" style={{ height: 420 }} /></div>;
     return (
       <div className="page"><div className="specular-card empty-state">
         <h3>This trade is not on this device</h3>
@@ -61,11 +75,23 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     return fromUrl && TIMEFRAMES.includes(fromUrl) ? fromUrl : defaultTimeframe(holdSeconds(trade));
   });
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
-  const [fitted, setFitted] = useState(true);
-  const [xray, setXray] = useState(false);
+  const [cardOpen, setCardOpen] = useState(false);
+  const [cardPrivacy, setCardPrivacy] = useState(prefs.shield);
+  const [fitted, setFitted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
+  const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
+  const [hindsightOpen, setHindsightOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closeSheet = useCallback(() => setClosing(false), []);
+  const [moodOpen, setMoodOpen] = useState(false);
+  const closeMood = useCallback(() => setMoodOpen(false), []);
+  const mood = useTradeMood(trade);
   const candles = useCandles(trade.id);
   const chartRef = useRef<TradeChartHandle>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+  const cardBuild = useRef(0);
   const readoutRef = useRef<HTMLSpanElement>(null);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -74,57 +100,104 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const next = index >= 0 && index < list.length - 1 ? list[index + 1] : undefined;
 
   useEffect(() => { ensureCandles(trade); }, [trade]);
+  // Fresh trades: Yahoo publishes the newest bars late, so ask again while this trade is on screen and
+  // when the page comes back. ensureCandles only fetches when a retry is due (R-02). Samples never poll (#89).
+  useEffect(() => {
+    if (trade.is_sample) return;
+    const check = () => { if (document.visibilityState === "visible") ensureCandles(trade); };
+    const timer = window.setInterval(check, 60_000);
+    document.addEventListener("visibilitychange", check);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", check); };
+  }, [trade]);
   // Neighbours are warmed up so stepping through the list is instant (docs/08 §2).
   useEffect(() => { if (previous) ensureCandles(previous); if (next) ensureCandles(next); }, [previous, next]);
 
   // A timeframe finer than what was captured cannot be drawn; show the best available one and say so (B-11).
   const base = candles?.baseTimeframe ?? "1m";
   const timeframe = TIMEFRAME_MINUTES[chosen] < TIMEFRAME_MINUTES[base] ? base : chosen;
+  const renderPrivacy = cardOpen ? cardPrivacy : prefs.shield;
   const setTimeframe = (value: Timeframe) => {
     setChosen(value);
+    cardBuild.current += 1;
     setShareBlob(null);
     window.history.replaceState(null, "", `${pathname}?tf=${value}`);
   };
 
   const go = useCallback((target: TradeRecord | undefined) => { if (target) router.push(`/trades/${target.id}`, { scroll: false }); }, [router]);
 
-  const onRendered = useCallback(() => {
+  const encodeCard = useCallback((reason: "sheet-open" | "share" | "privacy" | "view-change" | "chart-render") => {
+    if (!shouldBuildShareCard(reason, true)) return;
     const snapshot = chartRef.current?.screenshot();
-    if (snapshot) void buildShareCard(snapshot, trade, zone).then(setShareBlob).catch(() => setShareBlob(null));
-  }, [trade, zone]);
+    if (!snapshot) return;
+    const build = ++cardBuild.current;
+    setShareBlob(null);
+    void buildShareCard(snapshot, trade, zone, cardPrivacy, mood)
+      .then((blob) => { if (cardBuild.current === build) setShareBlob(blob); })
+      .catch(() => { if (cardBuild.current === build) setShareBlob(null); });
+  }, [cardPrivacy, mood, trade, zone]);
 
-  const shareCard = useCallback(async () => {
-    if (!shareBlob) return;
-    const file = new File([shareBlob], shareCardFileName(trade), { type: "image/png" });
-    try {
-      if (navigator.share && navigator.canShare?.({ files: [file] })) await navigator.share({ title: `${trade.symbol} trade review`, files: [file] });
-      else {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(shareBlob);
-        link.download = file.name;
-        link.click();
-        showToast("Trade card downloaded");
+  // After pan, pinch, fit, or ‹30/30› the live chart redraws. If the sheet is
+  // open, rebuild the card from that current view (AC-10). Notes typing still
+  // does not encode: the sheet is a dialog, and shouldBuildShareCard("notes")
+  // stays false. A leftover blob is dropped when the sheet is closed.
+  const onRendered = useCallback(() => {
+    if (cardOpen && shouldBuildShareCard("view-change", true)) encodeCard("view-change");
+    else if (!cardOpen) setShareBlob((prev) => (prev ? null : prev));
+  }, [cardOpen, encodeCard]);
+
+  const openCard = useCallback(() => {
+    setCardPrivacy(prefs.shield);
+    setShareBlob(null);
+    setCardOpen(true);
+  }, [prefs.shield]);
+
+  useEffect(() => {
+    if (cardOpen) encodeCard("sheet-open");
+  }, [cardOpen, cardPrivacy, encodeCard]);
+
+  const closeCard = useCallback(() => {
+    if (cardPrivacy !== prefs.shield) {
+      cardBuild.current += 1;
+      setShareBlob(null);
+    }
+    setCardOpen(false);
+  }, [cardPrivacy, prefs.shield]);
+
+  const changeCardPrivacy = useCallback((privacy: boolean) => {
+    setShareBlob(null);
+    setCardPrivacy(privacy);
+  }, []);
+
+  useEffect(() => {
+    if (!viewOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
+        setViewOpen(false);
       }
-    } catch (error) { if ((error as DOMException).name !== "AbortError") showToast("Share failed"); }
-  }, [shareBlob, trade]);
+    };
+    window.addEventListener("pointerdown", onPointer);
+    return () => window.removeEventListener("pointerdown", onPointer);
+  }, [viewOpen]);
 
-  // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card. X (hold for X-Ray) lives in the chart.
+  // Keyboard (UX-69): J/K next and previous, F fit, N notes, C Trade Card.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || document.querySelector('[role="dialog"]')) return;
       const target = event.target as HTMLElement | null;
-      if (event.key === "Escape") { setFullscreen(false); return; }
+      if (event.key === "Escape") { setFullscreen(false); setViewOpen(false); return; }
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
       const key = event.key.toLowerCase();
       if (key === "j") go(next);
       else if (key === "k") go(previous);
       else if (key === "f") chartRef.current?.fit();
-      else if (key === "c") void shareCard();
+      else if (key === "[") chartRef.current?.extend("before");
+      else if (key === "]") chartRef.current?.extend("after");
+      else if (key === "c") openCard();
       else if (key === "n") { event.preventDefault(); document.getElementById("review-note")?.focus(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, next, previous, shareCard]);
+  }, [go, next, openCard, previous]);
 
   // Trade-to-trade swipe lives on the header strip only, never on the chart (UX-40).
   const onSwipeEnd = (event: React.PointerEvent) => {
@@ -148,8 +221,11 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const sign = trade.direction === "LONG" ? 1 : -1;
   const points = formatPoints(tradePoints(trade), trade.symbol);
-  const headline = prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl);
-  const secondary = prefs.shield ? (r != null ? points : "—R") : formatR(r);
+  // An open trade shows `Open` where the result goes, and nothing else (OD-38). Its chart runs
+  // from the entry bar to the last loaded bar, with no exit (R-03c).
+  const open = isOpen(trade);
+  const headline = open ? "Open" : prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl);
+  const secondary = open ? "" : prefs.shield ? (r != null ? points : "—R") : formatR(r);
 
   const ready = candles?.status === "ready";
   const baseMinutes = TIMEFRAME_MINUTES[base];
@@ -163,20 +239,37 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     const barMs = baseMinutes * 60_000;
     const barAt = (iso: string) => { const time = Math.floor(Date.parse(iso) / barMs) * barMs; return candles.candles.find((bar) => bar.time === time); };
     const entryBar = barAt(trade.entry_time);
-    const exitBar = barAt(trade.exit_time);
+    const exitBar = trade.exit_time == null ? undefined : barAt(trade.exit_time);
     const entryOff = Boolean(entryBar) && !fillInsideBar(trade.entry_price, entryBar, trade.symbol);
-    const exitOff = Boolean(exitBar) && !fillInsideBar(trade.exit_price, exitBar, trade.symbol);
+    const exitOff = Boolean(exitBar) && trade.exit_price != null && !fillInsideBar(trade.exit_price, exitBar, trade.symbol);
     return entryOff || exitOff;
   }, [ready, candles, trade, baseMinutes]);
   const barCheck = useMemo(() => {
-    if (!ready || trade.is_sample) return null;
+    // The exit-bar checks have nothing to test on an open trade; its entry bar anchors the load (R-03c).
+    if (!ready || trade.is_sample || open) return null;
     return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
-  }, [ready, candles, trade, baseMinutes]);
+  }, [ready, candles, trade, baseMinutes, open]);
+  // Null for an open trade: there is no "after the exit" yet.
+  const hindsight = useMemo(() => {
+    if (!ready) return null;
+    return buildHindsight(trade, candles.candles, candles.baseTimeframe);
+  }, [ready, trade, candles]);
   const barIssues = barCheck?.issues ?? [];
   const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
-  const sourceText = `${trade.yahoo_ticker} · ${candles?.source === "Yahoo Finance" ? "Yahoo" : "No candles"} · ${ready ? timeframe : "—"}`;
+  // Issue #83: every data-quality note collapses into one chip. Hindsight is not a data note.
+  const dataNotes = collectDataNotes({
+    noCandles: candles?.status === "none" && !trade.is_sample,
+    base: ready ? base : null,
+    misaligned,
+    ticker: trade.yahoo_ticker,
+    coverage: barCoverage,
+    chronologyUnresolved: barCheck?.chronology === "unresolved",
+    issueCodes: barIssues.map((issue) => issue.code),
+  });
+  const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
+  const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
 
-  return (
+  return <>
     <div className="detail-layout">
       <aside className="detail-rail" aria-label={`Trades: ${listLabel}`}>
         <h2>{listLabel}</h2>
@@ -198,24 +291,142 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
-        {candles?.status === "none" && !trade.is_sample && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
+        {candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
+        {candles?.status === "none" && !trade.is_sample && (
+          <div className="chart-note fact candle-retry" role="status">
+            <span>{(open ? candles.lastAttemptAt - Date.parse(trade.entry_time) < FRESH_EXIT_MS : exitIsFresh(trade, candles.lastAttemptAt)) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
+            <button type="button" disabled={candles.fetching} onClick={() => ensureCandles(trade, true)}>{candles.fetching ? "Checking…" : "Retry"}</button>
+          </div>
+        )}
         {candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
             <div className="timeframes" role="group" aria-label="Timeframe">
               {TIMEFRAMES.map((value) => <button key={value} type="button" aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
             </div>
-            <div className="chart-tools">
-              {!fitted && <button type="button" className="tool-button attention" onClick={() => chartRef.current?.fit()} title="Fit the trade (F)">Fit</button>}
-              <button type="button" className="tool-button" aria-pressed={xray} aria-label="X-Ray: fade the position box" title="X-Ray: fade the box to read the candles (hold X)" onClick={() => { chartRef.current?.setXray(!xray); setXray(!xray); }}>X-Ray</button>
-              <button type="button" className="tool-button" aria-pressed={fullscreen} aria-label={fullscreen ? "Exit full screen" : "Full-screen chart"} onClick={() => setFullscreen(!fullscreen)}>
-                {fullscreen ? "Done" : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>}
+            <div className="view-menu-wrapper" ref={viewMenuRef}>
+              <button
+                type="button"
+                className="tool-button view-button"
+                aria-expanded={viewOpen}
+                aria-haspopup="true"
+                aria-label="Chart view options"
+                onClick={() => setViewOpen((open) => !open)}
+              >
+                <span>View</span>
+                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden="true">
+                  <path d="M4.5 6L8 9.5 11.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                </svg>
               </button>
+              {viewOpen && (
+                <div className="view-menu" role="menu" aria-label="Chart view options">
+                  <div className="view-menu-section">
+                    <button
+                      type="button"
+                      className="view-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        chartRef.current?.fit();
+                        setViewOpen(false);
+                      }}
+                      title="Fit the trade (F)"
+                    >
+                      <span>{fitted ? "Fitted ✓" : "Fit trade"}</span>
+                      <span className="shortcut">F</span>
+                    </button>
+                  </div>
+                  {!open && <div className="view-menu-section">
+                    <span className="view-menu-label">Continuation</span>
+                    <div className="view-menu-toggle-group" role="group" aria-label="Chart detail">
+                      <button
+                        type="button"
+                        aria-pressed={detailLevel === "low"}
+                        onClick={() => setDetailLevel("low")}
+                        title="No post-exit continuation"
+                      >
+                        <span>Simple</span>
+                        <small>No extra</small>
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={detailLevel === "medium"}
+                        onClick={() => setDetailLevel("medium")}
+                        title="Dotted continuation on"
+                      >
+                        <span>After exit</span>
+                        <small>Continuation</small>
+                      </button>
+                    </div>
+                  </div>}
+                  <div className="view-menu-section">
+                    <button
+                      type="button"
+                      className="view-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setFullscreen(!fullscreen);
+                        setViewOpen(false);
+                      }}
+                      title={fullscreen ? "Exit full screen" : "Full-screen chart"}
+                    >
+                      <span>{fullscreen ? "Exit full screen" : "Full screen"}</span>
+                      <span className="shortcut">{fullscreen ? "Esc" : ""}</span>
+                    </button>
+                  </div>
+                  <div className="view-menu-section">
+                    <span className="view-menu-label">Extend range</span>
+                    <div className="view-menu-row">
+                      <button
+                        type="button"
+                        className="tool-button"
+                        disabled={!extension.canBefore}
+                        title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"}
+                        aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"}
+                        onClick={() => chartRef.current?.extend("before")}
+                      >
+                        ‹ 30 earlier
+                      </button>
+                      <button
+                        type="button"
+                        className="tool-button"
+                        disabled={!extension.canAfter}
+                        title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"}
+                        aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"}
+                        onClick={() => chartRef.current?.extend("after")}
+                      >
+                        30 later ›
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="chart-frame">
             {ready ? (
-              <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={prefs.shield} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onXrayChange={setXray} />
+              <>
+                <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
+                <button
+                  type="button"
+                  className="chart-edge-hit left"
+                  disabled={!extension.canBefore}
+                  title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"}
+                  aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"}
+                  onClick={() => chartRef.current?.extend("before")}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="chart-edge-hit right"
+                  disabled={!extension.canAfter}
+                  title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"}
+                  aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"}
+                  onClick={() => chartRef.current?.extend("after")}
+                >
+                  ›
+                </button>
+              </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
             )}
@@ -225,30 +436,58 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <span className="readout num" ref={readoutRef} aria-hidden="true" />
             <span className="source-text">{candles?.fetching ? "Checking Yahoo…" : ""}</span>
           </div>
-          {ready && base !== "1m" && <div className="chart-note"><span>1m data was not captured for this trade — showing {base} bars.</span></div>}
-          {misaligned && <div className="chart-note"><span>Candles are from the {trade.yahoo_ticker} continuous contract. Your fills may sit slightly off the bars.</span></div>}
-          {barCoverage === "missing" && <div className="chart-note"><span>Bar coverage is missing — this check cannot confirm the trade against the candles.</span></div>}
-          {barCoverage === "partial" && <div className="chart-note"><span>Bar coverage is partial — some candles in the hold are missing, so this is not a complete check.</span></div>}
-          {barCoverage === "complete" && barCheck?.chronology === "unresolved" && <div className="chart-note"><span>Entry and exit sit in the same bar, so this check cannot establish order between them.</span></div>}
-          {barIssues.some((issue) => issue.code === "stop_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.</span></div>}
-          {barIssues.some((issue) => issue.code === "target_crossed_before_exit") && <div className="chart-note fact"><span>Price passed your planned target before the recorded exit, which was worse than that target.</span></div>}
-          {barIssues.some((issue) => issue.code === "exit_outside_bar") && <div className="chart-note fact"><span>The recorded exit sits outside the Yahoo bar at that time.</span></div>}
-          <div className="levels">
-            <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
-            <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
-            <div><small>STOP</small><b className={trade.stop_loss_price == null ? "empty" : ""}>{formatPrice(trade.stop_loss_price, trade.symbol)}</b></div>
-            <div><small>TARGET</small><b className={trade.planned_target_price == null ? "empty" : ""}>{trade.planned_target_price == null ? "No target set" : formatPrice(trade.planned_target_price, trade.symbol)}</b></div>
-            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
-            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
-          </div>
-          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
+          <DataNotesChip notes={dataNotes} />
+          {hindsight && detailLevel === "low" && (
+            <div className="chart-note fact" aria-label="After the exit — hindsight">
+              <button type="button" className={`hindsight-line${hindsightOpen ? " open" : ""}`} aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>
+                {hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, "low")}
+              </button>
+            </div>
+          )}
+          {hindsight && detailLevel !== "low" && (
+            <div className="chart-note fact" aria-label="After the exit — hindsight">
+              <button type="button" className="tool-button" aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>
+                After the exit — hindsight
+              </button>
+              <span>{hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, detailLevel)}</span>
+            </div>
+          )}
           </div>
 
 
           <div className="detail-actions">
-            <button type="button" className="btn-primary" disabled={!shareBlob} onClick={shareCard}>{shareBlob ? "Share Trade Card" : ready ? "Preparing card…" : "Trade Card needs candles"}</button>
+            <button type="button" className="btn-primary" disabled={!ready} onClick={openCard}>{ready ? "Trade Card" : "Trade Card needs candles"}</button>
           </div>
         </>}
+
+        {open && (
+          <div className="detail-actions">
+            <button type="button" className="btn-primary" onClick={() => setClosing(true)}>Close trade</button>
+          </div>
+        )}
+
+        <div className="trade-levels-card specular-card">
+          <div className="rstrip-row">
+            <RStrip trade={trade} excursions={ex} size="detail" />
+            <button type="button" className="mood-mini" onClick={() => setMoodOpen(true)} aria-label="Mood Shape. Tap to edit.">
+              <MoodShape vector={mood} size={44} />
+            </button>
+          </div>
+          <div className="levels">
+            <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
+            <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
+            <TradeLevelEditor trade={trade} field="stop_loss_price" />
+            <TradeLevelEditor trade={trade} field="planned_target_price" />
+            <TradeLevelEditor trade={trade} field="key_level_price" />
+            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
+            <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
+          </div>
+          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
+          {/* The frozen first stop, shown as a quiet fact only once the working stop has moved (R-10). */}
+          {trade.initial_stop_price != null && trade.initial_stop_set_at != null && trade.stop_loss_price !== trade.initial_stop_price && (
+            <p className="initial-stop">Initial stop {formatPrice(trade.initial_stop_price, trade.symbol)}, set {formatListTime(trade.initial_stop_set_at, zone)}</p>
+          )}
+        </div>
 
         <div className="pager">
           <button type="button" aria-label="Previous trade (K)" disabled={!previous} onClick={() => go(previous)}>‹ Prev</button>
@@ -262,6 +501,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
           <PitStop trade={trade} />
         </section>
+        <MoodCard trade={trade} onEdit={() => setMoodOpen(true)} />
         <div className="review-actions">
           <button type="button" className="icon-button" aria-pressed={trade.flagged} aria-label={trade.flagged ? "Flagged for the weekly review. Tap to unflag." : "Flag for the weekly review"} title="Flag for the weekly review" onClick={() => updateTrade(trade.id, { flagged: !trade.flagged })}><span aria-hidden="true">⚑</span></button>
           {trade.review_status === "reviewed"
@@ -272,5 +512,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         {!trade.is_sample && <button type="button" className="btn-danger-ghost" onClick={removeThis}>Remove this trade</button>}
       </aside>
     </div>
-  );
+    {moodOpen && <MoodEditorSheet trade={trade} onClose={closeMood} />}
+    {closing && open && <CloseTradeSheet trade={trade} zone={zone} onClose={closeSheet} />}
+    {cardOpen && <TradeCardSheet trade={trade} blob={shareBlob} privacy={cardPrivacy} onPrivacyChange={changeCardPrivacy} onClose={closeCard} />}
+  </>;
 }

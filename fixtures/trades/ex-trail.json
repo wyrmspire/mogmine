@@ -1,0 +1,24 @@
+{
+  "schema": "mogmine.trade.v1",
+  "doc": "docs/15-trade-document-and-render-grammar.md",
+  "id": "ex-trail",
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "revision": 1,
+  "instrument": { "symbol": "MES", "contract": null },
+  "side": "long",
+  "source": { "kind": "broker", "provider": "topstepx", "imported_at": null },
+  "is_sample": true,
+  "events": [
+    { "seq": 1, "t": "2026-11-12T15:34:00Z", "type": "fill", "basis": "broker", "order": "o1", "role": "entry", "qty": 2, "price": 7600.00 },
+    { "seq": 2, "t": "2026-11-12T15:34:01Z", "type": "order", "basis": "broker", "order": "o2", "role": "stop", "kind": "stop", "qty": 2, "price": 7595.00 },
+    { "seq": 3, "t": "2026-11-12T15:34:30Z", "type": "note", "basis": "stated", "text": "Voice memo: bored after an hour of chop and took the long anyway. Once in I was calm and trailed it patiently." },
+    { "seq": 4, "t": "2026-11-12T15:47:30Z", "type": "modify", "basis": "broker", "order": "o2", "price": 7601.00 },
+    { "seq": 5, "t": "2026-11-12T15:58:10Z", "type": "modify", "basis": "broker", "order": "o2", "price": 7606.00 },
+    { "seq": 6, "t": "2026-11-12T16:03:44Z", "type": "fill", "basis": "broker", "order": "o2", "role": "exit", "qty": 2, "price": 7606.00, "reason": "trail" }
+  ],
+  "mood_records": [
+    {"id": "mood-ex-trail-1", "trade_id": "ex-trail", "spoke_set_version": 1, "scores": {"calm": 0.8}, "evidence": {"calm": "trailed it patiently"}, "source": "voice_ai", "model": "mogmine-phrases-v1", "captured_at": "2026-11-12T15:34:30Z", "created_at": "2026-11-12T15:35:00Z"},
+    {"id": "mood-ex-trail-2", "trade_id": "ex-trail", "spoke_set_version": 1, "scores": {"confidence": 0.5, "hope": 0.3, "fomo": 0.2, "fear": 0.2, "frustration": 0.3}, "evidence": {}, "source": "user", "model": null, "captured_at": "2026-11-12T16:10:00Z", "created_at": "2026-11-12T16:10:00Z"},
+    {"id": "mood-ex-trail-3", "trade_id": "ex-trail", "spoke_set_version": 2, "scores": {"boredom": 0.8}, "evidence": {"boredom": "bored after an hour of chop and took the long anyway."}, "source": "voice_ai", "model": "mogmine-phrases-v1", "captured_at": null, "created_at": "2026-11-19T12:00:00Z"}
+  ]
+}

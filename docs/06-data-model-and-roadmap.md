@@ -49,6 +49,7 @@ erDiagram
         text yahoo_ticker
         text direction
         text trade_style
+        text status
         timestamptz entry_time
         timestamptz exit_time
         numeric entry_price
@@ -149,13 +150,13 @@ erDiagram
 | :--- | :--- |
 | **`accounts`** | Tracks TopstepX Combine / Express Funded / Live accounts (`external_account_id`, `account_type`, `balance`, `user_id`). |
 | **`executions`** | Immutable raw order fills from TopstepX (`external_fill_id` unique constraint prevents duplicate writes on WebSocket reconnects). |
-| **`trades`** | Aggregated round-trip positions. Stores `trade_style` (`'scalp' \| 'session_90m' \| 'investment'`), `style_overridden` boolean, `entry_price`, `exit_price`, `stop_loss_price`, `mae_price`, `mfe_price`, `r_multiple`, `net_pnl`, and `session_tag` (`'NY_AM' \| 'NY_PM' \| 'LONDON' \| 'ASIA'`). |
+| **`trades`** | Aggregated round-trip positions. Stores `status` (`'open' \| 'closed'`; an open trade has null `exit_time` and `exit_price`, and its money fields are null — `R-03`, `OD-38`), `trade_style` (`'scalp' \| 'session_90m' \| 'investment'`), `style_overridden` boolean, `entry_price`, `exit_price` (nullable while open), `stop_loss_price`, `initial_stop_price` and `initial_stop_set_at` (the first stop ever set, frozen when set — `R-10`; null until then, never back-filled or overwritten), `mae_price`, `mfe_price`, `r_multiple`, `net_pnl`, and `session_tag` (`'NY_AM' \| 'NY_PM' \| 'LONDON' \| 'ASIA'`). |
 | **`trade_candles`** | Permanently caches Yahoo Finance OHLCV arrays (`bars` JSONB of `{ time, open, high, low, close, volume }`) keyed by `(trade_id, symbol, timeframe)` so `1m` intraday history never vanishes after 30 days. |
 | **`trade_companion_charts`** | Stores secondary charts attached to a trade: either `kind = 'yahoo_sync'` (e.g., `NQ=F`, `^VIX` with `relationship_type = 'smt_divergence' \| 'confirming_push'` and 2-point `annotations` coordinates) or `kind = 'uploaded_image'` (Supabase Storage URL + caption). |
 | **`session_levels`** | One row per `(session_date, symbol)` holding `pdh`, `pdl`, `pdc`, `onh`, `onl`, `orb_high`, `orb_low`, `ibh`, `ibl` so multiple trades on the same day share the same levels. Revisioned level sets are proposed in [12 §6](12-levels-zones-and-daily-markup.md#6-data-model-proposed-shape) (`OD-20`). |
 | **`economic_events`** | Stores scheduled/fetched Tier-1 USD economic releases (`CPI`, `FOMC`, `NFP`, `PPI`, `ISM`) for ±30m trade hazard checks. |
 | **`playbooks`** | User-defined setups (e.g., *"ONL Sweep + NQ SMT"*), each with an ordered `checklist_rules` array (`[{ id, label, required }]`). |
-| **`trade_notes`** | Combines **Simple Mode** (`quick_tags`, `voice_audio_url`, `voice_transcript`, `mood_tag`) and **Advanced Mode** (`pre_trade_thesis`, `divergence_notes`, `management_notes`, `post_exit_notes`, `checklist_state`). |
+| **`trade_notes`** | Combines **Simple Mode** (`quick_tags`, `voice_audio_url`, `voice_transcript`; mood is not a column here: it is derived, versioned score records with a spoke registry, [18](18-mood-shape.md)) and **Advanced Mode** (`pre_trade_thesis`, `divergence_notes`, `management_notes`, `post_exit_notes`, `checklist_state`). |
 | **`ai_reviews`** | Stores the Zod-validated `AITradeReviewOutput` JSON, `grade`, `snapshot_url` (Vision AI / Trade Card screenshot), `playbook_adherence_score`, and follow-up coach chat history. |
 | **`user_preferences`** | Persists UI visual tuning: `gold_preset` (`'bullion' \| 'champagne' \| 'amber' \| 'platinum'`), `gold_intensity` (`0.0–1.0`), `position_box_opacity` (`0.15–0.65`), and `default_companion_tickers` (e.g., `['NQ=F']`). |
 

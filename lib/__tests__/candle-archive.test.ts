@@ -218,8 +218,11 @@ test("AC-02: batches are at most 8 days and a failed batch is retried without re
 test("the chart resolver prefers the archive and falls back to Yahoo when it is thin or missing", async () => {
   const entry = Date.parse("2026-11-10T15:43:00Z");
   const exit = Date.parse("2026-11-10T15:50:00Z");
-  const archiveBars = [0, 1, 2, 3, 4, 5].map((offset) => bar(entry + offset * minute, 6000 + offset));
-  const yahooBars = [0, 1, 2, 3, 4].map((offset) => bar(entry + offset * minute, 6100 + offset));
+  // Both sets span the whole 15:43–15:50 window: since the merge with main's route rules
+  // (issue #90), the resolver only serves a payload that covers the trade window, from
+  // either source — a thin set near the entry is not enough, stored or not.
+  const archiveBars = [0, 1, 2, 3, 4, 5, 6, 7].map((offset) => bar(entry + offset * minute, 6000 + offset));
+  const yahooBars = [0, 1, 2, 3, 4, 5, 6, 7].map((offset) => bar(entry + offset * minute, 6100 + offset));
   const archive = new MemoryArchiveClient();
   await archive.upsertCandles(candlesToRows("MES=F", "1m", archiveBars));
 

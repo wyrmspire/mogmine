@@ -100,6 +100,16 @@ test("issue #50: an off-tick MES price is rejected, never rounded into money", (
   assert.deepEqual(validateTradeInput({ symbol: "mes", direction: "LONG", quantity: 1, entry_price: 6844.25, exit_price: 6849, stop_loss_price: 6841.25, ...noLevels }), {});
 });
 
+test("issue #84: a manual execution is valid without stop, target or key level and keeps R null", () => {
+  const input = { symbol: "MES", direction: "LONG" as const, quantity: 1, entry_price: 6844.25, exit_price: 6849, stop_loss_price: null, planned_target_price: null, key_level_price: null };
+  assert.deepEqual(validateTradeInput(input), {});
+  const trade = normalizeTrade({ ...base, ...input });
+  assert.equal(trade.stop_loss_price, null);
+  assert.equal(trade.planned_target_price, null);
+  assert.equal(trade.key_level_price, null);
+  assert.equal(rMultiple(trade), null);
+});
+
 test("issue #51: a timestamp four days from any bar is unresolved, not snapped", () => {
   // Bars only on Nov 12 12:00–12:01 UTC; the fill is Nov 16 12:00 UTC.
   const bars = [Date.parse("2026-11-12T12:00:00Z"), Date.parse("2026-11-12T12:01:00Z")];

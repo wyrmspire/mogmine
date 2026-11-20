@@ -9,13 +9,14 @@ export async function GET(request: NextRequest) {
   const symbol = request.nextUrl.searchParams.get("symbol")?.toUpperCase();
   const entry = request.nextUrl.searchParams.get("entry");
   const exit = request.nextUrl.searchParams.get("exit");
-  if (!symbol || !FUTURES_SPECS[symbol] || !entry || !exit) {
-    return NextResponse.json({ error: "A supported symbol, entry and exit are required" }, { status: 400 });
+  if (!symbol || !FUTURES_SPECS[symbol] || !entry) {
+    return NextResponse.json({ error: "A supported symbol and entry are required" }, { status: 400 });
   }
 
   const entryTime = Date.parse(entry);
-  const exitTime = Date.parse(exit);
-  if (!Number.isFinite(entryTime) || !Number.isFinite(exitTime) || exitTime <= entryTime) {
+  // No exit is an open trade (R-03c). A present exit must still be valid and after the entry.
+  const exitTime = exit == null ? null : Date.parse(exit);
+  if (!Number.isFinite(entryTime) || (exitTime != null && (!Number.isFinite(exitTime) || exitTime <= entryTime))) {
     return NextResponse.json({ error: "The trade time range is invalid" }, { status: 400 });
   }
 

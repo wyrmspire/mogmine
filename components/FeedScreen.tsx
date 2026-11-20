@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DayHeader } from "./DayHeader";
+import { MoodStatsCard } from "./MoodCard";
 import { TradeRow } from "./TradeRow";
 import { usePrefs } from "@/lib/prefs";
 import { applyFilters, describeFilters, filtersToQuery, groupByDay, parseFilters, withSamples } from "@/lib/selectors";
@@ -23,6 +24,10 @@ export function FeedScreen() {
 
   // Filters live in the URL, so back, reload and a deep link all restore the same list (UX-10).
   const setFilters = (patch: Partial<FeedFilters>) => router.replace(`${pathname}${filtersToQuery({ ...filters, ...patch })}`, { scroll: false });
+
+  if (!journal.hydrated) {
+    return <div className="page" role="status" aria-label="Loading your journal…"><div className="page-head"><div><span className="eyebrow">Feed</span><h1>Loading your journal…</h1></div></div>{[0, 1, 2].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>;
+  }
 
   const all = withSamples(journal.trades, prefs.showSamples);
   const shown = applyFilters(all, filters);
@@ -69,6 +74,8 @@ export function FeedScreen() {
           </section>
         ))
       )}
+
+      {groups.length > 0 && <MoodStatsCard trades={journal.trades} />}
     </div>
   );
 }

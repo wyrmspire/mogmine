@@ -1,0 +1,23 @@
+{
+  "schema": "mogmine.trade.v1",
+  "doc": "docs/15-trade-document-and-render-grammar.md",
+  "id": "ex-sl",
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "revision": 1,
+  "instrument": { "symbol": "MES", "contract": null },
+  "side": "long",
+  "source": { "kind": "manual", "provider": null, "imported_at": null },
+  "is_sample": true,
+  "events": [
+    { "seq": 1, "t": "2026-11-12T15:34:00Z", "type": "plan", "basis": "stated", "qty": 2,
+      "entry": { "order": "market", "price": 7600.00 }, "stop": 7595.00,
+      "targets": [ { "key": "t1", "price": 7610.00, "qty": 2 } ] },
+    { "seq": 2, "t": "2026-11-12T15:34:00Z", "type": "fill", "basis": "stated", "role": "entry", "qty": 2, "price": 7600.00 },
+    { "seq": 3, "t": "2026-11-12T15:35:00Z", "type": "note", "basis": "stated", "text": "Voice memo: chased it, did not want to miss the move after the first push. Jumped in before it was confirmed." },
+    { "seq": 4, "t": "2026-11-12T15:41:00Z", "type": "fill", "basis": "stated", "role": "exit", "qty": 2, "price": 7595.00, "reason": "stop" }
+  ],
+  "mood_records": [
+    {"id": "mood-ex-sl-1", "trade_id": "ex-sl", "spoke_set_version": 1, "scores": {"fomo": 0.9}, "evidence": {"fomo": "chased it"}, "source": "voice_ai", "model": "mogmine-phrases-v1", "captured_at": "2026-11-12T15:35:00Z", "created_at": "2026-11-12T15:35:20Z"},
+    {"id": "mood-ex-sl-2", "trade_id": "ex-sl", "spoke_set_version": 1, "scores": {"calm": 0.15, "confidence": 0.3, "hope": 0.35, "fear": 0.25, "frustration": 0.25}, "evidence": {}, "source": "user", "model": null, "captured_at": "2026-11-12T15:45:00Z", "created_at": "2026-11-12T15:45:00Z"}
+  ]
+}

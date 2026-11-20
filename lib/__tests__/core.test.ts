@@ -8,12 +8,12 @@ import { formatSessionDate, sessionDate } from "../session.ts";
 import { applyFilters, dayStats, filtersToQuery, parseFilters } from "../selectors.ts";
 import { demoTrades } from "../fixtures.ts";
 import { validateTradeAgainstBars } from "../trade-bar-validation.ts";
-import { shareCardFileName } from "../shareCard.ts";
+import { shareCardContent, shareCardFileName, shouldBuildShareCard } from "../shareCard.ts";
 
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
-import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, defaultVisibleRange, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, isClosed, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks, visibleLogicalBars } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
@@ -123,6 +123,51 @@ test("coarser timeframes show wider clock-time context", () => {
   assert.ok(fifteenMinute.end - fifteenMinute.start > oneMinute.end - oneMinute.start);
 });
 
+test("defaultVisibleRange is the trade window with a 45-bar floor, not a 2.5x zoom-out", () => {
+  const baseFit = { from: 50, to: 95 }; // 45-bar fitted width
+  const opening = defaultVisibleRange(baseFit, 200);
+  assert.ok(visibleLogicalBars(opening) >= 45, "must never have fewer than 45 bars when data allows");
+  assert.equal(visibleLogicalBars(opening), 45, "must not apply a zoom-out multiplier");
+  assert.deepEqual(opening, baseFit);
+  assert.ok(opening.from >= 0 && opening.to <= 200, "must be clamped to the loaded series");
+
+  const nearStart = defaultVisibleRange({ from: 5, to: 50 }, 200);
+  assert.deepEqual(nearStart, { from: 5, to: 50 });
+  assert.equal(visibleLogicalBars(nearStart), 45);
+
+  const nearEnd = defaultVisibleRange({ from: 150, to: 195 }, 200);
+  assert.deepEqual(nearEnd, { from: 150, to: 195 });
+  assert.equal(visibleLogicalBars(nearEnd), 45);
+
+  // Fit window hangs off the end of a 60-bar series: clamp and keep 45 bars.
+  const shortHistory = defaultVisibleRange(baseFit, 60);
+  assert.deepEqual(shortHistory, { from: 15, to: 60 });
+  assert.equal(visibleLogicalBars(shortHistory), 45);
+
+  // Exactly 45 loaded candles still yield a 45-bar logical range, not 44.
+  const exact = defaultVisibleRange({ from: 0, to: 20 }, 45);
+  assert.equal(visibleLogicalBars(exact), 45);
+  assert.deepEqual(exact, { from: 0, to: 45 });
+
+  const thin = defaultVisibleRange({ from: 0, to: 8 }, 20);
+  assert.equal(visibleLogicalBars(thin), 20);
+});
+
+test("mnq-trend-hold 5m opening range is 45 to about 60 bars, not 100+", () => {
+  const trade = demoTrades.find((item) => item.id === "mnq-trend-hold");
+  assert.ok(trade && isClosed(trade));
+  const fitted = fitWindow(trade.entry_time, trade.exit_time, "5m");
+  assert.ok(fitted.visibleBars >= 45 && fitted.visibleBars <= 60, `fit window is ${fitted.visibleBars} bars`);
+  // Same conversion TradeChart uses: logical range starts before the entry bar.
+  const entryIndex = 800;
+  const fitFrom = entryIndex - fitted.beforeBars;
+  const baseFit = { from: fitFrom, to: fitFrom + fitted.visibleBars };
+  const opening = defaultVisibleRange(baseFit, 1372);
+  const bars = visibleLogicalBars(opening);
+  assert.ok(bars >= 45, `opening range is ${bars} bars, need at least 45`);
+  assert.ok(bars <= 60, `opening range is ${bars} bars, expected 45–60, not 100+`);
+});
+
 test("all ten sample trades have deterministic fitted-window goldens", () => {
   const expected: Record<string, { timeframe: string; share: number }> = {
     "mes-opening-scalp": { timeframe: "1m", share: (479 / 60) / 45 },
@@ -138,6 +183,7 @@ test("all ten sample trades have deterministic fitted-window goldens", () => {
   };
   assert.equal(demoTrades.length, 10);
   for (const trade of demoTrades) {
+    assert.ok(isClosed(trade), `${trade.id} is a closed fixture`);
     assert.notEqual(trade.planned_target_price, null, `${trade.id} needs a planned target`);
     assert.deepEqual(trade.sparkline, [], `${trade.id} must not ship generated candles`);
     const golden = expected[trade.id];
@@ -471,7 +517,18 @@ test("chart text equivalent describes direction, size, times, prices and R or po
 });
 
 test("Shield / privacy mode omits dollars and contract size in descriptions and share file names (UX-64, UX-72)", () => {
-  const trade = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 3, entry_price: 6844.25, exit_price: 6849, stop_loss_price: 6841.25 });
+  const trade = normalizeTrade({
+    ...base,
+    symbol: "MES",
+    direction: "LONG",
+    quantity: 3,
+    entry_price: 6844.25,
+    exit_price: 6849,
+    stop_loss_price: 6841.25,
+    playbook_id: "orb-reclaim",
+    quick_tags: ["Opening Drive", "A+ Patience"],
+    checklist_state: [{ id: "hard-stop", label: "Hard stop placed", checked: true }],
+  });
   const open = describeTrade(trade, "America/Chicago", false);
   const shielded = describeTrade(trade, "America/Chicago", true);
   assert.match(open, /3 contracts/);
@@ -481,6 +538,33 @@ test("Shield / privacy mode omits dollars and contract size in descriptions and 
   const fileName = shareCardFileName(trade);
   assert.equal(fileName, "mes-long-2026-11-10-trade-card.png");
   assert.doesNotMatch(fileName, /\$|usd|3|contract|71\.25/i);
+
+  const privateCard = shareCardContent(trade, "America/Chicago", true);
+  assert.doesNotMatch(JSON.stringify(privateCard), /\$|contract/i);
+  assert.match(privateCard.outcome, /R$/);
+  assert.equal(privateCard.outcomeDetail, "+4.75 pts");
+  assert.match(privateCard.entry, /ENTRY Nov 10, 09:43 CST/);
+  assert.match(privateCard.exit, /EXIT Nov 10, 09:45 CST/);
+  assert.equal(privateCard.playbook, "ORB Reclaim");
+  assert.deepEqual(privateCard.tags, ["Opening Drive", "A+ Patience"]);
+  assert.equal(privateCard.ruleSeal, "1/1 FOLLOWED");
+  assert.deepEqual(privateCard.rules, trade.checklist_state);
+
+  const openCard = shareCardContent(trade, "America/Chicago", false);
+  assert.match(openCard.outcome, /\+\$71\.25/);
+  assert.match(openCard.direction, /3 contracts/);
+});
+
+test("encodes the Trade Card lazily, never on a notes keystroke", () => {
+  assert.equal(shouldBuildShareCard("notes", false), false);
+  assert.equal(shouldBuildShareCard("notes", true), false);
+  assert.equal(shouldBuildShareCard("sheet-open", false), true);
+  assert.equal(shouldBuildShareCard("share", false), true);
+  assert.equal(shouldBuildShareCard("privacy", true), true);
+  assert.equal(shouldBuildShareCard("chart-render", false), false);
+  assert.equal(shouldBuildShareCard("view-change", false), false);
+  assert.equal(shouldBuildShareCard("view-change", true), true);
+  assert.equal(shouldBuildShareCard("chart-render", true), true);
 });
 
 test("journal backup round-trips trades (notes, prices, tags, checklist, playbook) and preserves sample labels", () => {
@@ -510,6 +594,7 @@ test("journal backup round-trips trades (notes, prices, tags, checklist, playboo
     review_status: "reviewed",
     is_sample: false,
   });
+
   const sampleTrade = normalizeTrade({
     id: "mes-opening-scalp",
     symbol: "MES",

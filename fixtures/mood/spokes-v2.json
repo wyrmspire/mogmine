@@ -1,0 +1,13 @@
+{
+  "doc": "docs/18-mood-shape.md",
+  "version": 2,
+  "spokes": [
+    { "id": "calm", "label": "Calm / patience", "short": "Calm", "added_in_version": 1 },
+    { "id": "confidence", "label": "Confidence", "short": "Conf", "added_in_version": 1 },
+    { "id": "hope", "label": "Hope", "short": "Hope", "added_in_version": 1 },
+    { "id": "fomo", "label": "FOMO", "short": "FOMO", "added_in_version": 1 },
+    { "id": "fear", "label": "Fear", "short": "Fear", "added_in_version": 1 },
+    { "id": "frustration", "label": "Frustration", "short": "Frus", "added_in_version": 1 },
+    { "id": "boredom", "label": "Boredom", "short": "Bored", "added_in_version": 2 }
+  ]
+}
