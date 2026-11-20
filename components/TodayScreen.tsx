@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AccountCards } from "./AccountCard";
 import { DayHeader } from "./DayHeader";
 import { TradeRow } from "./TradeRow";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
@@ -61,6 +62,8 @@ export function TodayScreen() {
               <button type="button" onClick={openAddTrade}>Add yours</button>
             </div>
           )}
+
+          <AccountCards shield={prefs.shield} />
 
           {today ? (
             <>

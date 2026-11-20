@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CloseTradeSheet } from "./CloseTradeSheet";
 import { MoodCard } from "./MoodCard";
+import { AccountSelect } from "./AccountSelect";
 import { MoodEditorSheet } from "./MoodEditorSheet";
 import { MoodShape, useTradeMood } from "./MoodShape";
 import { PitStop } from "./PitStop";
@@ -497,6 +498,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
           <PitStop trade={trade} />
         </section>
+        {!trade.is_sample && <AccountSelect className="field account-pick" value={trade.account_id} onChange={(id) => updateTrade(trade.id, { account_id: id })} />}
         <MoodCard trade={trade} onEdit={() => setMoodOpen(true)} />
         <div className="review-actions">
           <button type="button" className="icon-button" aria-pressed={trade.flagged} aria-label={trade.flagged ? "Flagged for the weekly review. Tap to unflag." : "Flag for the weekly review"} title="Flag for the weekly review" onClick={() => updateTrade(trade.id, { flagged: !trade.flagged })}><span aria-hidden="true">⚑</span></button>

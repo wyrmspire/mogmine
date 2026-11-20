@@ -4,7 +4,7 @@ When you journal trades from a particular account, Mogmine keeps a running total
 
 Owner request, 2026-11-20: "if you're journaling from a particular account it should keep a running total". Open choices are `OD-41` in [DECISIONS.md](../DECISIONS.md).
 
-**Status:** step 1 is built: the engine (`lib/accounts.ts`), the device store (`lib/accounts-store.ts`), `account_id` on trades, and accounts in backups. There is no screen yet (steps 2–4 in §6).
+**Status:** steps 1–3 are built: the engine (`lib/accounts.ts`), the device store (`lib/accounts-store.ts`), `account_id` on trades, accounts in backups, the account card on Today, the add/edit sheet with optional rules, "Match broker balance", and an account picker in the entry form and on Trade Detail. Drawdown Defender as an account rule (step 4) is not built.
 
 ---
 
@@ -58,6 +58,6 @@ Label every total **"From your journal · gross"**. Never "live", "balance" alon
 ## 6. Build steps
 
 1. **Engine, store, `account_id` on trades, backups.** Done.
-2. **Account card on Today:** balance, high point, room left before the limit, today's result, progress to the target, a small balance line. Tapping it opens the account's ledger.
-3. **Account picker** in the entry form (and the new entry panel from docs/19), defaulting to the account used last (`defaultAccountId`). Assigning an account on Trade Detail.
-4. **Account setup and rules screen,** and Drawdown Defender as an account rule (docs/17).
+2. **Account card on Today** (`components/AccountCard.tsx`): balance, high point ("high at a close" for end-of-session trailing), today's result, a balance line with the loss floor dashed, room before the loss limit, room today, distance to the target, notes for open and unpriced trades, "Match broker balance", and a History list linking to each trade. With no account, an "Add account" offer. Under Shield: no dollars, only shares of each limit ("100%+" when the room has grown past the limit). Done.
+3. **Account picker** (`components/AccountSelect.tsx`) in the entry form, defaulting to the account used last, and on Trade Detail for real trades. Hidden until an account exists. Add/edit sheet with optional rules (`components/AccountSheet.tsx`). Done.
+4. **Drawdown Defender as an account rule** (docs/17). Not built.

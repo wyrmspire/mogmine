@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-20 — agent (Claude Code) — accounts steps 2–3: Today card, add/edit sheet, picker (docs/20), App shell lane
+Did:      `AccountCards` on Today (balance, high, today, balance line with floor, room before limit, daily room, target, Match broker balance, History), `AccountSheet` (name, start, optional target / loss limit / daily loss / how the limit moves; archive with Undo), `AccountSelect` in the entry form (defaults to the last account) and on Trade Detail. `formatBalance`, `formatCents` in `lib/format.ts`. Shield hides every dollar on the card.
+Files:    `components/AccountCard.tsx`, `AccountSheet.tsx`, `AccountSelect.tsx` (new), `TodayScreen.tsx`, `AddTradeSheet.tsx`, `TradeDetail.tsx`, `lib/format.ts`, `app/globals.css`, `docs/20`, `NOTES.md`.
+Checked:  typecheck, lint (0 errors), 219/219 tests, build. Headless Chrome 390×844: add account → log MES 2 × +10 pts → card shows $50,100.00, room $2,100.00 (end-of-day trailing, floor $48,000), today +$100.00; a $50,095.50 broker balance records −$4.50; Shield shows no dollars; no overflow; no console errors. Not checked on a real phone.
+Watch:    `app/r10-stop-at-entry` also edits `AddTradeSheet.tsx` and `TradeDetail.tsx`; my changes there are a few lines each, so a merge conflict should be small.
+
 ### 2026-11-20 — agent (Claude Code) — accounts and running totals, step 1 (docs/20), Core math lane
 Did:      `lib/accounts.ts`: `TradingAccount` with per-account rules (static / trailing / end-of-session trailing loss limit, daily loss, target), `accountSummary` (balance, peak, drawdown, room, today, target, curve, ledger), balance checks as adjustments, `defaultAccountId`, sanitisers. `account_id: string | null` on `TradeRecord` (default null). `lib/accounts-store.ts` (`mogmine-accounts-v1`), hydrated in AppShell, in backups.
 Files:    `lib/accounts.ts`, `lib/accounts-store.ts`, `lib/trades.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`, `lib/__tests__/accounts.test.ts`, `docs/20` (new), docs/06, docs/17, `DECISIONS.md` (`OD-41`), `AGENTS.md`, `README.md`.

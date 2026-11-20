@@ -4,6 +4,10 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { formatMoney, formatPoints, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
+import { AccountSelect } from "./AccountSelect";
+import { defaultAccountId } from "@/lib/accounts";
+import { useAccounts } from "@/lib/accounts-store";
+import { useJournal } from "@/lib/store";
 import { addTrade } from "@/lib/store";
 import { fromZonedInput, toZonedInput, zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -23,6 +27,8 @@ interface Draft {
   exitTime: string;
   entryPrice: string;
   exitPrice: string;
+  /** Undefined until the trader picks: the account used last (docs/20). */
+  accountId?: string | null;
 }
 
 // Kept while the app is open, so closing the sheet by accident never loses what was typed.
@@ -43,6 +49,9 @@ export function AddTradeSheet() {
   const [draft, setDraft] = useState<Draft>(() => readDraft<Draft>(DRAFT_KEY) ?? freshDraft(zone));
   const [submitted, setSubmitted] = useState(false);
   const firstField = useRef<HTMLSelectElement>(null);
+  const accounts = useAccounts();
+  const journal = useJournal();
+  const accountId = draft.accountId !== undefined ? draft.accountId : defaultAccountId(accounts.accounts, journal.trades);
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -124,6 +133,7 @@ export function AddTradeSheet() {
       entry_price: entryPrice,
       stop_loss_price: null, planned_target_price: null, key_level_price: null,
       note: "",
+      account_id: accountId,
     });
     addTrade(trade);
     keepDraft(DRAFT_KEY, null);
@@ -150,6 +160,7 @@ export function AddTradeSheet() {
                 <button type="button" aria-pressed={!isOpenDraft} onClick={() => setStatus("closed")}>Closed</button>
               </div>
             </div>
+            <AccountSelect className="field wide" value={accountId} onChange={(id) => change({ accountId: id })} />
             <label className="field"><span>Symbol</span>
               <select ref={firstField} value={draft.symbol} onChange={(event) => change({ symbol: event.target.value })}>
                 {Object.keys(FUTURES_SPECS).map((symbol) => <option key={symbol}>{symbol}</option>)}

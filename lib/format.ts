@@ -67,3 +67,15 @@ export function approx(text: string) {
 export function formatPercent(ratio: number | null) {
   return ratio == null || !Number.isFinite(ratio) ? "—" : `${Math.round(ratio * 100)}%`;
 }
+
+/** An account balance from integer cents: `$50,150.00`, `−$120.00`. No plus sign: a balance is not a result. */
+export function formatBalance(cents: number | null) {
+  if (cents == null || !Number.isFinite(cents)) return "—";
+  const abs = (Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${cents < 0 ? MINUS : ""}$${abs}`;
+}
+
+/** A change in integer cents, signed: `+$150.00`, `−$75.00`. */
+export function formatCents(cents: number | null) {
+  return cents == null ? "—" : formatMoney(cents / 100);
+}

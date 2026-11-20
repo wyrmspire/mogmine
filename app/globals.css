@@ -721,3 +721,36 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .mood-table caption { text-align: left; color: var(--text-muted); font-size: 0.75rem; padding-bottom: 4px; }
 .mood-table th, .mood-table td { text-align: left; padding: 6px 4px; border-top: 1px solid var(--border-subtle); }
 .mood-table td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ───────────────────────── Accounts (docs/20) ─────────────────────────
+   A journal total, not a result: neutral ink, no gold (#80). Limits are text first, a bar second. */
+.account-cards { display: grid; gap: 10px; margin-bottom: 14px; }
+.account-balance { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; margin-top: 6px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.account-balance span { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); letter-spacing: 0; }
+.account-balance.muted { font-size: 1rem; color: var(--text-muted); }
+.account-today { font-size: 0.8125rem; color: var(--text-muted); margin-top: 2px; }
+.balance-line { width: 100%; height: 40px; display: block; margin: 10px 0 4px; }
+.balance-line path { fill: none; stroke: var(--text-primary); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.balance-line .floor { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.account-limits { display: grid; gap: 8px; margin-top: 10px; }
+.account-limit { display: grid; gap: 4px; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.account-limit.reached span { color: var(--warn-amber); font-weight: 700; }
+.meter { display: block; height: 6px; border-radius: 3px; background: var(--bg-inset); border: 1px solid var(--border-subtle); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--text-muted); }
+.account-limit.reached .meter i { background: var(--warn-amber); }
+.account-notes { margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); }
+.account-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.account-actions button, .account-add { min-height: 44px; }
+.account-add { justify-self: start; }
+.account-check { display: grid; gap: 8px; margin-top: 12px; }
+.account-check .muted { font-size: 0.75rem; color: var(--text-muted); }
+.account-check .actions { display: flex; gap: 8px; }
+.account-empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.8125rem; }
+.account-empty .btn-secondary { flex: none; min-height: 44px; }
+.account-history { margin-top: 12px; font-size: 0.8125rem; }
+.account-history > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; font-weight: 700; }
+.account-history > summary span { color: var(--text-muted); font-weight: 500; font-size: 0.75rem; }
+.account-history ol { list-style: none; padding: 0; margin: 0; }
+.account-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; min-height: 44px; border-top: 1px solid var(--border-subtle); }
+.account-history li a, .account-history li > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-pick { margin-top: 12px; }
