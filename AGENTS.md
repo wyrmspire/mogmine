@@ -42,6 +42,7 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 | The UI branch: what phases 1–3 built, what is proposed next, what waits for the owner | [14 — UI & Experience: Phased Plan](docs/14-ui-phased-plan.md) |
 | **What to build next, in order**: pinch zoom, fresh-candle retry, open trades, the archive, trades in Supabase, the assistant endpoint, playbooks, stats, challenges | [16 — Floor Roadmap](docs/16-floor-roadmap.md) (`R-01`–`R-10`) |
 | Challenges: Drawdown Defender, Clean Run, the evaluator contract, golden test cases, the Today card and detail screen | [17 — Challenges](docs/17-challenges.md) (`R-09`, `OD-37`) |
+| Mood Shape: emotion spokes, score records, suggestions from notes, adding a spoke and re-scoring, mood against outcome | [18 — Mood Shape](docs/18-mood-shape.md) (`OD-39`) |
 | Trade document (`mogmine.trade.v1`), plan/actual/excursion box layers, stop paths, hindsight, the deriver and display list (`buildMarks`) | [15 — Trade Document & Render Grammar](docs/15-trade-document-and-render-grammar.md) (open decisions `OD-30`–`OD-34`) |
 | A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
 | Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |

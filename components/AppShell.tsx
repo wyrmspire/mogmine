@@ -8,6 +8,7 @@ import { HomeScreenHint } from "./HomeScreenHint";
 import { hydratePrefs, setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { hydrateJournal, useJournal } from "@/lib/store";
+import { hydrateMood } from "@/lib/mood-store";
 import { dismissToast, useToast } from "@/lib/toast";
 import { openAddTrade, useOnline, useUi } from "@/lib/ui";
 
@@ -36,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const toast = useToast();
   const online = useOnline();
 
-  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); }, []);
+  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); }, []);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   const waiting = journal.hydrated ? withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status === "new").length : 0;

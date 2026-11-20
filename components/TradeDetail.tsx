@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CloseTradeSheet } from "./CloseTradeSheet";
+import { MoodCard } from "./MoodCard";
+import { MoodEditorSheet } from "./MoodEditorSheet";
+import { MoodShape, useTradeMood } from "./MoodShape";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
 import { TradeCardSheet } from "./TradeCardSheet";
@@ -82,6 +85,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [hindsightOpen, setHindsightOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const closeSheet = useCallback(() => setClosing(false), []);
+  const [moodOpen, setMoodOpen] = useState(false);
+  const closeMood = useCallback(() => setMoodOpen(false), []);
+  const mood = useTradeMood(trade);
   const candles = useCandles(trade.id);
   const chartRef = useRef<TradeChartHandle>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
@@ -125,10 +131,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     if (!snapshot) return;
     const build = ++cardBuild.current;
     setShareBlob(null);
-    void buildShareCard(snapshot, trade, zone, cardPrivacy)
+    void buildShareCard(snapshot, trade, zone, cardPrivacy, mood)
       .then((blob) => { if (cardBuild.current === build) setShareBlob(blob); })
       .catch(() => { if (cardBuild.current === build) setShareBlob(null); });
-  }, [cardPrivacy, trade, zone]);
+  }, [cardPrivacy, mood, trade, zone]);
 
   // After pan, pinch, fit, or ‹30/30› the live chart redraws. If the sheet is
   // open, rebuild the card from that current view (AC-10). Notes typing still
@@ -461,7 +467,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         )}
 
         <div className="trade-levels-card specular-card">
-          <RStrip trade={trade} excursions={ex} size="detail" />
+          <div className="rstrip-row">
+            <RStrip trade={trade} excursions={ex} size="detail" />
+            <button type="button" className="mood-mini" onClick={() => setMoodOpen(true)} aria-label="Mood Shape. Tap to edit.">
+              <MoodShape vector={mood} size={44} />
+            </button>
+          </div>
           <div className="levels">
             <div><small>ENTRY</small><b>{formatPrice(trade.entry_price, trade.symbol)}</b></div>
             <div><small>EXIT</small><b>{formatPrice(trade.exit_price, trade.symbol)}</b></div>
@@ -486,6 +497,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
           <PitStop trade={trade} />
         </section>
+        <MoodCard trade={trade} onEdit={() => setMoodOpen(true)} />
         <div className="review-actions">
           <button type="button" className="icon-button" aria-pressed={trade.flagged} aria-label={trade.flagged ? "Flagged for the weekly review. Tap to unflag." : "Flag for the weekly review"} title="Flag for the weekly review" onClick={() => updateTrade(trade.id, { flagged: !trade.flagged })}><span aria-hidden="true">⚑</span></button>
           {trade.review_status === "reviewed"
@@ -496,6 +508,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         {!trade.is_sample && <button type="button" className="btn-danger-ghost" onClick={removeThis}>Remove this trade</button>}
       </aside>
     </div>
+    {moodOpen && <MoodEditorSheet trade={trade} onClose={closeMood} />}
     {closing && open && <CloseTradeSheet trade={trade} zone={zone} onClose={closeSheet} />}
     {cardOpen && <TradeCardSheet trade={trade} blob={shareBlob} privacy={cardPrivacy} onPrivacyChange={changeCardPrivacy} onClose={closeCard} />}
   </>;

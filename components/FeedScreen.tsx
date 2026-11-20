@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DayHeader } from "./DayHeader";
+import { MoodStatsCard } from "./MoodCard";
 import { TradeRow } from "./TradeRow";
 import { usePrefs } from "@/lib/prefs";
 import { applyFilters, describeFilters, filtersToQuery, groupByDay, parseFilters, withSamples } from "@/lib/selectors";
@@ -73,6 +74,8 @@ export function FeedScreen() {
           </section>
         ))
       )}
+
+      {groups.length > 0 && <MoodStatsCard trades={journal.trades} />}
     </div>
   );
 }

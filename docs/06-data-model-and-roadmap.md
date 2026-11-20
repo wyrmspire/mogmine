@@ -156,7 +156,7 @@ erDiagram
 | **`session_levels`** | One row per `(session_date, symbol)` holding `pdh`, `pdl`, `pdc`, `onh`, `onl`, `orb_high`, `orb_low`, `ibh`, `ibl` so multiple trades on the same day share the same levels. Revisioned level sets are proposed in [12 §6](12-levels-zones-and-daily-markup.md#6-data-model-proposed-shape) (`OD-20`). |
 | **`economic_events`** | Stores scheduled/fetched Tier-1 USD economic releases (`CPI`, `FOMC`, `NFP`, `PPI`, `ISM`) for ±30m trade hazard checks. |
 | **`playbooks`** | User-defined setups (e.g., *"ONL Sweep + NQ SMT"*), each with an ordered `checklist_rules` array (`[{ id, label, required }]`). |
-| **`trade_notes`** | Combines **Simple Mode** (`quick_tags`, `voice_audio_url`, `voice_transcript`, `mood_tag`) and **Advanced Mode** (`pre_trade_thesis`, `divergence_notes`, `management_notes`, `post_exit_notes`, `checklist_state`). |
+| **`trade_notes`** | Combines **Simple Mode** (`quick_tags`, `voice_audio_url`, `voice_transcript`; mood is not a column here: it is derived, versioned score records with a spoke registry, [18](18-mood-shape.md)) and **Advanced Mode** (`pre_trade_thesis`, `divergence_notes`, `management_notes`, `post_exit_notes`, `checklist_state`). |
 | **`ai_reviews`** | Stores the Zod-validated `AITradeReviewOutput` JSON, `grade`, `snapshot_url` (Vision AI / Trade Card screenshot), `playbook_adherence_score`, and follow-up coach chat history. |
 | **`user_preferences`** | Persists UI visual tuning: `gold_preset` (`'bullion' \| 'champagne' \| 'amber' \| 'platinum'`), `gold_intensity` (`0.0–1.0`), `position_box_opacity` (`0.15–0.65`), and `default_companion_tickers` (e.g., `['NQ=F']`). |
 

@@ -69,7 +69,7 @@ Designed for one-handed thumb use right after closing a trade:
 - **Voice-to-Structured-Note Button:**
   - Press and hold (or tap) the gold microphone icon and speak naturally for 5–15 seconds:  
     *"Took MES long after we swept the overnight low at 9:45, NQ refused to make a lower low and pushed hard. Got a little scared at VWAP and took everything off instead of leaving a runner."*
-  - **AI Auto-Parser:** Transcribes the audio and offers suggested **Playbook**, **Tags** (`SMT Divergence`, `Level Sweep`, `Cut Early`), **Thesis Summary**, and **Emotional State** for acceptance. It never overwrites user selections or prose. Audio retention follows the user's setting (UX-33, UX-39).
+  - **AI Auto-Parser:** Transcribes the audio and offers suggested **Playbook**, **Tags** (`SMT Divergence`, `Level Sweep`, `Cut Early`), **Thesis Summary**, and **Emotional State** (per-spoke Mood Shape scores, each with an evidence quote, [18](18-mood-shape.md)) for acceptance. It never overwrites user selections or prose. Audio retention follows the user's setting (UX-33, UX-39).
 
 ### B. Advanced Mode (Post-Market Deep Review)
 Expandable drawer or tab when sitting down after the session to grade yourself thoroughly:

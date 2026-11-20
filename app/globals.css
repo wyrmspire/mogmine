@@ -247,7 +247,7 @@ h1, h2, h3, p { margin: 0; }
 
 .trade-list { display: grid; gap: 8px; padding-top: 10px; }
 .trade-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 10px;
   min-height: 76px; padding: 11px 12px; text-align: left; width: 100%;
   border: 1px solid var(--border-subtle); border-radius: var(--radius); background: var(--bg-surface);
 }
@@ -517,7 +517,7 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
   .detail-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr) 350px; gap: 0 16px; padding: 0 20px; align-items: start; }
   .detail-rail { display: block; position: sticky; top: var(--topbar-h); max-height: calc(100dvh - var(--topbar-h)); overflow: auto; padding: 16px 2px 20px; overscroll-behavior: contain; }
   .detail-rail .trade-row { grid-template-columns: minmax(0, 1fr) auto; min-height: 64px; }
-  .detail-rail .sparkline { display: none; }
+  .detail-rail .sparkline, .detail-rail .mood-shape.thumb { display: none; }
   .detail-rail h2 { font-size: 0.75rem; color: var(--text-muted); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 2px 2px; }
   .detail-main { padding-top: 6px; min-width: 0; }
   .chart-card { margin: 0; }
@@ -649,3 +649,75 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .switch[aria-checked="true"]::after, .switch[data-checked="true"]::after { transform: translateX(20px); background: var(--on-bright); }
 .switch-hit { min-height: 44px; min-width: 50px; display: grid; place-items: center; background: none; border: 0; padding: 0; }
 .switch-hit:focus-visible .switch { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+
+/* ───────────────────────── Mood Shape (docs/18) ─────────────────────────
+   The trader's state, not a result: neutral ink, no gold (#80), no profit/loss colour on a single shape. */
+.mood-shape { display: block; flex: none; overflow: visible; }
+.mood-shape.thumb { width: 40px; height: 40px; }
+.mood-fill { fill: color-mix(in srgb, var(--text-primary) 16%, transparent); stroke: none; }
+.mood-line { fill: none; stroke: var(--text-primary); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.mood-line.dashed { stroke: var(--text-faint); stroke-dasharray: 3 3; }
+.mood-layer.profit .mood-line { stroke: var(--profit-text); stroke-width: 2; }
+.mood-layer.loss .mood-line { stroke: var(--loss-text); stroke-width: 2; stroke-dasharray: 6 3; }
+.mood-layer.profit .mood-line.dashed, .mood-layer.loss .mood-line.dashed { stroke-dasharray: 2 4; opacity: 0.7; }
+.mood-axes circle, .mood-axes line { fill: none; stroke: var(--border-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.mood-axes text { fill: var(--text-muted); font: 650 11px var(--font-sans); }
+
+.rstrip-row { display: flex; align-items: center; gap: 8px; }
+.rstrip-row .rstrip.detail { flex: 1; min-width: 0; }
+.mood-mini { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-inset); padding: 0; }
+
+.mood-card { margin-top: 12px; }
+.mood-card-body { display: flex; align-items: center; gap: 14px; }
+.mood-open { flex: none; padding: 4px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--bg-inset); }
+.mood-card-text { display: grid; gap: 8px; min-width: 0; font-size: 0.8125rem; }
+.mood-card-text .btn-secondary { justify-self: start; min-height: 44px; }
+.mood-card .muted, .mood-stats .muted { color: var(--text-muted); font-size: 0.75rem; }
+.mood-similar { margin-top: 14px; display: grid; gap: 6px; font-size: 0.8125rem; }
+.mood-similar h4 { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.mood-similar-list { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }
+.mood-similar-list a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface); font-size: 0.75rem; }
+.r-dots { width: 100%; max-width: 260px; height: 20px; display: block; }
+.r-dots .zero { stroke: var(--border-strong); stroke-width: 1; }
+.r-dots circle { fill: var(--text-muted); }
+.r-dots circle.up { fill: var(--profit-text); }
+.r-dots circle.down { fill: var(--loss-text); }
+
+.mood-sheet { max-width: 560px; max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.mood-editor { display: grid; place-items: center; }
+.mood-shape.editor { width: min(100%, 320px); height: auto; aspect-ratio: 1; touch-action: none; user-select: none; -webkit-user-select: none; }
+.mood-handle { cursor: grab; outline: none; }
+.mood-handle .hit { fill: transparent; }
+.mood-handle .dot { fill: var(--text-primary); stroke: var(--bg-surface); stroke-width: 2; }
+.mood-handle.unknown .dot { fill: var(--bg-surface); stroke: var(--text-faint); stroke-dasharray: 2 2; }
+.mood-handle:focus-visible .dot { stroke: var(--text-primary); stroke-width: 3; }
+.mood-handle:active { cursor: grabbing; }
+.mood-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 2px; }
+.mood-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name value" "source clear"; align-items: center; column-gap: 10px; padding: 8px 0; border-top: 1px solid var(--border-subtle); font-size: 0.8125rem; }
+.mood-name { grid-area: name; font-weight: 700; }
+.mood-value { grid-area: value; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.mood-source { grid-area: source; color: var(--text-muted); font-size: 0.75rem; min-width: 0; overflow-wrap: anywhere; }
+.mood-source q, .mood-chip q { display: block; font-style: italic; color: var(--text-muted); font-size: 0.75rem; margin-top: 2px; overflow-wrap: anywhere; }
+.mood-clear { grid-area: clear; min-height: 44px; }
+.mood-suggest { margin-top: 12px; display: grid; gap: 8px; }
+.mood-suggest h4 { font-size: 0.8125rem; }
+.mood-suggest h4 span { color: var(--text-muted); font-weight: 500; margin-left: 6px; }
+.mood-chip { display: inline-flex; align-items: stretch; gap: 2px; max-width: 100%; }
+.mood-chip .chip { min-height: 44px; text-align: left; max-width: calc(100% - 46px); white-space: normal; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; padding: 6px 13px; border-radius: 16px; }
+.chip-dismiss { min-width: 44px; min-height: 44px; border: 0; background: none; color: var(--text-muted); }
+.mood-actions, .mood-suggest .actions, .mood-candidate .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.mood-candidate { margin-top: 12px; padding: 12px; border: 1px dashed var(--border-strong); border-radius: 12px; font-size: 0.8125rem; }
+
+.blind-mood { display: flex; align-items: center; gap: 12px; margin: 10px 0 4px; font-size: 0.8125rem; color: var(--text-muted); }
+
+.mood-stats { margin-top: 18px; }
+.mood-stats > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; font-weight: 750; }
+.mood-stats > summary span { color: var(--text-muted); font-weight: 500; font-size: 0.75rem; text-align: right; }
+.mood-overlay { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0; }
+.mood-legend { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 0.75rem; }
+.mood-legend i { display: inline-block; width: 18px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 2px solid var(--profit-text); }
+.mood-legend .loss i { border-top: 2px dashed var(--loss-text); }
+.mood-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.mood-table caption { text-align: left; color: var(--text-muted); font-size: 0.75rem; padding-bottom: 4px; }
+.mood-table th, .mood-table td { text-align: left; padding: 6px 4px; border-top: 1px solid var(--border-subtle); }
+.mood-table td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
