@@ -1,9 +1,9 @@
 // docs/20: price-first entry (draft, times, tick steppers) and R-10 stop at entry, frozen.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addCalendarDays, entryLevelFields, entryTimes, freshEntryDraft, splitZonedInput, stepPriceText, upgradeDraft } from "../entry-form.ts";
+import { addCalendarDays, entryTimes, freshEntryDraft, splitZonedInput, stepPriceText, upgradeDraft } from "../entry-form.ts";
 import { parseBackupFile } from "../store.ts";
-import { initialRMultiple, keepInitialStop, normalizeTrade, rMultiple, stopEditPatch, validateTradeInput } from "../trades.ts";
+import { keepInitialStop, normalizeTrade, stopPatch, validateTradeInput } from "../trades.ts";
 
 const CT = "America/Chicago";
 
@@ -102,63 +102,16 @@ test("the form's stop still uses the validateTradeInput stop-side rule", () => {
   assert.equal(validateTradeInput({ ...base, direction: "SHORT", stop_loss_price: 6840 }).stop_loss_price, "A short's stop sits above the entry");
 });
 
+// R-10 capture, freeze and initialRMultiple are covered by initial-stop.test.ts (PR #118).
+// This file adds only the backup-restore guard that #118 does not have.
 const at = "2026-11-20T15:42:00.000Z";
 const baseTrade = {
   id: "r10", symbol: "MES", direction: "LONG" as const, entry_time: "2026-11-20T15:30:00.000Z", exit_time: "2026-11-20T15:50:00.000Z",
   entry_price: 6844, exit_price: 6852, quantity: 1,
 };
 
-test("R-10: a stop saved at entry sets the stop, the initial stop and its time", () => {
-  const fields = entryLevelFields(6840, 6856, at);
-  assert.deepEqual(fields, { stop_loss_price: 6840, initial_stop_price: 6840, initial_stop_set_at: at, planned_target_price: 6856 });
-  const trade = normalizeTrade({ ...baseTrade, ...fields });
-  assert.equal(trade.initial_stop_price, 6840);
-  assert.equal(trade.initial_stop_set_at, at);
-  assert.equal(initialRMultiple(trade), 2);
-});
-
-test("R-10: no stop at entry leaves all three null", () => {
-  assert.deepEqual(entryLevelFields(null, null, at), { stop_loss_price: null, initial_stop_price: null, initial_stop_set_at: null, planned_target_price: null });
-});
-
-test("R-10: a later edit moves only stop_loss_price", () => {
-  const trade = normalizeTrade({ ...baseTrade, ...entryLevelFields(6840, null, at) });
-  const patch = stopEditPatch(trade, 6842, "2026-11-20T16:00:00.000Z");
-  assert.deepEqual(patch, { stop_loss_price: 6842 });
-  const moved = { ...trade, ...patch };
-  assert.equal(rMultiple(moved), 4);
-  assert.equal(initialRMultiple(moved), 2);
-});
-
-test("R-10: the first stop on a stop-less trade is captured once", () => {
-  const trade = normalizeTrade({ ...baseTrade });
-  const first = stopEditPatch(trade, 6840, at);
-  assert.deepEqual(first, { stop_loss_price: 6840, initial_stop_price: 6840, initial_stop_set_at: at });
-  const second = stopEditPatch({ ...trade, ...first }, 6838, "2026-11-20T16:00:00.000Z");
-  assert.deepEqual(second, { stop_loss_price: 6838 });
-  // Clearing the stop never clears the initial stop.
-  assert.deepEqual(stopEditPatch({ ...trade, ...first }, null, at), { stop_loss_price: null });
-});
-
-test("R-10: initialRMultiple is null without an initial stop and for an open trade", () => {
-  const noStop = normalizeTrade({ ...baseTrade, stop_loss_price: 6840 });
-  assert.equal(initialRMultiple(noStop), null);
-  assert.equal(rMultiple(noStop), 2);
-  const open = normalizeTrade({ ...baseTrade, status: "open", exit_time: null, exit_price: null, ...entryLevelFields(6840, null, at) });
-  assert.equal(initialRMultiple(open), null);
-});
-
-test("R-10: an old record normalises with both new fields null; a half pair is cleared", () => {
-  const old = normalizeTrade({ ...baseTrade, stop_loss_price: 6840 });
-  assert.equal(old.initial_stop_price, null);
-  assert.equal(old.initial_stop_set_at, null);
-  const half = normalizeTrade({ ...baseTrade, initial_stop_price: 6840 });
-  assert.equal(half.initial_stop_price, null);
-  assert.equal(half.initial_stop_set_at, null);
-});
-
 test("R-10: a backup round-trips the initial stop, and a restore never overwrites one the device holds", () => {
-  const device = normalizeTrade({ ...baseTrade, ...entryLevelFields(6840, null, at) });
+  const device = normalizeTrade({ ...baseTrade, ...stopPatch({ initial_stop_price: null }, 6840, at) });
   const parsed = parseBackupFile(JSON.stringify({ app: "mogmine", trades: [{ ...device, initial_stop_price: 6830, initial_stop_set_at: "2026-11-20T17:00:00.000Z" }] }));
   assert.ok(parsed.ok);
   const incoming = parsed.trades[0];
@@ -169,4 +122,11 @@ test("R-10: a backup round-trips the initial stop, and a restore never overwrite
   // Nothing on the device: the backup's value is used.
   assert.equal(keepInitialStop(incoming, undefined).initial_stop_price, 6830);
   assert.equal(keepInitialStop(incoming, { ...device, initial_stop_price: null, initial_stop_set_at: null }).initial_stop_price, 6830);
+});
+
+test("R-10: a backup with a half-written initial stop restores as unknown", () => {
+  const parsed = parseBackupFile(JSON.stringify({ app: "mogmine", trades: [{ ...normalizeTrade({ ...baseTrade }), initial_stop_price: 6840, initial_stop_set_at: "not a time" }] }));
+  assert.ok(parsed.ok);
+  assert.equal(parsed.trades[0].initial_stop_price, null);
+  assert.equal(parsed.trades[0].initial_stop_set_at, null);
 });

@@ -4,7 +4,7 @@
 
 import { fromZonedInput, toZonedInput } from "./time.ts";
 import { snapToTick, specFor, tickDecimals, toTicks } from "./trades.ts";
-import type { TradeDirection, TradeRecord, TradeStatus } from "./trades.ts";
+import type { TradeDirection, TradeStatus } from "./trades.ts";
 
 export interface EntryDraft {
   /** `open`: still running, no exit yet (R-03b). */
@@ -141,18 +141,6 @@ export function stepPriceText(text: string, steps: number, symbol: string, seed 
   return next.toFixed(tickDecimals(spec.tickSize));
 }
 
-/**
- * The stop and target fields of a trade saved from the form (R-10). A stop also becomes the
- * initial stop, stamped with the save time. No stop: all three are null (unknown, never 0).
- */
-export function entryLevelFields(stop: number | null, target: number | null, savedAt: string): Pick<TradeRecord, "stop_loss_price" | "initial_stop_price" | "initial_stop_set_at" | "planned_target_price"> {
-  return {
-    stop_loss_price: stop,
-    initial_stop_price: stop,
-    initial_stop_set_at: stop == null ? null : savedAt,
-    planned_target_price: target,
-  };
-}
 
 // ── Times from the bars (OD-41 (5), docs/20 §2.2) ───────────────────────────────────────────────
 

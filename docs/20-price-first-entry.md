@@ -5,7 +5,7 @@ From the owner's phone review on 2026-11-20 (12:26 AM CT). Two complaints:
 1. **Adding a trade is backwards.** The form asked for times first. A trader remembers prices: where they got in, where they got out, the stop and the target. Times should be quick to set, with a calendar or time wheel.
 2. **The arrow on the price axis is in the way.** A `›` button sat over the right price scale. The axis is needed for other things, and dragging it up or down should stretch the price scale. It could not.
 
-This doc is the spec for both. It folds in `R-10` (stop at entry, frozen) from [docs/16](16-floor-roadmap.md), because the stop field is part of the new form. `OD-41` in [DECISIONS.md](../DECISIONS.md) records the choices; the owner answered (2) and (5) on 2026-11-20.
+This doc is the spec for both. The stop row uses `R-10` (stop at entry, frozen, PR #118). `OD-41` in [DECISIONS.md](../DECISIONS.md) records the choices; the owner answered (2) and (5) on 2026-11-20.
 
 > Numbering: `docs/19` and `OD-40` are taken by the trade-screen design guide on branch `docs/19-design-guide`, which is not merged yet.
 
@@ -68,14 +68,11 @@ The owner asked for this now (`OD-41` (5), 2026-11-20): "a general logic that tr
 
 ### Stop at entry, frozen (`R-10`)
 
-Built here as specified in [docs/16 R-10](16-floor-roadmap.md#r-10--stop-at-entry-frozen):
+`R-10` is built in PR #118 ([docs/16 R-10](16-floor-roadmap.md#r-10--stop-at-entry-frozen)): `initial_stop_price` / `initial_stop_set_at`, `stopPatch`, `initialRMultiple`, and the quiet "Initial stop …" line on Trade Detail. This form uses that one implementation:
 
-- `TradeRecord` has `initial_stop_price` and `initial_stop_set_at`. `normalizeTrade` sets both to `null` on older records and clears a half-written pair.
-- A stop typed on the form is saved as `stop_loss_price` **and** `initial_stop_price`, stamped with the save time (`entryLevelFields`).
-- A trade saved without a stop: the first stop set on Trade Detail, from the level editor or a risk chip, is captured as the initial stop (`stopEditPatch`). Later edits move `stop_loss_price` only. Undo moves the stop back and leaves the initial stop alone.
-- `initialRMultiple(trade)` sits beside `rMultiple`. No screen switches to it in this change.
-- Trade Detail shows "Initial stop 6841.25, set 09:42" as a quiet line when the current stop differs.
-- A backup restore never overwrites an initial stop the device already holds for the same trade (`keepInitialStop` in `replaceTrades`).
+- The Stop row on the ladder saves through `stopPatch`, so a stop typed here is the stop **and** the frozen initial stop.
+- A first stop set from a risk chip on Trade Detail also goes through `stopPatch` (the level editor already did in #118).
+- Added here: a backup restore never overwrites an initial stop the device already holds for the same trade (`keepInitialStop` in `replaceTrades`), and a backup with a half-written pair restores both as null.
 
 ## 3. The chart (`components/TradeChart.tsx`, `components/TradeDetail.tsx`, `lib/price-scale.ts`)
 
@@ -98,7 +95,7 @@ Built here as specified in [docs/16 R-10](16-floor-roadmap.md#r-10--stop-at-entr
 
 ## 4. Checked
 
-- Unit tests: `lib/__tests__/price-first-entry.test.ts` (draft defaults, overnight exit, DST, draft upgrade, tick steppers, stop-side rule, all `R-10` cases) and `lib/__tests__/price-scale.test.ts`.
+- Unit tests: `lib/__tests__/price-first-entry.test.ts` (draft defaults, overnight exit, DST, draft upgrade, tick steppers, stop-side rule, the `R-10` restore guard; the rest of `R-10` is in `initial-stop.test.ts`) and `lib/__tests__/price-scale.test.ts`.
 - Headless Chrome at 390×844 with touch emulation: no horizontal overflow on the sheet or the trade screen; every sheet control ≥ 44 px; a typed long stop above the entry shows the error at once; a saved trade stores the stop, the initial stop and its time. On the chart: an emulated finger drag on the axis stretched the scale and did not scroll the page; double-tap reset it; a vertical swipe on the chart body scrolled the page; a horizontal drag panned the chart. Mouse drag, double-click and wheel on the axis at 1280×900 worked.
 - Bar finder, headless Chrome at 390×844 against live Yahoo 1m bars for 2026-11-19: a short at 7439.75 / 7430 matched "05:55 entry, 06:00 exit" and filled both pickers; a long at 7150.25 / 7155 said "traded 3 times, picked 23:15 (the first)"; a hand-set 10:00 entry was kept and a Use button offered; 9000 said no bar traded it; offline showed the offline line and Retry. Screenshots: `finder-*.png` in the handoff.
 - **Not verified on a phone.** Real iOS and Android touch, the native pickers' look, and the right-edge scroll trade-off need the owner's phone.

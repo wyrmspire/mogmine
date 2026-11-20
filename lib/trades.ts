@@ -66,12 +66,12 @@ export interface TradeRecord {
   exit_price: number | null;
   stop_loss_price: number | null;
   /**
-   * The stop as it was when the risk was first set (R-10): at entry, or the first time a stop is added on
-   * Trade Detail. Written once and never changed after, so R measured on it cannot be edited after the fact.
-   * Null on trades saved before R-10 and on trades that never had a stop: unknown, never back-filled.
+   * The first stop this trade ever had, frozen when it was set (R-10). Later edits move
+   * `stop_loss_price` only. Null until a stop is first set; records saved before R-10 stay null —
+   * their initial stop is unknown and is never back-filled from `stop_loss_price`.
    */
   initial_stop_price: number | null;
-  /** UTC ISO time `initial_stop_price` was captured, or null with it. */
+  /** When `initial_stop_price` was captured (ISO). Null with it. */
   initial_stop_set_at: string | null;
   planned_target_price: number | null;
   key_level_price: number | null;
@@ -249,31 +249,29 @@ export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price">):
 }
 
 /**
- * R measured on the stop frozen when the risk was first set (R-10). Same math as `rMultiple`, on
- * `initial_stop_price`. Null without an initial stop, and for an open trade. `rMultiple` is unchanged.
+ * The patch for setting or changing a trade's stop (R-10). The first stop a trade ever has is
+ * also frozen as its initial stop, stamped with `now` (ISO). Once an initial stop exists this
+ * returns a `stop_loss_price`-only patch, so no later edit — including a backup restore of the
+ * same trade — ever overwrites it.
  */
+export function stopPatch(
+  trade: Pick<TradeRecord, "initial_stop_price">,
+  price: number | null,
+  now: string,
+): Partial<TradeRecord> {
+  if (price == null || trade.initial_stop_price != null) return { stop_loss_price: price };
+  return { stop_loss_price: price, initial_stop_price: price, initial_stop_set_at: now };
+}
+
+/** R against the frozen initial stop (R-10): the same math as `rMultiple`, on `initial_stop_price`. `null` without one. */
 export function initialRMultiple(trade: Priced & Pick<TradeRecord, "initial_stop_price">): number | null {
+  if (trade.initial_stop_price == null) return null;
   return rMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
 }
 
 /**
- * The patch for setting or changing the stop on a saved trade (R-10). The first stop on a trade with no
- * initial stop is also captured as `initial_stop_price`, stamped `at`. Later edits move `stop_loss_price` only.
- */
-export function stopEditPatch(
-  trade: Pick<TradeRecord, "initial_stop_price">,
-  stop: number | null,
-  at: string,
-): Pick<TradeRecord, "stop_loss_price"> & Partial<Pick<TradeRecord, "initial_stop_price" | "initial_stop_set_at">> {
-  if (stop != null && trade.initial_stop_price == null) {
-    return { stop_loss_price: stop, initial_stop_price: stop, initial_stop_set_at: at };
-  }
-  return { stop_loss_price: stop };
-}
-
-/**
- * Restoring a backup never overwrites an initial stop the device already holds for the same trade (R-10).
- * Returns `incoming` with the device's frozen pair when there is one.
+ * A backup restore never overwrites an initial stop the device already holds for the same trade
+ * (R-10 "Do not"). Returns `incoming` with the device's frozen pair when there is one.
  */
 export function keepInitialStop(incoming: TradeRecord, existing: Pick<TradeRecord, "id" | "initial_stop_price" | "initial_stop_set_at"> | undefined): TradeRecord {
   if (!existing || existing.id !== incoming.id || existing.initial_stop_price == null) return incoming;
@@ -756,11 +754,6 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;
-  // R-10: a record from before this field, or one with a half-written pair, has no known initial stop.
-  if (trade.initial_stop_price == null || !Number.isFinite(trade.initial_stop_price) || trade.initial_stop_set_at == null) {
-    trade.initial_stop_price = null;
-    trade.initial_stop_set_at = null;
-  }
   if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);

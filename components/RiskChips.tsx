@@ -5,7 +5,7 @@ import { formatPrice } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { updateTrade } from "@/lib/store";
 import { showToast } from "@/lib/toast";
-import { isWholeQuantity, snapToTick, specFor, stopEditPatch, toTicks } from "@/lib/trades";
+import { isWholeQuantity, snapToTick, specFor, stopPatch, toTicks } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
 
 /**
@@ -27,7 +27,7 @@ export function RiskChips({ trade, budgetUsd, shield }: { trade: TradeRecord; bu
 
   const setStop = (price: number) => {
     // R-10: the first stop on a trade is also frozen as its initial stop. Undo clears the stop only.
-    updateTrade(trade.id, stopEditPatch(trade, price, new Date().toISOString()));
+    updateTrade(trade.id, stopPatch(trade, price, new Date().toISOString()));
     showToast(`Stop set at ${formatPrice(price, trade.symbol)}`, { label: "Undo", run: () => updateTrade(trade.id, { stop_loss_price: null }) });
   };
   const customPrice = Number(custom);

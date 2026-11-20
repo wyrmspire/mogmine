@@ -55,8 +55,6 @@ erDiagram
         numeric entry_price
         numeric exit_price
         numeric stop_loss_price
-        numeric initial_stop_price
-        timestamptz initial_stop_set_at
         numeric mae_price
         numeric mfe_price
         numeric net_pnl
@@ -152,7 +150,7 @@ erDiagram
 | :--- | :--- |
 | **`accounts`** | Tracks TopstepX Combine / Express Funded / Live accounts (`external_account_id`, `account_type`, `balance`, `user_id`). |
 | **`executions`** | Immutable raw order fills from TopstepX (`external_fill_id` unique constraint prevents duplicate writes on WebSocket reconnects). |
-| **`trades`** | Aggregated round-trip positions. Stores `status` (`'open' \| 'closed'`; an open trade has null `exit_time` and `exit_price`, and its money fields are null — `R-03`, `OD-38`), `trade_style` (`'scalp' \| 'session_90m' \| 'investment'`), `style_overridden` boolean, `entry_price`, `exit_price` (nullable while open), `stop_loss_price`, `initial_stop_price` and `initial_stop_set_at` (the stop when the risk was first set, written once and never changed — `R-10`, [docs/20](20-price-first-entry.md)), `mae_price`, `mfe_price`, `r_multiple`, `net_pnl`, and `session_tag` (`'NY_AM' \| 'NY_PM' \| 'LONDON' \| 'ASIA'`). |
+| **`trades`** | Aggregated round-trip positions. Stores `status` (`'open' \| 'closed'`; an open trade has null `exit_time` and `exit_price`, and its money fields are null — `R-03`, `OD-38`), `trade_style` (`'scalp' \| 'session_90m' \| 'investment'`), `style_overridden` boolean, `entry_price`, `exit_price` (nullable while open), `stop_loss_price`, `initial_stop_price` and `initial_stop_set_at` (the first stop ever set, frozen when set — `R-10`; null until then, never back-filled or overwritten), `mae_price`, `mfe_price`, `r_multiple`, `net_pnl`, and `session_tag` (`'NY_AM' \| 'NY_PM' \| 'LONDON' \| 'ASIA'`). |
 | **`trade_candles`** | Permanently caches Yahoo Finance OHLCV arrays (`bars` JSONB of `{ time, open, high, low, close, volume }`) keyed by `(trade_id, symbol, timeframe)` so `1m` intraday history never vanishes after 30 days. |
 | **`trade_companion_charts`** | Stores secondary charts attached to a trade: either `kind = 'yahoo_sync'` (e.g., `NQ=F`, `^VIX` with `relationship_type = 'smt_divergence' \| 'confirming_push'` and 2-point `annotations` coordinates) or `kind = 'uploaded_image'` (Supabase Storage URL + caption). |
 | **`session_levels`** | One row per `(session_date, symbol)` holding `pdh`, `pdl`, `pdc`, `onh`, `onl`, `orb_high`, `orb_low`, `ibh`, `ibl` so multiple trades on the same day share the same levels. Revisioned level sets are proposed in [12 §6](12-levels-zones-and-daily-markup.md#6-data-model-proposed-shape) (`OD-20`). |

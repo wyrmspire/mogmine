@@ -203,9 +203,10 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
     entry_price: item.entry_price,
     exit_price: item.exit_price ?? null,
     stop_loss_price: stopLoss,
-    // R-10: kept only as a valid pair; anything else is unknown (normalizeTrade clears a half pair).
-    initial_stop_price: isFiniteNumber(rest.initial_stop_price) ? rest.initial_stop_price : null,
-    initial_stop_set_at: isValidTime(rest.initial_stop_set_at) ? rest.initial_stop_set_at : null,
+    // R-10: kept only as a valid pair; anything else is unknown, never guessed.
+    ...(isFiniteNumber(rest.initial_stop_price) && isValidTime(rest.initial_stop_set_at)
+      ? { initial_stop_price: rest.initial_stop_price, initial_stop_set_at: rest.initial_stop_set_at }
+      : { initial_stop_price: null, initial_stop_set_at: null }),
     planned_target_price: plannedTarget,
     key_level_price: keyLevel,
     quantity,

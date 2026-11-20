@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { dayWindow, entryLevelFields, entryTimes, priceOrNull, stepPriceText, suggestionPatch, upgradeDraft, zonedParts } from "@/lib/entry-form";
+import { dayWindow, entryTimes, priceOrNull, stepPriceText, suggestionPatch, upgradeDraft, zonedParts } from "@/lib/entry-form";
 import { loadDayCandles } from "@/lib/candles";
 import { inferTradeTimes } from "@/lib/infer-times";
 import type { InferResult } from "@/lib/infer-times";
@@ -13,7 +13,7 @@ import { usePrefs } from "@/lib/prefs";
 import { addTrade } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeStatus } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft, useOnline } from "@/lib/ui";
 
@@ -224,7 +224,8 @@ export function AddTradeSheet() {
       entry_time: entry.toISOString(), ...exitFields,
       entry_price: entryPrice,
       // R-10: a stop typed here is the stop and the frozen initial stop.
-      ...entryLevelFields(stopPrice, targetPrice, new Date().toISOString()),
+      ...stopPatch({ initial_stop_price: null }, stopPrice, new Date().toISOString()),
+      planned_target_price: targetPrice,
       key_level_price: null,
       note: "",
     });

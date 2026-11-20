@@ -468,10 +468,11 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
           </div>
-          {trade.initial_stop_price != null && trade.initial_stop_set_at != null && trade.initial_stop_price !== trade.stop_loss_price && (
-            <p className="initial-stop-fact num">Initial stop {formatPrice(trade.initial_stop_price, trade.symbol)}, set {formatListTime(trade.initial_stop_set_at, zone)}</p>
-          )}
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
+          {/* The frozen first stop, shown as a quiet fact only once the working stop has moved (R-10). */}
+          {trade.initial_stop_price != null && trade.initial_stop_set_at != null && trade.stop_loss_price !== trade.initial_stop_price && (
+            <p className="initial-stop">Initial stop {formatPrice(trade.initial_stop_price, trade.symbol)}, set {formatListTime(trade.initial_stop_set_at, zone)}</p>
+          )}
         </div>
 
         <div className="pager">
