@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { RStrip } from "./RStrip";
+import { TradeMoodThumb } from "./MoodShape";
 import { formatDuration, formatMoney, formatPoints, formatR } from "@/lib/format";
 import { playbookName } from "@/lib/playbooks";
 import { formatListTime } from "@/lib/time";
@@ -50,6 +51,7 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
         <span className="row-meta">{formatListTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}</span>
         <span className={`row-context ${info.todo ? "todo" : ""}`}>{info.text}</span>
       </span>
+      <TradeMoodThumb trade={trade} />
       <RStrip trade={trade} />
       <span className="row-result">
         <b className={tone}>{headline}</b>

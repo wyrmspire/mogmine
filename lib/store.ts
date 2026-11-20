@@ -4,6 +4,8 @@
 import { useSyncExternalStore } from "react";
 import { DEMO_TRADE_IDS, demoTrades } from "./fixtures.ts";
 import { idbSet } from "./idb.ts";
+import { sanitizeMoodBackup } from "./mood-store.ts";
+import type { MoodBackup } from "./mood-store.ts";
 import type { Prefs } from "./prefs.ts";
 import { annotationKey, candleCacheKey, candleSignature, deriveReviewStatus, normalizeTrade } from "./trades.ts";
 import type { Candle, ChecklistItem, TradeDirection, TradeRecord } from "./trades.ts";
@@ -134,10 +136,12 @@ export interface JournalBackup {
   includesCandles: false;
   trades: TradeRecord[];
   prefs?: Partial<Prefs>;
+  /** Mood Shape records, spoke registry and candidates (docs/18). Absent in older backups. */
+  mood?: MoodBackup;
 }
 
 export type ParseBackupResult =
-  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; realCount: number; sampleCount: number; exportedAt: string | null }
+  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; mood?: MoodBackup; realCount: number; sampleCount: number; exportedAt: string | null }
   | { ok: false; error: string };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -219,7 +223,7 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
 }
 
 /** Build a local backup payload of the trade journal and device preferences (no candles, no secrets). */
-export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs): JournalBackup {
+export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs, mood?: MoodBackup): JournalBackup {
   const cleanTrades = trades.map((trade) => {
     const rest: TradeRecord & { candles?: Candle[] } = { ...trade };
     delete rest.candles;
@@ -232,6 +236,7 @@ export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs)
     includesCandles: false,
     trades: cleanTrades,
     ...(prefs ? { prefs } : {}),
+    ...(mood ? { mood } : {}),
   };
 }
 
@@ -249,6 +254,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
 
   let rawTrades: unknown[];
   let rawPrefs: Partial<Prefs> | undefined;
+  let mood: MoodBackup | undefined;
   let exportedAt: string | null = null;
 
   if (Array.isArray(parsed)) {
@@ -265,6 +271,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
     if (obj.prefs && typeof obj.prefs === "object" && !Array.isArray(obj.prefs)) {
       rawPrefs = obj.prefs as Partial<Prefs>;
     }
+    mood = sanitizeMoodBackup(obj.mood) ?? undefined;
     if (typeof obj.exportedAt === "string" && Number.isFinite(Date.parse(obj.exportedAt))) {
       exportedAt = obj.exportedAt;
     }
@@ -293,7 +300,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
   const sampleCount = trades.filter((t) => t.is_sample).length;
   const realCount = trades.length - sampleCount;
 
-  return { ok: true, trades, prefs: rawPrefs, realCount, sampleCount, exportedAt };
+  return { ok: true, trades, prefs: rawPrefs, ...(mood ? { mood } : {}), realCount, sampleCount, exportedAt };
 }
 
 function readStored(): TradeRecord[] | null {

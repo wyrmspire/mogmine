@@ -1,5 +1,7 @@
 // Trade Card image, composed on a canvas from the chart snapshot (OD-8: no html-to-image).
 import { formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "./format.ts";
+import { describeMood, knownCount, moodPath } from "./mood.ts";
+import type { MoodVector } from "./mood.ts";
 import { playbookName } from "./playbooks.ts";
 import { sessionDate } from "./session.ts";
 import { getTheme } from "./theme.ts";
@@ -88,7 +90,57 @@ function fillWrapped(
   return cursor;
 }
 
-export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, zone: string, privacy = false) {
+/** First phrase of the mood description for the card: "FOMO high", "Balanced". Null when nothing is scored. */
+export function moodCardCaption(vector: MoodVector | null | undefined) {
+  if (!vector || !knownCount(vector)) return null;
+  return describeMood(vector).split(" · ")[0];
+}
+
+/** The Mood Shape in the card's top-right corner: faint spokes, a soft fill, solid and dashed outline. */
+function drawMood(ctx: CanvasRenderingContext2D, vector: MoodVector, theme: ReturnType<typeof getTheme>) {
+  // Right of the symbol, above the chart panel (y 266), clear of the SHIELD badge (y 76).
+  const size = 128;
+  const left = 1012 - size;
+  const top = 92;
+  const geometry = moodPath(vector.values, { size, padding: 6 });
+  const ring = moodPath(vector.values.map(() => 1), { size, padding: 6 });
+  if (!geometry || !ring) return;
+  ctx.save();
+  ctx.translate(left, top);
+  ctx.strokeStyle = theme.textMuted;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 1;
+  for (const point of ring.points) {
+    ctx.beginPath();
+    ctx.moveTo(ring.center, ring.center);
+    ctx.lineTo(point.axisX, point.axisY);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 0.16;
+  ctx.fillStyle = theme.textPrimary;
+  ctx.fill(new Path2D(geometry.fill));
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = theme.textPrimary;
+  ctx.lineWidth = 3;
+  if (geometry.solid) ctx.stroke(new Path2D(geometry.solid));
+  if (geometry.dashed) {
+    ctx.setLineDash([6, 6]);
+    ctx.globalAlpha = 0.5;
+    ctx.stroke(new Path2D(geometry.dashed));
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+  const caption = moodCardCaption(vector);
+  if (caption) {
+    ctx.fillStyle = theme.textMuted;
+    ctx.font = "650 22px system-ui";
+    ctx.textAlign = "right";
+    ctx.fillText(fitText(ctx, caption, 300), 1012, top + size + 24);
+    ctx.textAlign = "left";
+  }
+}
+
+export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, zone: string, privacy = false, mood: MoodVector | null = null) {
   return new Promise<Blob>((resolve, reject) => {
     const theme = getTheme();
     const content = shareCardContent(trade, zone, privacy);
@@ -121,6 +173,8 @@ export function buildShareCard(snapshot: HTMLCanvasElement, trade: TradeRecord, 
     ctx.font = "700 30px ui-monospace, monospace";
     ctx.fillStyle = trade.direction === "LONG" ? theme.profit : theme.risk;
     ctx.fillText(content.direction, 72, 228);
+    // Mood is the trader's state, not a result: neutral colours, no gold (#80), drawn only when scored.
+    if (mood && knownCount(mood)) drawMood(ctx, mood, theme);
 
     ctx.fillStyle = theme.surface;
     ctx.beginPath();

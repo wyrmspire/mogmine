@@ -241,6 +241,8 @@ Seven example documents are committed under [`fixtures/trades/`](../fixtures/tra
 | `ex-nottaken.json` | Planned, not taken | manual | `status: not_taken`. No result, no R, excluded from every statistic. | Dotted faint plan fills from 15:31 to 16:10, tag `PLAN · not filled`. The observer adds hindsight: whether price reached the entry and what the plan would have done. |
 | `ex-partials.json` | Two partial targets | manual | `outcome: partial_targets`; initial risk 2 × 5 pts × $5 = $50; result (5 + 12.5) × $5 = $87.50 = +1.75R | Reward zone with inner `T1 1.0R · 1 of 2` and outer `T2 2.5R · 1 of 2`, band to T1 then T2 at half, stop stepping to entry at 15:42, flags `▽ T1` and `▽ T2` |
 
+`ex-tp`, `ex-sl` and `ex-trail` also carry a `note` event (a voice memo transcript) and a `mood_records` array. Those records are derived, versioned Mood Shape scores, not events: they can be rebuilt from the note text ([18 §3](18-mood-shape.md#3-records-derived-and-versioned)). They sit in the fixture only until `OD-30` decides where derived rows live.
+
 The results were checked by hand against the examples: for example, ex-ignored is (7592 − 7600) × 2 × $5 = −$80 against $50 of risk, so −1.6R, and the part beyond the stop is (7595 − 7592) × 2 × $5 = $30, or 0.6R.
 
 ### 3.6 How each source maps in

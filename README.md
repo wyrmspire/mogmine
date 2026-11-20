@@ -93,6 +93,8 @@ Read the planning documents in order for the complete technical and product spec
    The ordered work list from the owner's 2026-11-16 review (`R-01`–`R-09`): pinch zoom, fresh-candle retry, open trades, then the archive, trades in Supabase, the assistant endpoint, playbooks, stats and challenges. Each step names its files, its limits and its done-when.
 17. **[17 — Challenges](docs/17-challenges.md)**  
    The design for roadmap step `R-09`: Drawdown Defender (do not give back more than a dollar limit) and Clean Run (N trades in a row by the rules). Rules, math, golden test cases, the code contract, the screens and what is deferred.
+18. **[18 — Mood Shape](docs/18-mood-shape.md)**  
+   The trader's emotional state on a trade as a radar blob: spokes, derived and versioned score records, suggestions from notes that never overwrite the trader, adding a spoke and re-scoring, and comparing shapes with outcomes. Open decision `OD-39`.
 
 ---
 
