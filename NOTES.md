@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-20 — agent (Claude Code) — design guide from the owner's mockups, no lane
+Did:      Saved the owner's phone and desktop trade screen mockups to `docs/design/` and wrote `docs/19-design-guide.md`: what they show, a map to built and planned work, four conflicts with decisions on record (gold, "Market Live", "Set Trade", tab names), opened as `OD-40`, and where the Mood Shape fits (entry-time tap for `OD-39` (c)). Documentation only.
+Files:    `docs/19-design-guide.md`, `docs/design/mockup-phone-trade.png`, `docs/design/mockup-desktop-trade.png`, `DECISIONS.md`, `AGENTS.md`, `README.md`, `NOTES.md`.
+Checked:  Relative links and image paths resolve. No code changed.
+Left:     `OD-40` and `OD-39` need the owner. Suggested build order is docs/19 §5.
+
 ### 2026-11-19 — agent (Claude Code) — Mood Shape (docs/18), App shell + Core math lanes
 Did:      Mood Shape on the device: pure `lib/mood.ts` (`moodVector`, `moodPath`, `similarTrades`, `moodOutcomeStats`, phrase-matcher suggestions, `parseMoodSuggestion` AI contract, candidates, `addSpoke` + `rescoreForNewSpoke`), `lib/mood-store.ts` (`mogmine-mood-v1`, append-only records, in backups). UI: shape beside the R strip and a Mood card on Trade Detail, editor sheet (drag/arrow keys, Accept/Dismiss suggestions, "Add spoke?"), 40px feed thumbnails, shape kept visible in sealed blind review, Trade Card PNG, "Mood and result" card on Feed. Fixtures `ex-tp`/`ex-sl`/`ex-trail` got note events and `mood_records`; `fixtures/mood/spokes-v2.json`.
 Files:    `lib/mood.ts`, `lib/mood-store.ts`, `lib/store.ts`, `lib/shareCard.ts`, `components/Mood*.tsx`, `TradeDetail`, `TradeRow`, `ReviewScreen`, `FeedScreen`, `TuneScreen`, `AppShell`, `app/globals.css`, `lib/__tests__/mood.test.ts`, fixtures, `docs/18` (new), docs/03, 06, 15, `DECISIONS.md` (`OD-39`, drift row), `AGENTS.md`, `README.md`.
