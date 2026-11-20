@@ -25,6 +25,8 @@ export interface EntryDraft {
   stopPrice: string;
   /** Optional. Saved as the planned target. */
   targetPrice: string;
+  /** The account the trade is logged to (docs/21). Undefined until the trader picks: the account used last. */
+  accountId?: string | null;
   /** Entry date, `YYYY-MM-DD`, wall clock in the display zone. */
   date: string;
   /** Entry time, `HH:mm`, wall clock in the display zone. */
@@ -81,6 +83,7 @@ export function upgradeDraft(raw: unknown, now: Date, zone: string): EntryDraft 
     exitPrice: text(old.exitPrice, ""),
     stopPrice: text(old.stopPrice, ""),
     targetPrice: text(old.targetPrice, ""),
+    ...(old.accountId === null || typeof old.accountId === "string" ? { accountId: old.accountId } : {}),
     date: text(old.date, entry?.date || fresh.date),
     entryClock: text(old.entryClock, entry?.clock || fresh.entryClock),
     exitClock: text(old.exitClock, exit?.clock || fresh.exitClock),

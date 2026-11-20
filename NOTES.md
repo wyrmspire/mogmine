@@ -51,6 +51,11 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-20 — agent (Grok Bot) — accounts merged after price-first entry: renumbered to docs/21, OD-42
+Did:      Merged main (#119 price-first entry, #120 design guide) into `feat/accounts-running-total`. Both used docs/20 and `OD-41`; the price-first change merged first, so accounts is now `docs/21-accounts-and-running-totals.md` and `OD-42`, with every reference moved (AGENTS, README, DECISIONS, NOTES, docs/06, docs/17, code comments). The account picker sits under Side and Status on the price-first sheet; `EntryDraft` carries `accountId`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (261 pass), build. Headless Chrome 390×844: picker lists the account, a saved trade gets `account_id` and its frozen stop, the Today card adds it; no overflow. **Not verified on a phone.**
+Left:     `OD-42`; docs/21 §6 step 4 (Drawdown Defender as an account rule).
+
 ### 2026-11-20 — agent (Grok Bot) — times from the bars (docs/20 §2.2, OD-41 (5)), App shell + Market data lanes
 Did:      Owner asked for OD-41 (5) now and OK'd native pickers. `lib/infer-times.ts` (`inferTradeTimes`: entry stretches, consistency with exit and stop, hint / RTH / earliest, exit bar, stop-or-target-first flag, exact/ambiguous/none, approximate on coarse bars), `lib/infer-message.ts`, day mode on `/api/market-data` (`from`/`to`), `loadDayCandles` with IndexedDB cache and the R-02 one-minute rule. Sheet: "Finding your fill in the bars…" then fills untouched pickers; hand-set times kept with a "Use …" button; Retry on no bars / offline.
 Files:    `lib/infer-times.ts`, `lib/infer-message.ts` (new), `lib/candles.ts`, `lib/entry-form.ts`, `app/api/market-data/route.ts`, `components/AddTradeSheet.tsx`, `app/globals.css`, `lib/__tests__/infer-times.test.ts` (new); docs/20, `DECISIONS.md` (`OD-41`).
@@ -68,6 +73,18 @@ Did:      Saved the owner's phone and desktop trade screen mockups to `docs/desi
 Files:    `docs/19-design-guide.md`, `docs/design/mockup-phone-trade.png`, `docs/design/mockup-desktop-trade.png`, `DECISIONS.md`, `AGENTS.md`, `README.md`, `NOTES.md`.
 Checked:  Relative links and image paths resolve. No code changed.
 Left:     `OD-40` and `OD-39` need the owner. Suggested build order is docs/19 §5.
+
+### 2026-11-20 — agent (Claude Code) — accounts steps 2–3: Today card, add/edit sheet, picker (docs/21), App shell lane
+Did:      `AccountCards` on Today (balance, high, today, balance line with floor, room before limit, daily room, target, Match broker balance, History), `AccountSheet` (name, start, optional target / loss limit / daily loss / how the limit moves; archive with Undo), `AccountSelect` in the entry form (defaults to the last account) and on Trade Detail. `formatBalance`, `formatCents` in `lib/format.ts`. Shield hides every dollar on the card.
+Files:    `components/AccountCard.tsx`, `AccountSheet.tsx`, `AccountSelect.tsx` (new), `TodayScreen.tsx`, `AddTradeSheet.tsx`, `TradeDetail.tsx`, `lib/format.ts`, `app/globals.css`, `docs/21`, `NOTES.md`.
+Checked:  typecheck, lint (0 errors), 219/219 tests, build. Headless Chrome 390×844: add account → log MES 2 × +10 pts → card shows $50,100.00, room $2,100.00 (end-of-day trailing, floor $48,000), today +$100.00; a $50,095.50 broker balance records −$4.50; Shield shows no dollars; no overflow; no console errors. Not checked on a real phone.
+Watch:    `app/r10-stop-at-entry` also edits `AddTradeSheet.tsx` and `TradeDetail.tsx`; my changes there are a few lines each, so a merge conflict should be small.
+
+### 2026-11-20 — agent (Claude Code) — accounts and running totals, step 1 (docs/21), Core math lane
+Did:      `lib/accounts.ts`: `TradingAccount` with per-account rules (static / trailing / end-of-session trailing loss limit, daily loss, target), `accountSummary` (balance, peak, drawdown, room, today, target, curve, ledger), balance checks as adjustments, `defaultAccountId`, sanitisers. `account_id: string | null` on `TradeRecord` (default null). `lib/accounts-store.ts` (`mogmine-accounts-v1`), hydrated in AppShell, in backups.
+Files:    `lib/accounts.ts`, `lib/accounts-store.ts`, `lib/trades.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`, `lib/__tests__/accounts.test.ts`, `docs/21` (new), docs/06, docs/17, `DECISIONS.md` (`OD-42`), `AGENTS.md`, `README.md`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), 219/219 tests, build. The docs/17 §3 golden drawdown cases pass on the account engine; six hand mutations of the engine each fail at least one test.
+Left:     No screen yet: steps 2–4 in docs/21 §6 (Today card, account picker, setup and rules screen). `OD-42`.
 
 ### 2026-11-19 — agent (Tappy) — R-10 stop at entry, frozen, Core math + App shell lanes
 Did:      `R-10`: `TradeRecord` gains `initial_stop_price` / `initial_stop_set_at` (null on old records, never back-filled); `stopPatch()` freezes the first stop once and later edits move `stop_loss_price` only; `initialRMultiple()` added beside an unchanged `rMultiple`. `AddTradeSheet` gains an optional Stop field (existing `validateTradeInput` stop-side rule) that sets all three fields on save; `TradeLevelEditor` captures the first stop via `stopPatch` (undo restores the working stop only, never the frozen one). Trade Detail shows a quiet "Initial stop 6841.25, set 09:42" line only when the working stop differs.

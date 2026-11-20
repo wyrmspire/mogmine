@@ -28,7 +28,7 @@ Both run **live on the device**, from the trades in `mogmine-trades-v3`. Progres
 | Custom challenge builder | Two working presets and real use. |
 | Practice run on past trades | A journal with real history. On 2026-11-16 the journal is sample trades only. |
 | Challenges that follow you across devices | `R-05`. |
-| Net-of-fees results, per-account scope | Fee and account data, which `TradeRecord` does not have. |
+| Net-of-fees results, per-account scope | Fee data. Accounts now exist ([21](21-accounts-and-running-totals.md)), and Drawdown Defender uses the same engine. |
 
 **Never:** broker rule enforcement, order control, a claim that a prop evaluation was passed, leaderboards, AI-computed scores (guardrails 1 and 11).
 

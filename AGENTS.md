@@ -45,6 +45,7 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 | Mood Shape: emotion spokes, score records, suggestions from notes, adding a spoke and re-scoring, mood against outcome | [18 — Mood Shape](docs/18-mood-shape.md) (`OD-39`) |
 | The owner's trade screen mockups (phone and desktop), and how they map to the roadmap | [19 — Design Guide](docs/19-design-guide.md) (`OD-40`) |
 | The add-trade form (prices first, tick steppers, date and time pickers), stop at entry (`R-10`), dragging the price axis to stretch it | [20 — Price-First Entry & Price-Axis Stretch](docs/20-price-first-entry.md) (`OD-41`) |
+| Accounts, running totals, loss limits, balance checks | [21 — Accounts and Running Totals](docs/21-accounts-and-running-totals.md) (`OD-42`) |
 | Trade document (`mogmine.trade.v1`), plan/actual/excursion box layers, stop paths, hindsight, the deriver and display list (`buildMarks`) | [15 — Trade Document & Render Grammar](docs/15-trade-document-and-render-grammar.md) (open decisions `OD-30`–`OD-34`) |
 | A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
 | Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |

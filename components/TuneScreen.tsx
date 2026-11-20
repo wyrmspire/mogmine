@@ -6,6 +6,7 @@ import type { GoldPreset } from "@/lib/prefs";
 import { buildBackup, parseBackupFile, replaceTrades, useJournal } from "@/lib/store";
 import type { ParseBackupResult } from "@/lib/store";
 import { getMoodBackup, restoreMood } from "@/lib/mood-store";
+import { getAccountsBackup, restoreAccounts } from "@/lib/accounts-store";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 
@@ -77,7 +78,7 @@ export function TuneScreen() {
   const sampleCount = journal.trades.length - realCount;
 
   const downloadBackup = () => {
-    const payload = buildBackup(journal.trades, prefs, getMoodBackup());
+    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup());
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -115,6 +116,7 @@ export function TuneScreen() {
     if (pending.prefs) setPrefs(pending.prefs);
     // An older backup has no mood data: keep what this device has rather than wipe it.
     if (pending.mood) restoreMood(pending.mood);
+    if (pending.accounts) restoreAccounts(pending.accounts);
     const total = pending.trades.length;
     setPending(null);
     setError(null);

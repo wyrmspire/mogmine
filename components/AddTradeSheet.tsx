@@ -10,7 +10,10 @@ import { finderMessage } from "@/lib/infer-message";
 import type { EntryDraft } from "@/lib/entry-form";
 import { formatMoney, formatPointDistance, formatPoints, formatR, formatUsdAmount } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
-import { addTrade } from "@/lib/store";
+import { AccountSelect } from "./AccountSelect";
+import { defaultAccountId } from "@/lib/accounts";
+import { useAccounts } from "@/lib/accounts-store";
+import { addTrade, useJournal } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
@@ -70,6 +73,10 @@ export function AddTradeSheet() {
   const [openedAt] = useState(() => Date.now());
   const dialogRef = useRef<HTMLElement>(null);
   const firstField = useRef<HTMLButtonElement>(null);
+  const accounts = useAccounts();
+  const journal = useJournal();
+  // Undefined until the trader picks: the account used last (docs/21).
+  const accountId = draft.accountId !== undefined ? draft.accountId : defaultAccountId(accounts.accounts, journal.trades);
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -228,6 +235,7 @@ export function AddTradeSheet() {
       planned_target_price: targetPrice,
       key_level_price: null,
       note: "",
+      account_id: accountId,
     });
     addTrade(trade);
     keepDraft(DRAFT_KEY, null);
@@ -263,6 +271,7 @@ export function AddTradeSheet() {
                 <button type="button" aria-pressed={isOpenDraft} onClick={() => setStatus("open")}>Still open</button>
               </div>
             </div>
+            <AccountSelect className="field wide" value={accountId} onChange={(id) => change({ accountId: id })} />
           </div>
 
           <fieldset className="price-ladder" aria-label="Prices">
