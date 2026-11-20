@@ -25,7 +25,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 **Work the list in [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md)** (owner order, 2026-11-16). Each step names its files, its limits and its done-when.
 
-Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math.
+Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math. `R-10` merged in #118; the price-first form (docs/20) uses its `stopPatch`.
 
 1. `R-03b` Entry and close for an open trade (`AddTradeSheet.tsx`, `TradeDetail.tsx`, the list rows), with `R-10` in the same form: an optional stop at entry, frozen as `initial_stop_price`.
 2. `R-03c` Chart and candles for an open trade.
@@ -51,17 +51,46 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
-### 2026-11-20 — agent (Claude Code) — accounts steps 2–3: Today card, add/edit sheet, picker (docs/20), App shell lane
+### 2026-11-20 — agent (Grok Bot) — accounts merged after price-first entry: renumbered to docs/21, OD-42
+Did:      Merged main (#119 price-first entry, #120 design guide) into `feat/accounts-running-total`. Both used docs/20 and `OD-41`; the price-first change merged first, so accounts is now `docs/21-accounts-and-running-totals.md` and `OD-42`, with every reference moved (AGENTS, README, DECISIONS, NOTES, docs/06, docs/17, code comments). The account picker sits under Side and Status on the price-first sheet; `EntryDraft` carries `accountId`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (261 pass), build. Headless Chrome 390×844: picker lists the account, a saved trade gets `account_id` and its frozen stop, the Today card adds it; no overflow. **Not verified on a phone.**
+Left:     `OD-42`; docs/21 §6 step 4 (Drawdown Defender as an account rule).
+
+### 2026-11-20 — agent (Grok Bot) — times from the bars (docs/20 §2.2, OD-41 (5)), App shell + Market data lanes
+Did:      Owner asked for OD-41 (5) now and OK'd native pickers. `lib/infer-times.ts` (`inferTradeTimes`: entry stretches, consistency with exit and stop, hint / RTH / earliest, exit bar, stop-or-target-first flag, exact/ambiguous/none, approximate on coarse bars), `lib/infer-message.ts`, day mode on `/api/market-data` (`from`/`to`), `loadDayCandles` with IndexedDB cache and the R-02 one-minute rule. Sheet: "Finding your fill in the bars…" then fills untouched pickers; hand-set times kept with a "Use …" button; Retry on no bars / offline.
+Files:    `lib/infer-times.ts`, `lib/infer-message.ts` (new), `lib/candles.ts`, `lib/entry-form.ts`, `app/api/market-data/route.ts`, `components/AddTradeSheet.tsx`, `app/globals.css`, `lib/__tests__/infer-times.test.ts` (new); docs/20, `DECISIONS.md` (`OD-41`).
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (239 pass), build. Headless Chrome 390×844 with live Yahoo 1m bars for 2026-11-19: exact, ambiguous, hand-set, no-match and offline states; no overflow. **Not verified on a phone.**
+Left:     `OD-41` (1), (3), (4) and the tie-break / previous-evening questions on (5). The finder line shows 24-hour times while iOS pickers show 12-hour.
+
+### 2026-11-20 — agent (Grok Bot) — price-first entry + price-axis stretch (docs/20), App shell + Chart + Core math lanes
+Did:      Owner phone feedback. Add-trade sheet leads with side, status and a price ladder (Entry, Exit, Stop, Target) with one-tick `−`/`+` steppers; date + time pickers with Now buttons below; overnight exit read as next day. `R-10` itself came from #118 (merged into this branch, its `stopPatch` is the one implementation); this branch adds only `keepInitialStop` on backup restore and a valid-pair check in `parseTradeItem`. Chart: floating `‹`/`›` edge buttons removed (the right one sat on the price axis); `‹30` `30›` now in the toolbar. Transparent grip over the price axis: drag stretches/compresses, double-tap/double-click auto-fits, wheel works.
+Files:    `lib/entry-form.ts`, `lib/price-scale.ts` (new), `lib/trades.ts`, `lib/store.ts`, `lib/format.ts`, `components/AddTradeSheet.tsx`, `TradeChart.tsx`, `TradeDetail.tsx`, `TradeLevelEditor.tsx`, `RiskChips.tsx`, `app/globals.css`, tests `price-first-entry.test.ts`, `price-scale.test.ts`; docs/20 (new), docs/06, 08, 15, 16, `DECISIONS.md` (`OD-41`), `AGENTS.md`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (222 pass), build. Headless Chrome 390×844 with touch emulation: no overflow, targets ≥ 44 px, axis drag stretches without page scroll, chart-body vertical swipe still scrolls, horizontal pan works; mouse at 1280×900. **Not verified on a phone.**
+Left:     `OD-41` (next-day rule, undo vs frozen initial stop, right-edge scroll trade-off, times suggested from candles later). docs/19 + `OD-40` are on unmerged `docs/19-design-guide`, hence docs/20 / `OD-41`.
+
+### 2026-11-20 — agent (Claude Code) — design guide from the owner's mockups, no lane
+Did:      Saved the owner's phone and desktop trade screen mockups to `docs/design/` and wrote `docs/19-design-guide.md`: what they show, a map to built and planned work, four conflicts with decisions on record (gold, "Market Live", "Set Trade", tab names), opened as `OD-40`, and where the Mood Shape fits (entry-time tap for `OD-39` (c)). Documentation only.
+Files:    `docs/19-design-guide.md`, `docs/design/mockup-phone-trade.png`, `docs/design/mockup-desktop-trade.png`, `DECISIONS.md`, `AGENTS.md`, `README.md`, `NOTES.md`.
+Checked:  Relative links and image paths resolve. No code changed.
+Left:     `OD-40` and `OD-39` need the owner. Suggested build order is docs/19 §5.
+
+### 2026-11-20 — agent (Claude Code) — accounts steps 2–3: Today card, add/edit sheet, picker (docs/21), App shell lane
 Did:      `AccountCards` on Today (balance, high, today, balance line with floor, room before limit, daily room, target, Match broker balance, History), `AccountSheet` (name, start, optional target / loss limit / daily loss / how the limit moves; archive with Undo), `AccountSelect` in the entry form (defaults to the last account) and on Trade Detail. `formatBalance`, `formatCents` in `lib/format.ts`. Shield hides every dollar on the card.
-Files:    `components/AccountCard.tsx`, `AccountSheet.tsx`, `AccountSelect.tsx` (new), `TodayScreen.tsx`, `AddTradeSheet.tsx`, `TradeDetail.tsx`, `lib/format.ts`, `app/globals.css`, `docs/20`, `NOTES.md`.
+Files:    `components/AccountCard.tsx`, `AccountSheet.tsx`, `AccountSelect.tsx` (new), `TodayScreen.tsx`, `AddTradeSheet.tsx`, `TradeDetail.tsx`, `lib/format.ts`, `app/globals.css`, `docs/21`, `NOTES.md`.
 Checked:  typecheck, lint (0 errors), 219/219 tests, build. Headless Chrome 390×844: add account → log MES 2 × +10 pts → card shows $50,100.00, room $2,100.00 (end-of-day trailing, floor $48,000), today +$100.00; a $50,095.50 broker balance records −$4.50; Shield shows no dollars; no overflow; no console errors. Not checked on a real phone.
 Watch:    `app/r10-stop-at-entry` also edits `AddTradeSheet.tsx` and `TradeDetail.tsx`; my changes there are a few lines each, so a merge conflict should be small.
 
-### 2026-11-20 — agent (Claude Code) — accounts and running totals, step 1 (docs/20), Core math lane
+### 2026-11-20 — agent (Claude Code) — accounts and running totals, step 1 (docs/21), Core math lane
 Did:      `lib/accounts.ts`: `TradingAccount` with per-account rules (static / trailing / end-of-session trailing loss limit, daily loss, target), `accountSummary` (balance, peak, drawdown, room, today, target, curve, ledger), balance checks as adjustments, `defaultAccountId`, sanitisers. `account_id: string | null` on `TradeRecord` (default null). `lib/accounts-store.ts` (`mogmine-accounts-v1`), hydrated in AppShell, in backups.
-Files:    `lib/accounts.ts`, `lib/accounts-store.ts`, `lib/trades.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`, `lib/__tests__/accounts.test.ts`, `docs/20` (new), docs/06, docs/17, `DECISIONS.md` (`OD-41`), `AGENTS.md`, `README.md`.
+Files:    `lib/accounts.ts`, `lib/accounts-store.ts`, `lib/trades.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`, `lib/__tests__/accounts.test.ts`, `docs/21` (new), docs/06, docs/17, `DECISIONS.md` (`OD-42`), `AGENTS.md`, `README.md`.
 Checked:  typecheck, lint (0 errors, 1 pre-existing warning), 219/219 tests, build. The docs/17 §3 golden drawdown cases pass on the account engine; six hand mutations of the engine each fail at least one test.
-Left:     No screen yet: steps 2–4 in docs/20 §6 (Today card, account picker, setup and rules screen). `OD-41`.
+Left:     No screen yet: steps 2–4 in docs/21 §6 (Today card, account picker, setup and rules screen). `OD-42`.
+
+### 2026-11-19 — agent (Tappy) — R-10 stop at entry, frozen, Core math + App shell lanes
+Did:      `R-10`: `TradeRecord` gains `initial_stop_price` / `initial_stop_set_at` (null on old records, never back-filled); `stopPatch()` freezes the first stop once and later edits move `stop_loss_price` only; `initialRMultiple()` added beside an unchanged `rMultiple`. `AddTradeSheet` gains an optional Stop field (existing `validateTradeInput` stop-side rule) that sets all three fields on save; `TradeLevelEditor` captures the first stop via `stopPatch` (undo restores the working stop only, never the frozen one). Trade Detail shows a quiet "Initial stop 6841.25, set 09:42" line only when the working stop differs.
+Files:    `lib/trades.ts`, `lib/__tests__/initial-stop.test.ts`, `components/AddTradeSheet.tsx`, `components/TradeLevelEditor.tsx`, `components/TradeDetail.tsx`, `app/globals.css`, `docs/06-data-model-and-roadmap.md`, `docs/16-floor-roadmap.md` (R-05 planned columns), `NOTES.md`.
+Checked:  typecheck clean; lint 0 errors (1 pre-existing postcss warning); test 180/180 (7 new R-10 tests); build passes. Headless Chrome at 390×844: no horizontal overflow on home, sheet or detail; saved a trade with a stop (stored stop = initial = 6841.25, set-at stamped, preview +2.0R), edited the stop to 6845 and the stored initial stayed 6841.25 with the quiet line reading "Initial stop 6841.25, set 22:36". Not verified on a phone.
+Left:     PR open as do-not-merge-without-Chris. No screen switched from `rMultiple` to `initialRMultiple` (separate decision, per the step's Do-not list). Fixture/sample trades keep a null initial stop — theirs was never captured at entry.
 
 ### 2026-11-19 — agent (Claude Code) — Mood Shape (docs/18), App shell + Core math lanes
 Did:      Mood Shape on the device: pure `lib/mood.ts` (`moodVector`, `moodPath`, `similarTrades`, `moodOutcomeStats`, phrase-matcher suggestions, `parseMoodSuggestion` AI contract, candidates, `addSpoke` + `rescoreForNewSpoke`), `lib/mood-store.ts` (`mogmine-mood-v1`, append-only records, in backups). UI: shape beside the R strip and a Mood card on Trade Detail, editor sheet (drag/arrow keys, Accept/Dismiss suggestions, "Add spoke?"), 40px feed thumbnails, shape kept visible in sealed blind review, Trade Card PNG, "Mood and result" card on Feed. Fixtures `ex-tp`/`ex-sl`/`ex-trail` got note events and `mood_records`; `fixtures/mood/spokes-v2.json`.

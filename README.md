@@ -95,8 +95,12 @@ Read the planning documents in order for the complete technical and product spec
    The design for roadmap step `R-09`: Drawdown Defender (do not give back more than a dollar limit) and Clean Run (N trades in a row by the rules). Rules, math, golden test cases, the code contract, the screens and what is deferred.
 18. **[18 — Mood Shape](docs/18-mood-shape.md)**  
    The trader's emotional state on a trade as a radar blob: spokes, derived and versioned score records, suggestions from notes that never overwrite the trader, adding a spoke and re-scoring, and comparing shapes with outcomes. Open decision `OD-39`.
-20. **[20 — Accounts and Running Totals](docs/20-accounts-and-running-totals.md)**  
-   A running total per account from the trades you log: balance, high point, room before the loss limit (static, trailing or end-of-session trailing), daily loss, target and balance checks. Open decision `OD-41`.
+19. **[19 — Design Guide](docs/19-design-guide.md)**  
+   The owner's phone and desktop trade screen mockups, what each part maps to on the roadmap, the four places they conflict with decisions on record (`OD-40`), and where the Mood Shape fits.
+20. **[20 — Price-First Entry & Price-Axis Stretch](docs/20-price-first-entry.md)**  
+   The add-trade form led by prices with one-tick steppers, times suggested from the bars, the frozen stop at entry it saves through, and dragging the price axis to stretch it. Open choices: `OD-41`.
+21. **[21 — Accounts and Running Totals](docs/21-accounts-and-running-totals.md)**  
+   A running total per account from the trades you log: balance, high point, room before the loss limit (static, trailing or end-of-session trailing), daily loss, target and balance checks. Open decision `OD-42`.
 
 ---
 

@@ -15,7 +15,7 @@ const MODES: Array<{ value: DrawdownMode; label: string }> = [
 const centsText = (cents: number | null) => (cents == null ? "" : (cents / 100).toFixed(2).replace(/\.00$/, ""));
 
 /**
- * Add or edit an account (docs/20). Name and starting balance are required; rules are optional and only
+ * Add or edit an account (docs/21). Name and starting balance are required; rules are optional and only
  * describe the account. They never block or change a trade.
  */
 export function AccountSheet({ account, onClose }: { account?: TradingAccount; onClose: () => void }) {

@@ -1,4 +1,4 @@
-// Accounts and running totals (docs/20). Drawdown cases are docs/17 §3's golden table, so the account card and
+// Accounts and running totals (docs/21). Drawdown cases are docs/17 §3's golden table, so the account card and
 // Drawdown Defender agree by construction.
 import assert from "node:assert/strict";
 import { test } from "node:test";

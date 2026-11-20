@@ -17,10 +17,32 @@ const ATTEMPTS: Array<{ timeframe: Timeframe; padHours: number }> = [
   { timeframe: "1h", padHours: 72 },
 ];
 
+/** Longest day-mode window: one calendar day plus slack for a DST change. */
+const MAX_RANGE_MS = 26 * 3_600_000;
+
 export async function GET(request: NextRequest) {
   const symbol = request.nextUrl.searchParams.get("symbol")?.toUpperCase();
   const entry = request.nextUrl.searchParams.get("entry");
   const exit = request.nextUrl.searchParams.get("exit");
+  const rangeFrom = request.nextUrl.searchParams.get("from");
+  // Day mode (docs/20 §2.2): the bars of one window, so the entry form can find the fill from the
+  // prices. No trade to anchor yet, so any non-empty window is an answer, finest timeframe first.
+  if (symbol && FUTURES_SPECS[symbol] && rangeFrom != null) {
+    const from = Date.parse(rangeFrom);
+    const to = Math.min(Date.parse(request.nextUrl.searchParams.get("to") ?? ""), Date.now());
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > MAX_RANGE_MS) {
+      return NextResponse.json({ error: "The range is invalid" }, { status: 400 });
+    }
+    try {
+      for (const { timeframe } of ATTEMPTS) {
+        const candles = await provider.getCandles({ symbol, timeframe, from: new Date(from), to: new Date(to) });
+        if (candles.length) return NextResponse.json({ candles, source: "Yahoo Finance", ticker: provider.resolveProviderSymbol(symbol), baseTimeframe: timeframe });
+      }
+      return NextResponse.json({ error: "Yahoo Finance has no candles for this range" }, { status: 404 });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Market data request failed" }, { status: 502 });
+    }
+  }
   if (!symbol || !FUTURES_SPECS[symbol] || !entry) {
     return NextResponse.json({ error: "A supported symbol and entry are required" }, { status: 400 });
   }

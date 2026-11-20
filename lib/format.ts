@@ -7,6 +7,12 @@ function signOf(value: number) {
   return value < 0 ? MINUS : "+";
 }
 
+/** `$20.00` with no sign, for a size such as risk (docs/20). `—` when unknown. */
+export function formatUsdAmount(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `$${Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 /** `+$325.00`, `−$110.00`, `—` when the trade cannot be priced. */
 export function formatMoney(value: number | null) {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -36,6 +42,12 @@ export function formatPrice(value: number | null | undefined, symbol = "MES") {
 export function formatPoints(points: number | null, symbol = "MES") {
   if (points == null || !Number.isFinite(points)) return "—";
   return `${signOf(points)}${Math.abs(points).toFixed(displayDecimals(symbol))} pts`;
+}
+
+/** `4.00 pts` with no sign, for a distance such as entry to stop (docs/20). `—` when unknown. */
+export function formatPointDistance(points: number | null, symbol = "MES") {
+  if (points == null || !Number.isFinite(points)) return "—";
+  return `${Math.abs(points).toFixed(displayDecimals(symbol))} pts`;
 }
 
 /** `+52 ticks` */

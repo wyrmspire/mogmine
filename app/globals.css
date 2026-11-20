@@ -298,6 +298,7 @@ h1, h2, h3, p { margin: 0; }
 
 .chart-card { margin: 0 8px; overflow: hidden; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.32); }
 .trade-levels-card { margin: 8px 8px 4px; overflow: hidden; }
+.initial-stop { margin: 0; padding: 7px 10px; border-top: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 0.6875rem; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .chart-toolbar { min-height: 52px; padding: 4px 6px; display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: nowrap; border-bottom: 1px solid var(--border-subtle); }
 .timeframes { display: flex; gap: 2px; flex-wrap: wrap; }
 .timeframes button, .tool-button {
@@ -341,18 +342,13 @@ h1, h2, h3, p { margin: 0; }
 .view-menu-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .view-menu-row .tool-button { min-height: 44px; padding: 0 8px; font-size: 0.75rem; text-align: center; justify-content: center; }
 .chart-frame { position: relative; height: 380px; background: var(--chart-bg); }
-.chart-edge-hit {
-  position: absolute; top: 50%; transform: translateY(-50%); z-index: 10; width: 44px; height: 44px;
-  display: flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--bg-surface) 80%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--border-subtle); border-radius: 12px; color: var(--text-muted); font-family: var(--font-mono);
-  font-size: 1.25rem; font-weight: 700; line-height: 1; cursor: pointer; touch-action: manipulation;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
-}
-.chart-edge-hit.left { left: 6px; }
-.chart-edge-hit.right { right: 6px; }
-.chart-edge-hit:hover:not(:disabled), .chart-edge-hit:active:not(:disabled) { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-strong); }
-.chart-edge-hit:disabled { opacity: 0.18; cursor: not-allowed; pointer-events: none; }
+/* ‹30 / 30› live in the toolbar (docs/20 §3); nothing floats over the price axis. */
+.chart-extend { display: flex; gap: 2px; margin-left: auto; flex: 0 0 auto; }
+.chart-extend .tool-button { padding: 0 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.chart-extend .tool-button:disabled { opacity: 0.35; }
+/* Price-axis grip (docs/20 §3): a transparent strip over the right price scale. touch-action: none so a
+   vertical finger drag stretches the scale instead of scrolling the page. Size and place are set in JS. */
+.price-axis-grip { position: absolute; top: 0; right: 0; z-index: 5; width: 0; height: 0; touch-action: none; cursor: ns-resize; background: transparent; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
 .chart-host { width: 100%; height: 100%; touch-action: pan-y; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 .chart-skeleton { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-faint); font-size: 0.75rem; }
 .chart-skeleton .skeleton { position: absolute; inset: 14px; opacity: 0.5; }
@@ -444,6 +440,33 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--bg-inset); border: 1px solid var(--border-subtle); }
 .segmented button { min-height: 44px; border: 0; border-radius: 9px; background: none; color: var(--text-muted); font-weight: 800; font-size: 0.75rem; }
 .segmented button[aria-pressed="true"] { background: var(--bg-elevated); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border-strong); }
+/* Price-first entry (docs/20 §2): one row per price, − and + nudge by one tick. */
+.price-ladder { margin: 14px 0 0; padding: 0; border: 0; display: grid; gap: 8px; min-width: 0; }
+.price-row { display: grid; grid-template-columns: 4.25rem 44px minmax(0, 1fr) 44px; gap: 6px; align-items: center; }
+.price-row > label { color: var(--text-muted); font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 750; display: grid; line-height: 1.2; }
+.price-row > label i { font-style: normal; color: var(--text-faint); text-transform: none; letter-spacing: 0; font-weight: 600; }
+.price-row input {
+  width: 100%; min-width: 0; min-height: 48px; border: 1px solid var(--border-subtle); border-radius: 11px; text-align: center;
+  background: var(--bg-inset); color: var(--text-primary); padding: 9px 6px; font: 650 max(16px, 1rem) var(--font-mono); font-variant-numeric: tabular-nums; outline: none;
+}
+.price-row input[aria-invalid="true"] { border-color: var(--risk-crimson); }
+.price-row .error { grid-column: 2 / -1; font-size: 0.6875rem; color: var(--loss-text); }
+.tick-step { min-width: 44px; min-height: 48px; border-radius: 11px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary); font: 800 1.125rem/1 var(--font-mono); touch-action: manipulation; }
+.tick-step:active { background: var(--bg-inset); }
+/* Bar finder (docs/20 §2.2): a quiet status line, never a modal. */
+.finder { margin-top: 10px; padding: 8px 10px; min-height: 44px; border-radius: 12px; border: 1px dashed var(--border-subtle); display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 0.75rem; line-height: 1.4; }
+.finder-line { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.finder-done .finder-line { color: var(--text-primary); }
+.finder-spinner { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--text-primary); animation: finder-spin 0.8s linear infinite; }
+@keyframes finder-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .finder-spinner { animation: none; } }
+.finder .now-button { flex: 0 0 auto; }
+.finder-hint { margin: 8px 2px 0; color: var(--text-faint); font-size: 0.6875rem; }
+.when-grid { margin-top: 14px; }
+.field > label > span { color: var(--text-muted); font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 750; }
+.clock-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.now-button { min-width: 52px; min-height: 48px; padding: 0 10px; border-radius: 11px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary); font-weight: 800; font-size: 0.75rem; touch-action: manipulation; }
+.field input[type="date"], .field input[type="time"] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .form-preview { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--bg-inset); border: 1px solid var(--border-subtle); display: flex; justify-content: space-between; gap: 10px; font: 600 0.75rem/1.4 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-muted); flex-wrap: wrap; }
 .form-preview b { font-size: 0.875rem; }
 .suggest { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -722,7 +745,7 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .mood-table th, .mood-table td { text-align: left; padding: 6px 4px; border-top: 1px solid var(--border-subtle); }
 .mood-table td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-/* ───────────────────────── Accounts (docs/20) ─────────────────────────
+/* ───────────────────────── Accounts (docs/21) ─────────────────────────
    A journal total, not a result: neutral ink, no gold (#80). Limits are text first, a bar second. */
 .account-cards { display: grid; gap: 10px; margin-bottom: 14px; }
 .account-balance { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; margin-top: 6px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }

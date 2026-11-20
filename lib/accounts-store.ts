@@ -1,4 +1,4 @@
-// Accounts and balance checks on this device (docs/20). Kept apart from the trade list, like a separate table.
+// Accounts and balance checks on this device (docs/21). Kept apart from the trade list, like a separate table.
 // Local-first like the journal (UX-30, UX-31). Moves to Supabase with the trades (R-05).
 import { useSyncExternalStore } from "react";
 import { makeAccount, sanitizeAccounts, sanitizeBalanceChecks } from "./accounts.ts";

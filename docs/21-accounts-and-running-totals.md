@@ -1,8 +1,8 @@
-# 20 — Accounts and Running Totals
+# 21 — Accounts and Running Totals
 
 When you journal trades from a particular account, Mogmine keeps a running total for it: where the balance stands, its high point, how much room is left before the loss limit, and progress toward a target. Every number comes from **closed trades you logged**. It is a journal total, not the broker's balance, and it never says "live".
 
-Owner request, 2026-11-20: "if you're journaling from a particular account it should keep a running total". Open choices are `OD-41` in [DECISIONS.md](../DECISIONS.md).
+Owner request, 2026-11-20: "if you're journaling from a particular account it should keep a running total". Open choices are `OD-42` in [DECISIONS.md](../DECISIONS.md).
 
 **Status:** steps 1–3 are built: the engine (`lib/accounts.ts`), the device store (`lib/accounts-store.ts`), `account_id` on trades, accounts in backups, the account card on Today, the add/edit sheet with optional rules, "Match broker balance", and an account picker in the entry form and on Trade Detail. Drawdown Defender as an account rule (step 4) is not built.
 

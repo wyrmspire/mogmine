@@ -3,7 +3,7 @@
 import { useAccounts } from "@/lib/accounts-store";
 
 /**
- * Which account a trade was taken in (docs/20). Renders nothing until an account exists, so the entry
+ * Which account a trade was taken in (docs/21). Renders nothing until an account exists, so the entry
  * form stays as short as before for a trader who does not track accounts.
  */
 export function AccountSelect({ value, onChange, className = "field" }: { value: string | null; onChange: (id: string | null) => void; className?: string }) {

@@ -9,7 +9,7 @@
 // - Money is integer cents. Compare unrounded; round only to display.
 // - Missing is not zero: a trade with no computable P&L is listed as an issue, never counted as $0.
 // - The starting balance counts as the first peak. Touching the loss limit counts as a breach.
-// See docs/20.
+// See docs/21.
 
 import { sessionCloseUtc, sessionDate } from "./session.ts";
 import { DEFAULT_OWNER_USER_ID, tradePnl } from "./trades.ts";
