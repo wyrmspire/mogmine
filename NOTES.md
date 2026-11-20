@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-20 — agent (Grok Bot) — times from the bars (docs/20 §2.2, OD-41 (5)), App shell + Market data lanes
+Did:      Owner asked for OD-41 (5) now and OK'd native pickers. `lib/infer-times.ts` (`inferTradeTimes`: entry stretches, consistency with exit and stop, hint / RTH / earliest, exit bar, stop-or-target-first flag, exact/ambiguous/none, approximate on coarse bars), `lib/infer-message.ts`, day mode on `/api/market-data` (`from`/`to`), `loadDayCandles` with IndexedDB cache and the R-02 one-minute rule. Sheet: "Finding your fill in the bars…" then fills untouched pickers; hand-set times kept with a "Use …" button; Retry on no bars / offline.
+Files:    `lib/infer-times.ts`, `lib/infer-message.ts` (new), `lib/candles.ts`, `lib/entry-form.ts`, `app/api/market-data/route.ts`, `components/AddTradeSheet.tsx`, `app/globals.css`, `lib/__tests__/infer-times.test.ts` (new); docs/20, `DECISIONS.md` (`OD-41`).
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (239 pass), build. Headless Chrome 390×844 with live Yahoo 1m bars for 2026-11-19: exact, ambiguous, hand-set, no-match and offline states; no overflow. **Not verified on a phone.**
+Left:     `OD-41` (1), (3), (4) and the tie-break / previous-evening questions on (5). The finder line shows 24-hour times while iOS pickers show 12-hour.
+
 ### 2026-11-20 — agent (Grok Bot) — price-first entry + price-axis stretch (docs/20), App shell + Chart + Core math lanes
 Did:      Owner phone feedback. Add-trade sheet leads with side, status and a price ladder (Entry, Exit, Stop, Target) with one-tick `−`/`+` steppers; date + time pickers with Now buttons below; overnight exit read as next day. `R-10` built: `initial_stop_price`/`initial_stop_set_at`, `initialRMultiple`, `stopEditPatch`, `keepInitialStop` on restore, "Initial stop …" line on Trade Detail. Chart: floating `‹`/`›` edge buttons removed (the right one sat on the price axis); `‹30` `30›` now in the toolbar. Transparent grip over the price axis: drag stretches/compresses, double-tap/double-click auto-fits, wheel works.
 Files:    `lib/entry-form.ts`, `lib/price-scale.ts` (new), `lib/trades.ts`, `lib/store.ts`, `lib/format.ts`, `components/AddTradeSheet.tsx`, `TradeChart.tsx`, `TradeDetail.tsx`, `TradeLevelEditor.tsx`, `RiskChips.tsx`, `app/globals.css`, tests `price-first-entry.test.ts`, `price-scale.test.ts`; docs/20 (new), docs/06, 08, 15, 16, `DECISIONS.md` (`OD-41`), `AGENTS.md`.

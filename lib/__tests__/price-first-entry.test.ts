@@ -74,7 +74,7 @@ test("upgradeDraft: an older datetime-local draft keeps what was typed", () => {
   assert.equal(draft.stopPrice, "");
   assert.deepEqual(upgradeDraft(undefined, now, CT), freshEntryDraft(now, CT));
   const current = freshEntryDraft(now, CT);
-  assert.deepEqual(upgradeDraft({ ...current, stopPrice: "6840" }, now, CT), { ...current, entryEdited: false, stopPrice: "6840" });
+  assert.deepEqual(upgradeDraft({ ...current, stopPrice: "6840" }, now, CT), { ...current, entryEdited: false, exitEdited: false, dateEdited: false, stopPrice: "6840" });
 });
 
 test("stepPriceText: one MES tick is 0.25; empty fields start from the seed", () => {

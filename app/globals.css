@@ -452,6 +452,15 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .price-row .error { grid-column: 2 / -1; font-size: 0.6875rem; color: var(--loss-text); }
 .tick-step { min-width: 44px; min-height: 48px; border-radius: 11px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary); font: 800 1.125rem/1 var(--font-mono); touch-action: manipulation; }
 .tick-step:active { background: var(--bg-inset); }
+/* Bar finder (docs/20 §2.2): a quiet status line, never a modal. */
+.finder { margin-top: 10px; padding: 8px 10px; min-height: 44px; border-radius: 12px; border: 1px dashed var(--border-subtle); display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 0.75rem; line-height: 1.4; }
+.finder-line { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.finder-done .finder-line { color: var(--text-primary); }
+.finder-spinner { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--text-primary); animation: finder-spin 0.8s linear infinite; }
+@keyframes finder-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .finder-spinner { animation: none; } }
+.finder .now-button { flex: 0 0 auto; }
+.finder-hint { margin: 8px 2px 0; color: var(--text-faint); font-size: 0.6875rem; }
 .when-grid { margin-top: 14px; }
 .field > label > span { color: var(--text-muted); font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 750; }
 .clock-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }

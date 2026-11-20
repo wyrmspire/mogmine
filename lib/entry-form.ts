@@ -9,8 +9,12 @@ import type { TradeDirection, TradeRecord, TradeStatus } from "./trades.ts";
 export interface EntryDraft {
   /** `open`: still running, no exit yet (R-03b). */
   status: TradeStatus;
-  /** The trader set an entry time, so switching to Still open keeps it. */
+  /** The trader set the entry time by hand: switching to Still open keeps it, and the bar finder never overwrites it. */
   entryEdited?: boolean;
+  /** The trader set the exit time by hand: the bar finder never overwrites it. */
+  exitEdited?: boolean;
+  /** The trader picked the date by hand. */
+  dateEdited?: boolean;
   symbol: string;
   direction: TradeDirection;
   quantity: string;
@@ -68,6 +72,8 @@ export function upgradeDraft(raw: unknown, now: Date, zone: string): EntryDraft 
   return {
     status: old.status === "open" ? "open" : "closed",
     entryEdited: old.entryEdited === true,
+    exitEdited: old.exitEdited === true,
+    dateEdited: old.dateEdited === true,
     symbol: text(old.symbol, fresh.symbol),
     direction: old.direction === "SHORT" ? "SHORT" : "LONG",
     quantity: text(old.quantity, fresh.quantity),
@@ -146,4 +152,37 @@ export function entryLevelFields(stop: number | null, target: number | null, sav
     initial_stop_set_at: stop == null ? null : savedAt,
     planned_target_price: target,
   };
+}
+
+// ── Times from the bars (OD-41 (5), docs/20 §2.2) ───────────────────────────────────────────────
+
+/** The bars window for a picked date: 00:00 to 24:00 on that date in the display zone, UTC ms. */
+export function dayWindow(date: string, zone: string): { from: number; to: number } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const from = fromZonedInput(`${date}T00:00`, zone).getTime();
+  const to = fromZonedInput(`${addCalendarDays(date, 1)}T00:00`, zone).getTime();
+  return Number.isFinite(from) && Number.isFinite(to) && to > from ? { from, to } : null;
+}
+
+/** Minimal view of `InferResult` the form needs, so this module does not depend on the finder. */
+export interface TimeSuggestion {
+  entryTime: number | null;
+  exitTime: number | null;
+}
+
+/**
+ * The draft patch that fills the time pickers from a suggestion. A time the trader set by hand is
+ * never overwritten; `force` (the trader tapped "Use") overwrites and hands both back to the finder.
+ */
+export function suggestionPatch(draft: Pick<EntryDraft, "status" | "entryEdited" | "exitEdited" | "entryClock" | "exitClock">, suggestion: TimeSuggestion, zone: string, force = false): Partial<EntryDraft> {
+  const patch: Partial<EntryDraft> = {};
+  if (suggestion.entryTime != null && (force || !draft.entryEdited)) {
+    patch.entryClock = zonedParts(new Date(suggestion.entryTime), zone).clock;
+    if (force) patch.entryEdited = false;
+  }
+  if (draft.status !== "open" && suggestion.exitTime != null && (force || !draft.exitEdited)) {
+    patch.exitClock = zonedParts(new Date(suggestion.exitTime), zone).clock;
+    if (force) patch.exitEdited = false;
+  }
+  return patch;
 }

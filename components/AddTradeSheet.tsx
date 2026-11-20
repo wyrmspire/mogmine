@@ -2,7 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { entryLevelFields, entryTimes, priceOrNull, stepPriceText, upgradeDraft, zonedParts } from "@/lib/entry-form";
+import { dayWindow, entryLevelFields, entryTimes, priceOrNull, stepPriceText, suggestionPatch, upgradeDraft, zonedParts } from "@/lib/entry-form";
+import { loadDayCandles } from "@/lib/candles";
+import { inferTradeTimes } from "@/lib/infer-times";
+import type { InferResult } from "@/lib/infer-times";
+import { finderMessage } from "@/lib/infer-message";
 import type { EntryDraft } from "@/lib/entry-form";
 import { formatMoney, formatPointDistance, formatPoints, formatR, formatUsdAmount } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
@@ -11,7 +15,16 @@ import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeStatus } from "@/lib/trades";
-import { closeAddTrade, keepDraft, readDraft } from "@/lib/ui";
+import { closeAddTrade, keepDraft, readDraft, useOnline } from "@/lib/ui";
+
+/** Wait this long after the last price keystroke before searching the bars. */
+const FINDER_DEBOUNCE_MS = 600;
+
+type Finder =
+  | { state: "idle" }
+  | { state: "loading"; key: string }
+  | { state: "done"; key: string; result: InferResult; message: string }
+  | { state: "error"; key: string; message: string };
 
 // Kept while the app is open, so closing the sheet by accident never loses what was typed.
 const DRAFT_KEY = "add-trade";
@@ -50,6 +63,11 @@ export function AddTradeSheet() {
   const zone = prefs.timeZone;
   const [draft, setDraft] = useState<EntryDraft>(() => upgradeDraft(readDraft<unknown>(DRAFT_KEY), new Date(), zone));
   const [submitted, setSubmitted] = useState(false);
+  const [finder, setFinder] = useState<Finder>({ state: "idle" });
+  const [finderNonce, setFinderNonce] = useState(0);
+  const online = useOnline();
+  // A date that starts after the sheet opened has no bars yet.
+  const [openedAt] = useState(() => Date.now());
   const dialogRef = useRef<HTMLElement>(null);
   const firstField = useRef<HTMLButtonElement>(null);
 
@@ -77,14 +95,14 @@ export function AddTradeSheet() {
   const isOpenDraft = draft.status === "open";
   // Still open: the entry defaults to now unless the trader already set a time (R-03b).
   const setStatus = (status: TradeStatus) => {
-    if (status === "open" && !draft.entryEdited) {
+    if (status === "open" && !draft.entryEdited && !draft.dateEdited && finder.state !== "done") {
       const now = zonedParts(new Date(), zone);
       change({ status, date: now.date, entryClock: now.clock });
     } else change({ status });
   };
   const setNow = (which: "entry" | "exit") => {
     const now = zonedParts(new Date(), zone);
-    change(which === "entry" ? { date: now.date, entryClock: now.clock, entryEdited: true } : { exitClock: now.clock });
+    change(which === "entry" ? { date: now.date, entryClock: now.clock, entryEdited: true, dateEdited: true } : { exitClock: now.clock, exitEdited: true });
   };
   // A stepper on an empty stop, target or exit starts from the entry price.
   const stepPrice = (key: PriceKey, ticks: number) => change({ [key]: stepPriceText(draft[key], ticks, draft.symbol, key === "entryPrice" ? "" : draft.entryPrice) });
@@ -139,6 +157,58 @@ export function AddTradeSheet() {
   const plan = priced ? plannedR(priced) : null;
   const pnl = priced ? tradePnl(priced) : null;
   const r = priced ? rMultiple(priced) : null;
+
+  // Find the times from the prices (OD-41 (5), docs/20 §2.2). Runs a moment after the prices settle,
+  // or on "Find times". A hand-set time is a hint and is never overwritten.
+  const dayRange = dayWindow(draft.date, zone);
+  const entryReady = entryPrice != null && entryPrice > 0 && !errors.entryPrice;
+  const hint = draft.entryEdited && !Number.isNaN(entry.getTime()) ? entry.getTime() : null;
+  const finderInput = entryPrice != null && entryReady && dayRange && dayRange.from < openedAt
+    ? {
+      symbol: draft.symbol, direction: draft.direction, entryPrice,
+      exitPrice: !isOpenDraft && exitPrice != null && exitPrice > 0 && !errors.exitPrice ? exitPrice : null,
+      stopPrice: !errors.stopPrice ? stopPrice : null, targetPrice: !errors.targetPrice ? targetPrice : null,
+      hint, window: dayRange,
+    }
+    : null;
+  const finderKey = finderInput ? JSON.stringify({ ...finderInput, nonce: finderNonce }) : "";
+  const dateLabel = dayRange ? new Intl.DateTimeFormat("en-US", { timeZone: zone, month: "short", day: "numeric" }).format(new Date(dayRange.from + 12 * 3_600_000)) : "";
+  const finderRun = useRef(0);
+  useEffect(() => {
+    const run = ++finderRun.current;
+    if (!finderInput) return;
+    const timer = setTimeout(() => {
+      loadDayCandles(finderInput.symbol, finderInput.window.from, finderInput.window.to)
+        .then((day) => {
+          if (run !== finderRun.current) return;
+          const result = inferTradeTimes({ ...finderInput, candles: day.candles, timeframe: day.baseTimeframe });
+          setFinder({ state: "done", key: finderKey, result, message: finderMessage(result, { symbol: finderInput.symbol, entryPrice: finderInput.entryPrice, exitPrice: finderInput.exitPrice, dateLabel }, zone) });
+          setDraft((current) => keepDraft(DRAFT_KEY, { ...current, ...suggestionPatch(current, result, zone) }));
+        })
+        .catch(() => {
+          if (run !== finderRun.current) return;
+          setFinder({ state: "error", key: finderKey, message: navigator.onLine
+            ? `No bars for ${dateLabel} yet. Yahoo may not have published them. Set the times yourself.`
+            : "Offline, so the bars cannot be searched. Set the times yourself." });
+        });
+    }, FINDER_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // finderKey carries every input; the object itself is rebuilt each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finderKey]);
+  // A result for older inputs is stale: while the new search waits or runs, show the loading line.
+  const shown: Finder = !finderKey ? { state: "idle" } : finder.state !== "idle" && finder.key === finderKey ? finder : { state: "loading", key: finderKey };
+  const suggestion = shown.state === "done" ? shown.result : null;
+  const suggestedEntry = suggestion?.entryTime != null ? zonedParts(new Date(suggestion.entryTime), zone).clock : null;
+  const suggestedExit = !isOpenDraft && suggestion?.exitTime != null ? zonedParts(new Date(suggestion.exitTime), zone).clock : null;
+  // The trader set a time by hand that differs from the bars: offer the bars' times, never force them.
+  const canUseSuggestion = suggestion != null
+    && ((draft.entryEdited && suggestedEntry != null && suggestedEntry !== draft.entryClock) || (draft.exitEdited && suggestedExit != null && suggestedExit !== draft.exitClock));
+  const focusEntryTime = () => {
+    const input = document.getElementById("entry-clock") as (HTMLInputElement & { showPicker?: () => void }) | null;
+    input?.focus();
+    try { input?.showPicker?.(); } catch { /* focus is enough */ }
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -212,6 +282,19 @@ export function AddTradeSheet() {
                 : "Result appears with the exit"}</span>
           </div>
 
+          {shown.state !== "idle" && (
+            <div className={`finder finder-${shown.state}`} role="status" aria-live="polite">
+              {shown.state === "loading" && <><span className="finder-spinner" aria-hidden="true" /><span>Finding your fill in the bars…</span></>}
+              {shown.state === "done" && <button type="button" className="finder-line" onClick={focusEntryTime}>{shown.message}</button>}
+              {shown.state === "error" && <span className="finder-line">{online ? shown.message : "Offline, so the bars cannot be searched. Set the times yourself."}</span>}
+              {shown.state === "done" && canUseSuggestion && (
+                <button type="button" className="now-button" onClick={() => change(suggestionPatch(draft, shown.result, zone, true))}>Use {suggestedEntry}{suggestedExit ? `–${suggestedExit}` : ""}</button>
+              )}
+              {shown.state === "error" && <button type="button" className="now-button" onClick={() => setFinderNonce((n) => n + 1)}>Retry</button>}
+            </div>
+          )}
+          {shown.state === "idle" && finderInput == null && entryReady && <p className="finder-hint">Pick a date that has bars to find the times.</p>}
+
           <div className="form-grid when-grid">
             <label className="field"><span>Symbol</span>
               <select value={draft.symbol} onChange={(event) => change({ symbol: event.target.value })}>
@@ -228,7 +311,7 @@ export function AddTradeSheet() {
               </label>
             )}
             <label className="field wide"><span>Date <i>{zoneName}</i></span>
-              <input type="date" value={draft.date} aria-invalid={!!show("date")} onChange={(event) => change({ date: event.target.value, entryEdited: true })} />
+              <input type="date" value={draft.date} aria-invalid={!!show("date")} onChange={(event) => change({ date: event.target.value, dateEdited: true })} />
               {show("date") && <span className="error">{show("date")}</span>}
             </label>
             <div className="field wide"><label htmlFor="entry-clock"><span>Entry time</span></label>
@@ -241,7 +324,7 @@ export function AddTradeSheet() {
             {!isOpenDraft && (
               <div className="field wide"><label htmlFor="exit-clock"><span>Exit time</span></label>
                 <div className="clock-row">
-                  <input id="exit-clock" type="time" step={60} value={draft.exitClock} aria-invalid={!!show("exitClock")} onChange={(event) => change({ exitClock: event.target.value })} />
+                  <input id="exit-clock" type="time" step={60} value={draft.exitClock} aria-invalid={!!show("exitClock")} onChange={(event) => change({ exitClock: event.target.value, exitEdited: true })} />
                   <button type="button" className="now-button" onClick={() => setNow("exit")} aria-label="Exit time now">Now</button>
                 </div>
                 {nextDayLabel && !show("exitClock") && <span className="hint">Next day, {nextDayLabel}</span>}

@@ -325,3 +325,64 @@ export function getCandleEntry(tradeId: string | undefined): CandleEntry | undef
 export function resetCandlesForTest() {
   entries.clear();
 }
+
+// ── Day bars for the entry form (docs/20 §2.2) ─────────────────────────────────────────────────
+// The form finds the fill from the typed prices, before any trade exists. It asks the same route for
+// one window (`from`/`to`), caches the answer in IndexedDB like a trade's candles, and follows the
+// R-02 rule: a window that ended over an hour ago is final; a fresher one is asked again after a minute.
+
+export interface DayCandles {
+  candles: Candle[];
+  baseTimeframe: Timeframe;
+  fetchedAt: number;
+}
+
+/** Cache key for one symbol and window. */
+export function dayCandleKey(symbol: string, fromMs: number, toMs: number) {
+  return `day:${symbol.toUpperCase()}:${fromMs}:${toMs}`;
+}
+
+/** Whether a cached day window can be used without asking the network again. Pure, for tests. */
+export function dayCandlesUsable(stored: DayCandles | undefined, windowEndMs: number, now: number) {
+  if (!stored || !Array.isArray(stored.candles) || !stored.candles.length) return false;
+  // Final once the window ended long enough ago for Yahoo to publish every bar (R-02).
+  if (stored.fetchedAt - windowEndMs >= FRESH_EXIT_MS) return true;
+  return now - stored.fetchedAt < MINUTE_MS;
+}
+
+export interface DayCandleDependencies {
+  read(key: string): Promise<DayCandles | undefined>;
+  write(key: string, value: DayCandles): Promise<unknown>;
+  request(symbol: string, fromMs: number, toMs: number): Promise<{ candles?: Candle[]; baseTimeframe?: Timeframe }>;
+  now(): number;
+}
+
+/** Bars for one window: the cache when it is usable, else the network, else a stale cache, else an error. */
+export async function loadDayCandles(symbol: string, fromMs: number, toMs: number, dependencies?: DayCandleDependencies): Promise<DayCandles> {
+  const deps: DayCandleDependencies = dependencies ?? {
+    read: (key) => idbGet<DayCandles>(key),
+    write: (key, value) => idbSet(key, value),
+    request: async (requestSymbol, from, to) => {
+      const params = new URLSearchParams({ symbol: requestSymbol, from: new Date(from).toISOString(), to: new Date(to).toISOString() });
+      const response = await fetch(`/api/market-data?${params}`);
+      if (!response.ok) throw new Error(response.status === 404 ? "no-bars" : "unavailable");
+      return response.json();
+    },
+    now: Date.now,
+  };
+  const key = dayCandleKey(symbol, fromMs, toMs);
+  const cached = await deps.read(key).catch(() => undefined);
+  if (dayCandlesUsable(cached, toMs, deps.now())) return cached!;
+  try {
+    const body = await deps.request(symbol, fromMs, toMs);
+    if (!Array.isArray(body.candles) || !body.candles.length || !body.baseTimeframe || !TIMEFRAMES.includes(body.baseTimeframe)) throw new Error("no-bars");
+    // Never replace more data with less (R-02).
+    if (cached && cached.candles.length > body.candles.length) return cached;
+    const stored: DayCandles = { candles: body.candles, baseTimeframe: body.baseTimeframe, fetchedAt: deps.now() };
+    await deps.write(key, stored).catch(() => undefined);
+    return stored;
+  } catch (error) {
+    if (cached?.candles?.length) return cached;
+    throw error instanceof Error ? error : new Error("unavailable");
+  }
+}
