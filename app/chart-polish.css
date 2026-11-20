@@ -1,0 +1,36 @@
+/* Mogmine chart surface polish — issue #114.
+   Scoped to the trade-detail chart; no new trading functionality. */
+.chart-card {
+  border-color: color-mix(in srgb, var(--border-subtle) 72%, var(--gold-light) 28%);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .28);
+}
+.chart-toolbar {
+  background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-elevated));
+  gap: 8px;
+}
+.chart-toolbar .timeframes {
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chart-toolbar .timeframes::-webkit-scrollbar { display: none; }
+.chart-toolbar .timeframes button {
+  flex: 0 0 auto;
+  transition: background-color .16s ease, color .16s ease;
+}
+.chart-toolbar .timeframes button:focus-visible,
+.chart-toolbar .tool-button:focus-visible {
+  outline: 2px solid var(--gold-light);
+  outline-offset: 2px;
+}
+.chart-frame { isolation: isolate; }
+@media (max-width: 600px) {
+  .chart-card { margin-inline: 4px; border-radius: 15px; }
+  .chart-toolbar { padding-inline: 8px; }
+  .chart-toolbar .chart-tools { flex: 0 0 auto; }
+  .chart-frame { height: clamp(300px, 47svh, 420px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-toolbar .timeframes button { transition: none; }
+}
