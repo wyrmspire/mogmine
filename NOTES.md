@@ -48,6 +48,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-15 — agent (Grok Bot) — App shell, branch `feat/80-gold-good-process` (#80)
+Did:      Gold is reserved for good process only: the full-rules seal, checked checklist rules, Today's "By the rules" / day-head process score, and the clean-process header glow. Selected and active chrome (timeframes, pills, dock, focus rings, primary buttons, brand mark, Shield switch) now use plain white. Tune gold preset and intensity still preview the process gold.
+Files:    `app/globals.css`, `components/TuneScreen.tsx`, `NOTES.md`.
+Left:     Share-card RULES seal stays gold (good process). Gold presets remain a Tune control.
+
+
 ### 2026-11-15 — agent (Grok Bot) — integration/batch5
 Did:      Draft integration of #78 (Low hindsight one-liner), #79/#77 (first-load P&L), #97/#96 (#87+#88 Trade Card lazy + current view), #92/#65 (session coverage), #95/#90 (market-data expected coverage), #93 (Tune Shield risk mask), #94/#91 (docs stale/no-purple), #98/#86 (candle refetch), and #99/#89 (sample fixture bars). Kept #71 out. Composed #65+#90 so coversTradeWindow uses Globex hours when a symbol is passed. Composed #86+#90 so a cache is reused only when it covers the trade window and the hindsight window, or is refetched after session close. Samples load from sample-bars.json and never hit Yahoo.
 Left:     Draft PR against main, do-not-merge-without-Chris. Do not merge or deploy. Holiday calendar remains OD-35. The reported $140 then $171 pair was not a current fixture P&L.
