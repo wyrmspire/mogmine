@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import "./globals.css";
+import "./chart-polish.css";
 
 // Loaded by next/font (self-hosted at build time, no runtime request to Google).
 // globals.css builds --font-sans / --font-mono on top of these variables.
