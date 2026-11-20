@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-20 — agent (Claude Code) — accounts and running totals, step 1 (docs/20), Core math lane
+Did:      `lib/accounts.ts`: `TradingAccount` with per-account rules (static / trailing / end-of-session trailing loss limit, daily loss, target), `accountSummary` (balance, peak, drawdown, room, today, target, curve, ledger), balance checks as adjustments, `defaultAccountId`, sanitisers. `account_id: string | null` on `TradeRecord` (default null). `lib/accounts-store.ts` (`mogmine-accounts-v1`), hydrated in AppShell, in backups.
+Files:    `lib/accounts.ts`, `lib/accounts-store.ts`, `lib/trades.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`, `lib/__tests__/accounts.test.ts`, `docs/20` (new), docs/06, docs/17, `DECISIONS.md` (`OD-41`), `AGENTS.md`, `README.md`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), 219/219 tests, build. The docs/17 §3 golden drawdown cases pass on the account engine; six hand mutations of the engine each fail at least one test.
+Left:     No screen yet: steps 2–4 in docs/20 §6 (Today card, account picker, setup and rules screen). `OD-41`.
+
 ### 2026-11-19 — agent (Claude Code) — Mood Shape (docs/18), App shell + Core math lanes
 Did:      Mood Shape on the device: pure `lib/mood.ts` (`moodVector`, `moodPath`, `similarTrades`, `moodOutcomeStats`, phrase-matcher suggestions, `parseMoodSuggestion` AI contract, candidates, `addSpoke` + `rescoreForNewSpoke`), `lib/mood-store.ts` (`mogmine-mood-v1`, append-only records, in backups). UI: shape beside the R strip and a Mood card on Trade Detail, editor sheet (drag/arrow keys, Accept/Dismiss suggestions, "Add spoke?"), 40px feed thumbnails, shape kept visible in sealed blind review, Trade Card PNG, "Mood and result" card on Feed. Fixtures `ex-tp`/`ex-sl`/`ex-trail` got note events and `mood_records`; `fixtures/mood/spokes-v2.json`.
 Files:    `lib/mood.ts`, `lib/mood-store.ts`, `lib/store.ts`, `lib/shareCard.ts`, `components/Mood*.tsx`, `TradeDetail`, `TradeRow`, `ReviewScreen`, `FeedScreen`, `TuneScreen`, `AppShell`, `app/globals.css`, `lib/__tests__/mood.test.ts`, fixtures, `docs/18` (new), docs/03, 06, 15, `DECISIONS.md` (`OD-39`, drift row), `AGENTS.md`, `README.md`.

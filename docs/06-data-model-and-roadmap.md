@@ -148,7 +148,7 @@ erDiagram
 
 | Table | Purpose & Key Columns |
 | :--- | :--- |
-| **`accounts`** | Tracks TopstepX Combine / Express Funded / Live accounts (`external_account_id`, `account_type`, `balance`, `user_id`). |
+| **`accounts`** | Tracks TopstepX Combine / Express Funded / Live accounts (`external_account_id`, `account_type`, `balance`, `user_id`). On the device today: name, starting balance and rules, with the balance derived from logged trades and balance checks ([20](20-accounts-and-running-totals.md)). |
 | **`executions`** | Immutable raw order fills from TopstepX (`external_fill_id` unique constraint prevents duplicate writes on WebSocket reconnects). |
 | **`trades`** | Aggregated round-trip positions. Stores `status` (`'open' \| 'closed'`; an open trade has null `exit_time` and `exit_price`, and its money fields are null — `R-03`, `OD-38`), `trade_style` (`'scalp' \| 'session_90m' \| 'investment'`), `style_overridden` boolean, `entry_price`, `exit_price` (nullable while open), `stop_loss_price`, `mae_price`, `mfe_price`, `r_multiple`, `net_pnl`, and `session_tag` (`'NY_AM' \| 'NY_PM' \| 'LONDON' \| 'ASIA'`). |
 | **`trade_candles`** | Permanently caches Yahoo Finance OHLCV arrays (`bars` JSONB of `{ time, open, high, low, close, volume }`) keyed by `(trade_id, symbol, timeframe)` so `1m` intraday history never vanishes after 30 days. |

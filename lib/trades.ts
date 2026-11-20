@@ -52,6 +52,8 @@ export interface ChecklistItem {
 export interface TradeRecord {
   id: string;
   user_id: string;
+  /** The account this trade was taken in (docs/20). Null: not assigned; it counts toward no account total. */
+  account_id: string | null;
   symbol: string;
   yahoo_ticker: string;
   direction: TradeDirection;
@@ -687,6 +689,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   const canonicalTicker = specFor(symbol)?.yahooTicker;
   const trade: TradeRecord = {
     user_id: DEFAULT_OWNER_USER_ID,
+    account_id: null,
     yahoo_ticker: canonicalTicker || raw.yahoo_ticker || symbol,
     trade_style: classifyTrade(raw.entry_time, raw.exit_time),
     stop_loss_price: null,
@@ -713,6 +716,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;
+  if (trade.account_id === undefined) trade.account_id = null;
   if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
