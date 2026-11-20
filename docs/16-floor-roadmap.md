@@ -225,6 +225,8 @@ Everything after this step needs it. Today the journal exists only in one phone'
 status      text not null default 'closed' check (status in ('open','closed')),
 exit_time   timestamptz,
 exit_price  numeric,
+initial_stop_price  numeric,
+initial_stop_set_at timestamptz,
 constraint trades_open_has_no_exit check (
   (status = 'open'   and exit_time is null     and exit_price is null) or
   (status = 'closed' and exit_time is not null and exit_price is not null)
