@@ -50,7 +50,7 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 | `R-07` | Playbook editor | Medium | `R-05` |
 | `R-08` | Running stats across days | Medium | `R-05` |
 | `R-09` | Challenges: Drawdown Defender and Clean Run ([docs/17](17-challenges.md)) | Medium, four PRs | `OD-37`. **Not** blocked on `R-05`: it runs on the device. |
-| `R-10` | Stop at entry, frozen | Small | `R-03b` |
+| `R-10` | Stop at entry, frozen | Built with the price-first entry form ([docs/20](20-price-first-entry.md)), branch `app/price-first-entry` | `R-03b` |
 
 `R-01`–`R-03`, `R-09` and `R-10` need no backend. `R-04` onward is the data layer. **AI and cross-day stats are blocked on `R-05`**, because today the trades never leave the phone. Challenges are not: they are recomputed from the trades on the device, and only follow you to a second device after `R-05`.
 
@@ -307,6 +307,8 @@ Fixed constraints:
 ---
 
 ## R-10 — Stop at entry, frozen
+
+> **Built** in the price-first entry change ([docs/20](20-price-first-entry.md) §2), on branch `app/price-first-entry`. The spec below is unchanged; the first stop set from a risk chip on Trade Detail is captured too.
 
 **Problem.** `components/AddTradeSheet.tsx` saves every trade with `stop_loss_price: null`. The stop is added later on Trade Detail and stays editable, so `rMultiple` and `initialRiskUsd` can change after the trade is over. Nothing records what the risk was when the trade was taken. Any R-based stat or challenge is only as honest as that edit.
 

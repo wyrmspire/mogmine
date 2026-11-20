@@ -25,7 +25,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 **Work the list in [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md)** (owner order, 2026-11-16). Each step names its files, its limits and its done-when.
 
-Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math.
+Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math. `R-10` is built on `app/price-first-entry` with the price-first form (docs/20).
 
 1. `R-03b` Entry and close for an open trade (`AddTradeSheet.tsx`, `TradeDetail.tsx`, the list rows), with `R-10` in the same form: an optional stop at entry, frozen as `initial_stop_price`.
 2. `R-03c` Chart and candles for an open trade.
@@ -50,6 +50,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-20 — agent (Grok Bot) — price-first entry + price-axis stretch (docs/20), App shell + Chart + Core math lanes
+Did:      Owner phone feedback. Add-trade sheet leads with side, status and a price ladder (Entry, Exit, Stop, Target) with one-tick `−`/`+` steppers; date + time pickers with Now buttons below; overnight exit read as next day. `R-10` built: `initial_stop_price`/`initial_stop_set_at`, `initialRMultiple`, `stopEditPatch`, `keepInitialStop` on restore, "Initial stop …" line on Trade Detail. Chart: floating `‹`/`›` edge buttons removed (the right one sat on the price axis); `‹30` `30›` now in the toolbar. Transparent grip over the price axis: drag stretches/compresses, double-tap/double-click auto-fits, wheel works.
+Files:    `lib/entry-form.ts`, `lib/price-scale.ts` (new), `lib/trades.ts`, `lib/store.ts`, `lib/format.ts`, `components/AddTradeSheet.tsx`, `TradeChart.tsx`, `TradeDetail.tsx`, `TradeLevelEditor.tsx`, `RiskChips.tsx`, `app/globals.css`, tests `price-first-entry.test.ts`, `price-scale.test.ts`; docs/20 (new), docs/06, 08, 15, 16, `DECISIONS.md` (`OD-41`), `AGENTS.md`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (222 pass), build. Headless Chrome 390×844 with touch emulation: no overflow, targets ≥ 44 px, axis drag stretches without page scroll, chart-body vertical swipe still scrolls, horizontal pan works; mouse at 1280×900. **Not verified on a phone.**
+Left:     `OD-41` (next-day rule, undo vs frozen initial stop, right-edge scroll trade-off, times suggested from candles later). docs/19 + `OD-40` are on unmerged `docs/19-design-guide`, hence docs/20 / `OD-41`.
 
 ### 2026-11-19 — agent (Claude Code) — Mood Shape (docs/18), App shell + Core math lanes
 Did:      Mood Shape on the device: pure `lib/mood.ts` (`moodVector`, `moodPath`, `similarTrades`, `moodOutcomeStats`, phrase-matcher suggestions, `parseMoodSuggestion` AI contract, candidates, `addSpoke` + `rescoreForNewSpoke`), `lib/mood-store.ts` (`mogmine-mood-v1`, append-only records, in backups). UI: shape beside the R strip and a Mood card on Trade Detail, editor sheet (drag/arrow keys, Accept/Dismiss suggestions, "Add spoke?"), 40px feed thumbnails, shape kept visible in sealed blind review, Trade Card PNG, "Mood and result" card on Feed. Fixtures `ex-tp`/`ex-sl`/`ex-trail` got note events and `mood_records`; `fixtures/mood/spokes-v2.json`.

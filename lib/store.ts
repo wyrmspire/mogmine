@@ -7,7 +7,7 @@ import { idbSet } from "./idb.ts";
 import { sanitizeMoodBackup } from "./mood-store.ts";
 import type { MoodBackup } from "./mood-store.ts";
 import type { Prefs } from "./prefs.ts";
-import { annotationKey, candleCacheKey, candleSignature, deriveReviewStatus, normalizeTrade } from "./trades.ts";
+import { annotationKey, candleCacheKey, candleSignature, deriveReviewStatus, keepInitialStop, normalizeTrade } from "./trades.ts";
 import type { Candle, ChecklistItem, TradeDirection, TradeRecord } from "./trades.ts";
 export { candleCacheKey, candleSignature };
 
@@ -203,6 +203,9 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
     entry_price: item.entry_price,
     exit_price: item.exit_price ?? null,
     stop_loss_price: stopLoss,
+    // R-10: kept only as a valid pair; anything else is unknown (normalizeTrade clears a half pair).
+    initial_stop_price: isFiniteNumber(rest.initial_stop_price) ? rest.initial_stop_price : null,
+    initial_stop_set_at: isValidTime(rest.initial_stop_set_at) ? rest.initial_stop_set_at : null,
     planned_target_price: plannedTarget,
     key_level_price: keyLevel,
     quantity,
@@ -397,7 +400,9 @@ export function getJournal() {
 
 /** Replace the whole journal from a backup file. */
 export function replaceTrades(trades: TradeRecord[]) {
-  set({ trades: [...trades].sort(byNewest) });
+  // A restore never overwrites an initial stop this device already froze for the same trade (R-10).
+  const current = new Map(state.trades.map((trade) => [trade.id, trade]));
+  set({ trades: trades.map((trade) => keepInitialStop(trade, current.get(trade.id))).sort(byNewest) });
   persist();
 }
 

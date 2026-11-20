@@ -65,6 +65,14 @@ export interface TradeRecord {
   /** Null while the trade is open (R-03). Never `0` or the entry price. */
   exit_price: number | null;
   stop_loss_price: number | null;
+  /**
+   * The stop as it was when the risk was first set (R-10): at entry, or the first time a stop is added on
+   * Trade Detail. Written once and never changed after, so R measured on it cannot be edited after the fact.
+   * Null on trades saved before R-10 and on trades that never had a stop: unknown, never back-filled.
+   */
+  initial_stop_price: number | null;
+  /** UTC ISO time `initial_stop_price` was captured, or null with it. */
+  initial_stop_set_at: string | null;
   planned_target_price: number | null;
   key_level_price: number | null;
   quantity: number;
@@ -238,6 +246,39 @@ export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price">):
   const ticks = tradeTicks(trade);
   if (riskTicks == null || ticks == null || !isWholeQuantity(trade.quantity)) return null;
   return ticks / riskTicks;
+}
+
+/**
+ * R measured on the stop frozen when the risk was first set (R-10). Same math as `rMultiple`, on
+ * `initial_stop_price`. Null without an initial stop, and for an open trade. `rMultiple` is unchanged.
+ */
+export function initialRMultiple(trade: Priced & Pick<TradeRecord, "initial_stop_price">): number | null {
+  return rMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
+}
+
+/**
+ * The patch for setting or changing the stop on a saved trade (R-10). The first stop on a trade with no
+ * initial stop is also captured as `initial_stop_price`, stamped `at`. Later edits move `stop_loss_price` only.
+ */
+export function stopEditPatch(
+  trade: Pick<TradeRecord, "initial_stop_price">,
+  stop: number | null,
+  at: string,
+): Pick<TradeRecord, "stop_loss_price"> & Partial<Pick<TradeRecord, "initial_stop_price" | "initial_stop_set_at">> {
+  if (stop != null && trade.initial_stop_price == null) {
+    return { stop_loss_price: stop, initial_stop_price: stop, initial_stop_set_at: at };
+  }
+  return { stop_loss_price: stop };
+}
+
+/**
+ * Restoring a backup never overwrites an initial stop the device already holds for the same trade (R-10).
+ * Returns `incoming` with the device's frozen pair when there is one.
+ */
+export function keepInitialStop(incoming: TradeRecord, existing: Pick<TradeRecord, "id" | "initial_stop_price" | "initial_stop_set_at"> | undefined): TradeRecord {
+  if (!existing || existing.id !== incoming.id || existing.initial_stop_price == null) return incoming;
+  if (incoming.initial_stop_price === existing.initial_stop_price && incoming.initial_stop_set_at === existing.initial_stop_set_at) return incoming;
+  return { ...incoming, initial_stop_price: existing.initial_stop_price, initial_stop_set_at: existing.initial_stop_set_at };
 }
 
 /** A trade with both exit fields set. The chart draws only these until R-03c. */
@@ -690,6 +731,8 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     yahoo_ticker: canonicalTicker || raw.yahoo_ticker || symbol,
     trade_style: classifyTrade(raw.entry_time, raw.exit_time),
     stop_loss_price: null,
+    initial_stop_price: null,
+    initial_stop_set_at: null,
     planned_target_price: null,
     key_level_price: null,
     quantity: 1,
@@ -713,6 +756,11 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;
+  // R-10: a record from before this field, or one with a half-written pair, has no known initial stop.
+  if (trade.initial_stop_price == null || !Number.isFinite(trade.initial_stop_price) || trade.initial_stop_set_at == null) {
+    trade.initial_stop_price = null;
+    trade.initial_stop_set_at = null;
+  }
   if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);

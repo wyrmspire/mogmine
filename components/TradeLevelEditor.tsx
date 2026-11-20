@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { formatPrice } from "@/lib/format";
 import { updateTrade } from "@/lib/store";
 import { showToast } from "@/lib/toast";
-import { specFor, validateTradeInput } from "@/lib/trades";
+import { specFor, stopEditPatch, validateTradeInput } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
 
 type LevelField = "stop_loss_price" | "planned_target_price" | "key_level_price";
@@ -55,7 +55,9 @@ export function TradeLevelEditor({ trade, field }: { trade: TradeRecord; field: 
     }
     // Undo restores what was there before: the previous level on a correction, nothing on an add.
     const previous = value;
-    updateTrade(trade.id, levelPatch(field, price));
+    // R-10: the first stop on a trade without an initial stop is also frozen as the initial stop.
+    // Undo moves the stop back only; the initial stop, once captured, never changes.
+    updateTrade(trade.id, field === "stop_loss_price" ? stopEditPatch(trade, price, new Date().toISOString()) : levelPatch(field, price));
     showToast(`${label[0]}${label.slice(1).toLowerCase()} ${previous == null ? "set" : "changed"} to ${formatPrice(price, trade.symbol)}`, {
       label: "Undo",
       run: () => updateTrade(trade.id, levelPatch(field, previous)),
