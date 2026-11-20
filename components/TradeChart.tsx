@@ -12,6 +12,8 @@ import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
 import { TIMEFRAME_MINUTES, aggregateCandles, alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, isScratch, specFor, visibleLogicalBars } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import { buildHindsight } from "@/lib/hindsight";
+import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
+import type { PriceSpan, TapPoint } from "@/lib/price-scale";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
 type LWC = typeof import("lightweight-charts");
@@ -145,6 +147,7 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
 
 export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone, privacy, readout, onRendered, onFitChange, detailLevel = "medium", onExtensionChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
   const latest = useRef({ trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange });
@@ -163,6 +166,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       l.extraBefore = 0;
       l.extraAfter = 0;
       l.chart.priceScale("right").applyOptions({ autoScale: true });
+      l.host.dataset.priceScale = "auto";
       l.fitRange = l.baseFitRange;
       setProgrammaticRange(l, () => { l.chart.timeScale().setVisibleLogicalRange(l.baseFitRange!); });
       latest.current.onFitChange?.(true);
@@ -426,8 +430,88 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       host.addEventListener("pointerup", onPointerEnd);
       host.addEventListener("pointercancel", onPointerEnd);
 
+      // Price-axis stretch (docs/20 §3). The library's own axis drag works for a mouse, but on touch
+      // it treats a vertical drag as page scroll (we keep vertTouchDrag off for UX-41). So a transparent
+      // grip sits over the price scale only, with touch-action: none, and drives the scale itself for
+      // touch, pen and mouse alike. Double-tap or double-click resets to auto-fit. The chart pane,
+      // pinch and horizontal pan are untouched.
+      const grip = gripRef.current;
+      const priceScale = () => chart.priceScale("right");
+      const placeGrip = () => {
+        if (!grip) return;
+        let width = 0;
+        let axisHeight = 0;
+        try { width = priceScale().width(); axisHeight = chart.timeScale().height(); } catch { width = 0; }
+        grip.style.width = `${width}px`;
+        grip.style.height = `${Math.max(0, host.clientHeight - axisHeight)}px`;
+      };
+      const settleView = () => {
+        window.clearTimeout(state.viewSettleTimer);
+        state.viewSettleTimer = window.setTimeout(() => latest.current.onRendered?.(), 300);
+      };
+      const tickSize = () => specFor(latest.current.trade.symbol)?.tickSize ?? 0.01;
+      const visiblePrices = (): PriceSpan | null => {
+        const range = priceScale().getVisibleRange();
+        if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to) || range.from === range.to) return null;
+        return { from: Math.min(range.from, range.to), to: Math.max(range.from, range.to) };
+      };
+      let drag: { id: number; y: number; start: PriceSpan; moved: boolean } | null = null;
+      let lastTap: TapPoint | null = null;
+      const onGripDown = (event: PointerEvent) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        if (drag) return; // a second finger on the axis is ignored
+        event.preventDefault();
+        const tap = { time: event.timeStamp, x: event.clientX, y: event.clientY };
+        if (isDoubleTap(lastTap, tap)) {
+          lastTap = null;
+          priceScale().setAutoScale(true);
+          host.dataset.priceScale = "auto";
+          settleView();
+          return;
+        }
+        lastTap = tap;
+        const start = visiblePrices();
+        if (!start) return;
+        drag = { id: event.pointerId, y: event.clientY, start, moved: false };
+        try { grip?.setPointerCapture(event.pointerId); } catch { /* capture is a nicety */ }
+      };
+      const onGripMove = (event: PointerEvent) => {
+        if (!drag || event.pointerId !== drag.id) return;
+        const dy = event.clientY - drag.y;
+        if (!drag.moved && Math.abs(dy) < STRETCH_DEAD_ZONE_PX) return;
+        event.preventDefault();
+        drag.moved = true;
+        lastTap = null;
+        priceScale().setVisibleRange(stretchPriceRange(drag.start, dy, grip?.clientHeight ?? host.clientHeight, tickSize()));
+        host.dataset.priceScale = "manual";
+      };
+      const onGripEnd = (event: PointerEvent) => {
+        if (!drag || event.pointerId !== drag.id) return;
+        const moved = drag.moved;
+        drag = null;
+        if (moved) settleView();
+      };
+      const onGripWheel = (event: WheelEvent) => {
+        event.preventDefault();
+        const start = visiblePrices();
+        if (!start) return;
+        priceScale().setVisibleRange(stretchPriceRange(start, wheelToDragPx(event.deltaY), grip?.clientHeight ?? host.clientHeight, tickSize()));
+        host.dataset.priceScale = "manual";
+        settleView();
+      };
+      grip?.addEventListener("pointerdown", onGripDown);
+      grip?.addEventListener("pointermove", onGripMove);
+      grip?.addEventListener("pointerup", onGripEnd);
+      grip?.addEventListener("pointercancel", onGripEnd);
+      grip?.addEventListener("wheel", onGripWheel, { passive: false });
+      host.dataset.priceScale = "auto";
+      placeGrip();
+      requestAnimationFrame(placeGrip);
+      chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(placeGrip));
+
       const resize = new ResizeObserver(() => {
         chart.applyOptions({ width: host.clientWidth, height: host.clientHeight });
+        requestAnimationFrame(placeGrip);
         if (!state.userPanned && state.heldDefaultRange) {
           setProgrammaticRange(state, () => { state.chart.timeScale().setVisibleLogicalRange(state.heldDefaultRange!); });
           writeVisibleCount(state, state.heldDefaultRange);
@@ -445,6 +529,11 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
         host.removeEventListener("pointermove", onPointerMove);
         host.removeEventListener("pointerup", onPointerEnd);
         host.removeEventListener("pointercancel", onPointerEnd);
+        grip?.removeEventListener("pointerdown", onGripDown);
+        grip?.removeEventListener("pointermove", onGripMove);
+        grip?.removeEventListener("pointerup", onGripEnd);
+        grip?.removeEventListener("pointercancel", onGripEnd);
+        grip?.removeEventListener("wheel", onGripWheel);
         resize.disconnect();
         live.current = null;
         chart.remove();
@@ -471,7 +560,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     draw.current(refit);
   }, [trade, timeframe, zone, privacy, theme, baseTimeframe, detailLevel]);
 
-  return <div
+  return <><div
     ref={hostRef}
     className="chart-host"
     role="img"
@@ -479,5 +568,8 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     data-timeframe={diagnosticTimeframe}
     data-visible-bars={diagnosticWindow.visibleBars.toFixed(3)}
     data-trade-share={(diagnosticWindow.holdBars / diagnosticWindow.visibleBars).toFixed(4)}
-  />;
+  />
+  {/* Drag up or down to stretch the price scale; double-tap to auto-fit (docs/20 §3). */}
+  <div ref={gripRef} className="price-axis-grip" aria-hidden="true" title="Drag to stretch the price scale. Double-click to auto-fit." />
+  </>;
 }

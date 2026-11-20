@@ -25,7 +25,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 **Work the list in [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md)** (owner order, 2026-11-16). Each step names its files, its limits and its done-when.
 
-Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math.
+Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math. `R-10` merged in #118; the price-first form (docs/20) uses its `stopPatch`.
 
 1. `R-03b` Entry and close for an open trade (`AddTradeSheet.tsx`, `TradeDetail.tsx`, the list rows), with `R-10` in the same form: an optional stop at entry, frozen as `initial_stop_price`.
 2. `R-03c` Chart and candles for an open trade.
@@ -50,6 +50,18 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-20 — agent (Grok Bot) — times from the bars (docs/20 §2.2, OD-41 (5)), App shell + Market data lanes
+Did:      Owner asked for OD-41 (5) now and OK'd native pickers. `lib/infer-times.ts` (`inferTradeTimes`: entry stretches, consistency with exit and stop, hint / RTH / earliest, exit bar, stop-or-target-first flag, exact/ambiguous/none, approximate on coarse bars), `lib/infer-message.ts`, day mode on `/api/market-data` (`from`/`to`), `loadDayCandles` with IndexedDB cache and the R-02 one-minute rule. Sheet: "Finding your fill in the bars…" then fills untouched pickers; hand-set times kept with a "Use …" button; Retry on no bars / offline.
+Files:    `lib/infer-times.ts`, `lib/infer-message.ts` (new), `lib/candles.ts`, `lib/entry-form.ts`, `app/api/market-data/route.ts`, `components/AddTradeSheet.tsx`, `app/globals.css`, `lib/__tests__/infer-times.test.ts` (new); docs/20, `DECISIONS.md` (`OD-41`).
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (239 pass), build. Headless Chrome 390×844 with live Yahoo 1m bars for 2026-11-19: exact, ambiguous, hand-set, no-match and offline states; no overflow. **Not verified on a phone.**
+Left:     `OD-41` (1), (3), (4) and the tie-break / previous-evening questions on (5). The finder line shows 24-hour times while iOS pickers show 12-hour.
+
+### 2026-11-20 — agent (Grok Bot) — price-first entry + price-axis stretch (docs/20), App shell + Chart + Core math lanes
+Did:      Owner phone feedback. Add-trade sheet leads with side, status and a price ladder (Entry, Exit, Stop, Target) with one-tick `−`/`+` steppers; date + time pickers with Now buttons below; overnight exit read as next day. `R-10` itself came from #118 (merged into this branch, its `stopPatch` is the one implementation); this branch adds only `keepInitialStop` on backup restore and a valid-pair check in `parseTradeItem`. Chart: floating `‹`/`›` edge buttons removed (the right one sat on the price axis); `‹30` `30›` now in the toolbar. Transparent grip over the price axis: drag stretches/compresses, double-tap/double-click auto-fits, wheel works.
+Files:    `lib/entry-form.ts`, `lib/price-scale.ts` (new), `lib/trades.ts`, `lib/store.ts`, `lib/format.ts`, `components/AddTradeSheet.tsx`, `TradeChart.tsx`, `TradeDetail.tsx`, `TradeLevelEditor.tsx`, `RiskChips.tsx`, `app/globals.css`, tests `price-first-entry.test.ts`, `price-scale.test.ts`; docs/20 (new), docs/06, 08, 15, 16, `DECISIONS.md` (`OD-41`), `AGENTS.md`.
+Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (222 pass), build. Headless Chrome 390×844 with touch emulation: no overflow, targets ≥ 44 px, axis drag stretches without page scroll, chart-body vertical swipe still scrolls, horizontal pan works; mouse at 1280×900. **Not verified on a phone.**
+Left:     `OD-41` (next-day rule, undo vs frozen initial stop, right-edge scroll trade-off, times suggested from candles later). docs/19 + `OD-40` are on unmerged `docs/19-design-guide`, hence docs/20 / `OD-41`.
 
 ### 2026-11-19 — agent (Tappy) — R-10 stop at entry, frozen, Core math + App shell lanes
 Did:      `R-10`: `TradeRecord` gains `initial_stop_price` / `initial_stop_set_at` (null on old records, never back-filled); `stopPatch()` freezes the first stop once and later edits move `stop_loss_price` only; `initialRMultiple()` added beside an unchanged `rMultiple`. `AddTradeSheet` gains an optional Stop field (existing `validateTradeInput` stop-side rule) that sets all three fields on save; `TradeLevelEditor` captures the first stop via `stopPatch` (undo restores the working stop only, never the frozen one). Trade Detail shows a quiet "Initial stop 6841.25, set 09:42" line only when the working stop differs.

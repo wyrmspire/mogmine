@@ -269,6 +269,16 @@ export function initialRMultiple(trade: Priced & Pick<TradeRecord, "initial_stop
   return rMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
 }
 
+/**
+ * A backup restore never overwrites an initial stop the device already holds for the same trade
+ * (R-10 "Do not"). Returns `incoming` with the device's frozen pair when there is one.
+ */
+export function keepInitialStop(incoming: TradeRecord, existing: Pick<TradeRecord, "id" | "initial_stop_price" | "initial_stop_set_at"> | undefined): TradeRecord {
+  if (!existing || existing.id !== incoming.id || existing.initial_stop_price == null) return incoming;
+  if (incoming.initial_stop_price === existing.initial_stop_price && incoming.initial_stop_set_at === existing.initial_stop_set_at) return incoming;
+  return { ...incoming, initial_stop_price: existing.initial_stop_price, initial_stop_set_at: existing.initial_stop_set_at };
+}
+
 /** A trade with both exit fields set. The chart draws only these until R-03c. */
 export type ClosedTradeRecord = TradeRecord & { status: "closed"; exit_time: string; exit_price: number };
 
