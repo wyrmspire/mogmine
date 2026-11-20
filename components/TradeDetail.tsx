@@ -22,7 +22,7 @@ import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { buildShareCard, shouldBuildShareCard } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
-import { formatDetailTime } from "@/lib/time";
+import { formatDetailTime, formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
@@ -304,6 +304,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div className="timeframes" role="group" aria-label="Timeframe">
               {TIMEFRAMES.map((value) => <button key={value} type="button" aria-pressed={value === timeframe} disabled={TIMEFRAME_MINUTES[value] < baseMinutes} onClick={() => setTimeframe(value)}>{value}</button>)}
             </div>
+            {/* ‹30 / 30›: widen the time window. In the toolbar, not floating over the chart, so the
+                price axis stays free for dragging (owner feedback 2026-11-20, docs/20 §3). */}
+            <div className="chart-extend" role="group" aria-label="Show more bars">
+              <button type="button" className="tool-button" disabled={!ready || !extension.canBefore} title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"} aria-label={extension.canBefore ? "Show 30 earlier bars" : "No earlier candles"} onClick={() => chartRef.current?.extend("before")}>‹30</button>
+              <button type="button" className="tool-button" disabled={!ready || !extension.canAfter} title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"} aria-label={extension.canAfter ? "Show 30 later bars" : "No later candles"} onClick={() => chartRef.current?.extend("after")}>30›</button>
+            </div>
             <div className="view-menu-wrapper" ref={viewMenuRef}>
               <button
                 type="button"
@@ -406,26 +412,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             {ready ? (
               <>
                 <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
-                <button
-                  type="button"
-                  className="chart-edge-hit left"
-                  disabled={!extension.canBefore}
-                  title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"}
-                  aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"}
-                  onClick={() => chartRef.current?.extend("before")}
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  className="chart-edge-hit right"
-                  disabled={!extension.canAfter}
-                  title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"}
-                  aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"}
-                  onClick={() => chartRef.current?.extend("after")}
-                >
-                  ›
-                </button>
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
@@ -483,6 +469,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
           </div>
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
+          {/* The frozen first stop, shown as a quiet fact only once the working stop has moved (R-10). */}
+          {trade.initial_stop_price != null && trade.initial_stop_set_at != null && trade.stop_loss_price !== trade.initial_stop_price && (
+            <p className="initial-stop">Initial stop {formatPrice(trade.initial_stop_price, trade.symbol)}, set {formatListTime(trade.initial_stop_set_at, zone)}</p>
+          )}
         </div>
 
         <div className="pager">

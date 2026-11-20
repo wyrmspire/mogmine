@@ -50,7 +50,7 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 | `R-07` | Playbook editor | Medium | `R-05` |
 | `R-08` | Running stats across days | Medium | `R-05` |
 | `R-09` | Challenges: Drawdown Defender and Clean Run ([docs/17](17-challenges.md)) | Medium, four PRs | `OD-37`. **Not** blocked on `R-05`: it runs on the device. |
-| `R-10` | Stop at entry, frozen | Small | `R-03b` |
+| `R-10` | Stop at entry, frozen | **Merged** (#118); used by the price-first form ([docs/20](20-price-first-entry.md)) | `R-03b` |
 
 `R-01`–`R-03`, `R-09` and `R-10` need no backend. `R-04` onward is the data layer. **AI and cross-day stats are blocked on `R-05`**, because today the trades never leave the phone. Challenges are not: they are recomputed from the trades on the device, and only follow you to a second device after `R-05`.
 
@@ -225,6 +225,8 @@ Everything after this step needs it. Today the journal exists only in one phone'
 status      text not null default 'closed' check (status in ('open','closed')),
 exit_time   timestamptz,
 exit_price  numeric,
+initial_stop_price  numeric,
+initial_stop_set_at timestamptz,
 constraint trades_open_has_no_exit check (
   (status = 'open'   and exit_time is null     and exit_price is null) or
   (status = 'closed' and exit_time is not null and exit_price is not null)
@@ -307,6 +309,8 @@ Fixed constraints:
 ---
 
 ## R-10 — Stop at entry, frozen
+
+> **Merged** in #118. The price-first form ([docs/20](20-price-first-entry.md) §2) saves its stop through the same `stopPatch`, risk chips use it too, and a backup restore keeps the device's initial stop (`keepInitialStop`).
 
 **Problem.** `components/AddTradeSheet.tsx` saves every trade with `stop_loss_price: null`. The stop is added later on Trade Detail and stays editable, so `rMultiple` and `initialRiskUsd` can change after the trade is over. Nothing records what the risk was when the trade was taken. Any R-based stat or challenge is only as honest as that edit.
 
