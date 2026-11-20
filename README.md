@@ -95,6 +95,8 @@ Read the planning documents in order for the complete technical and product spec
    The design for roadmap step `R-09`: Drawdown Defender (do not give back more than a dollar limit) and Clean Run (N trades in a row by the rules). Rules, math, golden test cases, the code contract, the screens and what is deferred.
 18. **[18 — Mood Shape](docs/18-mood-shape.md)**  
    The trader's emotional state on a trade as a radar blob: spokes, derived and versioned score records, suggestions from notes that never overwrite the trader, adding a spoke and re-scoring, and comparing shapes with outcomes. Open decision `OD-39`.
+19. **[19 — Design Guide](docs/19-design-guide.md)**  
+   The owner's phone and desktop trade screen mockups, what each part maps to on the roadmap, the four places they conflict with decisions on record (`OD-40`), and where the Mood Shape fits.
 
 ---
 
