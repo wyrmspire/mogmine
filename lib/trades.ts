@@ -65,6 +65,14 @@ export interface TradeRecord {
   /** Null while the trade is open (R-03). Never `0` or the entry price. */
   exit_price: number | null;
   stop_loss_price: number | null;
+  /**
+   * The first stop this trade ever had, frozen when it was set (R-10). Later edits move
+   * `stop_loss_price` only. Null until a stop is first set; records saved before R-10 stay null —
+   * their initial stop is unknown and is never back-filled from `stop_loss_price`.
+   */
+  initial_stop_price: number | null;
+  /** When `initial_stop_price` was captured (ISO). Null with it. */
+  initial_stop_set_at: string | null;
   planned_target_price: number | null;
   key_level_price: number | null;
   quantity: number;
@@ -238,6 +246,27 @@ export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price">):
   const ticks = tradeTicks(trade);
   if (riskTicks == null || ticks == null || !isWholeQuantity(trade.quantity)) return null;
   return ticks / riskTicks;
+}
+
+/**
+ * The patch for setting or changing a trade's stop (R-10). The first stop a trade ever has is
+ * also frozen as its initial stop, stamped with `now` (ISO). Once an initial stop exists this
+ * returns a `stop_loss_price`-only patch, so no later edit — including a backup restore of the
+ * same trade — ever overwrites it.
+ */
+export function stopPatch(
+  trade: Pick<TradeRecord, "initial_stop_price">,
+  price: number | null,
+  now: string,
+): Partial<TradeRecord> {
+  if (price == null || trade.initial_stop_price != null) return { stop_loss_price: price };
+  return { stop_loss_price: price, initial_stop_price: price, initial_stop_set_at: now };
+}
+
+/** R against the frozen initial stop (R-10): the same math as `rMultiple`, on `initial_stop_price`. `null` without one. */
+export function initialRMultiple(trade: Priced & Pick<TradeRecord, "initial_stop_price">): number | null {
+  if (trade.initial_stop_price == null) return null;
+  return rMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
 }
 
 /** A trade with both exit fields set. The chart draws only these until R-03c. */
@@ -690,6 +719,8 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     yahoo_ticker: canonicalTicker || raw.yahoo_ticker || symbol,
     trade_style: classifyTrade(raw.entry_time, raw.exit_time),
     stop_loss_price: null,
+    initial_stop_price: null,
+    initial_stop_set_at: null,
     planned_target_price: null,
     key_level_price: null,
     quantity: 1,

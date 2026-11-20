@@ -7,7 +7,7 @@ import { usePrefs } from "@/lib/prefs";
 import { addTrade } from "@/lib/store";
 import { fromZonedInput, toZonedInput, zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { FUTURES_SPECS, isWholeQuantity, normalizeTrade, rMultiple, specFor, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { FUTURES_SPECS, isWholeQuantity, normalizeTrade, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeDirection, TradeStatus } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft } from "@/lib/ui";
 
@@ -23,6 +23,8 @@ interface Draft {
   exitTime: string;
   entryPrice: string;
   exitPrice: string;
+  /** Optional stop at entry, frozen as the trade's initial stop on save (R-10). Missing on older drafts. */
+  stopPrice?: string;
 }
 
 // Kept while the app is open, so closing the sheet by accident never loses what was typed.
@@ -31,7 +33,7 @@ const DRAFT_KEY = "add-trade";
 function freshDraft(zone: string): Draft {
   const exit = new Date();
   const entry = new Date(exit.getTime() - 30 * 60_000);
-  return { status: "closed", symbol: "MES", direction: "LONG", quantity: "1", entryTime: toZonedInput(entry, zone), exitTime: toZonedInput(exit, zone), entryPrice: "", exitPrice: "" };
+  return { status: "closed", symbol: "MES", direction: "LONG", quantity: "1", entryTime: toZonedInput(entry, zone), exitTime: toZonedInput(exit, zone), entryPrice: "", exitPrice: "", stopPrice: "" };
 }
 
 const toNumber = (text: string) => (text.trim() === "" ? null : Number(text));
@@ -73,6 +75,8 @@ export function AddTradeSheet() {
   const spec = specFor(draft.symbol);
   const entryPrice = toNumber(draft.entryPrice);
   const exitPrice = toNumber(draft.exitPrice);
+  // Optional (R-10): empty stays null and the trade is saved with no stop, as before.
+  const stopPrice = toNumber(draft.stopPrice ?? "");
   // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50).
   // Under Shield the Contracts input is hidden, so an invalid draft quantity cannot be seen or
   // fixed; fall back to 1 there and keep the typed draft untouched for when Shield turns off.
@@ -85,13 +89,14 @@ export function AddTradeSheet() {
   const executionErrors = validateTradeInput({
     symbol: draft.symbol, direction: draft.direction, quantity,
     entry_price: entryPrice ?? Number.NaN, exit_price: isOpenDraft ? null : exitPrice ?? Number.NaN,
-    stop_loss_price: null, planned_target_price: null, key_level_price: null,
+    stop_loss_price: stopPrice, planned_target_price: null, key_level_price: null,
   });
   const errors: Partial<Record<keyof Draft, string>> = {
     symbol: executionErrors.symbol,
     quantity: prefs.shield ? undefined : executionErrors.quantity,
     entryPrice: executionErrors.entry_price,
     exitPrice: executionErrors.exit_price,
+    stopPrice: executionErrors.stop_loss_price,
   };
   if (entryPrice != null && !(entryPrice > 0)) errors.entryPrice = "Enter the entry price";
   if (!isOpenDraft && exitPrice != null && !(exitPrice > 0)) errors.exitPrice = "Enter the exit price";
@@ -105,7 +110,7 @@ export function AddTradeSheet() {
   const show = (key: keyof Draft) => (submitted ? errors[key] : undefined);
 
   const preview = !isOpenDraft && entryPrice != null && exitPrice != null && entryPrice > 0 && exitPrice > 0
-    ? { symbol: draft.symbol, direction: draft.direction, quantity, entry_price: entryPrice, exit_price: exitPrice, stop_loss_price: null }
+    ? { symbol: draft.symbol, direction: draft.direction, quantity, entry_price: entryPrice, exit_price: exitPrice, stop_loss_price: stopPrice }
     : null;
   const previewPnl = preview ? tradePnl(preview) : null;
 
@@ -122,7 +127,9 @@ export function AddTradeSheet() {
       id: crypto.randomUUID(), symbol: draft.symbol, direction: draft.direction, quantity,
       entry_time: entry.toISOString(), ...exitFields,
       entry_price: entryPrice,
-      stop_loss_price: null, planned_target_price: null, key_level_price: null,
+      // A stop typed here is the trade's first: it is frozen as the initial stop at save time (R-10).
+      ...stopPatch({ initial_stop_price: null }, stopPrice, new Date().toISOString()),
+      planned_target_price: null, key_level_price: null,
       note: "",
     });
     addTrade(trade);
@@ -188,6 +195,10 @@ export function AddTradeSheet() {
               {show("exitPrice") && <span className="error">{show("exitPrice")}</span>}
             </label>
             </>}
+            <label className="field"><span>Stop <i>optional</i></span>
+              <input inputMode="decimal" type="number" step={step} placeholder="6841.25" value={draft.stopPrice ?? ""} aria-invalid={!!show("stopPrice")} onChange={(event) => change({ stopPrice: event.target.value })} />
+              {show("stopPrice") && <span className="error">{show("stopPrice")}</span>}
+            </label>
           </div>
           <div className="form-preview" aria-live="polite">
             {preview
