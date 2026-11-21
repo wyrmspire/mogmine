@@ -59,7 +59,7 @@ What exists: `buildShareCard` in [lib/shareCard.ts](../lib/shareCard.ts), 1080×
 
 **Process seal content, interim:** rules followed (`adherence()`), plus the blind answer when there is one (`TAKE AGAIN ✓`, `SMALLER`, `PASS`). A letter grade (`A`–`D`) waits for `OD-46` (c); do not invent a grading formula.
 
-**Chart framing.** Keep the current chart view for export under `AC-10` while `OD-47` is open. The proposed trade-focused crop is part of that decision.
+**Chart framing.** Keep the current chart view for export under `AC-10` while `OD-48` is open. The proposed trade-focused crop is part of that decision.
 
 **Split for PRs:** `CD-1a` pure layout tables and the frame (tests on band heights and Shield copy for all three sizes); `CD-1b` sheet controls (size picker, back toggle) and `390×844` check.
 
