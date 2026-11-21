@@ -52,6 +52,7 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 | `R-08` | Running stats across days (`R-08a` pure selectors, `R-08b` UI) | Medium, two PRs | **Not** blocked on `R-05` ([docs/22](22-development-mode-and-backend-boundary.md)) |
 | `R-09` | Challenges: Drawdown Defender and Clean Run ([docs/17](17-challenges.md)) | **Merged** (`R-09a`–`R-09d`) | `OD-37` |
 | `R-10` | Stop at entry, frozen | **Merged** (#118); used by the price-first form ([docs/20](20-price-first-entry.md)) | — |
+| `CD` | Card system: Trade Card refresh, drills, playbook card ([docs/23](23-card-system.md)) | Medium, six PRs | `OD-46` (interim rule allows `CD-1`, `CD-2`) |
 
 Per [docs/22 — Development Mode and Backend Boundary](22-development-mode-and-backend-boundary.md), do **not** pause local-first product work while Supabase is unconfigured. Only `R-04`–`R-06` require Supabase (`R-06` needs server-stored trades). `R-07` and `R-08` run on device storage (`mogmine-trades-v3` / `mogmine-playbooks-v1`) first and sync to Supabase later in `R-05`.
 
@@ -70,6 +71,12 @@ Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CO
 9. **`UI-2` — Desktop 3-column workstation & toolbar polish (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`):** Refine `>=1024px` workspace without hiding `.trade-levels-card` or regressing `390×844`.
 10. **`UI-3` — Mood at Entry (`OD-39` c, `docs/19` §4):** Optional 1-tap pre-exit mood capture in `AddTradeSheet` / open `TradeDetail`.
 11. **`MD-1` (Issue `#90` `AC-07`) — Expected window coverage in `/api/market-data` & `lib/candles.ts`:** Check `expectedInsideBarTimes` instead of `candles.length >= 4`.
+12. **`CD-1a` — Card frame & Trade Card layout (`lib/shareCard.ts` + tests, [docs/23](23-card-system.md) §2–3, `OD-46`):** Shared frame, `4:5` / `9:16` / `1:1` layout tables, chart at 55–60%, hero R with rules seal, Shield copy tested for all sizes.
+13. **`CD-1b` — Trade Card sheet controls (`components/TradeCardSheet.tsx`):** Size picker, back side, Share opens with Shield on; `390×844` check.
+14. **`CD-2a` — Drill decks, pure (`lib/drills.ts` + tests, docs/23 §4):** Eligibility (closed, not sample, bars cached, older than 7 days), warm-up / playbook / misses decks, chart cut at entry, scoring.
+15. **`CD-2b` — Drill store & backup (`lib/drill-store.ts`, `lib/store.ts`):** `mogmine-drills-v1` + `user_id`, in journal backup/restore, never writes `take_again`.
+16. **`CD-2c` — Drill screen:** Sealed front, *Take it / Smaller / Pass*, reveal (instant under reduced motion), missing-bars skip count.
+17. **`CD-3` — Playbook card (docs/23 §5):** After `R-07b` and `R-08a`.
 
 ---
 

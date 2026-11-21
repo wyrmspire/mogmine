@@ -8,6 +8,9 @@ Speed during the trading session and depth after the market closes require compl
 
 From any trade view, tapping the **`Trade Card`** button generates a high-craft, self-contained summary card designed to look sharp on a mobile screen and export cleanly as a PNG for personal archives, Discord study groups, or X/Twitter.
 
+> [!NOTE]
+> The Trade Card refresh, the shared card frame, and new card types (drill, playbook, day, plan, mistake) are in [23 — Card System](23-card-system.md) (`OD-46`).
+
 ### Card Visual Anatomy
 
 ```text
