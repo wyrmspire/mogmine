@@ -720,4 +720,3 @@ test("regression (cycle 2): legacy stop move and cancellation preserve inferred 
   const cancelEv = cancelDoc.events.find((e) => e.type === "cancel");
   assert.equal(cancelEv?.type === "cancel" ? cancelEv.basis : null, "inferred");
 });
-
