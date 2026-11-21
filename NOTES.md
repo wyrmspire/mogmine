@@ -51,6 +51,18 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — Codex — reviewed R-09d, App shell and notes lane released
+Did:      Reviewed the worker's uncommitted detail route against docs/17 and #80. Fixed saved drawdown row values, deciding labels for unavailable trades, end-time comparison, direct-route finalization, and neutral drawdown accents. Added a Today history link for manually ended attempts (OD-45).
+Files:    `app/challenges/[id]/page.tsx`, `app/globals.css`, `components/ChallengeCard.tsx`, `components/ChallengeDetail.tsx`, `docs/17-challenges.md`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` 303 passed, 0 failed. `npm run typecheck` passed. `npm run lint` 0 errors, 1 existing PostCSS warning. `npm run build` generated 8/8 pages and included the dynamic challenge route. Local Chromium at 390×844 passed Today navigation and restart, saved breach after edit/deletion, post-end cutoff, Shield, Clean Run shapes and issue links, manual end/cancel/reopen, direct-route pass, and missing route. Zero horizontal overflow and page errors.
+Left:     R-09d is complete. The floor roadmap and owner decisions govern subsequent work.
+
+### 2026-11-21 — agent (Antigravity) — R-09d challenge detail screen (`/challenges/[id]`), App shell and notes lane released
+Did:      Built `components/ChallengeDetail.tsx` and dynamic route `app/challenges/[id]/page.tsx` (docs/17 §6: headline metrics, inline SVG step path for equity and floor, Clean Run dot history with shapes/colors, scored trades list with deciding trade badge, issues list with trade fix links, fine print disclosures, manual end confirmation with frozen final result, post-end edit difference detection, and past attempts list). Wired whole-row links in `components/ChallengeCard.tsx` while keeping grading links and actions distinct. Added detail styling in `app/globals.css`.
+Files:    `app/challenges/[id]/page.tsx` (new), `components/ChallengeDetail.tsx` (new), `components/ChallengeCard.tsx`, `app/globals.css`, `NOTES.md`.
+Verified: `npm test` 303 passed, 0 failed; `npm run typecheck` clean; `npm run lint` 0 errors, 1 existing PostCSS warning; `npm run build` 8/8 static/dynamic routes; `git diff --check origin/main` clean. Headless Chromium at 390×844: verified Today whole-row navigation, Drawdown step line & floor, Clean Run dot shapes, deciding trade label, trade difference banner after post-end edit, issue links to trade details, manual end confirmation & cancellation, Shield mode ($ masking), zero horizontal overflow (`scrollWidth === clientWidth === 390`), zero page errors.
+Left:     R-09 suite (a–d) is now feature complete. Next planned priorities are `R-04` (candle archive activation/rebase) or `R-03b`/`R-03c` (open trades).
+
 ### 2026-11-21 — Codex — reviewed R-09c, App shell and notes lane released
 Did:      Freeze pass/fail, enable retry with prior rules, show provisional and grading states, wrap long dot rows, and validate whole-number targets. Documented completed-row visibility in OD-44.
 Files:    `components/ChallengeCard.tsx`, `components/ChallengeSetupSheet.tsx`, `components/TodayScreen.tsx`, `lib/ui.ts`, `app/globals.css`, `docs/17-challenges.md`, `DECISIONS.md`, `NOTES.md`.
