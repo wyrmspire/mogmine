@@ -126,13 +126,15 @@ function DrawdownRow({
 
   return (
     <div className={`challenge-row ${isBreached ? "failed" : ""}`}>
-      <div className="challenge-row-head">
-        <span className="challenge-name">DRAWDOWN DEFENDER</span>
-        <span className="challenge-header-stat num">
-          {sessionsDone} / {targetSessions} days
-        </span>
-      </div>
-      {renderContent()}
+      <Link href={`/challenges/${encodeURIComponent(challenge.id)}`} className="challenge-row-link" aria-label={`Drawdown Defender challenge details`}>
+        <div className="challenge-row-head">
+          <span className="challenge-name">DRAWDOWN DEFENDER</span>
+          <span className="challenge-header-stat num">
+            {sessionsDone} / {targetSessions} days
+          </span>
+        </div>
+        {renderContent()}
+      </Link>
       {result.state === "failed" && onRestart && (
         <button type="button" className="btn-ghost challenge-failed-action" onClick={onRestart}>
           Start again
@@ -159,31 +161,33 @@ function CleanRunRow({
 
   return (
     <div className="challenge-row">
-      <div className="challenge-row-head">
-        <span className="challenge-name">CLEAN RUN</span>
-        <span className="challenge-header-stat num">best {bestRun}</span>
-      </div>
-
-      {result.state === "passed" ? (
-        <div className="challenge-status-passed">
-          <span>Done: {targetTrades} in a row by the rules</span>
-          <span className="challenge-badge-check" aria-hidden="true">✓</span>
+      <Link href={`/challenges/${encodeURIComponent(challenge.id)}`} className="challenge-row-link" aria-label="Clean Run challenge details">
+        <div className="challenge-row-head">
+          <span className="challenge-name">CLEAN RUN</span>
+          <span className="challenge-header-stat num">best {bestRun}</span>
         </div>
-      ) : (
-        <>
-          <div className="challenge-row-metrics num">{run} / {targetTrades} by the rules</div>
-          {ungraded.length > 0 && (
-            <div className="challenge-grading-note">
-              <span>{ungraded.length} {ungraded.length === 1 ? "needs" : "need"} grading</span>
-              {ungraded.map(({ trade_id }, index) => (
-                <Link key={trade_id} href={`/trades/${encodeURIComponent(trade_id)}`}>
-                  Grade trade {index + 1}
-                </Link>
-              ))}
-            </div>
-          )}
-          <CleanRunDots target={targetTrades} run={run} />
-        </>
+
+        {result.state === "passed" ? (
+          <div className="challenge-status-passed">
+            <span>Done: {targetTrades} in a row by the rules</span>
+            <span className="challenge-badge-check" aria-hidden="true">✓</span>
+          </div>
+        ) : (
+          <>
+            <div className="challenge-row-metrics num">{run} / {targetTrades} by the rules</div>
+            <CleanRunDots target={targetTrades} run={run} />
+          </>
+        )}
+      </Link>
+      {result.state !== "passed" && ungraded.length > 0 && (
+        <div className="challenge-grading-note">
+          <span>{ungraded.length} {ungraded.length === 1 ? "needs" : "need"} grading</span>
+          {ungraded.map(({ trade_id }, index) => (
+            <Link key={trade_id} href={`/trades/${encodeURIComponent(trade_id)}`}>
+              Grade trade {index + 1}
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -223,6 +227,14 @@ export function ChallengeCard({ shield }: { shield: boolean }) {
   }, [hydrated, journal.hydrated, now, results]);
 
   if (!hydrated || onlySamples) return null;
+
+  const manualHistory = (["drawdown", "clean_run"] as const).flatMap((kind) => {
+    if (results.some(({ challenge }) => challenge.rules.kind === kind)) return [];
+    const latest = challenges
+      .filter((challenge) => challenge.rules.kind === kind && challenge.ended_at !== null)
+      .sort((a, b) => Date.parse(b.ended_at!) - Date.parse(a.ended_at!))[0];
+    return latest ? [latest] : [];
+  });
 
   const availableKind = (["drawdown", "clean_run"] as const).find((kind) =>
     !results.some(({ challenge }) => challenge.rules.kind === kind && challenge.ended_at === null),
@@ -271,6 +283,12 @@ export function ChallengeCard({ shield }: { shield: boolean }) {
           )}
         </div>
       )}
+
+      {manualHistory.map((attempt) => (
+        <Link key={attempt.id} className="challenge-past-row" href={`/challenges/${encodeURIComponent(attempt.id)}`}>
+          Past {attempt.rules.kind === "drawdown" ? "Drawdown Defender" : "Clean Run"} attempts
+        </Link>
+      ))}
 
       {setup && <ChallengeSetupSheet initialKind={setup.kind} initialRules={setup.rules} onClose={closeSetup} />}
     </section>

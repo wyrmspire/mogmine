@@ -167,7 +167,7 @@ export function evaluateChallenge(definition: ChallengeDefinition, trades: Trade
 ```
 
 - An `unpriceable` trade is left out of the drawdown path, sets `provisional`, and blocks a pass. A breach on the trades that can be priced is still shown, as an estimate in the scored path, and the state stays `active` until the trade is fixed.
-- `evaluateChallenge` on an ended attempt is never called for display: show `definition.final`. If recomputing gives a different answer, the detail screen adds one line: "A trade was edited after this ended. Today's numbers differ." Both are shown; the saved one is not replaced.
+- `evaluateChallenge` on an ended attempt is never called for display: show `definition.final`. If recomputing as of the saved end time gives a different answer, the detail screen adds one line: "A trade was edited after this ended. Today's numbers differ." Both are shown; the saved one is not replaced.
 
 **Storage,** in a small `lib/challenge-store.ts` shaped like `lib/prefs.ts`:
 - `localStorage` key `mogmine-challenges-v1`, an array of `ChallengeDefinition`.
@@ -181,7 +181,7 @@ All of it follows [AGENTS.md §4](../AGENTS.md#4-mobile-first-verification-check
 
 ### Today card
 
-One card under the day summary in `components/TodayScreen.tsx`. One row per active challenge, two at most. R-09d makes the whole row a link to the detail screen, with in-row trade links and actions as separate targets. R-09c shows the latest passed or failed attempt of each kind when there is no active attempt of that kind.
+One card under the day summary in `components/TodayScreen.tsx`. One row per active challenge, two at most. R-09d makes the whole row a link to the detail screen, with in-row trade links and actions as separate targets. R-09c shows the latest passed or failed attempt of each kind when there is no active attempt of that kind. When neither row is available, Today links to the latest manually ended attempt of that kind, whose detail links to earlier attempts.
 
 ```
 ┌──────────────────────────────────────────────┐
