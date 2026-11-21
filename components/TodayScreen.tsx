@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AccountCards } from "./AccountCard";
+import { ChallengeCard } from "./ChallengeCard";
 import { DayHeader } from "./DayHeader";
 import { TradeRow } from "./TradeRow";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
@@ -65,11 +66,11 @@ export function TodayScreen() {
 
           <AccountCards shield={prefs.shield} />
 
+          {today && <DaySummary group={today} shield={prefs.shield} />}
+          <ChallengeCard shield={prefs.shield} />
+
           {today ? (
-            <>
-              <DaySummary group={today} shield={prefs.shield} />
-              <div className="trade-list">{today.trades.map((trade) => <TradeRow key={trade.id} trade={trade} zone={prefs.timeZone} shield={prefs.shield} onOpen={open(today)} />)}</div>
-            </>
+            <div className="trade-list">{today.trades.map((trade) => <TradeRow key={trade.id} trade={trade} zone={prefs.timeZone} shield={prefs.shield} onOpen={open(today)} />)}</div>
           ) : (
             <div className="specular-card empty-state">
               <h3>{closed ? "Nothing to log yet" : "No trades yet today"}</h3>

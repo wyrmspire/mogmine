@@ -51,6 +51,18 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — Codex — reviewed R-09c, App shell and notes lane released
+Did:      Freeze pass/fail, enable retry with prior rules, show provisional and grading states, wrap long dot rows, and validate whole-number targets. Documented completed-row visibility in OD-44.
+Files:    `components/ChallengeCard.tsx`, `components/ChallengeSetupSheet.tsx`, `components/TodayScreen.tsx`, `lib/ui.ts`, `app/globals.css`, `docs/17-challenges.md`, `DECISIONS.md`, `NOTES.md`.
+Verified: Local Chromium at 390×844 reported all Today states with Shield on/off, grading link, 50 dots, setup validation, focus trap, frozen pass/fail, restart, blocked storage, 44px targets, zero overflow and zero page errors.
+Left:     R-09d adds the detail route, whole-row navigation, scoring history, and manual end confirmation.
+
+### 2026-11-21 — agent (Antigravity) — R-09c Today challenge card & setup sheet (docs/17), App shell and notes lane released
+Did:      Built `components/ChallengeCard.tsx` (Drawdown Defender bar/estimate/close/breach/Shield/passed/failed states, Clean Run gold process dots, single/multi active rows, storage blocked banner fallback) and `components/ChallengeSetupSheet.tsx` (Drawdown and Clean Run presets, plain rule sentence, validation). Wired into `components/TodayScreen.tsx` (suppressed when only sample trades exist per docs/17 §6). Added reactive `now` to `lib/ui.ts` `useToday`.
+Files:    `components/ChallengeCard.tsx` (new), `components/ChallengeSetupSheet.tsx` (new), `components/TodayScreen.tsx`, `lib/ui.ts`, `app/globals.css`, `NOTES.md`.
+Checked:  `npm test` 303 passed, 0 failed; `npm run typecheck` clean; `npm run lint` 0 errors, 1 existing PostCSS warning; `npm run build` 8/8 static pages; `git diff --check origin/main` clean. Headless Chrome at 390×844: verified sample trade suppression, start challenge link, setup sheet validation, Drawdown submission, meter & close warnings, Clean Run dots, Shield mode ($ masking), storage blocked warning banner, zero horizontal overflow (`scrollWidth === clientWidth === 390`).
+Left:     Unblocks `R-09d` (detail screen `/challenges/[id]`).
+
 ### 2026-11-21 — Codex — reviewed R-09b, Data lane released
 Did:      Fixed legacy and challenge-only restores, duplicate active imports, frozen results, and validation. The local store exposes whether storage succeeded.
 Files:    `lib/challenge-store.ts`, `lib/__tests__/challenge-store.test.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`, `docs/17-challenges.md`, `NOTES.md`.

@@ -15,7 +15,7 @@ A challenge is a goal the trader trades through, scored by code from the trader'
 | **Drawdown Defender** | Not giving money back | Gross dollars | A loss boundary rewards restraint, and Topstep's own limits are in dollars. |
 | **Clean Run** | Trading the plan, win or lose | Trades by the rules | It is what the owner asked for ("match the setups, get impeccable") and uses the checklist and tags that already exist. |
 
-Both run **live on the device**, from the trades in `mogmine-trades-v3`. Progress is **recomputed from the trades every time**; only the challenge's settings are saved. So this does not wait for Supabase (`R-05`).
+Both run **live on the device**, from the trades in `mogmine-trades-v3`. Active progress is **recomputed from the trades**. Settings are frozen at start, and the result is saved when the attempt ends. So this does not wait for Supabase (`R-05`).
 
 **Deferred, each with the thing it waits for:**
 
@@ -181,7 +181,7 @@ All of it follows [AGENTS.md §4](../AGENTS.md#4-mobile-first-verification-check
 
 ### Today card
 
-One card under the day summary in `components/TodayScreen.tsx`. One row per active challenge, two at most. The whole row is a link to the detail screen.
+One card under the day summary in `components/TodayScreen.tsx`. One row per active challenge, two at most. R-09d makes the whole row a link to the detail screen, with in-row trade links and actions as separate targets. R-09c shows the latest passed or failed attempt of each kind when there is no active attempt of that kind.
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -217,7 +217,7 @@ A bottom sheet like `AddTradeSheet`, opened from "Start a challenge".
 
 1. Pick one: **Drawdown Defender** or **Clean Run**, each with its one-line rule from §3 and §4.
 2. Settings: two fields. Drawdown: sessions, and the dollar limit (required, no default). Clean Run: how many in a row, and which playbooks count (checkboxes).
-3. **A plain sentence of the frozen rule, built from the fields,** before the button: "From now, trade 20 sessions without giving back more than $300.00 from your high point. Gross, fees not included. Trades already open do not count."
+3. **A plain sentence of the frozen rule, built from the fields,** before the button: "From now, trade 20 sessions without giving back $300.00 from your high point. Gross, fees not included. Trades already open do not count."
 4. Button: `Start challenge`. Invalid settings disable it and say why.
 
 ### Detail screen
