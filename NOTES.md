@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — agent (Antigravity) — cycle 2 review & regression fixes (#33), Core math lane
+Did:      Fixed initial R to capture stop in force at entry fill even when pre-entry stop was modified (docs/15 §3.3). Changed `fromLegacy` stop modify/cancel events to `basis: "inferred"` because legacy records don't store post-freeze edit timestamps. Added regression tests for both.
+Files:    `lib/trade-document.ts`, `lib/__tests__/trade-document.test.ts`, `NOTES.md`.
+Checked:  `npm test` (286 passed, 0 failed), `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning).
+Left:     Unblocks #34 (`buildMarks` display list) and #35 (`observeTrade`).
+
 ### 2026-11-21 — agent (Antigravity) — issue #33 (`deriveTrade`, `fromLegacy`, `mogmine.trade.v1`), Core math lane
 Did:      Built `lib/trade-document.ts` (pure, no I/O, no candles, no DB tables per `OD-30`): `mogmine.trade.v1` types, `deriveTrade(doc, spec)` (FIFO integer-tick P&L, B-32 initial risk against first stop in force, D-010 scratch 0.1R/2-tick rule, stepped stop path with widened/locked flags, working orders, planned R:R per target, `void` exclusion, `stop_removed_while_open`/`exit_past_stop` facts, non-throwing structural errors) and `fromLegacy(record)` (zero-loss conversion incl. R-10 moved stops, R-03 open trades, exact-match exit reason inference).
 Files:    `lib/trade-document.ts`, `lib/__tests__/trade-document.test.ts` (new), `docs/15-trade-document-and-render-grammar.md`, `NOTES.md`.
