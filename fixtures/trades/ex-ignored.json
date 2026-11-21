@@ -10,7 +10,7 @@
   "is_sample": true,
   "events": [
     { "seq": 1, "t": "2026-11-12T15:34:00Z", "type": "fill", "basis": "broker", "order": "o1", "role": "entry", "qty": 2, "price": 7600.00 },
-    { "seq": 2, "t": "2026-11-12T15:34:01Z", "type": "order", "basis": "broker", "order": "o2", "role": "stop", "kind": "stop", "qty": 2, "price": 7595.00 },
+    { "seq": 2, "t": "2026-11-12T15:34:01Z", "type": "order", "basis": "broker", "order": "o2", "opening_entry_seq": 1, "role": "stop", "kind": "stop", "qty": 2, "price": 7595.00 },
     { "seq": 3, "t": "2026-11-12T15:39:20Z", "type": "cancel", "basis": "broker", "order": "o2" },
     { "seq": 4, "t": "2026-11-12T15:46:05Z", "type": "fill", "basis": "broker", "role": "exit", "qty": 2, "price": 7592.00, "reason": "manual" }
   ]

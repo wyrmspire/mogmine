@@ -10,7 +10,7 @@
   "is_sample": true,
   "events": [
     { "seq": 1, "t": "2026-11-12T15:34:00Z", "type": "fill", "basis": "broker", "order": "o1", "role": "entry", "qty": 2, "price": 7600.00 },
-    { "seq": 2, "t": "2026-11-12T15:34:01Z", "type": "order", "basis": "broker", "order": "o2", "role": "stop", "kind": "stop", "qty": 2, "price": 7595.00 },
+    { "seq": 2, "t": "2026-11-12T15:34:01Z", "type": "order", "basis": "broker", "order": "o2", "opening_entry_seq": 1, "role": "stop", "kind": "stop", "qty": 2, "price": 7595.00 },
     { "seq": 3, "t": "2026-11-12T15:34:30Z", "type": "note", "basis": "stated", "text": "Voice memo: bored after an hour of chop and took the long anyway. Once in I was calm and trailed it patiently." },
     { "seq": 4, "t": "2026-11-12T15:47:30Z", "type": "modify", "basis": "broker", "order": "o2", "price": 7601.00 },
     { "seq": 5, "t": "2026-11-12T15:58:10Z", "type": "modify", "basis": "broker", "order": "o2", "price": 7606.00 },
