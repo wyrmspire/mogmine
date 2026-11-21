@@ -93,9 +93,12 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
     setChecking(false);
   };
 
+  const undatedCount = summary.issues.filter((issue) => issue.reason === "undated").length;
+  const unpricedCount = summary.issues.length - undatedCount;
   const notes = [
     summary.openTrades ? `${summary.openTrades} open, not counted yet` : "",
-    summary.issues.length ? `${summary.issues.length} ${summary.issues.length === 1 ? "trade" : "trades"} could not be priced` : "",
+    unpricedCount ? `${unpricedCount} ${unpricedCount === 1 ? "trade" : "trades"} could not be priced` : "",
+    undatedCount ? `${undatedCount} ${undatedCount === 1 ? "trade needs" : "trades need"} a valid exit date` : "",
     summary.adjustments_cents && !shield ? `${formatCents(summary.adjustments_cents)} adjustments` : "",
   ].filter(Boolean);
 

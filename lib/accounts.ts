@@ -90,7 +90,7 @@ export type LedgerRow =
   | { kind: "trade"; trade_id: string; at: string; session: string; delta_cents: number; balance_cents: number; floor_cents: number | null }
   | { kind: "check"; check_id: string; at: string; session: string; delta_cents: number; balance_cents: number; floor_cents: number | null };
 
-export type AccountIssue = { trade_id: string; reason: "unpriceable" };
+export type AccountIssue = { trade_id: string; reason: "unpriceable" | "undated" };
 
 export interface AccountSummary {
   account_id: string;
@@ -145,9 +145,11 @@ export function accountSummary(account: TradingAccount, trades: TradeRecord[], c
   let openTrades = 0;
   for (const trade of own) {
     if (trade.exit_time == null) { openTrades += 1; continue; }
+    const exitMs = Date.parse(trade.exit_time);
+    if (!Number.isFinite(exitMs)) { issues.push({ trade_id: trade.id, reason: "undated" }); continue; }
     const cents = pnlCents(trade);
     if (cents == null) { issues.push({ trade_id: trade.id, reason: "unpriceable" }); continue; }
-    items.push({ kind: "trade", at: trade.exit_time, ms: Date.parse(trade.exit_time), id: trade.id, cents });
+    items.push({ kind: "trade", at: trade.exit_time, ms: exitMs, id: trade.id, cents });
   }
   for (const check of checks) {
     if (check.account_id !== account.id || !Number.isFinite(check.balance_cents)) continue;

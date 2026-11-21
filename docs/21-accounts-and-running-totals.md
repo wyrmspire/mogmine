@@ -33,7 +33,7 @@ interface TradingAccount {
 `accountSummary(account, trades, checks, now)` is pure, with `now` as a parameter. It uses the same rules as docs/17 §2, so the account card and Drawdown Defender share one engine:
 
 - **Counted:** real, closed trades in this account. Samples never count. Open trades are counted as "open" and have no result (`OD-38`). A trade whose P&L cannot be computed is listed as an issue, never counted as $0.
-- **Order:** by exit time, then by id. At the same instant a trade comes before a balance check. Each trade lands on the session it closed in (`sessionDate(exit_time)`).
+- **Order:** by exit time, then by id. At the same instant a trade comes before a balance check. Each trade lands on the session it closed in (`sessionDate(exit_time)`). An invalid exit date leaves the trade out of the ledger and raises an undated-trade notice (OD-47).
 - **Money:** integer cents, and gross (fees are not in the data). Balance = start + closed trades + balance-check adjustments.
 - **High point:** the starting balance counts as the first peak.
 - **Loss limit:** the floor is `start − max_loss` (`static`), `peak − max_loss` (`trailing`, peak after any closed trade), or `peak − max_loss` with the peak taken only at session ends (`trailing_eod`). For `trailing_eod`, the current session counts only once it is over. Reaching the floor exactly counts as a breach, and the first breach stays recorded even if the balance recovers.

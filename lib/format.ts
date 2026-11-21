@@ -58,6 +58,7 @@ export function formatTicks(ticks: number) {
 
 /** Two units at most: `48s`, `42m 10s`, `42m`, `3h 05m`. */
 export function formatDuration(totalSeconds: number) {
+  if (!Number.isFinite(totalSeconds)) return "—";
   const seconds = Math.max(0, Math.round(totalSeconds));
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) {

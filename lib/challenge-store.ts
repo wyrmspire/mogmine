@@ -86,7 +86,7 @@ export function sanitizeChallengeResult(raw: unknown): ChallengeResult | undefin
   if (obj.decided_by !== null && typeof obj.decided_by !== "string") return undefined;
   if (!isFiniteNumber(obj.excluded_before_start)) return undefined;
   if (!obj.issues.every((issue) => issue && typeof issue.trade_id === "string"
-    && ["open", "unpriceable", "ungraded"].includes(issue.reason))) return undefined;
+    && ["open", "unpriceable", "ungraded", "undated"].includes(issue.reason))) return undefined;
   if (!obj.points.every((point) => point && typeof point.trade_id === "string"
     && isFiniteNumber(point.closed_at) && typeof point.session === "string"
     && (point.read === undefined || ["clean", "broken", "off_plan"].includes(point.read))

@@ -36,7 +36,7 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 | Accounts & Mood | Complete on device (`docs/21`, `docs/18`). |
 | AI | No AI code and no endpoint an assistant can call (`R-06`). |
 | Playbooks | Four hardcoded setups sharing one checklist (`lib/playbooks.ts`). No editor (`R-07`). |
-| Stats | Per-day only (`dayStats` in `lib/selectors.ts`). Nothing across days (`R-08`). |
+| Stats | Daily and running stats on Today. Running stats include rolling windows and all-time playbook and tag breakdowns (`R-08`). |
 
 ## 2. The order
 
@@ -49,7 +49,7 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 | `R-05` | Trades stored in Supabase | Large | `R-03`, `R-04` |
 | `R-06` | Read-only assistant endpoint | Medium | `R-05`, `OD-19` |
 | `R-07` | Playbook editor (`R-07a` local store, `R-07b` editor; syncs in `R-05`) | Medium, two PRs | **Not** blocked on `R-05` ([docs/22](22-development-mode-and-backend-boundary.md)) |
-| `R-08` | Running stats across days (`R-08a` pure selectors, `R-08b` UI) | Selectors built, UI next | **Not** blocked on `R-05` ([docs/22](22-development-mode-and-backend-boundary.md)) |
+| `R-08` | Running stats across days (`R-08a` pure selectors, `R-08b` UI) | Done on Today | **Not** blocked on `R-05` ([docs/22](22-development-mode-and-backend-boundary.md)) |
 | `R-09` | Challenges: Drawdown Defender and Clean Run ([docs/17](17-challenges.md)) | **Merged** (`R-09a`–`R-09d`) | `OD-37` |
 | `R-10` | Stop at entry, frozen | **Merged** (#118); used by the price-first form ([docs/20](20-price-first-entry.md)) | — |
 | `CD` | Card system: Trade Card refresh, drills, playbook card ([docs/23](23-card-system.md)) | Medium, six PRs | `OD-46` (interim rule allows `CD-1`, `CD-2`) |
@@ -61,7 +61,7 @@ Per [docs/22 — Development Mode and Backend Boundary](22-development-mode-and-
 Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CONTRIBUTING.md` §3):
 
 1. **`R-08a` — Pure running stats (`lib/selectors.ts` + tests), done:** Cross-day, per-playbook, per-tag, rolling windows (last 20, week, month). Exclude `is_sample` and `open`; skip `rMultiple === null` and count skipped; gross only.
-2. **`R-08b` — Running stats UI:** Summary view on Today or `/feed`, `390×844` + desktop, Shield-safe, gross-labelled.
+2. **`R-08b` — Running stats UI, done:** Summary card on Today, `390×844` + desktop, Shield-safe, gross-labelled.
 3. **`TD-1` (Issue `#35` pure) — `observeTrade` (`docs/15` §3.3):** Bar observer over `DerivedTrade` + golden tests on `fixtures/trades/ex-*.json`.
 4. **`TD-2` (Issue `#34` pure) — `buildMarks` (`docs/15` §3.4):** Display list builder (`D-010` fills-only look; no purple outlines) + golden tests on all 7 `ex-*.json` fixtures.
 5. **`TD-3` (Issue `#34` canvas) — `PositionBoxPrimitive` paints `Mark[]`:** Stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
@@ -307,11 +307,11 @@ Today `lib/playbooks.ts` holds four fixed setups that share `STANDARD_RULES`. Bu
 
 Extend `lib/selectors.ts`. Pure functions with tests (`R-08a`), then a screen/card (`R-08b`). Runs live from device trades (`mogmine-trades-v3`, [docs/22](22-development-mode-and-backend-boundary.md)); does not wait for `R-05`:
 
-- Per playbook and per quick tag: trade count, win rate, average R, total R, rule adherence (`adherence()` in `lib/trades.ts`). A trade counts once per tag.
+- All-time breakdowns per playbook and per quick tag: trade count, win rate, average R, total R, rule adherence (`adherence()` in `lib/trades.ts`). A trade counts once per tag.
 - Rolling windows: last 20 by exit time (ties by id), this session week (Monday to Friday), this session month. The caller passes the current instant to `runningStats(trades, now)`. Calendar windows use the New York session date at exit. A closed trade with an invalid exit timestamp stays in all-time totals and is counted as undated for the rolling windows (`OD-47`).
 - **Excluded always:** sample trades (`is_sample`), open trades (`R-03`).
 - R-based numbers skip trades for which `rMultiple` is `null` and show the skip count. A scratch with a valid stop contributes `0R`.
-- Report gross figures and label them gross (issue #61). Win rate uses priced trades. Show the priced denominator and an incomplete indication when any trade could not be priced.
+- Report gross figures and label them gross (issue #61). Win rate uses priced trades. Show the priced denominator and an incomplete indication when any trade could not be priced. If no trade can be priced, display `—` for both gross P&L and win rate. Shield hides gross dollars in the summaries and breakdowns (UX-64).
 
 ---
 

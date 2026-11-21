@@ -144,8 +144,9 @@ async function loadSampleCandles(trade: TradeRecord, signature: string) {
 /** True only after the hindsight window has closed and the cached bars do not reach that close. */
 export function cachedCandlesNeedRefetch(trade: Pick<TradeRecord, "exit_time">, stored: StoredCandles, now: number) {
   // An open trade has no hindsight window: it refreshes on the R-02 five-minute rule instead (R-03c).
-  if (trade.exit_time == null) return false;
-  const windowClose = sessionCloseUtc(trade.exit_time);
+  const exit = trade.exit_time == null ? NaN : Date.parse(trade.exit_time);
+  if (!Number.isFinite(exit)) return false;
+  const windowClose = sessionCloseUtc(exit);
   if (now <= windowClose) return false;
   const lastBar = stored.candles.reduce((latest, bar) => Math.max(latest, bar.time), 0);
   const barMs = TIMEFRAME_MINUTES[stored.baseTimeframe] * 60_000;
@@ -178,7 +179,9 @@ export function nextCandleRetryAt(
     const entryFresh = trade.entry_time != null && now - Date.parse(trade.entry_time) < FRESH_EXIT_MS;
     return lastAttemptAt + (entryFresh ? MINUTE_MS : 15 * MINUTE_MS);
   }
-  const sessionClosed = now > sessionCloseUtc(trade.exit_time);
+  const exit = Date.parse(trade.exit_time);
+  if (!Number.isFinite(exit)) return null;
+  const sessionClosed = now > sessionCloseUtc(exit);
   const reachesClose = !cachedCandlesNeedRefetch(trade, {
     signature: "",
     candles: entry.candles,
@@ -285,6 +288,13 @@ export function ensureCandles(trade: TradeRecord, force = false) {
   }
 
   if (typeof window === "undefined") return;
+  // An undated legacy exit cannot anchor candles (OD-47).
+  if (trade.exit_time != null && !Number.isFinite(Date.parse(trade.exit_time))) {
+    if (existing?.signature !== signature) {
+      put(trade.id, { status: "none", candles: [], source: null, baseTimeframe: "1m", fetching: false, signature, lastAttemptAt: 0 });
+    }
+    return;
+  }
   const coverageRefresh = existing?.signature === signature && existing.status === "ready" && existing.source === "Yahoo Finance"
     && cachedCandlesNeedRefetch(trade, {
       signature,

@@ -26,6 +26,7 @@ export interface ChallengeDefinition {
 export type ChallengeIssue =
   | { trade_id: string; reason: "open" }
   | { trade_id: string; reason: "unpriceable" } // tradePnl returned null
+  | { trade_id: string; reason: "undated" }
   | { trade_id: string; reason: "ungraded" }; // Clean Run only
 
 export interface ChallengePoint {
@@ -89,7 +90,12 @@ export function evaluateChallenge(
       continue;
     }
 
-    inScopeClosedTrades.push({ trade, exitMs: Date.parse(trade.exit_time) });
+    const exitMs = Date.parse(trade.exit_time);
+    if (!Number.isFinite(exitMs)) {
+      issues.push({ trade_id: trade.id, reason: "undated" });
+      continue;
+    }
+    inScopeClosedTrades.push({ trade, exitMs });
   }
 
   // Order is by exit_time, then by id for ties (docs/17 §2 rule 4)
@@ -169,7 +175,8 @@ function evaluateDrawdown(
   let state: "active" | "passed" | "failed" = "active";
   let decidedBy: string | null = null;
 
-  if (failedAtTradeId != null && !issues.some((issue) => issue.reason === "unpriceable")) {
+  const incompletePath = issues.some((issue) => issue.reason === "unpriceable" || issue.reason === "undated");
+  if (failedAtTradeId != null && !incompletePath) {
     state = "failed";
     decidedBy = failedAtTradeId;
   } else if (!provisional && lastCountedTradeExitMs != null && activeSessions.size >= rules.sessions) {

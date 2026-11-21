@@ -137,6 +137,7 @@ export interface ChallengeDefinition {
 export type ChallengeIssue =
   | { trade_id: string; reason: "open" }
   | { trade_id: string; reason: "unpriceable" }     // tradePnl returned null
+  | { trade_id: string; reason: "undated" }         // invalid exit date
   | { trade_id: string; reason: "ungraded" };       // Clean Run only
 
 export interface ChallengePoint {                    // one per scored trade, in order
@@ -167,6 +168,7 @@ export function evaluateChallenge(definition: ChallengeDefinition, trades: Trade
 ```
 
 - An `unpriceable` trade is left out of the drawdown path, sets `provisional`, and blocks a pass. A breach on the trades that can be priced is still shown, as an estimate in the scored path, and the state stays `active` until the trade is fixed.
+- An in-scope trade with an invalid exit date is listed as `undated` and omitted from the scored path. It keeps either challenge provisional, including a Drawdown Defender breach estimate, until the trade has a valid exit date (OD-47).
 - `evaluateChallenge` on an ended attempt is never called for display: show `definition.final`. If recomputing as of the saved end time gives a different answer, the detail screen adds one line: "A trade was edited after this ended. Today's numbers differ." Both are shown; the saved one is not replaced.
 
 **Storage,** in a small `lib/challenge-store.ts` shaped like `lib/prefs.ts`:

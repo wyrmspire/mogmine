@@ -44,6 +44,28 @@ function makeTrade(overrides: Partial<TradeRecord> = {}): TradeRecord {
   };
 }
 
+test("an undated trade keeps both challenge paths provisional (OD-47)", () => {
+  const undated = makeTrade({ id: "undated", exit_time: "invalid-time" });
+  const rules: ChallengeDefinition["rules"][] = [
+    { kind: "drawdown", sessions: 1, max_drawdown_cents: 5_000 },
+    { kind: "clean_run", target_trades: 1, playbook_ids: ["pb-trend"] },
+  ];
+  for (const rule of rules) {
+    const def: ChallengeDefinition = {
+      id: "undated-case", user_id: "test-user", rules: rule,
+      started_at: "2026-11-17T14:00:00Z", ended_at: null, calc_version: CHALLENGE_CALC_VERSION,
+    };
+    const known = makeTrade({ id: "dated", exit_price: 5990 });
+    const now = Date.parse("2026-11-18T20:00:00Z");
+    assert.equal(evaluateChallenge(def, [known], now).state, rule.kind === "drawdown" ? "failed" : "passed");
+    const result = evaluateChallenge(def, [known, undated], now);
+    assert.equal(result.state, "active");
+    assert.equal(result.provisional, true);
+    assert.deepEqual(result.points.map(({ trade_id }) => trade_id), ["dated"]);
+    assert.deepEqual(result.issues, [{ trade_id: "undated", reason: "undated" }]);
+  }
+});
+
 test("Drawdown Defender golden cases (docs/17 §3)", () => {
   const startedAt = "2026-11-17T14:00:00Z";
   const def: ChallengeDefinition = {
