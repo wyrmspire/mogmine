@@ -1,6 +1,6 @@
 # 17 — Challenges: Drawdown Defender and Clean Run
 
-The design for roadmap step `R-09` in [16 — Floor Roadmap](16-floor-roadmap.md). The owner reviewed a wider "Trading Challenges" proposal on 2026-11-16 and asked for the best of it on the roadmap. This is that cut. The evaluator is implemented in R-09a. The open choices are `OD-37` in [DECISIONS.md](../DECISIONS.md).
+The design for roadmap step `R-09` in [16 — Floor Roadmap](16-floor-roadmap.md). The owner reviewed a wider "Trading Challenges" proposal on 2026-11-16 and asked for the best of it on the roadmap. This is that cut. The evaluator and device store are implemented in R-09a and R-09b. The open choices are `OD-37` in [DECISIONS.md](../DECISIONS.md).
 
 A challenge is a goal the trader trades through, scored by code from the trader's own logged trades. It must make discipline engaging **without rewarding more trades, bigger size or recovery trading**.
 
@@ -172,7 +172,7 @@ export function evaluateChallenge(definition: ChallengeDefinition, trades: Trade
 **Storage,** in a small `lib/challenge-store.ts` shaped like `lib/prefs.ts`:
 - `localStorage` key `mogmine-challenges-v1`, an array of `ChallengeDefinition`.
 - At most **one active challenge of each kind**. Ended attempts stay in the array.
-- Backup: add an optional `challenges?: ChallengeDefinition[]` to `JournalBackup` in `lib/store.ts`. Keep `version: 1`; an old backup without the field restores as "no challenges". A restore never drops trades because of a bad challenges field.
+- Backup: add an optional `challenges?: ChallengeDefinition[]` to `JournalBackup` in `lib/store.ts`. Keep `version: 1`; an old backup without the field restores as "no challenges". A restore never drops trades because of a bad challenges field. A backup with a valid challenge can be restored even if its trade list is empty. If the file includes conflicting active attempts, keep the first valid one of each kind.
 - Storage blocked or full: the challenge still works for the session and the card says "Not saved on this device", the same way the journal header does.
 
 ## 6. Screens
@@ -243,7 +243,7 @@ Each is one PR, with the four checks from [docs/16 §0](16-floor-roadmap.md#0-ru
 | `R-09c` | Today card and setup sheet. | Every row of the state table in §6 can be shown, checked at `390×844`, Shield on and off. |
 | `R-09d` | Detail screen. | The decided-by trade is labelled, every issue links to its trade, and an ended attempt shows its saved result. |
 
-`R-09a` can start now: it needs nothing but the trade model on `main`.
+
 
 ## 8. What the owner still decides (`OD-37`)
 
