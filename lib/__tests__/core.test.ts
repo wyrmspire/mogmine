@@ -406,6 +406,7 @@ test("formatting follows docs/08 §13", () => {
   assert.equal(formatDuration(42 * 60 + 10), "42m 10s");
   assert.equal(formatDuration(42 * 60), "42m");
   assert.equal(formatDuration(3 * 3600 + 5 * 60), "3h 05m");
+  assert.equal(formatDuration(Number.NaN), "—");
   assert.equal(approx("−1.25 pts"), "≈ −1.25 pts");
 });
 

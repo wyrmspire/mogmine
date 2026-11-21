@@ -39,6 +39,16 @@ function account(rules: Partial<AccountRules> = {}, start = 5_000_000): TradingA
 
 const LIMIT_300 = { max_loss_cents: 30_000, drawdown: "trailing" as const };
 
+test("an undated trade raises an issue and stays out of the account ledger (OD-47)", () => {
+  const [dated, trade] = sequence([50, -300]);
+  const undated = { ...trade, exit_time: "invalid-time" };
+  const summary = accountSummary(account(LIMIT_300), [dated, undated], [], NOW);
+  assert.equal(summary.closedTrades, 1);
+  assert.equal(summary.realized_cents, 5_000);
+  assert.equal(summary.limit?.breached_at, null);
+  assert.deepEqual(summary.issues, [{ trade_id: trade.id, reason: "undated" }]);
+});
+
 test("pnlCents is exact integer cents, and null for an open trade", () => {
   assert.equal(pnlCents(tradeFor("a", 298.75, "2026-11-17T15:00:00.000Z")), 29_875);
   assert.equal(pnlCents(normalizeTrade({ id: "o", symbol: "MES", direction: "LONG", entry_time: NOW, exit_time: null, entry_price: 6000, exit_price: null, status: "open" })), null);

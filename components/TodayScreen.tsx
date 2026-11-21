@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AccountCards } from "./AccountCard";
 import { ChallengeCard } from "./ChallengeCard";
 import { DayHeader } from "./DayHeader";
+import { RunningStatsCard } from "./RunningStatsCard";
 import { TradeRow } from "./TradeRow";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
@@ -30,7 +31,7 @@ function DaySummary({ group, shield }: { group: DayGroup; shield: boolean }) {
 export function TodayScreen() {
   const journal = useJournal();
   const prefs = usePrefs();
-  const { date: todayDate, closed } = useToday();
+  const { date: todayDate, closed, now } = useToday();
 
   if (!journal.hydrated || !todayDate) {
     return <div className="page" role="status" aria-label="Loading your journal…"><div className="page-head"><div><span className="eyebrow">Today</span><h1>Loading your journal…</h1></div></div>{[0, 1, 2].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>;
@@ -86,6 +87,8 @@ export function TodayScreen() {
               <div className="trade-list">{previous.trades.map((trade) => <TradeRow key={trade.id} trade={trade} zone={prefs.timeZone} shield={prefs.shield} onOpen={open(previous)} />)}</div>
             </section>
           )}
+
+          <RunningStatsCard shield={prefs.shield} trades={journal.trades} now={now} />
         </div>
 
         <aside>

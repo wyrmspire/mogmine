@@ -148,6 +148,12 @@ test("session close stays at 17:00 New York across DST and follows evening sessi
 const noneEntry = { status: "none" as const, candles: [] as Candle[], baseTimeframe: "1m" as const };
 const readyEntry = (candles: Candle[]) => ({ status: "ready" as const, candles, baseTimeframe: "1m" as const });
 
+test("R-02: an undated legacy exit has no candle retry (OD-47)", () => {
+  const undatedTrade = { ...trade, exit_time: "invalid-time" };
+  assert.equal(nextCandleRetryAt(undatedTrade, noneEntry, exit, exit + minute), null);
+  assert.equal(nextCandleRetryAt(undatedTrade, readyEntry(bars(exit)), exit, exit + minute), null);
+});
+
 test("R-02: a finished, complete ready set never retries", () => {
   assert.equal(nextCandleRetryAt(trade, readyEntry(bars(close - minute)), close + minute, close + 2 * minute), null);
   assert.equal(nextCandleRetryAt(trade, readyEntry(bars(close - minute)), close + minute, close + 24 * 60 * minute), null);

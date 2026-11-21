@@ -75,6 +75,7 @@ function DrawdownRow({
 
   const openCount = result.issues.filter((issue) => issue.reason === "open").length;
   const unpriceableCount = result.issues.filter((i) => i.reason === "unpriceable").length;
+  const undatedCount = result.issues.filter((issue) => issue.reason === "undated").length;
 
   const renderContent = () => {
     if (result.state === "passed") {
@@ -113,7 +114,7 @@ function DrawdownRow({
             </span>
           )}
           {result.provisional && (
-            <span className="challenge-estimate"> · estimate{unpriceableCount > 0 && `, ${unpriceableCount} ${unpriceableCount === 1 ? "trade needs" : "trades need"} a price`}{openCount > 0 && `, ${openCount} open`}</span>
+            <span className="challenge-estimate"> · estimate{unpriceableCount > 0 && `, ${unpriceableCount} ${unpriceableCount === 1 ? "trade needs" : "trades need"} a price`}{undatedCount > 0 && `, ${undatedCount} undated`}{openCount > 0 && `, ${openCount} open`}</span>
           )}
         </div>
         <div className="challenge-meter-wrap">
@@ -158,6 +159,7 @@ function CleanRunRow({
   const run = result.run ?? 0;
   const bestRun = result.best_run ?? 0;
   const ungraded = result.issues.filter((i) => i.reason === "ungraded");
+  const undatedCount = result.issues.filter((issue) => issue.reason === "undated").length;
 
   return (
     <div className="challenge-row">
@@ -175,6 +177,7 @@ function CleanRunRow({
         ) : (
           <>
             <div className="challenge-row-metrics num">{run} / {targetTrades} by the rules</div>
+            {undatedCount > 0 && <span className="challenge-estimate">{undatedCount} undated</span>}
             <CleanRunDots target={targetTrades} run={run} />
           </>
         )}

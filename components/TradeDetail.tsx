@@ -71,6 +71,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const zone = prefs.timeZone;
+  const undatedExit = trade.exit_time != null && !Number.isFinite(Date.parse(trade.exit_time));
   const [chosen, setChosen] = useState<Timeframe>(() => {
     const fromUrl = searchParams.get("tf") as Timeframe | null;
     return fromUrl && TIMEFRAMES.includes(fromUrl) ? fromUrl : defaultTimeframe(holdSeconds(trade));
@@ -292,14 +293,15 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
         </div>
 
-        {candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
-        {candles?.status === "none" && !trade.is_sample && (
+        {undatedExit && <p className="chart-note fact" role="status">Chart needs a valid exit date.</p>}
+        {!undatedExit && candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
+        {!undatedExit && candles?.status === "none" && !trade.is_sample && (
           <div className="chart-note fact candle-retry" role="status">
             <span>{(open ? candles.lastAttemptAt - Date.parse(trade.entry_time) < FRESH_EXIT_MS : exitIsFresh(trade, candles.lastAttemptAt)) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
             <button type="button" disabled={candles.fetching} onClick={() => ensureCandles(trade, true)}>{candles.fetching ? "Checking…" : "Retry"}</button>
           </div>
         )}
-        {candles?.status === "none" ? null : <>
+        {undatedExit || candles?.status === "none" ? null : <>
           <div className={`chart-card specular-card ${fullscreen ? "fullscreen" : ""}`}>
           <div className="chart-toolbar">
             <div className="timeframes" role="group" aria-label="Timeframe">

@@ -383,7 +383,7 @@ export function ChallengeDetail({ id }: { id: string }) {
 
         {displayResult.provisional && (
           <div className="challenge-estimate" style={{ marginTop: 12 }}>
-            ⚠️ Numbers are provisional estimates while open or unpriceable trades exist.
+            ⚠️ Numbers are estimates while trades need attention.
           </div>
         )}
       </section>
@@ -416,7 +416,9 @@ export function ChallengeDetail({ id }: { id: string }) {
                   ? "Trade is still open"
                   : issue.reason === "unpriceable"
                     ? "Trade cannot be priced (needs exit/quantity)"
-                    : "Clean Run checklist needs grading";
+                    : issue.reason === "undated"
+                      ? "Trade needs a valid exit date"
+                      : "Clean Run checklist needs grading";
               return (
                 <div key={idx} className="challenge-issue-item">
                   <div className="issue-info">
@@ -428,7 +430,7 @@ export function ChallengeDetail({ id }: { id: string }) {
                     )}
                   </div>
                   <Link href={`/trades/${encodeURIComponent(issue.trade_id)}`} className="btn-secondary issue-fix-link">
-                    Fix trade →
+                    {issue.reason === "undated" ? "View trade →" : "Fix trade →"}
                   </Link>
                 </div>
               );
