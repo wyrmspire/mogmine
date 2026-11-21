@@ -23,19 +23,20 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 5. Never invent a P&L, a price, or a bar. A value that cannot be computed is `null` and the screen says so (guardrails 4 and 11).
 6. Update the spec named in the step in the same PR, and add a handoff entry to [NOTES.md](../NOTES.md).
 
-## 1. Where things stand (2026-11-16)
+## 1. Where things stand (2026-11-21)
 
 | Area | State on `main` |
 | :--- | :--- |
-| Trades | Stored **only on the device** in `localStorage` key `mogmine-trades-v3` (`lib/store.ts`). No server copy. |
-| Candles | Fetched per trade from `/api/market-data` (Yahoo), cached in IndexedDB (`lib/candles.ts`). |
+| Trades | Stored **only on the device** in `localStorage` key `mogmine-trades-v3` (`lib/store.ts`), plus `deriveTrade` (`lib/trade-document.ts`). No server copy yet. |
+| Candles | Fetched per trade and per day from `/api/market-data` (Yahoo), cached in IndexedDB (`lib/candles.ts`). |
 | Candle archive | Built on branch `feat/m0-candle-archive`. **Not merged.** Off until Supabase keys exist. |
-| Open trades | The model and the money math accept an open trade (`R-03a`, merged). **The entry form and the chart do not yet** (`R-03b`, `R-03c`). |
-| AI | No AI code and no endpoint an assistant can call. The only API route is `/api/market-data`. |
-| Playbooks | Four hardcoded setups sharing one checklist (`lib/playbooks.ts`). No editor. |
-| Stats | Per-day only (`dayStats` in `lib/selectors.ts`). Nothing across days. |
-| Challenges | Designed in [docs/17](17-challenges.md). Not built. |
-| Stop at entry | The entry form has no stop field; a stop is added later and stays editable, so R can change after the fact (`R-10`). |
+| Open trades | Complete (`R-03a`–`R-03c` merged). |
+| Challenges | Complete on device (`R-09a`–`R-09d` merged, `docs/17`). |
+| Stop at entry | Complete (`R-10` merged in `#118`; used by the price-first form in `docs/20`). |
+| Accounts & Mood | Complete on device (`docs/21`, `docs/18`). |
+| AI | No AI code and no endpoint an assistant can call (`R-06`). |
+| Playbooks | Four hardcoded setups sharing one checklist (`lib/playbooks.ts`). No editor (`R-07`). |
+| Stats | Per-day only (`dayStats` in `lib/selectors.ts`). Nothing across days (`R-08`). |
 
 ## 2. The order
 
@@ -43,18 +44,32 @@ This doc builds on [09 — Backend Risk Register](09-backend-risk-register.md) (
 | :--- | :--- | :--- | :--- |
 | `R-01` | Pinch zooms the chart, not the page | **Merged** (phone check still owed) | — |
 | `R-02` | Fresh-trade candles retry and refresh | **Merged** | — |
-| `R-03` | Log a trade that is still open | `R-03a` **merged**; `R-03b`, `R-03c` to do | `OD-38` (decided: show `Open`) |
+| `R-03` | Log a trade that is still open | **Merged** (`R-03a`–`R-03c`) | `OD-38` |
 | `R-04` | Turn on the candle archive | Owner task + merge | Supabase project |
 | `R-05` | Trades stored in Supabase | Large | `R-03`, `R-04` |
 | `R-06` | Read-only assistant endpoint | Medium | `R-05`, `OD-19` |
-| `R-07` | Playbook editor | Medium | `R-05` |
-| `R-08` | Running stats across days | Medium | `R-05` |
-| `R-09` | Challenges: Drawdown Defender and Clean Run ([docs/17](17-challenges.md)) | Medium, four PRs | `OD-37`. **Not** blocked on `R-05`: it runs on the device. |
-| `R-10` | Stop at entry, frozen | **Merged** (#118); used by the price-first form ([docs/20](20-price-first-entry.md)) | `R-03b` |
+| `R-07` | Playbook editor (`R-07a` local store, `R-07b` editor; syncs in `R-05`) | Medium, two PRs | **Not** blocked on `R-05` ([docs/22](22-development-mode-and-backend-boundary.md)) |
+| `R-08` | Running stats across days (`R-08a` pure selectors, `R-08b` UI) | Medium, two PRs | **Not** blocked on `R-05` ([docs/22](22-development-mode-and-backend-boundary.md)) |
+| `R-09` | Challenges: Drawdown Defender and Clean Run ([docs/17](17-challenges.md)) | **Merged** (`R-09a`–`R-09d`) | `OD-37` |
+| `R-10` | Stop at entry, frozen | **Merged** (#118); used by the price-first form ([docs/20](20-price-first-entry.md)) | — |
 
-`R-01`–`R-03`, `R-09` and `R-10` need no backend. `R-04` onward is the data layer. **AI and cross-day stats are blocked on `R-05`**, because today the trades never leave the phone. Challenges are not: they are recomputed from the trades on the device, and only follow you to a second device after `R-05`.
+Per [docs/22 — Development Mode and Backend Boundary](22-development-mode-and-backend-boundary.md), do **not** pause local-first product work while Supabase is unconfigured. Only `R-04`–`R-06` require Supabase (`R-06` needs server-stored trades). `R-07` and `R-08` run on device storage (`mogmine-trades-v3` / `mogmine-playbooks-v1`) first and sync to Supabase later in `R-05`.
 
-**Order from here:** `R-03b`, `R-10` (same form, do them together), `R-03c`, `R-09a`–`R-09d`, with the owner's `R-04` running alongside.
+### 2b. Local-first queue while Supabase is off (`docs/22`)
+
+Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CONTRIBUTING.md` §3):
+
+1. **`R-08a` — Pure running stats (`lib/selectors.ts` + tests):** Cross-day, per-playbook, per-tag, rolling windows (last 20, week, month). Exclude `is_sample` and `open`; skip `rMultiple === null` and count skipped; gross only.
+2. **`R-08b` — Running stats UI:** Summary view on Today or `/feed`, `390×844` + desktop, Shield-safe, gross-labelled.
+3. **`TD-1` (Issue `#35` pure) — `observeTrade` (`docs/15` §3.3):** Bar observer over `DerivedTrade` + golden tests on `fixtures/trades/ex-*.json`.
+4. **`TD-2` (Issue `#34` pure) — `buildMarks` (`docs/15` §3.4):** Display list builder (`D-010` fills-only look; no purple outlines) + golden tests on all 7 `ex-*.json` fixtures.
+5. **`TD-3` (Issue `#34` canvas) — `PositionBoxPrimitive` paints `Mark[]`:** Stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
+6. **`R-07a` — Local playbook store & backup (`lib/playbooks-store.ts`, `lib/store.ts`):** `mogmine-playbooks-v1` + `user_id` (Invariant 7) + backup/restore.
+7. **`R-07b` — Playbook editor (`components/TuneScreen.tsx`):** Add, rename, reorder rules, archive (no hard delete; frozen trade checklists stay intact).
+8. **`UI-1` — Chart OHLC HUD & honest freshness (`components/TradeDetail.tsx`, `app/globals.css`, `OD-40`):** Pin OHLC readout top-left inside `.chart-frame`; keep `.chart-source` visible; add `Delayed · Xm` / `Cached` / `Offline` pill.
+9. **`UI-2` — Desktop 3-column workstation & toolbar polish (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`):** Refine `>=1024px` workspace without hiding `.trade-levels-card` or regressing `390×844`.
+10. **`UI-3` — Mood at Entry (`OD-39` c, `docs/19` §4):** Optional 1-tap pre-exit mood capture in `AddTradeSheet` / open `TradeDetail`.
+11. **`MD-1` (Issue `#90` `AC-07`) — Expected window coverage in `/api/market-data` & `lib/candles.ts`:** Check `expectedInsideBarTimes` instead of `candles.length >= 4`.
 
 ---
 
@@ -272,18 +287,18 @@ So an AI assistant can read the journal. Scope and authorisation are `OD-19` ([d
 
 ## R-07 — Playbook editor
 
-Today `lib/playbooks.ts` holds four fixed setups that share `STANDARD_RULES`.
+Today `lib/playbooks.ts` holds four fixed setups that share `STANDARD_RULES`. Build local-first (`R-07a` store + backup, `R-07b` editor UI per [docs/22](22-development-mode-and-backend-boundary.md)), then sync to Supabase in `R-05`:
 
-- Table `playbooks` with `user_id` (invariant 7): `name`, `default_style`, `checklist_rules` (ordered list of `{ id, label }`), `archived`.
+- Local store `mogmine-playbooks-v1` (and later `playbooks` table) with `user_id` (invariant 7): `name`, `default_style`, `checklist_rules` (ordered list of `{ id, label }`), `archived`.
 - Editor in Tune or its own screen: add, rename, reorder rules, archive. No hard delete: old trades reference the playbook.
 - **A trade keeps the checklist it was saved with** (UX-50, `checklistFor` already copies it). Editing a playbook never changes a past trade.
-- Seed the four current playbooks so nothing existing breaks.
+- Seed the four current playbooks so nothing existing breaks, and include custom playbooks in `buildBackup`/`parseBackupFile`.
 
 ---
 
 ## R-08 — Running stats across days
 
-Extend `lib/selectors.ts`. Pure functions with tests, then a screen.
+Extend `lib/selectors.ts`. Pure functions with tests (`R-08a`), then a screen/card (`R-08b`). Runs live from device trades (`mogmine-trades-v3`, [docs/22](22-development-mode-and-backend-boundary.md)); does not wait for `R-05`:
 
 - Per playbook and per setup tag: trade count, win rate, average R, total R, rule adherence (`adherence()` in `lib/trades.ts`).
 - Rolling windows: last 20 trades, this week, this month.
