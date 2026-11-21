@@ -16,6 +16,7 @@ import {
   isScratch,
   normalizeTrade,
   rMultiple,
+  specFor,
   tradePnl,
   tradePoints,
   tradeTicks,
@@ -610,11 +611,14 @@ test("fromLegacy: omits plan when no stop/target, preserves R-10 moved stop, ope
     take_again: "yes",
   });
   const movedDoc = fromLegacy(movedStop);
+  const modifyEv = movedDoc.events.find((e) => e.type === "modify");
+  assert.equal(modifyEv?.basis, "inferred", "timing of legacy stop move is uncertain, hence inferred basis");
   const movedDerived = deriveTrade(movedDoc);
   assert.equal(movedDerived.initial_stop?.price, 7595);
   assert.equal(movedDerived.r_multiple, 1.2); // measured against frozen initial stop 7595
   assert.equal(movedDerived.stop_path.length, 2);
   assert.equal(movedDerived.stop_path[1].price, 7600);
+  assert.equal(movedDerived.stop_path[1].basis, "inferred");
   assert.equal(movedDoc.annotations?.account_id, "acct-1");
   assert.equal(movedDoc.annotations?.playbook_id, "pb-1");
   assert.equal(movedDoc.annotations?.key_level_price, 7598);
@@ -655,3 +659,65 @@ test("fromLegacy + deriveTrade matches legacy money math across all demo trades"
     assert.deepEqual(derived.errors, [], `${record.id}: zero structural errors`);
   }
 });
+
+test("regression (cycle 2): stop in force at entry fill is captured as initialStop even if pre-entry stop was modified", () => {
+  // A long trade with a stop placed at 95, moved to 97 before entry at 100, and exited at 106.
+  // The stop in force at entry (97) implies 100 - 97 = 3 pts initial risk.
+  // PnL = 106 - 100 = +6 pts. R = 6 / 3 = 2.0R (NOT 6 / (100 - 95) = 1.2R).
+  const doc: TradeDocument = {
+    schema: "mogmine.trade.v1",
+    id: "regress-pre-entry-stop-mod",
+    user_id: "00000000-0000-0000-0000-000000000000",
+    revision: 1,
+    instrument: { symbol: "MES", contract: null },
+    side: "long",
+    source: { kind: "broker", provider: "topstepx", imported_at: null },
+    is_sample: false,
+    events: [
+      { seq: 1, t: "2026-11-12T15:20:00Z", type: "order", basis: "broker", order: "s1", role: "stop", kind: "stop", qty: 1, price: 95 },
+      { seq: 2, t: "2026-11-12T15:25:00Z", type: "modify", basis: "broker", order: "s1", price: 97 },
+      { seq: 3, t: "2026-11-12T15:30:00Z", type: "fill", basis: "broker", order: "e1", role: "entry", qty: 1, price: 100 },
+      { seq: 4, t: "2026-11-12T15:35:00Z", type: "fill", basis: "broker", order: "x1", role: "exit", qty: 1, price: 106, reason: "manual" },
+    ],
+  };
+
+  const derived = deriveTrade(doc, specFor("MES"));
+  assert.equal(derived.initial_stop?.price, 97);
+  assert.equal(derived.initial_risk_usd, 15); // 3 pts * $5
+  assert.equal(derived.r_multiple, 2.0); // +6 pts / 3 pts = 2.0R
+});
+
+test("regression (cycle 2): legacy stop move and cancellation preserve inferred basis", () => {
+  const modRecord = normalizeTrade({
+    id: "leg-r10-mod",
+    symbol: "MES",
+    direction: "LONG",
+    quantity: 1,
+    entry_time: "2026-11-12T15:30:00Z",
+    exit_time: "2026-11-12T15:45:00Z",
+    entry_price: 7600,
+    exit_price: 7605,
+    initial_stop_price: 7595,
+    stop_loss_price: 7600, // moved
+  });
+  const modDoc = fromLegacy(modRecord);
+  const modEv = modDoc.events.find((e) => e.type === "modify");
+  assert.equal(modEv?.type === "modify" ? modEv.basis : null, "inferred");
+
+  const cancelRecord = normalizeTrade({
+    id: "leg-r10-cancel",
+    symbol: "MES",
+    direction: "LONG",
+    quantity: 1,
+    entry_time: "2026-11-12T15:30:00Z",
+    exit_time: "2026-11-12T15:45:00Z",
+    entry_price: 7600,
+    exit_price: 7605,
+    initial_stop_price: 7595,
+    stop_loss_price: null, // stop removed
+  });
+  const cancelDoc = fromLegacy(cancelRecord);
+  const cancelEv = cancelDoc.events.find((e) => e.type === "cancel");
+  assert.equal(cancelEv?.type === "cancel" ? cancelEv.basis : null, "inferred");
+});
+

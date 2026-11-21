@@ -760,7 +760,9 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
               implicit: false,
               segmentIndex: segIdx,
             });
-            if (!initialStop) {
+            // If the position is already open (entry fill occurred before stop order placement),
+            // this first stop order placed for the open position is our initial stop.
+            if (!initialStop && hasEntryFill) {
               initialStop = {
                 price: event.price,
                 t: event.t,
@@ -1418,6 +1420,9 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
   });
 
   // Preserve stop moves when R-10 frozen initial_stop_price differs from the working stop_loss_price.
+  // Note: legacy records only record when initial_stop_price was frozen (`initial_stop_set_at`),
+  // not when subsequent edits occurred. Because the timing of later edits is uncertain/inferred,
+  // we emit modify/cancel events with `basis: "inferred"` so renderers do not treat inferred timing as stated truth.
   if (record.initial_stop_price != null && record.stop_loss_price !== record.initial_stop_price) {
     const moveTime = pickStopMoveTime(record.entry_time, record.exit_time, record.initial_stop_set_at);
     if (record.stop_loss_price != null) {
@@ -1425,7 +1430,7 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
         seq: seq++,
         t: moveTime,
         type: "modify",
-        basis: "stated",
+        basis: "inferred",
         order: "stop",
         price: record.stop_loss_price,
       });
@@ -1434,7 +1439,7 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
         seq: seq++,
         t: moveTime,
         type: "cancel",
-        basis: "stated",
+        basis: "inferred",
         order: "stop",
       });
     }
