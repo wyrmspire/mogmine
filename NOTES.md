@@ -62,7 +62,7 @@ Claim a lane before starting. Clear the claim when you stop.
 | Core math | — | | |
 | Chart | — | | |
 | App shell and notes | — | | |
-| Data | — | | |
+| Data | Claude (Opus 5.5 session) | 2026-11-21 | `R-07a` + `R-07b` playbook store and editor. Worker: skip R-07, take TD-1 → TD-3. |
 | Market data | — | | |
 | Ingestion | — | | |
 | AI review | — | | |
