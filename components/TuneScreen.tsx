@@ -5,6 +5,7 @@ import { GOLD_PRESETS, getTuneRiskBudgetDisplay, setPrefs, usePrefs } from "@/li
 import type { GoldPreset } from "@/lib/prefs";
 import { buildBackup, parseBackupFile, replaceTrades, useJournal } from "@/lib/store";
 import type { ParseBackupResult } from "@/lib/store";
+import { getChallengesBackup, restoreChallenges } from "@/lib/challenge-store";
 import { getMoodBackup, restoreMood } from "@/lib/mood-store";
 import { getAccountsBackup, restoreAccounts } from "@/lib/accounts-store";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
@@ -78,7 +79,7 @@ export function TuneScreen() {
   const sampleCount = journal.trades.length - realCount;
 
   const downloadBackup = () => {
-    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup());
+    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup());
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -117,6 +118,7 @@ export function TuneScreen() {
     // An older backup has no mood data: keep what this device has rather than wipe it.
     if (pending.mood) restoreMood(pending.mood);
     if (pending.accounts) restoreAccounts(pending.accounts);
+    restoreChallenges(pending.challenges);
     const total = pending.trades.length;
     setPending(null);
     setError(null);
@@ -367,7 +369,7 @@ export function TuneScreen() {
         <p className="muted" style={{ fontSize: 13 }}>
           Your journal lives in this browser&apos;s storage ({realCount} {realCount === 1 ? "trade" : "trades"}
           {sampleCount > 0 ? ` + ${sampleCount} ${sampleCount === 1 ? "sample" : "samples"}` : ""}); clearing site data deletes it.
-          Backups save your trades (notes, prices, tags, checklist, playbook) and preferences to a local JSON file with no network upload.
+          Backups save your trades (notes, prices, tags, checklist, playbook) and device settings, including saved challenges, to a local JSON file with no network upload.
           Candle caches stay in IndexedDB and are not inside the file—charts for real trades re-fetch candles from Yahoo Finance when opened (and samples keep their offline fixture bars).
         </p>
 
@@ -408,7 +410,7 @@ export function TuneScreen() {
                 {pending.sampleCount > 0 ? ` and ${pending.sampleCount} labelled ${pending.sampleCount === 1 ? "sample" : "samples"}` : ""}
               </b>
               {pending.exportedAt ? ` exported ${formatDateTime(pending.exportedAt, prefs.timeZone)}` : ""}
-              {pending.prefs ? ", plus saved preferences" : ""}. Charts for real trades will re-fetch Yahoo Finance candles when opened (and samples keep their offline fixture bars).
+              {pending.prefs ? ", plus saved preferences" : ""}. Saved challenges will also be replaced{pending.challenges?.length ? ` with ${pending.challenges.length} from this file` : " with an empty list"}. Charts for real trades will re-fetch Yahoo Finance candles when opened (and samples keep their offline fixture bars).
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
               <button type="button" className="btn-primary" onClick={confirmRestore}>

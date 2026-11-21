@@ -51,6 +51,18 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — Codex — reviewed R-09b, Data lane released
+Did:      Fixed legacy and challenge-only restores, duplicate active imports, frozen results, and validation. The local store exposes whether storage succeeded.
+Files:    `lib/challenge-store.ts`, `lib/__tests__/challenge-store.test.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`, `docs/17-challenges.md`, `NOTES.md`.
+Checked:  `npm test` 303 passed, 0 failed; `npm run typecheck` clean; `npm run lint` 0 errors, 1 existing PostCSS warning; `npm run build` 8/8 static pages; `git diff --check` clean. Local 390×844 Tune restore smoke passed.
+Left:     R-09c can wire the Today card and setup sheet. Test Shield on/off, session-only storage fallback, and every state in docs/17 §6.
+
+### 2026-11-21 — agent (Antigravity) — R-09b challenge store & backup/restore (docs/17), Data lane released
+Did:      Built `lib/challenge-store.ts` (`mogmine-challenges-v1`, enforces <= 1 active challenge of each kind, final freeze on end, sanitization, backup export & restore) and tests in `lib/__tests__/challenge-store.test.ts`. Added optional `challenges` field to `JournalBackup` and `buildBackup`/`parseBackupFile` in `lib/store.ts`, connected restore and export in `components/TuneScreen.tsx`, and hydrated in `components/AppShell.tsx`.
+Files:    `lib/challenge-store.ts` (new), `lib/__tests__/challenge-store.test.ts` (new), `lib/store.ts`, `components/TuneScreen.tsx`, `components/AppShell.tsx`, `NOTES.md`.
+Checked:  `npm test` 301 passed, 0 failed; `npm run typecheck` clean; `npm run lint` 0 errors, 1 existing PostCSS warning; `npm run build` 8/8 static pages; `git diff --check origin/main` clean.
+Left:     Unblocks `R-09c` (Today card and setup sheet).
+
 ### 2026-11-21 — Codex — reviewed R-09a, Core math lane released
 Did:      Kept drawdown breaches provisional with missing prices, froze the scored path at the breach, corrected the Clean Run deciding trade after a reset, and counted only positions overlapping the start for the exclusion disclosure.
 Files:    `lib/challenges.ts`, `lib/__tests__/challenges.test.ts`, `docs/17-challenges.md`, `NOTES.md`.

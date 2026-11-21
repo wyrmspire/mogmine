@@ -6,6 +6,8 @@ import { DEMO_TRADE_IDS, demoTrades } from "./fixtures.ts";
 import { idbSet } from "./idb.ts";
 import { sanitizeAccountsBackup } from "./accounts-store.ts";
 import type { AccountsBackup } from "./accounts-store.ts";
+import { sanitizeChallengesBackup } from "./challenge-store.ts";
+import type { ChallengeDefinition } from "./challenges.ts";
 import { sanitizeMoodBackup } from "./mood-store.ts";
 import type { MoodBackup } from "./mood-store.ts";
 import type { Prefs } from "./prefs.ts";
@@ -142,10 +144,12 @@ export interface JournalBackup {
   mood?: MoodBackup;
   /** Accounts and balance checks (docs/21). Absent in older backups. */
   accounts?: AccountsBackup;
+  /** Trading challenges (docs/17). Absent in older backups. */
+  challenges?: ChallengeDefinition[];
 }
 
 export type ParseBackupResult =
-  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; mood?: MoodBackup; accounts?: AccountsBackup; realCount: number; sampleCount: number; exportedAt: string | null }
+  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; mood?: MoodBackup; accounts?: AccountsBackup; challenges?: ChallengeDefinition[]; realCount: number; sampleCount: number; exportedAt: string | null }
   | { ok: false; error: string };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -232,7 +236,7 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
 }
 
 /** Build a local backup payload of the trade journal and device preferences (no candles, no secrets). */
-export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs, mood?: MoodBackup, accounts?: AccountsBackup): JournalBackup {
+export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs, mood?: MoodBackup, accounts?: AccountsBackup, challenges?: ChallengeDefinition[]): JournalBackup {
   const cleanTrades = trades.map((trade) => {
     const rest: TradeRecord & { candles?: Candle[] } = { ...trade };
     delete rest.candles;
@@ -247,6 +251,7 @@ export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs,
     ...(prefs ? { prefs } : {}),
     ...(mood ? { mood } : {}),
     ...(accounts ? { accounts } : {}),
+    ...(challenges ? { challenges } : {}),
   };
 }
 
@@ -266,6 +271,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
   let rawPrefs: Partial<Prefs> | undefined;
   let mood: MoodBackup | undefined;
   let accounts: AccountsBackup | undefined;
+  let challenges: ChallengeDefinition[] | undefined;
   let exportedAt: string | null = null;
 
   if (Array.isArray(parsed)) {
@@ -284,6 +290,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
     }
     mood = sanitizeMoodBackup(obj.mood) ?? undefined;
     accounts = sanitizeAccountsBackup(obj.accounts) ?? undefined;
+    challenges = sanitizeChallengesBackup(obj.challenges) ?? undefined;
     if (typeof obj.exportedAt === "string" && Number.isFinite(Date.parse(obj.exportedAt))) {
       exportedAt = obj.exportedAt;
     }
@@ -291,7 +298,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
     return { ok: false, error: "Not a recognized MogMine backup format." };
   }
 
-  if (rawTrades.length === 0) {
+  if (rawTrades.length === 0 && !challenges?.length) {
     return { ok: false, error: "This backup file has no trades to restore." };
   }
 
@@ -312,7 +319,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
   const sampleCount = trades.filter((t) => t.is_sample).length;
   const realCount = trades.length - sampleCount;
 
-  return { ok: true, trades, prefs: rawPrefs, ...(mood ? { mood } : {}), ...(accounts ? { accounts } : {}), realCount, sampleCount, exportedAt };
+  return { ok: true, trades, prefs: rawPrefs, ...(mood ? { mood } : {}), ...(accounts ? { accounts } : {}), ...(challenges ? { challenges } : {}), realCount, sampleCount, exportedAt };
 }
 
 function readStored(): TradeRecord[] | null {
