@@ -17,7 +17,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-46`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-47`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
@@ -66,6 +66,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-21 — Codex — card implementation review, no lane
+Did:      Left [review notes](docs/23-card-system.md#9-review-notes-for-future-slices) on prepared exports, Shield, blind chart cutoffs, drill feedback and statistics, empty decks, and scheduled handoffs. Logged the crop conflict as `OD-47`.
+Files:    `docs/23-card-system.md`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `git diff --check` passed. Checked 12 added local links and their heading anchors.
+Left:     `CD-1a` can use the current visible chart under `AC-10`. The crop waits for `OD-47`.
 
 ### 2026-11-21 — Claude (Haiku 5.5 session) — lessons from the card-system work, no lane
 Did:      Wrote and merged the card spec (`docs/23`, PR #130), `OD-46`, and the `CD-1`–`CD-3` queue entries. Added the lessons below to `CONTRIBUTING.md` §4 so they outlive this session.
