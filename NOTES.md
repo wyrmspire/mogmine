@@ -25,6 +25,8 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 **Work top-to-bottom in small slices (~250–450 changed lines per PR, `CONTRIBUTING.md` §3).** See [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md) and [docs/22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
 
+The [project review](docs/16-floor-roadmap.md#4-project-review-and-follow-ups) records suggested reliability, usability, and scheduler improvements for future slices.
+
 Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a`–`R-03c` open trades, `R-09a`–`R-09d` challenges, `R-10` frozen initial stop.
 
 ### Active No-Supabase Queue (work in order)
@@ -66,6 +68,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-21 — Codex — whole-project implementation review, no lane
+Did:      Added [project-wide review notes](docs/16-floor-roadmap.md#4-project-review-and-follow-ups) for journal recovery, candle coverage, the phone workflow, review and stats, trade facts, and scheduled merges. Aligned the `R-05` intro with docs/22.
+Files:    `docs/16-floor-roadmap.md`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `npm test` 303 passed, 0 failed. Typecheck passed, lint had 0 errors and 1 existing PostCSS warning, and build generated 8/8 pages. A Node storage simulation reproduced the lost note and confirmed the blocked-write state. GitHub returned `protected: false` and `[]` for `main` rules. `git diff --check` and 21 added links passed.
+Left:     Proposals for owner review. The pending-note loss and the remaining `MD-1` acceptance checks have concrete repro or code references in docs/16 §4.
 
 ### 2026-11-21 — Codex — card implementation review, no lane
 Did:      Left [review notes](docs/23-card-system.md#9-review-notes-for-future-slices) on prepared exports, Shield, blind chart cutoffs, drill feedback and statistics, empty decks, and scheduled handoffs. Logged the crop conflict as `OD-47`.

@@ -124,3 +124,4 @@ Fixed during the review, no longer drifting:
 ### Conflicts between numbered specs
 
 - **Trade Card framing (`OD-47`).** `AC-10` in docs/10 and `B-61` in docs/09 require export to follow the current visible chart range and timeframe. The proposed layout in docs/23 §3 calls for a crop around entry and exit. Preserve `AC-10` while the crop is open.
+- **Backend dependency wording, resolved.** The older `R-05` introduction in docs/16 said all later work depends on trade persistence. [The backend boundary](docs/22-development-mode-and-backend-boundary.md) and the local-first queue allow UI, stats, playbooks, and render-grammar work on device state. The `R-05` introduction now names cross-device persistence and `R-06`.
