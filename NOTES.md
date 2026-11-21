@@ -32,7 +32,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 ### Active No-Supabase Queue (work in order)
 
 1. **`R-08a` — Pure cross-day & playbook/tag running stats, done** (`lib/selectors.ts`, `lib/__tests__/`, `docs/16` §R-08).
-2. **`R-08b` — Running stats screen/card** (on Today or `/feed`, `390×844` + desktop, Shield-safe, gross-labelled).
+2. **`R-08b` — Running stats screen/card, done** (`components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`).
 3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`** (`lib/trade-document.ts` / `lib/trade-bar-validation.ts`, `docs/15` §3.3): stop-segment traded through, unfilled target touched, fill outside bar, MFE/MAE, post-exit hindsight touches, tested against `fixtures/trades/ex-*.json`.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks(derived, facts, timeframe, detail, shield)`** (`docs/15` §3.4): deterministic `Mark[]` display list with bar snapping (`B-23`) and **`D-010` fills-only look** (no purple outlines; overrides stale pre-`D-010` text in `#34`) + golden tests for all 7 `ex-*.json` fixtures.
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
@@ -68,6 +68,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-21 — agent (Antigravity) — R-08b running stats card view, App shell and notes lane released
+Did:      Implemented `RunningStatsCard` and embedded it on `TodayScreen`. Added time-window tab switcher (Last 20, This Week, This Month, All-Time), gross P&L display with Shield protection, priced/unpriced incomplete handling, skipped R and scratch tracking, rule adherence, breakdown toggles for Playbook and Tag, and footer notes for undated/open/sample exclusions. Added styling in `app/globals.css` and tests in `lib/__tests__/running-stats-view.test.ts`.
+Files:    `components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`, `NOTES.md`.
+Verified: `npm test` 316 passed, 0 failed; `npm run typecheck` passed; `npm run lint` 0 errors, 1 existing PostCSS warning; `npm run build` generated 8/8 routes.
+Left:     Unblocks `TD-1` (Issue #35 pure part: `observeTrade(derived, candles, barMinutes)`).
 
 ### 2026-11-21 — Codex — reviewed R-08a, Core math lane released
 Did:      Reviewed the 21:30 UTC worker changes against docs/16 and #61. Required an explicit clock for the session windows, counted each trade once per tag, and kept closed trades with invalid exit dates in all-time totals (OD-47). The final API reports `skippedRCount` for every null R.
