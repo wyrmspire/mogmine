@@ -17,13 +17,15 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-47`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-48`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
 ## Next up
 
 **Work top-to-bottom in small slices (~250–450 changed lines per PR, `CONTRIBUTING.md` §3).** See [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md) and [docs/22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
+
+The [project review](docs/16-floor-roadmap.md#4-project-review-and-follow-ups) records suggested reliability, usability, and scheduler improvements for future slices.
 
 Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a`–`R-03c` open trades, `R-08a` running stats selectors, `R-09a`–`R-09d` challenges, `R-10` frozen initial stop.
 
@@ -72,6 +74,18 @@ Did:      Reviewed the 21:30 UTC worker changes against docs/16 and #61. Require
 Files:    `lib/selectors.ts`, `lib/__tests__/running-stats.test.ts`, `docs/16-floor-roadmap.md`, `DECISIONS.md`, `NOTES.md`.
 Checked:  `npm test` 313 passed. The running stats tests also passed 10/10 under `TZ=Pacific/Auckland`. Typecheck passed, lint had 0 errors and the existing PostCSS warning, build generated 8/8 pages, and the diff check passed.
 Left:     `R-08b` should pass the current instant to `runningStats(trades, now)` and show gross P&L, priced denominator, skipped R and undated counts. Verify empty and incomplete states, Shield, and the layout at 390×844 and desktop.
+
+### 2026-11-21 — Codex — whole-project implementation review, no lane
+Did:      Added [project-wide review notes](docs/16-floor-roadmap.md#4-project-review-and-follow-ups) for journal recovery, candle coverage, the phone workflow, review and stats, trade facts, and scheduled merges. Aligned the `R-05` intro with docs/22.
+Files:    `docs/16-floor-roadmap.md`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `npm test` 303 passed, 0 failed. Typecheck passed, lint had 0 errors and 1 existing PostCSS warning, and build generated 8/8 pages. A Node storage simulation reproduced the lost note and confirmed the blocked-write state. GitHub returned `protected: false` and `[]` for `main` rules. `git diff --check` and 21 added links passed.
+Left:     Proposals for owner review. The pending-note loss and the remaining `MD-1` acceptance checks have concrete repro or code references in docs/16 §4.
+
+### 2026-11-21 — Codex — card implementation review, no lane
+Did:      Left [review notes](docs/23-card-system.md#9-review-notes-for-future-slices) on prepared exports, Shield, blind chart cutoffs, drill feedback and statistics, empty decks, and scheduled handoffs. Logged the crop conflict as `OD-48`.
+Files:    `docs/23-card-system.md`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `git diff --check` passed. Checked 12 added local links and their heading anchors.
+Left:     `CD-1a` can use the current visible chart under `AC-10`. The crop waits for `OD-48`.
 
 ### 2026-11-21 — agent (Antigravity) — R-08a pure running stats, Core math lane released
 Did:      Implemented `summarizeTrades`, `sessionWeekMonday`, and `runningStats` in `lib/selectors.ts` per docs/16 §R-08 / Active No-Supabase Queue item 1. Computes rolling windows (last 20, this week, this month), per-playbook, and per-tag stats. Always excludes `is_sample` and `open` trades; skips trades with no stop from R totals and tracks `skippedWithNoStop` without zeroing; reports gross figures only. Added tests in `lib/__tests__/running-stats.test.ts`.

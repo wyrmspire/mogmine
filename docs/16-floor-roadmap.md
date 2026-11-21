@@ -239,7 +239,7 @@ The code exists on `feat/m0-candle-archive` (issue #70). It is 125+ commits behi
 
 ## R-05 — Trades stored in Supabase
 
-Everything after this step needs it. Today the journal exists only in one phone's `localStorage`.
+This step enables cross-device journal persistence and supports `R-06`. The local-first queue in §2b can proceed with device storage and fixtures under [the backend boundary](22-development-mode-and-backend-boundary.md).
 
 **Fix the planned SQL first.** `supabase/planned/20261115100001_trades_notes_annotations.sql` (on the archive branch) has `exit_time timestamptz not null` and `exit_price numeric not null`. That repeats the problem [docs/09](09-backend-risk-register.md) line 69 warns about and blocks `R-03`. The real migration must have:
 
@@ -361,3 +361,26 @@ Fixed constraints:
 ## 3. Not in this roadmap
 
 The broker listener, pull sync and CSV import (`D-009`, `M5`); the companion divergence pane and session levels (`M3`, docs/12); the AI review engine itself (`M4`, docs/04). They keep their place in [docs/10 §7](10-yahoo-first-build-plan.md#7-step-back-is-this-the-right-way-to-build-it). This roadmap only inserts `R-01`–`R-03` ahead of them and names the data steps the owner's goals depend on.
+
+---
+
+## 4. Project review and follow-ups
+
+Reviewed against `main` at `860547e` on 2026-11-21. MogMine already supports price-first entry, chart review, local notes, and process challenges. These are suggested follow-ups for the owner and future slices. The active order is in §2b and [Next up](../NOTES.md#next-up).
+
+### Protect the journal and chart evidence first
+
+1. **Keep an unsaved edit when another tab writes.** The journal replaces its in-memory trade list on a `storage` event. A simulated two-tab sequence dropped a pending note when a different trade was saved in the other tab. Preserve pending field edits across incoming updates and define how to handle two edits to the same field. Add a regression for each case. The add sheet also clears the draft and says the trade is saved before the debounced write completes. Check save confirmation, draft recovery, and the session-only state when storage is blocked. [Journal store](../lib/store.ts) · [Trade entry](../components/AddTradeSheet.tsx)
+2. **Make backup restore a recovery drill.** Tune restores trades, preferences, mood, accounts, and challenges through separate writes. Exercise an old backup, a failed write, and a restore into a clean browser profile. Show recovery status for the affected data. The JSON backup carries journal records, and the chart cache stays in IndexedDB. Make that distinction clear at export and restore. When the owner can unblock `R-04`, prioritize archive coverage and missed-run recovery. A journal restored after the provider's retention window may have a trade record without its original bars, which affects review, drills, and exports. [Backup and restore](../components/TuneScreen.tsx) · [Archive acceptance](10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1)
+3. **Refine `MD-1` from the code already on `main`.** The route and cache already check trade anchors and inside gaps under issue #90. The route returns partial coverage when both anchors are present. `aggregateCandles` can still build a higher-timeframe candle from an incomplete bucket without identifying it. Before dispatching `MD-1`, verify the remaining `AC-07` gaps and aim the slice at what is missing, including incomplete buckets and padding if applicable. Check that inferred fill times and excursions stay explicit about the bars available, including coarser data and holiday gaps (`OD-35`). [Market-data route](../app/api/market-data/route.ts) · [Candle aggregation](../lib/trades.ts)
+
+### Improve the daily review loop
+
+4. **Make a real phone the release check for the core loop.** Run Today → log an open trade → add a note → close the trade → Review → export. Repeat with blocked or unavailable market data and check that capture still works. Use `AC-11` for reload, chart gestures, timeframe switching, and native Share and Copy. Record the build, phone, OS, and browser. Keep browser automation for seeded regressions, including Shield, no horizontal overflow, and empty states. [Phone acceptance](10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1) · [UX checks](08-ux-notes-viewing-and-journaling.md#16-acceptance-checklist-adds-to-agentsmd-4)
+5. **Use the new stats to bring one lesson back to Today.** The app already has a review queue, quick tags, and a process count. After `R-07` and `R-08`, try a weekly review that opens a representative trade or a repeated rule break and lets the trader carry one rule into the next session. Keep process counts beside gross results with a sample size and missing-R count. Keep setup judgments and account-loss-limit checks visible in their own units. Test an edited playbook against historical checklist snapshots and an edited trade against frozen challenge results. [Review queue](../components/ReviewScreen.tsx) · [Daily workflow proposals](11-product-workflows-and-api-context.md) · [Card and drill notes](23-card-system.md#9-review-notes-for-future-slices)
+6. **Give the trade document a deliberate path into the live app.** `deriveTrade` and `fromLegacy` have fixture tests, and production screens currently use the legacy record and helpers. With `TD-1` through `TD-3`, compare the same trade's facts in Trade Detail, account totals, challenges, stats, and exports before switching their readers. Cover partial exits, a moved stop, missing risk, and observed versus inferred facts. Settle `OD-30` before making it a persistence format. The assistant can reuse the same facts once its read scope is approved. [Trade document](15-trade-document-and-render-grammar.md) · [Backend boundary](22-development-mode-and-backend-boundary.md)
+
+### Make unattended development easier to trust
+
+- **Make GitHub check the merge.** At review time `main` reported `protected: false` and its active branch rules list was empty. Add required CI checks that install from the lockfile with `npm ci` and run typecheck, lint, tests, and build. Keep the reviewer for changes that need human-readable evidence, including chart and restore behavior. Record the GitHub and local smoke results in the PR. [Definition of done](../CONTRIBUTING.md#3-how-changes-land)
+- **Make each scheduled run easy to resume.** Keep one stable slice ID, spec link, dependency, and acceptance check per ready item. The worker should read queue updates from the fetched `origin/main` and check whether its prior slice already merged before starting a branch. Summarize the outcome with slice ID, base commit, check results, PR or blocker, and next eligible item. Treat a timed-out run with a partial diff as unfinished work. This keeps the useful worker → reviewer → next worker feedback when the job is interrupted. [Queue](../NOTES.md#next-up) · [Agent workflow](../CONTRIBUTING.md#4-working-with-ai-agents)

@@ -59,6 +59,8 @@ What exists: `buildShareCard` in [lib/shareCard.ts](../lib/shareCard.ts), 1080×
 
 **Process seal content, interim:** rules followed (`adherence()`), plus the blind answer when there is one (`TAKE AGAIN ✓`, `SMALLER`, `PASS`). A letter grade (`A`–`D`) waits for `OD-46` (c); do not invent a grading formula.
 
+**Chart framing.** Keep the current chart view for export under `AC-10` while `OD-48` is open. The proposed trade-focused crop is part of that decision.
+
 **Split for PRs:** `CD-1a` pure layout tables and the frame (tests on band heights and Shield copy for all three sizes); `CD-1b` sheet controls (size picker, back toggle) and `390×844` check.
 
 ---
@@ -156,3 +158,22 @@ Each is a layout on the §2 frame. None is in the queue yet; each waits on the w
 4. §6 cards with the work they wait on.
 
 Acceptance for every card PR: AGENTS.md §4 at `390×844`, all three sizes rendered in a test, Shield copy tested (no `$`, size, account or balance), reduced-motion flip and reveal, and the empty, loading and missing-bars states (docs/08 §4).
+
+---
+
+## 9. Review notes for future slices
+
+### Trade Card
+
+- **Keep the preview and export in sync.** Reuse the prepared PNG flow in [TradeCardSheet](../components/TradeCardSheet.tsx). When framing, size, side, or Shield changes, enable export only when the matching image is ready. Exercise rapid option changes and a failed encode with a retry. Include an open trade that shows `OPEN` without a result and a trade with a long rule list. Check the native Share tap on an iPhone when one is available. [Export behavior](08-ux-notes-viewing-and-journaling.md#11-trade-card)
+- **Give the back its own privacy review.** Consider keeping journal notes and Mood Shape private by default on the back. If a back can be shared, preview both sides before exporting and test Shield across the chart, text, and filename. Use known safe fields in a Shield export. Custom notes, tags, playbook names, and rule labels can contain account names or dollar figures. [Current card content](../lib/shareCard.ts)
+
+### Drill and Playbook Cards
+
+- **Seal the information available at entry.** A completed candle containing the entry can include price movement after the fill, especially at `5m` or `15m`. Try showing only completed bars available at the cutoff, with a separate entry marker if needed. Derive scale and overlays from the sealed data so future bars or marks cannot give away the answer. Test a fill in the middle of a coarse bar and one at a bar boundary. [Bar alignment](../lib/trades.ts)
+- **Teach the rule on the reveal.** Show the first relevant frozen checklist rule and the evidence available at the decision. Try weighting the Misses deck by repeatable rule errors, including a rule break on a winner. For the Take it versus Pass comparison, count the first sealed answer per trade, show each group's sample size, and present average R as a historical comparison. Track replay attempts in a practice count. [Blind review](13-bold-ui-bets.md#4-bet-03--blind-review)
+- **Give empty decks a useful next step.** Show counts for trades awaiting the age cutoff and trades missing saved bars. Consider a clearly labeled sample drill with its own practice stats while the user's deck is empty. For Playbook Cards, consider letting the trader pin a good teaching example after the automatic selection works. [Candle cache](../lib/candles.ts)
+
+### Scheduled handoff
+
+- List one runnable slice per queue entry when the card work reaches the top. Link each entry to its acceptance checks and name its prerequisites. Read the queue from fetched `origin/main` when picking new work, and resume unfinished work on its topic branch. Include the slice ID, exact checks and results, and next eligible item in the review handoff. [Work queue](../NOTES.md#next-up) · [Contribution workflow](../CONTRIBUTING.md#4-working-with-ai-agents)

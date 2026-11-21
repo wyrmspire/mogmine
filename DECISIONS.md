@@ -79,6 +79,7 @@ Raised by the 2026-11-14 reviews and product discussion. Evidence and detail are
 | **OD-45** | How can the trader reopen a manually ended challenge before starting another attempt? | Use a quiet history link on Today when there is no active, passed or failed row of that kind. | R-09d uses the history link. Existing active and completed rows also link to prior attempts from detail. | docs/17 §6 |
 | **OD-46** | Card system (docs/23, owner request 2026-11-21): (a) share opens with Shield on; (b) drill decks use trades older than 7 days and keep answers in `mogmine-drills-v1`, separate from `take_again`; (c) is there a letter process grade, and what formula; (d) do playbooks get an optional "Skip when…" list; (e) minimum trades before a playbook card prints a rate. | (a) Yes. (b) Yes. (c) No letter grade until the owner defines one; the seal is rules followed plus the blind answer. (d) Yes, optional. (e) 10. | Build `CD-1` and `CD-2` with the recommendations. Do not invent a grade formula. `CD-3` waits for `R-07b` and `R-08a`. | [docs/23](docs/23-card-system.md), docs/03 §1, docs/13 §4 |
 | **OD-47** | How should running stats count a closed trade with an unreadable exit timestamp in older device data? | Keep its results in all-time and per-group stats when they can be computed. Count it as undated and omit it from time windows. | `R-08a` returns `undatedCount` for the stats UI to explain the omission. | [docs/16](docs/16-floor-roadmap.md#r-08--running-stats-across-days), `lib/selectors.ts` |
+| **OD-48** | Should the refreshed Trade Card continue to follow the visible chart or offer a trade-focused crop? | Keep the current chart as the default. Consider a trade-focused option with its own export preview. | `AC-10` stays in force. `CD-1a` can improve the frame around the current view. The crop waits for the owner decision. | [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1), [docs/23 §3](docs/23-card-system.md#3-trade-card-refresh-cd-1) |
 
 `OD-3` and `OD-7` depend on a broker account. Under `D-009` they are parked, not rejected.
 
@@ -120,3 +121,8 @@ Fixed during the review, no longer drifting:
 
 - The classifier in `mogprompt.md` §5.2 rounded the hold time to whole minutes before comparing, so a 14m 40s trade was classed `session_90m`. It now compares seconds, matching `docs/07`.
 - Links in `AGENTS.md` and `README.md` pointed at `file:///c:/mogmine/...` and worked on one machine only. They are now relative.
+
+### Conflicts between numbered specs
+
+- **Trade Card framing (`OD-48`).** `AC-10` in docs/10 and `B-61` in docs/09 require export to follow the current visible chart range and timeframe. The proposed layout in docs/23 §3 calls for a crop around entry and exit. Preserve `AC-10` while the crop is open.
+- **Backend dependency wording, resolved.** The older `R-05` introduction in docs/16 said all later work depends on trade persistence. [The backend boundary](docs/22-development-mode-and-backend-boundary.md) and the local-first queue allow UI, stats, playbooks, and render-grammar work on device state. The `R-05` introduction now names cross-device persistence and `R-06`.
