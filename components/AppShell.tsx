@@ -11,6 +11,7 @@ import { hydrateJournal, useJournal } from "@/lib/store";
 import { hydrateMood } from "@/lib/mood-store";
 import { hydrateAccounts } from "@/lib/accounts-store";
 import { hydrateChallenges } from "@/lib/challenge-store";
+import { hydratePlaybooks } from "@/lib/playbooks-store";
 import { dismissToast, useToast } from "@/lib/toast";
 import { openAddTrade, useOnline, useUi } from "@/lib/ui";
 
@@ -39,7 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const toast = useToast();
   const online = useOnline();
 
-  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); }, []);
+  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); }, []);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   const waiting = journal.hydrated ? withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status === "new").length : 0;

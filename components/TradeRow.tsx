@@ -5,6 +5,8 @@ import { RStrip } from "./RStrip";
 import { TradeMoodThumb } from "./MoodShape";
 import { formatDuration, formatMoney, formatPoints, formatR } from "@/lib/format";
 import { playbookName } from "@/lib/playbooks";
+import type { Playbook } from "@/lib/playbooks";
+import { usePlaybooks } from "@/lib/playbooks-store";
 import { formatListTime } from "@/lib/time";
 import { adherence, holdSeconds, isOpen, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
@@ -19,18 +21,19 @@ interface Props {
 }
 
 /** What the trader captured about this trade, or a nudge when nothing has been captured yet. */
-function context(trade: TradeRecord) {
-  const parts = [playbookName(trade.playbook_id), ...trade.quick_tags].filter(Boolean);
+function context(trade: TradeRecord, playbooks: readonly Playbook[]) {
+  const parts = [playbookName(trade.playbook_id, playbooks), ...trade.quick_tags].filter(Boolean);
   if (parts.length) return { text: parts.join(" · "), todo: false };
   if (trade.note.trim()) return { text: trade.note.trim(), todo: false };
   return { text: "Needs tags", todo: true };
 }
 
 export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
+  const { playbooks } = usePlaybooks();
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
-  const info = context(trade);
+  const info = context(trade, playbooks);
   const score = adherence(trade);
   // Shield mode shows skill, not money: R when there is a stop, points otherwise (UX-64).
   // An open trade shows `Open` where the result goes, and nothing else (OD-38).

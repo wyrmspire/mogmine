@@ -1,6 +1,6 @@
 import { normalizeTrade } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
-import { checklistFor } from "./playbooks.ts";
+import { PLAYBOOK_SEEDS, checklistFor } from "./playbooks.ts";
 
 type SeedTrade = Pick<TradeRecord, "id" | "symbol" | "direction" | "quantity" | "entry_time" | "exit_time" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price" | "key_level_price" | "note">
   & { playbook_id?: string; quick_tags?: string[]; followed?: number };
@@ -12,7 +12,8 @@ type SeedTrade = Pick<TradeRecord, "id" | "symbol" | "direction" | "quantity" | 
 export const DEMO_FIXTURE_VERSION = 1;
 
 function makeTrade({ followed, ...seed }: SeedTrade): TradeRecord {
-  const checklist = checklistFor(seed.playbook_id ?? null).map((item, index) => ({ ...item, checked: index < (followed ?? 0) }));
+  // Samples always use the seed rules, so a trader editing a playbook never changes the fixture defaults (#62).
+  const checklist = checklistFor(seed.playbook_id ?? null, PLAYBOOK_SEEDS).map((item, index) => ({ ...item, checked: index < (followed ?? 0) }));
   return normalizeTrade({
     ...seed,
     is_sample: true,
