@@ -164,7 +164,7 @@ Event types. `seq` orders events that share a timestamp.
 | `type` | Fields | Meaning |
 | :--- | :--- | :--- |
 | `plan` | `entry {order, price}`, `stop`, `targets [{key, price, qty}]`, `qty` | The intended trade at decision time. Zero or one per revision of the plan. |
-| `order` | `order`, `role` (`entry` / `stop` / `target`), `kind` (`market` / `limit` / `stop` / `trail`), `qty`, `price`, `target?` | An order went working. |
+| `order` | `order`, `role` (`entry` / `stop` / `target`), `kind` (`market` / `limit` / `stop` / `trail`), `qty`, `price`, `target?`, `opening_entry_seq?` | An order went working. |
 | `modify` | `order`, `price?`, `qty?` | A working order changed: a stop move or a trail step. |
 | `cancel` | `order`, `reason?` | A working order was pulled. |
 | `fill` | `order?`, `role` (`entry` / `exit`), `qty`, `price`, `reason?`, `fees?` | An execution. On an exit, `reason` is `target`, `stop`, `trail`, `manual` or `unknown`. |
@@ -181,7 +181,8 @@ Every event also has `seq`, `t` (UTC) and `basis`.
 
 - `status`: `planned`, `working`, `open`, `closed`, `not_taken`.
 - Position over time, average entry and exit, maximum size.
-- Result in ticks, points and dollars. Fees. R against the **first stop in force at the first entry fill**. Gross or net R is open (`OD-10`); the examples have no fees, so the question does not arise in them.
+- Result in ticks, points and dollars. Fees. R against the **first stop in force at the first entry fill** (or an attached opening bracket stop). Gross or net R is open (`OD-10`); the examples have no fees, so the question does not arise in them.
+  - A stop reported after the first entry fill can supply initial risk when its order explicitly references that fill with `opening_entry_seq` (issue #33, `OD-43`). An unlinked later stop contributes to the stop path from placement and leaves initial risk and R null when no stop was in force at entry (B-32).
 - `stop_path`: `[{from, to, price}]` segments built from `order` and `modify` events.
 - `outcome`: `target` · `stop` · `trail` · `scratch` · `manual` · `partial_targets` · `not_taken`. From exit reasons, and from price equality with the plan when a reason is missing (then `basis: inferred`).
 - Planned R:R per target.

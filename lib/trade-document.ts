@@ -73,6 +73,8 @@ export interface OrderEvent extends TradeEventBase {
   qty: number;
   price: number;
   target?: string;
+  /** Entry fill sequence explicitly associated with an opening bracket stop. */
+  opening_entry_seq?: number;
 }
 
 export interface ModifyEvent extends TradeEventBase {
@@ -140,6 +142,13 @@ export interface TradeDocAnnotations {
   flagged: boolean;
   take_again: "yes" | "smaller" | "pass" | null;
   take_again_at: string | null;
+  initial_stop_set_at?: string | null;
+  initial_stop_price?: number | null;
+  yahoo_ticker?: string;
+  sparkline?: number[];
+  candle_source?: TradeRecord["candle_source"];
+  fixture_version?: number;
+  annotations_modified?: boolean;
 }
 
 export interface TradeDocument {
@@ -257,6 +266,7 @@ export type StructuralErrorCode =
   | "closed_not_flat"
   | "stop_wrong_side"
   | "target_qty_exceeds_position"
+  | "malformed_event"
   | "invalid_quantity"
   | "off_tick_price"
   | "unknown_symbol";
@@ -456,8 +466,26 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     });
   }
 
-  // Sort a copy by seq (stable tie-breaker on original index).
-  const ordered = doc.events
+  // Safely filter and sort events by seq (stable tie-breaker on original index).
+  // Any non-object or malformed events that bypassed guards are recorded as structural errors rather than throwing.
+  const validEvents: TradeEvent[] = [];
+  for (let index = 0; index < doc.events.length; index++) {
+    const ev = doc.events[index];
+    if (isTradeEvent(ev)) {
+      validEvents.push(ev);
+    } else {
+      errors.push({
+        code: "malformed_event",
+        seq: null,
+        t: null,
+        price: null,
+        basis: null,
+        message: `Malformed event at index ${index}`,
+      });
+    }
+  }
+
+  const ordered = validEvents
     .map((event, index) => ({ event, index }))
     .sort((a, b) => (a.event.seq !== b.event.seq ? a.event.seq - b.event.seq : a.index - b.index))
     .map((item) => item.event);
@@ -502,6 +530,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
   let initialStop: InitialStopInfo | null = null;
   let initialStopChecked = false;
   let lastKnownStopPrice: number | null = null;
+  let firstEntryFillEvent: FillEvent | null = null;
   const resolvedExitReasons: Array<{ reason: ExitReason; basis: EventBasis; seq: number; t: string; price: number; fillBasis: EventBasis }> = [];
 
   const recordOffTickIfNeeded = (price: number, event: TradeEventBase, label: string) => {
@@ -551,7 +580,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     }
     const stopPrices: number[] = [];
     for (const stop of activeStops.values()) stopPrices.push(stop.price);
-    if (stopPrices.length === 0 && plan?.stop != null) stopPrices.push(plan.stop);
+    if (!hasEntryFill && stopPrices.length === 0 && plan?.stop != null) stopPrices.push(plan.stop);
     if (stopPrices.some((sp) => samePrice(fill.price, sp, resolvedSpec))) {
       return { reason: "stop", basis: "inferred" };
     }
@@ -760,9 +789,12 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
               implicit: false,
               segmentIndex: segIdx,
             });
-            // If the position is already open (entry fill occurred before stop order placement),
-            // this first stop order placed for the open position is our initial stop.
-            if (!initialStop && hasEntryFill) {
+            if (
+              initialStop == null &&
+              position > 0 &&
+              firstEntryFillEvent != null &&
+              event.opening_entry_seq === firstEntryFillEvent.seq
+            ) {
               initialStop = {
                 price: event.price,
                 t: event.t,
@@ -917,6 +949,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             firstEntryTime = event.t;
             firstEntryPrice = event.price;
             firstEntryTicks = fillTicks;
+            firstEntryFillEvent = event;
           }
 
           if (event.order && activeEntryOrders.has(event.order)) {
@@ -1447,7 +1480,7 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
 
   // Exit fill for closed trades only (open trades emit entry fill only).
   if (record.status === "closed" && record.exit_time != null && record.exit_price != null) {
-    const activeStop = record.stop_loss_price ?? record.initial_stop_price;
+    const activeStop = record.stop_loss_price;
     let reason: ExitReason | undefined;
     let reasonBasis: EventBasis | undefined;
     if (
@@ -1526,6 +1559,13 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
       flagged: record.flagged,
       take_again: record.take_again,
       take_again_at: record.take_again_at,
+      initial_stop_set_at: record.initial_stop_set_at,
+      initial_stop_price: record.initial_stop_price,
+      yahoo_ticker: record.yahoo_ticker,
+      sparkline: [...record.sparkline],
+      candle_source: record.candle_source,
+      fixture_version: record.fixture_version,
+      annotations_modified: record.annotations_modified,
     },
   };
 }
@@ -1547,18 +1587,111 @@ function pickStopMoveTime(entryTime: string, exitTime: string | null, setAt: str
   return entryTime;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function isBasis(value: unknown): value is EventBasis {
+  return value === "broker" || value === "stated" || value === "inferred";
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function isTradeEvent(value: unknown): value is TradeEvent {
+  if (!isRecord(value) || !Number.isSafeInteger(value.seq) || !isTimestamp(value.t) || !isBasis(value.basis)) {
+    return false;
+  }
+  switch (value.type) {
+    case "plan":
+      return typeof value.qty === "number" &&
+        isRecord(value.entry) &&
+        (value.entry.order === "market" || value.entry.order === "limit" || value.entry.order === "stop") &&
+        typeof value.entry.price === "number" &&
+        (value.stop === null || typeof value.stop === "number") &&
+        Array.isArray(value.targets) &&
+        value.targets.every((target) => isRecord(target) && typeof target.key === "string" &&
+          typeof target.price === "number" && typeof target.qty === "number");
+    case "order":
+      return typeof value.order === "string" &&
+        (value.role === "entry" || value.role === "stop" || value.role === "target") &&
+        (value.kind === "market" || value.kind === "limit" || value.kind === "stop" || value.kind === "trail") &&
+        typeof value.price === "number" && typeof value.qty === "number" &&
+        (value.target === undefined || typeof value.target === "string") &&
+        (value.opening_entry_seq === undefined || Number.isSafeInteger(value.opening_entry_seq));
+    case "modify":
+      return typeof value.order === "string" &&
+        (value.price === undefined || typeof value.price === "number") &&
+        (value.qty === undefined || typeof value.qty === "number");
+    case "cancel":
+      return typeof value.order === "string" && (value.reason === undefined || typeof value.reason === "string");
+    case "fill":
+      return (value.role === "entry" || value.role === "exit") &&
+        typeof value.price === "number" && typeof value.qty === "number" &&
+        (value.order === undefined || typeof value.order === "string") &&
+        (value.fees === undefined || typeof value.fees === "number") &&
+        (value.reason === undefined || value.reason === "target" || value.reason === "stop" ||
+          value.reason === "trail" || value.reason === "manual" || value.reason === "unknown") &&
+        (value.reason_basis === undefined || isBasis(value.reason_basis));
+    case "note":
+      return typeof value.text === "string" && (value.anchor === undefined ||
+        (isRecord(value.anchor) &&
+          (value.anchor.t === undefined || isTimestamp(value.anchor.t)) &&
+          (value.anchor.seq === undefined || Number.isSafeInteger(value.anchor.seq)) &&
+          (value.anchor.section === undefined || value.anchor.section === "note" ||
+            value.anchor.section === "pre_trade_thesis" || value.anchor.section === "management_notes" ||
+            value.anchor.section === "post_exit_notes")));
+    case "void":
+      return Number.isSafeInteger(value.ref);
+    default:
+      return false;
+  }
+}
+
 /** Runtime guard for checking an unknown JSON payload is a `mogmine.trade.v1` document. */
 export function isTradeDocument(value: unknown): value is TradeDocument {
-  if (!value || typeof value !== "object") return false;
-  const doc = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
   return (
-    doc.schema === TRADE_DOC_SCHEMA &&
-    typeof doc.id === "string" &&
-    typeof doc.user_id === "string" &&
-    (doc.side === "long" || doc.side === "short") &&
-    Array.isArray(doc.events) &&
-    typeof doc.instrument === "object" &&
-    doc.instrument !== null &&
-    typeof (doc.instrument as Record<string, unknown>).symbol === "string"
+    value.schema === TRADE_DOC_SCHEMA &&
+    (value.doc === undefined || typeof value.doc === "string") &&
+    typeof value.id === "string" &&
+    typeof value.user_id === "string" &&
+    Number.isSafeInteger(value.revision) &&
+    (value.side === "long" || value.side === "short") &&
+    typeof value.is_sample === "boolean" &&
+    Array.isArray(value.events) &&
+    value.events.every(isTradeEvent) &&
+    isRecord(value.instrument) &&
+    typeof value.instrument.symbol === "string" &&
+    (value.instrument.contract === null || typeof value.instrument.contract === "string") &&
+    isRecord(value.source) &&
+    (value.source.kind === "manual" || value.source.kind === "csv" || value.source.kind === "broker") &&
+    (value.source.provider === null || typeof value.source.provider === "string") &&
+    (value.source.imported_at === null || isTimestamp(value.source.imported_at)) &&
+    (value.mood_records === undefined || Array.isArray(value.mood_records)) &&
+    (value.annotations === undefined || isAnnotations(value.annotations))
   );
+}
+
+function isAnnotations(value: unknown): value is TradeDocAnnotations {
+  return isRecord(value) &&
+    (value.account_id === null || typeof value.account_id === "string") &&
+    (value.trade_style === "scalp" || value.trade_style === "session_90m" || value.trade_style === "investment") &&
+    (value.key_level_price === null || typeof value.key_level_price === "number") &&
+    (value.review_status === "new" || value.review_status === "tagged" || value.review_status === "reviewed") &&
+    (value.playbook_id === null || typeof value.playbook_id === "string") &&
+    Array.isArray(value.quick_tags) && value.quick_tags.every((tag) => typeof tag === "string") &&
+    Array.isArray(value.checklist_state) && value.checklist_state.every((item) =>
+      isRecord(item) && typeof item.id === "string" && typeof item.label === "string" && typeof item.checked === "boolean") &&
+    typeof value.flagged === "boolean" &&
+    (value.take_again === null || value.take_again === "yes" || value.take_again === "smaller" || value.take_again === "pass") &&
+    (value.take_again_at === null || isTimestamp(value.take_again_at)) &&
+    (value.initial_stop_set_at === undefined || value.initial_stop_set_at === null || isTimestamp(value.initial_stop_set_at)) &&
+    (value.initial_stop_price === undefined || value.initial_stop_price === null || typeof value.initial_stop_price === "number") &&
+    (value.yahoo_ticker === undefined || typeof value.yahoo_ticker === "string") &&
+    (value.sparkline === undefined || (Array.isArray(value.sparkline) && value.sparkline.every((price) => typeof price === "number"))) &&
+    (value.candle_source === undefined || value.candle_source === "Yahoo Finance" || value.candle_source === "Demo fixture") &&
+    (value.fixture_version === undefined || typeof value.fixture_version === "number") &&
+    (value.annotations_modified === undefined || typeof value.annotations_modified === "boolean");
 }

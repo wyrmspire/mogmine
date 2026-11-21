@@ -340,7 +340,7 @@ test("short trade: direction sign, widened stop detection, and exact MCL 0.01 in
 test("scale-in + voided fill: FIFO P&L, B-32 initial risk, and void excludes cancelled leg", () => {
   const doc = makeDoc([
     { seq: 1, t: "2026-11-12T15:30:00Z", type: "fill", basis: "broker", role: "entry", qty: 1, price: 7600 },
-    { seq: 2, t: "2026-11-12T15:30:01Z", type: "order", basis: "broker", order: "s1", role: "stop", kind: "stop", qty: 1, price: 7595 },
+    { seq: 2, t: "2026-11-12T15:30:01Z", type: "order", basis: "broker", order: "s1", opening_entry_seq: 1, role: "stop", kind: "stop", qty: 1, price: 7595 },
     { seq: 3, t: "2026-11-12T15:32:00Z", type: "fill", basis: "broker", role: "entry", qty: 1, price: 7602 },
     // Duplicate fill later voided by broker
     { seq: 4, t: "2026-11-12T15:32:00Z", type: "fill", basis: "broker", role: "entry", qty: 1, price: 7602 },
@@ -719,4 +719,72 @@ test("regression (cycle 2): legacy stop move and cancellation preserve inferred 
   const cancelDoc = fromLegacy(cancelRecord);
   const cancelEv = cancelDoc.events.find((e) => e.type === "cancel");
   assert.equal(cancelEv?.type === "cancel" ? cancelEv.basis : null, "inferred");
+  const exitAtRemovedStop = fromLegacy({ ...cancelRecord, exit_price: 7595 });
+  const exit = exitAtRemovedStop.events.find((event) => event.type === "fill" && event.role === "exit");
+  assert.equal(exit?.type === "fill" ? exit.reason : undefined, undefined);
+  assert.equal(deriveTrade(exitAtRemovedStop).outcome, "manual");
+});
+
+test("regression (cycle 3): attached opening bracket vs late stop", () => {
+  // Attached opening bracket preserves 1.2R in ex-trail
+  const trailDoc = loadFixture("ex-trail");
+  const trailDerived = deriveTrade(trailDoc, FUTURES_SPECS.MES);
+  assert.equal(trailDerived.initial_stop?.price, 7595);
+  assert.equal(trailDerived.r_multiple, 1.2);
+
+  // Moving the stop order after intervening events (e.g. note or later in time/seq) represents a late stop
+  // which leaves initial_stop, initial_risk, and r_multiple as null.
+  const lateDoc: TradeDocument = {
+    ...trailDoc,
+    events: [
+      { seq: 1, t: "2026-11-12T15:34:00Z", type: "fill", basis: "broker", order: "o1", role: "entry", qty: 2, price: 7600.00 },
+      { seq: 2, t: "2026-11-12T15:34:30Z", type: "note", basis: "stated", text: "Entered without stop" },
+      { seq: 3, t: "2026-11-12T15:39:00Z", type: "order", basis: "broker", order: "o2", role: "stop", kind: "stop", qty: 2, price: 7595.00 },
+      { seq: 4, t: "2026-11-12T15:47:30Z", type: "modify", basis: "broker", order: "o2", price: 7601.00 },
+      { seq: 5, t: "2026-11-12T15:58:10Z", type: "modify", basis: "broker", order: "o2", price: 7606.00 },
+      { seq: 6, t: "2026-11-12T16:03:44Z", type: "fill", basis: "broker", order: "o2", role: "exit", qty: 2, price: 7606.00, reason: "trail" },
+    ],
+  };
+
+  const adjacentLateDoc = { ...lateDoc, events: lateDoc.events
+    .filter((event) => event.type !== "note")
+    .map((event, index) => ({ ...event, seq: index + 1 })) };
+  assert.equal(deriveTrade(adjacentLateDoc, FUTURES_SPECS.MES).r_multiple, null);
+
+  const lateDerived = deriveTrade(lateDoc, FUTURES_SPECS.MES);
+  assert.equal(lateDerived.status, "closed");
+  assert.equal(lateDerived.initial_stop, null, "late stop must not be treated as initial stop");
+  assert.equal(lateDerived.initial_risk_usd, null, "initial risk must be null when entry lacked stop");
+  assert.equal(lateDerived.r_multiple, null, "R must be null when trade entered without stop in force");
+  assert.equal(lateDerived.stop_path.length, 3, "stop path still tracked from late placement");
+});
+
+test("regression (cycle 3): validation boundary rejects malformed events and deriveTrade reports errors without throwing", () => {
+  const trailDoc = loadFixture("ex-trail");
+  const malformedDoc = {
+    ...trailDoc,
+    events: [null, null],
+  };
+
+  assert.equal(isTradeDocument(malformedDoc), false, "isTradeDocument must reject malformed event arrays");
+
+  // If malformed document bypasses boundary and reaches deriveTrade, it should record errors gracefully rather than throwing
+  // @ts-expect-error testing untyped runtime bypass
+  const derived = deriveTrade(malformedDoc, FUTURES_SPECS.MES);
+  assert.ok(derived.errors.length >= 2);
+  assert.equal(derived.errors[0].code, "malformed_event");
+  assert.equal(derived.errors[0].message, "Malformed event at index 0");
+  assert.equal(derived.errors[1].message, "Malformed event at index 1");
+
+  const base = { seq: 1, t: "2026-11-12T15:34:00Z", basis: "broker" };
+  for (const event of [
+    { ...base, type: "plan" },
+    { ...base, type: "plan", entry: { order: "market", price: 7600 }, qty: 1, stop: null, targets: [null] },
+    { ...base, type: "fill", role: "entry", qty: 1 },
+    { ...base, type: "bogus" },
+  ]) {
+    const malformed = { ...trailDoc, events: [event] };
+    assert.equal(isTradeDocument(malformed), false);
+    assert.equal(deriveTrade(malformed as TradeDocument, FUTURES_SPECS.MES).errors[0].code, "malformed_event");
+  }
 });

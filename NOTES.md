@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — Codex — recovered timed-out issue #33 review, Core math lane
+Did:      Replaced bracket inference by event adjacency with an explicit opening fill reference (OD-43), validated event payloads, preserved legacy metadata, and prevented inferred stop exits at cancelled stops.
+Files:    `lib/trade-document.ts`, `lib/__tests__/trade-document.test.ts`, two bracket fixtures, docs/15, DECISIONS.md, NOTES.md.
+Checked:  `npm test` 288 passed and 0 failed, `npm run typecheck` clean, `npm run lint` 0 errors and 1 existing PostCSS warning, `npm run build` 8/8 static pages, `git diff --check origin/main` clean.
+Left:     OD-43 source mapping to confirm if broker support resumes.
+
 ### 2026-11-21 — agent (Antigravity) — cycle 2 review & regression fixes (#33), Core math lane
 Did:      Fixed initial R to capture stop in force at entry fill even when pre-entry stop was modified (docs/15 §3.3). Changed `fromLegacy` stop modify/cancel events to `basis: "inferred"` because legacy records don't store post-freeze edit timestamps. Added regression tests for both.
 Files:    `lib/trade-document.ts`, `lib/__tests__/trade-document.test.ts`, `NOTES.md`.
