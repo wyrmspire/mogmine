@@ -3,7 +3,7 @@
 > **Read this file FIRST before planning, scaffolding, or editing any code in this repository.**  
 > This guide protects smaller/faster models and specialized subagents from common charting, market-data, futures-math, and architecture pitfalls.
 >
-> **Then read [NOTES.md](NOTES.md)** for the current state and the last handoff, and check [DECISIONS.md](DECISIONS.md) before choosing a name or re-opening a settled choice. Workflow for people and agents is in [CONTRIBUTING.md](CONTRIBUTING.md).
+> **Then read [NOTES.md](NOTES.md)** for the current state and the last handoff, and check [DECISIONS.md](DECISIONS.md) before choosing a name or re-opening a settled choice. Workflow for people and agents is in [CONTRIBUTING.md](CONTRIBUTING.md). Before treating Supabase as a blocker, read [22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
 
 ---
 
@@ -46,6 +46,7 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 | The owner's trade screen mockups (phone and desktop), and how they map to the roadmap | [19 — Design Guide](docs/19-design-guide.md) (`OD-40`) |
 | The add-trade form (prices first, tick steppers, date and time pickers), stop at entry (`R-10`), dragging the price axis to stretch it | [20 — Price-First Entry & Price-Axis Stretch](docs/20-price-first-entry.md) (`OD-41`) |
 | Accounts, running totals, loss limits, balance checks | [21 — Accounts and Running Totals](docs/21-accounts-and-running-totals.md) (`OD-42`) |
+| Whether the current task needs Supabase, using fixtures/local state, or sharing one Supabase project with ShowMob | [22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md) |
 | Trade document (`mogmine.trade.v1`), plan/actual/excursion box layers, stop paths, hindsight, the deriver and display list (`buildMarks`) | [15 — Trade Document & Render Grammar](docs/15-trade-document-and-render-grammar.md) (open decisions `OD-30`–`OD-34`) |
 | A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
 | Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |
