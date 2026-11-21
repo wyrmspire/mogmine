@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — agent (Antigravity) — R-09a challenge evaluator (docs/17), Core math lane
+Did:      Built `lib/challenges.ts` (pure evaluation engine for Drawdown Defender and Clean Run; integer cents, session assignment, provisional states, no broker enforcement or AI scoring) and comprehensive test suite `lib/__tests__/challenges.test.ts`.
+Files:    `lib/challenges.ts` (new), `lib/__tests__/challenges.test.ts` (new), `NOTES.md`.
+Checked:  `npm run typecheck`, `npm run lint` (0 errors, 1 pre-existing warning), `npm test` (292 pass), `npm run build` (8/8 static).
+Left:     Unblocks `R-09b` (`lib/challenge-store.ts`, backup/restore).
+
 ### 2026-11-21 — Codex — recovered timed-out issue #33 review, Core math lane
 Did:      Replaced bracket inference by event adjacency with an explicit opening fill reference (OD-43), validated event payloads, preserved legacy metadata, and prevented inferred stop exits at cancelled stops.
 Files:    `lib/trade-document.ts`, `lib/__tests__/trade-document.test.ts`, two bracket fixtures, docs/15, DECISIONS.md, NOTES.md.
