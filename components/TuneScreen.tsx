@@ -9,6 +9,7 @@ import { getChallengesBackup, restoreChallenges } from "@/lib/challenge-store";
 import { getMoodBackup, restoreMood } from "@/lib/mood-store";
 import { getAccountsBackup, restoreAccounts } from "@/lib/accounts-store";
 import { getPlaybooksBackup, restorePlaybooks } from "@/lib/playbooks-store";
+import { PlaybookEditor } from "./PlaybookEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 
@@ -363,6 +364,12 @@ export function TuneScreen() {
           </div>
         </div>
       </section>
+
+      <div className="section-title" id="playbooks">
+        <h2>Playbooks</h2>
+        <span>Setups &amp; rules</span>
+      </div>
+      <PlaybookEditor />
 
       <div className="section-title">
         <h2>Journal backup</h2>

@@ -946,3 +946,22 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .running-table thead th { color: var(--text-muted); }
 .running-table small { display: block; }
 .running-footer-notes { margin: 10px 0 0; padding-inline-start: 16px; }
+
+/* Tune → Playbooks (R-07b) */
+.playbook-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.playbook-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 6px 0 6px 2px; border-top: 1px solid var(--border-subtle); }
+.playbook-list > li:first-child > .playbook-row { border-top: 0; }
+.playbook-row > span { display: grid; gap: 2px; min-width: 0; }
+.playbook-row b { overflow-wrap: anywhere; }
+.playbook-row small { color: var(--text-muted); font-size: 0.6875rem; }
+.playbook-row.archived b { color: var(--text-muted); }
+.playbook-row .btn-secondary { flex: none; min-width: 72px; }
+.playbook-form { display: grid; gap: 12px; padding: 12px; border-radius: 14px; background: var(--bg-inset); border: 1px solid var(--border-subtle); }
+.rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rule-list li { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 44px); gap: 4px; align-items: center; }
+.rule-list input, .rule-add input { min-height: 44px; min-width: 0; width: 100%; }
+.rule-list input[aria-invalid="true"] { border-color: var(--risk-crimson); }
+.rule-list .icon-button:disabled { opacity: 0.35; }
+.rule-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.playbook-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.playbook-actions .btn-ghost { margin-left: auto; }

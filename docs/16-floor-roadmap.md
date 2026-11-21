@@ -65,8 +65,8 @@ Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CO
 3. **`TD-1` (Issue `#35` pure) — `observeTrade` (`docs/15` §3.3):** Bar observer over `DerivedTrade` + golden tests on `fixtures/trades/ex-*.json`.
 4. **`TD-2` (Issue `#34` pure) — `buildMarks` (`docs/15` §3.4):** Display list builder (`D-010` fills-only look; no purple outlines) + golden tests on all 7 `ex-*.json` fixtures.
 5. **`TD-3` (Issue `#34` canvas) — `PositionBoxPrimitive` paints `Mark[]`:** Stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
-6. **`R-07a` — Local playbook store & backup (`lib/playbooks-store.ts`, `lib/store.ts`):** `mogmine-playbooks-v1` + `user_id` (Invariant 7) + backup/restore.
-7. **`R-07b` — Playbook editor (`components/TuneScreen.tsx`):** Add, rename, reorder rules, archive (no hard delete; frozen trade checklists stay intact).
+6. **Done — `R-07a` — Local playbook store & backup (`lib/playbooks-store.ts`, `lib/store.ts`):** `mogmine-playbooks-v1` + `user_id` (Invariant 7) + backup/restore.
+7. **Done — `R-07b` — Playbook editor (`components/PlaybookEditor.tsx` in Tune):** Add, rename, reorder rules, archive (no hard delete; frozen trade checklists stay intact).
 8. **`UI-1` — Chart OHLC HUD & honest freshness (`components/TradeDetail.tsx`, `app/globals.css`, `OD-40`):** Pin OHLC readout top-left inside `.chart-frame`; keep `.chart-source` visible; add `Delayed · Xm` / `Cached` / `Offline` pill.
 9. **`UI-2` — Desktop 3-column workstation & toolbar polish (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`):** Refine `>=1024px` workspace without hiding `.trade-levels-card` or regressing `390×844`.
 10. **`UI-3` — Mood at Entry (`OD-39` c, `docs/19` §4):** Optional 1-tap pre-exit mood capture in `AddTradeSheet` / open `TradeDetail`.
@@ -300,6 +300,7 @@ Today `lib/playbooks.ts` holds four fixed setups that share `STANDARD_RULES`. Bu
 - Editor in Tune or its own screen: add, rename, reorder rules, archive. No hard delete: old trades reference the playbook.
 - **A trade keeps the checklist it was saved with** (UX-50, `checklistFor` already copies it). Editing a playbook never changes a past trade.
 - Seed the four current playbooks so nothing existing breaks, and include custom playbooks in `buildBackup`/`parseBackupFile`.
+- **Built (2026-11-21):** `lib/playbooks-store.ts` and Tune → Playbooks. Pickers hide archived playbooks except the one a trade is filed under; names still resolve for old trades. `no-setup` stays rule-free and cannot be archived. Name clash is case-insensitive and includes archived playbooks. Limits: 40-character names, 12 rules, 80-character rules (`OD-49`). Sample fixtures always use the seed rules. Backups without `playbooks` leave the device list alone.
 
 ---
 

@@ -17,7 +17,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-48`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-49`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
@@ -36,8 +36,8 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`** (`lib/trade-document.ts` / `lib/trade-bar-validation.ts`, `docs/15` §3.3): stop-segment traded through, unfilled target touched, fill outside bar, MFE/MAE, post-exit hindsight touches, tested against `fixtures/trades/ex-*.json`.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks(derived, facts, timeframe, detail, shield)`** (`docs/15` §3.4): deterministic `Mark[]` display list with bar snapping (`B-23`) and **`D-010` fills-only look** (no purple outlines; overrides stale pre-`D-010` text in `#34`) + golden tests for all 7 `ex-*.json` fixtures.
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
-6. **`R-07a` — Local playbook store & backup** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
-7. **`R-07b` — Playbook editor UI** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
+6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
+7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
 8. **`UI-1` — Chart OHLC HUD & honest freshness** (`components/TradeDetail.tsx`, `app/globals.css`, `OD-40`): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
 9. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`.
 10. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
@@ -62,12 +62,18 @@ Claim a lane before starting. Clear the claim when you stop.
 | Core math | — | | |
 | Chart | — | | |
 | App shell and notes | — | | |
-| Data | Claude (Opus 5.5 session) | 2026-11-21 | `R-07a` + `R-07b` playbook store and editor. Worker: skip R-07, take TD-1 → TD-3. |
+| Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-21 — Claude (Opus 5.5 session) — R-07a + R-07b playbook store and editor, Data lane released
+Did:      `lib/playbooks-store.ts` (`mogmine-playbooks-v1`, seeds, `user_id`, archive-only, validation, backup round-trip) and Tune → Playbooks (`components/PlaybookEditor.tsx`: add, rename, default style, add/reorder/remove rules, archive/restore). Pickers, stats labels, rows and Clean Run setup read the store. Samples stay on seed rules. Open choices recorded as `OD-49`.
+Files:    `lib/playbooks.ts`, `lib/playbooks-store.ts` (new), `lib/store.ts`, `lib/fixtures.ts`, `lib/__tests__/playbooks-store.test.ts` (new), `components/PlaybookEditor.tsx` (new), `components/{TuneScreen,AppShell,PitStop,ChallengeSetupSheet,TradeRow,RunningStatsCard}.tsx`, `app/globals.css`, `docs/16`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `npm test` 329 passed, 0 failed. Typecheck clean, lint 0 errors and the existing warning, build 8/8. Headless Chrome at 390×844 and 1280×900, 26/26 checks: seeds listed, clash message, add/reorder/save (pending rule kept), `user_id` in storage, archive/restore, `no-setup` locked, rename shown on Feed, 0 overflow, 44px targets, 0 page errors.
+Left:     Phone check still owed (`AC-11`). `CD-3` is unblocked once the worker's TD queue allows. `OD-49` needs the owner.
 
 ### 2026-11-21 — Codex — reviewed R-08b, App shell and notes lane released
 Did:      Finished the Today stats card with accessible windows, all-time breakdowns, priced denominators, missing-R counts and Shield. OD-47 now covers how undated legacy trades affect accounts, challenges and Trade Detail.
