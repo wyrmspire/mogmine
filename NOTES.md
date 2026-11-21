@@ -67,6 +67,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — Claude (Haiku 5.5 session) — lessons from the card-system work, no lane
+Did:      Wrote and merged the card spec (`docs/23`, PR #130), `OD-46`, and the `CD-1`–`CD-3` queue entries. Added the lessons below to `CONTRIBUTING.md` §4 so they outlive this session.
+Learned:  (1) GPT and Codex runners read `origin/main` only. Work left in a local checkout was invisible to them, and the spec would have been lost to them without a PR. (2) A file changed on disk while I was editing `docs/23`. It was committed as found, but its content was not checked line by line against the draft. Re-read `docs/23` before building `CD-1a`. (3) `git branch -vv` showed several old local branches and a worktree (`mogmine-work.JBhofO`). Check them before reusing a branch name.
+Files:    `docs/23-card-system.md`, `CONTRIBUTING.md`, `NOTES.md`.
+Left:     Owner decisions in `OD-46` (letter grade, defaults). Next queue item is `MD-1`, then `CD-1a`.
+
 ### 2026-11-21 — Claude — card system spec (`docs/23`), no lane
 Did:      Owner asked how to improve Trade Cards and whether to add playbook and practice cards. Wrote docs/23: shared card frame, Trade Card refresh (`CD-1`), drill / flash cards built on BET-03 (`CD-2`), playbook card (`CD-3`), later day / plan / mistake / week cards, and uses. Opened `OD-46` with interim rules so `CD-1`/`CD-2` are not blocked.
 Files:    `docs/23-card-system.md` (new), `DECISIONS.md`, `AGENTS.md`, `docs/03-trade-cards-and-note-taking.md`, `docs/16-floor-roadmap.md`, `NOTES.md`.

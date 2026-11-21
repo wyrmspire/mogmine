@@ -88,6 +88,8 @@ Different developers will use different tools. The files, not the tool, carry th
 - **Two agents never edit the same file at once.** Use separate branches or worktrees and merge through PRs.
 - **An agent that finds a conflict between specs stops and records it** in `DECISIONS.md`. It does not resolve it by inventing a name or a behaviour.
 - **"Done" needs evidence.** The handoff includes the commands run and their real output. A claim without output is treated as not verified.
+- **If another agent or tool must see it, it must be on `origin/main`.** Some agents (GPT, Codex runners) read GitHub `main` only. Local uncommitted or unmerged work is invisible to them. Land docs in a small PR and merge it. Confirm with `git ls-tree origin/main <path>`, not with local `git status`.
+- **Check the worktree before editing a shared file.** Another session may have changed it. Re-read the file and check `git status` and `git log -- <file>` first. Report any change you did not make.
 - **Agents leave a handoff note** in [NOTES.md](NOTES.md) at the end of a session, in the format given there.
 - **Agents do not close decisions, change invariants, or touch secrets.** They propose. A person decides.
 - **Check external facts.** Vendor limits and terms change. [docs/09 §10](docs/09-backend-risk-register.md#10-verification-log-2026-11-14) records what was verified and when. Re-verify anything older than a few months before building on it.
