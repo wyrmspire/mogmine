@@ -16,8 +16,8 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use real Yahoo Finance candles only; without market bars they show no chart.
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
-- Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-45`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-46`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
@@ -40,6 +40,9 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 9. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`.
 10. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
 11. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check in `/api/market-data` & `lib/candles.ts`:** replace `candles.length >= 4` acceptance with shared `expectedInsideBarTimes` coverage check.
+12. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
+13. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
+14. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
 
 ### Supabase-gated / Owner-gated (do not block on or pick up unasked)
 
@@ -63,6 +66,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-21 — Claude — card system spec (`docs/23`), no lane
+Did:      Owner asked how to improve Trade Cards and whether to add playbook and practice cards. Wrote docs/23: shared card frame, Trade Card refresh (`CD-1`), drill / flash cards built on BET-03 (`CD-2`), playbook card (`CD-3`), later day / plan / mistake / week cards, and uses. Opened `OD-46` with interim rules so `CD-1`/`CD-2` are not blocked.
+Files:    `docs/23-card-system.md` (new), `DECISIONS.md`, `AGENTS.md`, `docs/03-trade-cards-and-note-taking.md`, `docs/16-floor-roadmap.md`, `NOTES.md`.
+Checked:  Docs only. Relative-link check and `git diff --check` (output in the PR).
+Left:     `CD-1a` follows `MD-1` in the queue. `OD-46` (c) letter grade needs the owner; do not invent one.
 
 ### 2026-11-21 — Codex — reviewed the scheduled maintainer, no lane
 Did:      Inspected the host timer, runner and run reports. Four half-hour worker and reviewer runs landed Challenges in PRs #125–#128.
