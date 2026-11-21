@@ -777,3 +777,63 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .account-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; min-height: 44px; border-top: 1px solid var(--border-subtle); }
 .account-history li a, .account-history li > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-pick { margin-top: 12px; }
+
+/* Trading Challenges (R-09c, docs/17 §6) */
+.challenge-card { margin-block: 14px; }
+.challenge-empty { display: flex; align-items: center; min-height: 44px; }
+.challenge-start-link { background: none; border: 0; padding: 0; color: var(--text-primary); font: inherit; font-size: 0.8125rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; min-height: 44px; }
+.challenge-start-link:hover { text-decoration: underline; }
+
+.challenge-active-list { display: grid; gap: 14px; }
+.challenge-entry { display: grid; }
+.challenge-entry + .challenge-entry { border-top: 1px solid var(--border-subtle); padding-top: 14px; }
+
+.challenge-row { display: grid; gap: 6px; font-variant-numeric: tabular-nums; }
+.challenge-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.challenge-name { font-size: 0.75rem; font-weight: 850; letter-spacing: 0.08em; color: var(--text-primary); }
+.challenge-header-stat { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
+
+.challenge-row-metrics { font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); }
+.challenge-estimate { color: var(--warn-amber); font-weight: 500; font-size: 0.75rem; }
+.challenge-grading-note { color: var(--warn-amber); font-weight: 500; font-size: 0.75rem; }
+
+.challenge-meter-wrap { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.challenge-meter { flex: 1; display: block; height: 6px; border-radius: 3px; background: var(--bg-inset); border: 1px solid var(--border-subtle); overflow: hidden; }
+.challenge-meter i { display: block; height: 100%; background: var(--text-muted); }
+.challenge-meter.close i { background: var(--warn-amber); }
+.challenge-meter.breached i { background: var(--loss-text); }
+.challenge-pct { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; min-width: 54px; text-align: right; }
+
+.challenge-dots { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.875rem; line-height: 1; margin-top: 2px; }
+.challenge-dot.filled { color: var(--gold-light); }
+.challenge-dot.empty { color: var(--text-faint); }
+
+.challenge-status-passed { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.8125rem; font-weight: 700; color: var(--text-primary); min-height: 36px; }
+.challenge-badge-check { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 12px; background: color-mix(in srgb, var(--profit-emerald) 20%, transparent); color: var(--profit-text); font-weight: 900; font-size: 0.875rem; }
+
+.challenge-status-failed { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.8125rem; font-weight: 700; color: var(--loss-text); min-height: 36px; }
+.challenge-badge-fail { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 12px; background: color-mix(in srgb, var(--risk-crimson) 20%, transparent); color: var(--loss-text); font-weight: 900; font-size: 0.875rem; }
+.challenge-failed-action { margin-top: 6px; }
+.challenge-failed-action { justify-self: start; min-height: 44px; }
+.challenge-add-another { margin-top: 6px; }
+.challenge-add-another button { min-height: 44px; }
+
+/* Challenge Setup Sheet */
+.challenge-kind-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-toggle { min-height: 52px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-inset); color: var(--text-muted); text-align: left; cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.btn-toggle b { font-size: 0.8125rem; color: var(--text-primary); }
+.btn-toggle small { font-size: 0.6875rem; color: var(--text-muted); }
+.btn-toggle.active { border-color: var(--text-primary); background: var(--bg-surface); }
+.btn-toggle.active b { color: var(--text-primary); }
+
+.challenge-playbooks-grid { display: grid; gap: 8px; margin-top: 4px; }
+.challenge-playbook-item { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-size: 0.8125rem; }
+.challenge-playbook-item input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--text-primary); cursor: pointer; }
+
+.challenge-rule-sentence { font-size: 0.75rem; color: var(--text-muted); line-height: 1.45; background: var(--bg-inset); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-top: 4px; }
+.challenge-rule-sentence p { margin: 0; }
+
+.challenge-row-metrics.close { color: var(--warn-amber); }
+.challenge-row-metrics.breached { color: var(--loss-text); }
+.challenge-grading-note a { display: flex; align-items: center; min-height: 44px; text-decoration: underline; }
+.challenge-sheet { font-variant-numeric: tabular-nums; }

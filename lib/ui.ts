@@ -57,7 +57,7 @@ let today = "";
 function readToday() {
   const now = Date.now();
   const weekend = ["Sat", "Sun"].includes(weekdayNY.format(new Date(now))) && sessionDate(now) !== sessionDate(now - 2 * 86_400_000);
-  return `${sessionDate(now)}|${weekend ? "closed" : "open"}`;
+  return `${sessionDate(now)}|${weekend ? "closed" : "open"}|${now}`;
 }
 function subscribeToday(listener: () => void) {
   const check = () => { const next = readToday(); if (next !== today) { today = next; listener(); } };
@@ -65,10 +65,10 @@ function subscribeToday(listener: () => void) {
   document.addEventListener("visibilitychange", check);
   return () => { clearInterval(timer); document.removeEventListener("visibilitychange", check); };
 }
-/** `{ date, closed }`: the session an entry made now would belong to. `date` is empty before hydration. */
+/** `{ date, closed, now }`: the session an entry made now would belong to. `date` is empty before hydration. */
 export function useToday() {
-  const [date, state] = useSyncExternalStore(subscribeToday, () => (today ||= readToday()), () => "|open").split("|");
-  return { date, closed: state === "closed" };
+  const [date, state, nowStr] = useSyncExternalStore(subscribeToday, () => (today ||= readToday()), () => "|open|0").split("|");
+  return { date, closed: state === "closed", now: Number.parseInt(nowStr, 10) || 0 };
 }
 
 // Unsent form drafts, kept in memory while the app is open (principle 6: nothing typed is lost).
