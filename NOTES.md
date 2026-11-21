@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — Codex — reviewed R-09a, Core math lane released
+Did:      Kept drawdown breaches provisional with missing prices, froze the scored path at the breach, corrected the Clean Run deciding trade after a reset, and counted only positions overlapping the start for the exclusion disclosure.
+Files:    `lib/challenges.ts`, `lib/__tests__/challenges.test.ts`, `docs/17-challenges.md`, `NOTES.md`.
+Checked:  `npm test` 295 passed, 0 failed; `npm run typecheck` clean; `npm run lint` 0 errors, 1 existing PostCSS warning; `npm run build` 8/8 static pages; `git diff --check origin/main` clean.
+Left:     R-09b can build local persistence and backup/restore against the evaluator contract.
+
 ### 2026-11-21 — agent (Antigravity) — R-09a challenge evaluator (docs/17), Core math lane
 Did:      Built `lib/challenges.ts` (pure evaluation engine for Drawdown Defender and Clean Run; integer cents, session assignment, provisional states, no broker enforcement or AI scoring) and comprehensive test suite `lib/__tests__/challenges.test.ts`.
 Files:    `lib/challenges.ts` (new), `lib/__tests__/challenges.test.ts` (new), `NOTES.md`.

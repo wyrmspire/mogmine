@@ -3,7 +3,7 @@
 // AGENTS §3b invariants: gross dollars / cents, deterministic integer math, no AI scoring, no broker enforcement.
 
 import { sessionCloseUtc, sessionDate } from "./session.ts";
-import { isClosed, isOpen, processRead, tradePnl } from "./trades.ts";
+import { isOpen, processRead, tradePnl } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
 
 export const CHALLENGE_CALC_VERSION = 1;
@@ -60,6 +60,8 @@ export interface ChallengeResult {
   best_run?: number;
 }
 
+type TimedTrade = { trade: TradeRecord; exitMs: number };
+
 export function evaluateChallenge(
   definition: ChallengeDefinition,
   trades: TradeRecord[],
@@ -68,7 +70,7 @@ export function evaluateChallenge(
   const startedMs = Date.parse(definition.started_at);
 
   let excludedBeforeStart = 0;
-  const inScopeClosedTrades: TradeRecord[] = [];
+  const inScopeClosedTrades: TimedTrade[] = [];
   const issues: ChallengeIssue[] = [];
 
   for (const trade of trades) {
@@ -76,7 +78,9 @@ export function evaluateChallenge(
 
     const entryMs = Date.parse(trade.entry_time);
     if (entryMs < startedMs) {
-      excludedBeforeStart += 1;
+      if (isOpen(trade) || (trade.exit_time != null && Date.parse(trade.exit_time) >= startedMs)) {
+        excludedBeforeStart += 1;
+      }
       continue;
     }
 
@@ -85,29 +89,25 @@ export function evaluateChallenge(
       continue;
     }
 
-    if (isClosed(trade)) {
-      inScopeClosedTrades.push(trade);
-    }
+    inScopeClosedTrades.push({ trade, exitMs: Date.parse(trade.exit_time) });
   }
 
   // Order is by exit_time, then by id for ties (docs/17 §2 rule 4)
   inScopeClosedTrades.sort((a, b) => {
-    const aTime = Date.parse(a.exit_time!);
-    const bTime = Date.parse(b.exit_time!);
-    if (aTime !== bTime) return aTime - bTime;
-    return a.id.localeCompare(b.id);
+    if (a.exitMs !== b.exitMs) return a.exitMs - b.exitMs;
+    if (a.trade.id === b.trade.id) return 0;
+    return a.trade.id < b.trade.id ? -1 : 1;
   });
 
   if (definition.rules.kind === "drawdown") {
     return evaluateDrawdown(definition.rules, inScopeClosedTrades, issues, excludedBeforeStart, now);
-  } else {
-    return evaluateCleanRun(definition.rules, inScopeClosedTrades, issues, excludedBeforeStart);
   }
+  return evaluateCleanRun(definition.rules, inScopeClosedTrades, issues, excludedBeforeStart);
 }
 
 function evaluateDrawdown(
   rules: { kind: "drawdown"; sessions: number; max_drawdown_cents: number },
-  trades: TradeRecord[],
+  trades: TimedTrade[],
   initialIssues: ChallengeIssue[],
   excludedBeforeStart: number,
   now: number,
@@ -124,16 +124,20 @@ function evaluateDrawdown(
   const activeSessions = new Set<string>();
   let lastCountedTradeExitMs: number | null = null;
 
-  for (const trade of trades) {
+  for (const { trade, exitMs } of trades) {
+    const session = sessionDate(exitMs);
+    activeSessions.add(session);
+    lastCountedTradeExitMs = exitMs;
+
     const pnl = tradePnl(trade);
-    if (pnl == null) {
+    if (pnl == null || !Number.isSafeInteger(Math.round(pnl * 100))) {
       issues.push({ trade_id: trade.id, reason: "unpriceable" });
       continue;
     }
 
+    if (failedAtTradeId != null) continue;
+
     const pnlCents = Math.round(pnl * 100);
-    const exitMs = Date.parse(trade.exit_time!);
-    const session = sessionDate(trade.exit_time!);
 
     equityCents += pnlCents;
     if (equityCents > peakCents) {
@@ -145,9 +149,6 @@ function evaluateDrawdown(
     }
     currentDrawdownCents = drawdown;
 
-    activeSessions.add(session);
-    lastCountedTradeExitMs = exitMs;
-
     points.push({
       trade_id: trade.id,
       closed_at: exitMs,
@@ -157,7 +158,7 @@ function evaluateDrawdown(
       drawdown_cents: drawdown,
     });
 
-    if (failedAtTradeId == null && drawdown >= rules.max_drawdown_cents) {
+    if (drawdown >= rules.max_drawdown_cents) {
       failedAtTradeId = trade.id;
     }
   }
@@ -168,11 +169,11 @@ function evaluateDrawdown(
   let state: "active" | "passed" | "failed" = "active";
   let decidedBy: string | null = null;
 
-  if (failedAtTradeId != null) {
+  if (failedAtTradeId != null && !issues.some((issue) => issue.reason === "unpriceable")) {
     state = "failed";
     decidedBy = failedAtTradeId;
-  } else if (!provisional && activeSessions.size >= rules.sessions) {
-    const lastSessionClose = lastCountedTradeExitMs != null ? sessionCloseUtc(lastCountedTradeExitMs) : 0;
+  } else if (!provisional && lastCountedTradeExitMs != null && activeSessions.size >= rules.sessions) {
+    const lastSessionClose = sessionCloseUtc(lastCountedTradeExitMs);
     if (now > lastSessionClose) {
       state = "passed";
       decidedBy = points.length > 0 ? points[points.length - 1].trade_id : null;
@@ -197,7 +198,7 @@ function evaluateDrawdown(
 
 function evaluateCleanRun(
   rules: { kind: "clean_run"; target_trades: number; playbook_ids: string[] },
-  trades: TradeRecord[],
+  trades: TimedTrade[],
   initialIssues: ChallengeIssue[],
   excludedBeforeStart: number,
 ): ChallengeResult {
@@ -208,9 +209,8 @@ function evaluateCleanRun(
   let bestRun = 0;
   let passedAtTradeId: string | null = null;
 
-  for (const trade of trades) {
-    const exitMs = Date.parse(trade.exit_time!);
-    const session = sessionDate(trade.exit_time!);
+  for (const { trade, exitMs } of trades) {
+    const session = sessionDate(exitMs);
 
     // Clean Run classification order (docs/17 §4):
     // 1. Broken: playbook_id === "no-setup" or processRead(trade) === "broken"
@@ -228,14 +228,13 @@ function evaluateCleanRun(
       readKind = "off_plan";
     } else if (!playbookId || pRead === null) {
       readKind = "ungraded";
-    } else if (pRead === "clean" && playbookId && rules.playbook_ids.includes(playbookId)) {
-      readKind = "clean";
     } else {
-      readKind = "ungraded";
+      readKind = "clean";
     }
 
     if (readKind === "broken" || readKind === "off_plan") {
       run = 0;
+      passedAtTradeId = null;
       points.push({
         trade_id: trade.id,
         closed_at: exitMs,
@@ -245,8 +244,7 @@ function evaluateCleanRun(
       });
     } else if (readKind === "ungraded") {
       issues.push({ trade_id: trade.id, reason: "ungraded" });
-      // Run does not move, not pushed to points or pushed with undefined read?
-      // docs/17 §4: Run does not move. Listed as "needs grading". Blocks a pass.
+      // Ungraded trades have no scored point and block a pass.
     } else if (readKind === "clean") {
       run += 1;
       if (run > bestRun) {

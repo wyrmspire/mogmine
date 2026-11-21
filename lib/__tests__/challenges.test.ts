@@ -128,6 +128,14 @@ test("Drawdown Defender golden cases (docs/17 §3)", () => {
   assert.equal(res6.state, "failed");
   assert.equal(res6.decided_by, "t5");
   assert.equal(res6.max_drawdown_cents, 30000);
+  assert.equal(res6.equity_cents, 10000);
+  assert.equal(res6.remaining_cents, 0);
+  assert.deepEqual(res6.points, res2.points);
+
+  const laterLoss = { ...t6_more, exit_price: 5800 };
+  const resLaterLoss = evaluateChallenge(def, [t1, t2, t3, t4, t5, laterLoss], Date.parse("2026-11-17T20:00:00Z"));
+  assert.equal(resLaterLoss.max_drawdown_cents, 30000);
+  assert.equal(resLaterLoss.decided_by, "t5");
 });
 
 test("Clean Run golden cases (docs/17 §4)", () => {
@@ -381,7 +389,8 @@ test("R-09a acceptance criteria edge cases (docs/17 §7)", () => {
     entry_time: "2026-11-17T13:59:59Z",
     exit_time: "2026-11-17T14:10:00Z",
   });
-  const resPre = evaluateChallenge(def, [preStart], Date.now());
+  const historical = { ...preStart, id: "historical", exit_time: "2026-11-17T13:59:59Z" };
+  const resPre = evaluateChallenge(def, [preStart, historical], Date.now());
   assert.equal(resPre.excluded_before_start, 1);
   assert.equal(resPre.points.length, 0);
 
@@ -478,9 +487,76 @@ test("Drawdown Defender passed conditions (active sessions and sessionCloseUtc)"
   assert.equal(resBefore.sessions_done, 2);
   assert.equal(resBefore.state, "active");
 
+  assert.equal(evaluateChallenge(def, [t1, t2], closeTimeUtc).state, "active");
+
   // After session close: passed
   const resAfter = evaluateChallenge(def, [t1, t2], closeTimeUtc + 1000);
   assert.equal(resAfter.sessions_done, 2);
   assert.equal(resAfter.state, "passed");
   assert.equal(resAfter.decided_by, "t2");
+});
+
+test("Drawdown Defender keeps a breach provisional while any closed trade needs pricing", () => {
+  const now = Date.parse("2026-11-17T22:00:01Z");
+  const def: ChallengeDefinition = {
+    id: "estimate",
+    user_id: "test-user",
+    rules: { kind: "drawdown", sessions: 1, max_drawdown_cents: 30000 },
+    started_at: "2026-11-17T14:00:00Z",
+    ended_at: null,
+    calc_version: CHALLENGE_CALC_VERSION,
+  };
+  const breach = makeTrade({ id: "breach", exit_price: 5940 });
+  const missing = makeTrade({ id: "missing", exit_time: "2026-11-17T15:00:00Z", exit_price: null });
+  const estimate = evaluateChallenge(def, [missing, breach], now);
+  assert.equal(estimate.state, "active");
+  assert.equal(estimate.provisional, true);
+  assert.equal(estimate.decided_by, null);
+  assert.equal(estimate.drawdown_cents, 30000);
+  assert.deepEqual(estimate.issues, [{ trade_id: "missing", reason: "unpriceable" }]);
+
+  const corrected = { ...missing, exit_price: 6000 };
+  assert.equal(evaluateChallenge(def, [breach, corrected], now).state, "failed");
+  const winner = { ...breach, exit_price: 6010 };
+  assert.equal(evaluateChallenge(def, [winner, missing], now).state, "active");
+  assert.equal(evaluateChallenge(def, [winner, corrected], now).state, "passed");
+});
+
+test("Clean Run credits the qualifying trade in the current run after a reset", () => {
+  const def: ChallengeDefinition = {
+    id: "reset",
+    user_id: "test-user",
+    rules: { kind: "clean_run", target_trades: 3, playbook_ids: ["pb-trend"] },
+    started_at: "2026-11-17T14:00:00Z",
+    ended_at: null,
+    calc_version: CHALLENGE_CALC_VERSION,
+  };
+  const trades = Array.from({ length: 8 }, (_, index) => makeTrade({
+    id: `t${index + 1}`,
+    exit_time: `2026-11-17T14:4${index}:00Z`,
+    playbook_id: index === 3 ? "no-setup" : "pb-trend",
+    exit_price: index === 6 ? null : 6010,
+  }));
+  const result = evaluateChallenge(def, trades, Date.parse("2026-11-17T22:00:01Z"));
+  assert.equal(result.state, "passed");
+  assert.equal(result.run, 4);
+  assert.equal(result.decided_by, "t7");
+});
+
+test("Drawdown Defender waits for the Monday close after the DST change", () => {
+  const def: ChallengeDefinition = {
+    id: "dst",
+    user_id: "test-user",
+    rules: { kind: "drawdown", sessions: 2, max_drawdown_cents: 30000 },
+    started_at: "2026-10-30T13:00:00Z",
+    ended_at: null,
+    calc_version: CHALLENGE_CALC_VERSION,
+  };
+  const friday = makeTrade({ id: "fri", entry_time: "2026-10-30T13:30:00Z", exit_time: "2026-10-30T14:00:00Z" });
+  const sunday = makeTrade({ id: "sun", entry_time: "2026-11-01T23:00:00Z", exit_time: "2026-11-01T23:05:00Z" });
+  const close = Date.parse("2026-11-02T22:00:00Z");
+  const atClose = evaluateChallenge(def, [sunday, friday], close);
+  assert.deepEqual(atClose.points.map((point) => point.session), ["2026-10-30", "2026-11-02"]);
+  assert.equal(atClose.state, "active");
+  assert.equal(evaluateChallenge(def, [sunday, friday], close + 1).state, "passed");
 });

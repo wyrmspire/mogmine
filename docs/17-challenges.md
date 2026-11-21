@@ -1,6 +1,6 @@
 # 17 — Challenges: Drawdown Defender and Clean Run
 
-The design for roadmap step `R-09` in [16 — Floor Roadmap](16-floor-roadmap.md). The owner reviewed a wider "Trading Challenges" proposal on 2026-11-16 and asked for the best of it on the roadmap. This is that cut. Nothing here is built. The open choices are `OD-37` in [DECISIONS.md](../DECISIONS.md).
+The design for roadmap step `R-09` in [16 — Floor Roadmap](16-floor-roadmap.md). The owner reviewed a wider "Trading Challenges" proposal on 2026-11-16 and asked for the best of it on the roadmap. This is that cut. The evaluator is implemented in R-09a. The open choices are `OD-37` in [DECISIONS.md](../DECISIONS.md).
 
 A challenge is a goal the trader trades through, scored by code from the trader's own logged trades. It must make discipline engaging **without rewarding more trades, bigger size or recovery trading**.
 
@@ -62,7 +62,7 @@ for each trade:  equity += pnl_cents
 ```
 
 - `pnl_cents = Math.round(tradePnl(trade) * 100)`. `tradePnl` is already computed in integer ticks and cents.
-- **Failed** at the first trade where `drawdown >= limit`. Equal counts as a breach. Later trades are shown but never undo it.
+- **Failed** at the first trade where `drawdown >= limit`. Equal counts as a breach. The scored path and its money totals stop at the breach. Later trades remain in the journal.
 - **Active sessions** = distinct `sessionDate(exit_time)` values with at least one in-scope closed trade. A day with no trades is neutral: it neither counts nor breaks anything.
 - **Passed** when all of these hold: active sessions `>= sessions`; the last counted session is over (`now > sessionCloseUtc(...)` of its last trade); no breach; no in-scope open trade; nothing in the needs-data list.
 - This is **closed-trade** drawdown. It does not see how far a trade went against you while it was open. The detail screen says that in one line.
@@ -166,7 +166,7 @@ export interface ChallengeResult {
 export function evaluateChallenge(definition: ChallengeDefinition, trades: TradeRecord[], now: number): ChallengeResult;
 ```
 
-- An `unpriceable` trade is left out of the drawdown path, sets `provisional`, and blocks a pass. A breach on the trades that can be priced is still shown, as an estimate, and the state stays `active` until the trade is fixed.
+- An `unpriceable` trade is left out of the drawdown path, sets `provisional`, and blocks a pass. A breach on the trades that can be priced is still shown, as an estimate in the scored path, and the state stays `active` until the trade is fixed.
 - `evaluateChallenge` on an ended attempt is never called for display: show `definition.final`. If recomputing gives a different answer, the detail screen adds one line: "A trade was edited after this ended. Today's numbers differ." Both are shown; the saved one is not replaced.
 
 **Storage,** in a small `lib/challenge-store.ts` shaped like `lib/prefs.ts`:
