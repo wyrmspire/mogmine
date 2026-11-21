@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AccountCards } from "./AccountCard";
 import { ChallengeCard } from "./ChallengeCard";
 import { DayHeader } from "./DayHeader";
+import { RunningStatsCard } from "./RunningStatsCard";
 import { TradeRow } from "./TradeRow";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
@@ -67,6 +68,7 @@ export function TodayScreen() {
           <AccountCards shield={prefs.shield} />
 
           {today && <DaySummary group={today} shield={prefs.shield} />}
+          <RunningStatsCard shield={prefs.shield} />
           <ChallengeCard shield={prefs.shield} />
 
           {today ? (
