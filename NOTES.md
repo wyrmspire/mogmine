@@ -9,31 +9,44 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ---
 
-## Current state (2026-11-15)
+## Current state (2026-11-21)
 
-- **`main` holds UI Phases 1–4, accessibility (#19), Shield mode (#15), backup (#18), and the honest-box cleanup (#30, #31)**: duration-fitted chart windows, a 45-bar floor (`MIN_FITTED_BARS = 45`), duration-derived timeframes, TP/SL/exit autoscale, fill-only position boxes with path lines and KEY levels, no on-chart P&L pill or axis tags, and real Yahoo Finance market bars only.
+- **`main` holds UI Phases 1–5, Challenges (`R-09a`–`R-09d`), open trades (`R-03a`–`R-03c`), frozen initial stop (`R-10`), price-first entry & price-axis stretch (`docs/20`), accounts & running totals (`docs/21`), Mood Shape (`docs/18`), and `deriveTrade` (`lib/trade-document.ts`, PR #124).**
+- **Backend boundary (`docs/22`, 2026-11-20):** Supabase is **not** a prerequisite for ordinary product, UI, pure-math, stats, playbook, or render-grammar work. Keep building local-first with fixtures and device storage (`mogmine-trades-v3`) until a feature requires cross-device persistence.
 - **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use real Yahoo Finance candles only; without market bars they show no chart.
-- **Which build is where.** `mogmine.vercel.app` served a bundle containing `America/Chicago` (`lib/time.ts`) at 21:28 CT on 2026-11-14, so it is serving `main` at or after PR #2 (CT). The Vercel preview for branch `app/first-trade-review` (`aaed7af`) predates PR #2 and still shows ET. Vercel reports successful builds for both heads. Which branch Vercel calls Production was not read from Vercel's settings: unverified.
-- **Phone behaviour is not verified.** Builds and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a phone (`AC-11`).
+- **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
-- Specs: `docs/01`–`07` (original), `docs/08` (UX notes), `docs/09` (backend risk register), `docs/10` (Yahoo-first build plan), `docs/11` (mobile workflow and assistant API proposals), `docs/12` (levels, zones and the daily markup), `docs/13` (bold UI bets).
-- Open decisions in [DECISIONS.md](DECISIONS.md) include `OD-24`–`OD-27` from the UI branches; `OD-27` records the mathematical conflict between the bar floor (now 45 bars, owner 2026-11-15; was 30) and a 35% minimum box width for very short fixtures. `OD-15` (`MES` → `MES=F`, `MNQ` → `MNQ=F`, no mini fallback, levels match chart instrument) is Decided and implemented. `OD-23` (box styles) was accepted by the owner on 2026-11-14 and only waits to be moved to Decided. `OD-1`, `OD-2`, `OD-4` and `OD-16` matter now. `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals; they do not expand approved scope.
+- Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary).
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-45`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
 ## Next up
 
-**Work the list in [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md)** (owner order, 2026-11-16). Each step names its files, its limits and its done-when.
+**Work top-to-bottom in small slices (~250–450 changed lines per PR, `CONTRIBUTING.md` §3).** See [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md) and [docs/22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
 
-Done: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a` open-trade types and math. `R-10` merged in #118; the price-first form (docs/20) uses its `stopPatch`.
+Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a`–`R-03c` open trades, `R-09a`–`R-09d` challenges, `R-10` frozen initial stop.
 
-1. `R-03b` Entry and close for an open trade (`AddTradeSheet.tsx`, `TradeDetail.tsx`, the list rows), with `R-10` in the same form: an optional stop at entry, frozen as `initial_stop_price`.
-2. `R-03c` Chart and candles for an open trade.
-3. `R-09a`–`R-09d` Challenges, to the design in [docs/17](docs/17-challenges.md). `R-09a` (the pure evaluator and its golden tests) needs nothing else and can start now.
-4. `R-04` Owner turns on the candle archive (Supabase project and keys); an agent rebases `feat/m0-candle-archive`. It loses a day of `1m` history for every day it waits.
-5. `R-05` Trades stored in Supabase (needs `OD-30`), then `R-06` assistant endpoint (`OD-19`), `R-07` playbook editor, `R-08` running stats.
+### Active No-Supabase Queue (work in order)
 
-Still open from before: `OD-37` (four challenge choices, docs/17 §8), `OD-1`, `OD-16`, and `AC-01`–`AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1). When a TopstepX account exists: get Topstep's written confirmation that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
+1. **`R-08a` — Pure cross-day & playbook/tag running stats** (`lib/selectors.ts`, `lib/__tests__/`): rolling windows (last 20, this week, this month) plus per-playbook and per-tag stats; exclude `is_sample` and `open`; skip `rMultiple === null` and count skipped; gross only (`docs/16` §R-08).
+2. **`R-08b` — Running stats screen/card** (on Today or `/feed`, `390×844` + desktop, Shield-safe, gross-labelled).
+3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`** (`lib/trade-document.ts` / `lib/trade-bar-validation.ts`, `docs/15` §3.3): stop-segment traded through, unfilled target touched, fill outside bar, MFE/MAE, post-exit hindsight touches, tested against `fixtures/trades/ex-*.json`.
+4. **`TD-2` (Issue `#34` pure part) — `buildMarks(derived, facts, timeframe, detail, shield)`** (`docs/15` §3.4): deterministic `Mark[]` display list with bar snapping (`B-23`) and **`D-010` fills-only look** (no purple outlines; overrides stale pre-`D-010` text in `#34`) + golden tests for all 7 `ex-*.json` fixtures.
+5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
+6. **`R-07a` — Local playbook store & backup** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
+7. **`R-07b` — Playbook editor UI** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
+8. **`UI-1` — Chart OHLC HUD & honest freshness** (`components/TradeDetail.tsx`, `app/globals.css`, `OD-40`): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
+9. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`.
+10. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
+11. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check in `/api/market-data` & `lib/candles.ts`:** replace `candles.length >= 4` acceptance with shared `expectedInsideBarTimes` coverage check.
+
+### Supabase-gated / Owner-gated (do not block on or pick up unasked)
+
+- `R-04` (owner creates Supabase project + rebase `feat/m0-candle-archive`, `#70`; never touch PR `#71`), `R-05` (Supabase trade persistence, needs `R-04` + `OD-30`), `R-06` (assistant endpoint, needs `R-05` + `OD-19`).
+- Skip owner-question issues (`#5`–`#9`, `#23`, `#24`, `#39`), parked broker work (`#43`), and `#123`.
+
+Still open from before: `OD-37`, `OD-39`–`OD-45`, `OD-1`, `OD-16`, and `AC-01`–`AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1). When a TopstepX account exists: get Topstep's written confirmation that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
 
 ## Lanes
 
@@ -50,6 +63,18 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-21 — Codex — reviewed the scheduled maintainer, no lane
+Did:      Inspected the host timer, runner and run reports. Four half-hour worker and reviewer runs landed Challenges in PRs #125–#128.
+Files:    `NOTES.md`.
+Checked:  `systemctl --user show` reported an active, enabled timer and a successful 21:00 UTC run. The worker checkout returned 303 passing tests and 0 failures. `gh pr checks 128` reported two Vercel passes. The GitHub branch and rules APIs returned `protected: false` and `[]` for `main`.
+Left:     The runner expects the local-first queue, which is in this checkout’s roadmap edits and was absent from `origin/main` at review time.
+
+### 2026-11-21 — agent (Antigravity) — post-R-09d local-first queue & roadmap update, no lane
+Did:      Updated `NOTES.md` and `docs/16-floor-roadmap.md` to reflect merged `R-03b`/`R-03c`/`R-09a`–`R-09d`/`R-10`/`#124` and define an ordered, ~250–450-LOC no-Supabase queue aligned with `docs/22`: `R-08a`–`b` (running stats), `TD-1`–`TD-3` (`docs/15` `observeTrade`/`buildMarks`/`PositionBoxPrimitive` under `D-010`), `R-07a`–`b` (local playbook store/editor), `UI-1`–`UI-3` (`docs/19`, `OD-40`, `OD-39` c), and `MD-1` (`#90`).
+Files:    `NOTES.md`, `docs/16-floor-roadmap.md`.
+Checked:  Relative links, `git diff --check`, `npm run typecheck && npm run lint && npm test && npm run build`.
+Left:     Start with `R-08a` (pure cross-day & playbook/tag running stats in `lib/selectors.ts`). Keep `R-04`–`R-06` paused until Supabase keys exist (`docs/22`).
 
 ### 2026-11-21 — Codex — reviewed R-09d, App shell and notes lane released
 Did:      Reviewed the worker's uncommitted detail route against docs/17 and #80. Fixed saved drawdown row values, deciding labels for unavailable trades, end-time comparison, direct-route finalization, and neutral drawdown accents. Added a Today history link for manually ended attempts (OD-45).
