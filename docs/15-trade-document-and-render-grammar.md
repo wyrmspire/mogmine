@@ -287,7 +287,8 @@ Agents propose and the owner decides. Each item is also in [DECISIONS.md](../DEC
 | Hindsight | None | §2.5 |
 | Archived style | None | §2.6 |
 | Flags | Entry and exit flags at fill prices | §2.4 (adds the reason text) |
-| `deriveTrade`, `observeTrade`, `buildMarks` | Not built | Issues #33 and #34 |
+| `deriveTrade`, `fromLegacy` | Built (`lib/trade-document.ts`, issue #33) | §3.2, §3.3, §3.6 |
+| `observeTrade`, `buildMarks` | Not built | Issues #34 and #35 |
 | Fixtures | `fixtures/sample-bars.json`, `fixtures/levelsets/` | `fixtures/trades/`, §3.5 |
 
 Nothing on the target list is drawn on a phone yet. Each element needs the §4 mobile checks in [AGENTS.md](../AGENTS.md) when it lands.

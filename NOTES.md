@@ -51,6 +51,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — agent (Antigravity) — issue #33 (`deriveTrade`, `fromLegacy`, `mogmine.trade.v1`), Core math lane
+Did:      Built `lib/trade-document.ts` (pure, no I/O, no candles, no DB tables per `OD-30`): `mogmine.trade.v1` types, `deriveTrade(doc, spec)` (FIFO integer-tick P&L, B-32 initial risk against first stop in force, D-010 scratch 0.1R/2-tick rule, stepped stop path with widened/locked flags, working orders, planned R:R per target, `void` exclusion, `stop_removed_while_open`/`exit_past_stop` facts, non-throwing structural errors) and `fromLegacy(record)` (zero-loss conversion incl. R-10 moved stops, R-03 open trades, exact-match exit reason inference).
+Files:    `lib/trade-document.ts`, `lib/__tests__/trade-document.test.ts` (new), `docs/15-trade-document-and-render-grammar.md`, `NOTES.md`.
+Checked:  Golden tests for all 7 `fixtures/trades/*.json`, scratch thresholds, short/MCL/scale-in/void/fees, structural errors, and `fromLegacy` parity across all `demoTrades`; typecheck, lint, test, build.
+Left:     Unblocks #34 (`buildMarks` + marks painter), #35 (`observeTrade`), and #36 (stop path UI). No Supabase or persistence changes (per docs/22 & `OD-30`).
+
 ### 2026-11-20 — agent (Grok Bot) — accounts merged after price-first entry: renumbered to docs/21, OD-42
 Did:      Merged main (#119 price-first entry, #120 design guide) into `feat/accounts-running-total`. Both used docs/20 and `OD-41`; the price-first change merged first, so accounts is now `docs/21-accounts-and-running-totals.md` and `OD-42`, with every reference moved (AGENTS, README, DECISIONS, NOTES, docs/06, docs/17, code comments). The account picker sits under Side and Status on the price-first sheet; `EntryDraft` carries `accountId`.
 Checked:  typecheck, lint (0 errors, 1 pre-existing warning), test (261 pass), build. Headless Chrome 390×844: picker lists the account, a saved trade gets `account_id` and its frozen stop, the Today card adds it; no overflow. **Not verified on a phone.**
