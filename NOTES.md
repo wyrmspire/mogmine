@@ -17,7 +17,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-46`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-47`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
@@ -25,11 +25,11 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 **Work top-to-bottom in small slices (~250–450 changed lines per PR, `CONTRIBUTING.md` §3).** See [docs/16 — Floor Roadmap](docs/16-floor-roadmap.md) and [docs/22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
 
-Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a`–`R-03c` open trades, `R-09a`–`R-09d` challenges, `R-10` frozen initial stop.
+Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle retry, `R-03a`–`R-03c` open trades, `R-08a` running stats selectors, `R-09a`–`R-09d` challenges, `R-10` frozen initial stop.
 
 ### Active No-Supabase Queue (work in order)
 
-1. **`R-08a` — Pure cross-day & playbook/tag running stats** (`lib/selectors.ts`, `lib/__tests__/`): rolling windows (last 20, this week, this month) plus per-playbook and per-tag stats; exclude `is_sample` and `open`; skip `rMultiple === null` and count skipped; gross only (`docs/16` §R-08).
+1. **`R-08a` — Pure cross-day & playbook/tag running stats, done** (`lib/selectors.ts`, `lib/__tests__/`, `docs/16` §R-08).
 2. **`R-08b` — Running stats screen/card** (on Today or `/feed`, `390×844` + desktop, Shield-safe, gross-labelled).
 3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`** (`lib/trade-document.ts` / `lib/trade-bar-validation.ts`, `docs/15` §3.3): stop-segment traded through, unfilled target touched, fill outside bar, MFE/MAE, post-exit hindsight touches, tested against `fixtures/trades/ex-*.json`.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks(derived, facts, timeframe, detail, shield)`** (`docs/15` §3.4): deterministic `Mark[]` display list with bar snapping (`B-23`) and **`D-010` fills-only look** (no purple outlines; overrides stale pre-`D-010` text in `#34`) + golden tests for all 7 `ex-*.json` fixtures.
@@ -66,6 +66,18 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-21 — Codex — reviewed R-08a, Core math lane released
+Did:      Reviewed the 21:30 UTC worker changes against docs/16 and #61. Required an explicit clock for the session windows, counted each trade once per tag, and kept closed trades with invalid exit dates in all-time totals (OD-47). The final API reports `skippedRCount` for every null R.
+Files:    `lib/selectors.ts`, `lib/__tests__/running-stats.test.ts`, `docs/16-floor-roadmap.md`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `npm test` 313 passed. The running stats tests also passed 10/10 under `TZ=Pacific/Auckland`. Typecheck passed, lint had 0 errors and the existing PostCSS warning, build generated 8/8 pages, and the diff check passed.
+Left:     `R-08b` should pass the current instant to `runningStats(trades, now)` and show gross P&L, priced denominator, skipped R and undated counts. Verify empty and incomplete states, Shield, and the layout at 390×844 and desktop.
+
+### 2026-11-21 — agent (Antigravity) — R-08a pure running stats, Core math lane released
+Did:      Implemented `summarizeTrades`, `sessionWeekMonday`, and `runningStats` in `lib/selectors.ts` per docs/16 §R-08 / Active No-Supabase Queue item 1. Computes rolling windows (last 20, this week, this month), per-playbook, and per-tag stats. Always excludes `is_sample` and `open` trades; skips trades with no stop from R totals and tracks `skippedWithNoStop` without zeroing; reports gross figures only. Added tests in `lib/__tests__/running-stats.test.ts`.
+Files:    `lib/selectors.ts`, `lib/__tests__/running-stats.test.ts` (new), `NOTES.md`.
+Verified: `npm test` 309 passed, 0 failed; `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning; `npm run build` passed (8/8 routes generated).
+Left:     Unblocks `R-08b` (Running stats UI screen/card on Today or `/feed`, Shield-safe, gross-labelled).
 
 ### 2026-11-21 — Claude (Haiku 5.5 session) — lessons from the card-system work, no lane
 Did:      Wrote and merged the card spec (`docs/23`, PR #130), `OD-46`, and the `CD-1`–`CD-3` queue entries. Added the lessons below to `CONTRIBUTING.md` §4 so they outlive this session.

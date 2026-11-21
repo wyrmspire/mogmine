@@ -1,4 +1,5 @@
-// Pure list logic: grouping, filtering and day statistics. Lists never see candles (B-42).
+// Pure list logic: grouping, filtering, day statistics, and running statistics across days (R-08a).
+// Lists never see candles (B-42).
 import { sessionDate } from "./session.ts";
 import { adherence, isOpen, rMultiple, tradePnl } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
@@ -124,4 +125,212 @@ export function withSamples(trades: TradeRecord[], showSamples: boolean) {
   const real = trades.filter((trade) => !trade.is_sample);
   // With nothing of their own yet, a trader still sees the labelled samples (docs/08 §4, first run).
   return real.length ? real : trades;
+}
+
+export interface SummaryStats {
+  tradeCount: number;
+  wins: number;
+  losses: number;
+  scratches: number;
+  winRate: number | null;
+  grossPnl: number;
+  pricedCount: number;
+  unpriceableCount: number;
+  incomplete: boolean;
+  totalR: number | null;
+  avgR: number | null;
+  withR: number;
+  /** Trades for which rMultiple returns null, including unpriceable trades. */
+  skippedRCount: number;
+  ruleAdherence: {
+    followed: number;
+    total: number;
+    ratio: number;
+    perfectTrades: number;
+    gradedTrades: number;
+  } | null;
+}
+
+export interface PlaybookStats extends SummaryStats {
+  playbookId: string | null;
+}
+
+export interface TagStats extends SummaryStats {
+  tag: string;
+}
+
+export interface RunningStats {
+  overall: SummaryStats;
+  last20: SummaryStats;
+  thisWeek: SummaryStats;
+  thisMonth: SummaryStats;
+  byPlaybook: PlaybookStats[];
+  byTag: TagStats[];
+  excludedSampleCount: number;
+  excludedOpenCount: number;
+  /** Closed trades whose results can be included in all-time summaries only. */
+  undatedCount: number;
+}
+
+function summarizeTrades(trades: TradeRecord[]): SummaryStats {
+  let wins = 0;
+  let losses = 0;
+  let scratches = 0;
+  let grossCents = 0;
+  let pricedCount = 0;
+  let unpriceableCount = 0;
+  let totalR = 0;
+  let withR = 0;
+  let checklistFollowedSum = 0;
+  let checklistTotalSum = 0;
+  let perfectTrades = 0;
+  let gradedTrades = 0;
+
+  for (const trade of trades) {
+    const pnl = tradePnl(trade);
+    if (pnl != null) {
+      pricedCount += 1;
+      grossCents += Math.round(pnl * 100);
+      if (pnl > 0) wins += 1;
+      else if (pnl < 0) losses += 1;
+      else scratches += 1;
+    } else {
+      unpriceableCount += 1;
+    }
+
+    const r = rMultiple(trade);
+    if (r != null) {
+      totalR += r;
+      withR += 1;
+    }
+
+    const score = adherence(trade);
+    if (score) {
+      gradedTrades += 1;
+      checklistFollowedSum += score.followed;
+      checklistTotalSum += score.total;
+      if (score.followed === score.total) {
+        perfectTrades += 1;
+      }
+    }
+  }
+
+  return {
+    tradeCount: trades.length,
+    wins,
+    losses,
+    scratches,
+    winRate: pricedCount > 0 ? wins / pricedCount : null,
+    grossPnl: grossCents / 100,
+    pricedCount,
+    unpriceableCount,
+    incomplete: unpriceableCount > 0,
+    totalR: withR > 0 ? totalR : null,
+    avgR: withR > 0 ? totalR / withR : null,
+    withR,
+    skippedRCount: trades.length - withR,
+    ruleAdherence:
+      gradedTrades > 0
+        ? {
+            followed: checklistFollowedSum,
+            total: checklistTotalSum,
+            ratio: checklistFollowedSum / checklistTotalSum,
+            perfectTrades,
+            gradedTrades,
+          }
+        : null,
+  };
+}
+
+/** Session dates are day labels. UTC here performs calendar arithmetic on the label. */
+function sessionWeekMonday(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() - (day.getUTCDay() + 6) % 7);
+  return day.toISOString().slice(0, 10);
+}
+
+/**
+ * Running statistics across closed real trades (R-08a). The caller supplies the
+ * current instant and calendar windows use New York session dates at exit.
+ */
+export function runningStats(
+  trades: readonly TradeRecord[],
+  now: number | string,
+): RunningStats {
+  let excludedSampleCount = 0;
+  let excludedOpenCount = 0;
+  const dated: Array<{ trade: TradeRecord; exitMs: number }> = [];
+  const undated: TradeRecord[] = [];
+
+  for (const trade of trades) {
+    if (trade.is_sample) {
+      excludedSampleCount += 1;
+      continue;
+    }
+    if (trade.status === "open" || trade.exit_time == null) {
+      excludedOpenCount += 1;
+      continue;
+    }
+    const exitMs = Date.parse(trade.exit_time);
+    if (Number.isFinite(exitMs)) dated.push({ trade, exitMs });
+    else undated.push(trade);
+  }
+
+  dated.sort((a, b) => {
+    if (a.exitMs !== b.exitMs) return a.exitMs - b.exitMs;
+    if (a.trade.id === b.trade.id) return 0;
+    return a.trade.id < b.trade.id ? -1 : 1;
+  });
+  const refSession = sessionDate(now);
+  const week = sessionWeekMonday(refSession);
+  const month = refSession.slice(0, 7);
+  const weekTrades: TradeRecord[] = [];
+  const monthTrades: TradeRecord[] = [];
+  for (const { trade, exitMs } of dated) {
+    const date = sessionDate(exitMs);
+    if (sessionWeekMonday(date) === week) weekTrades.push(trade);
+    if (date.startsWith(month)) monthTrades.push(trade);
+  }
+
+  const datedTrades = dated.map(({ trade }) => trade);
+  const eligible = datedTrades.concat(undated);
+
+  const playbookGroups = new Map<string | null, TradeRecord[]>();
+  const tagGroups = new Map<string, TradeRecord[]>();
+  for (const trade of eligible) {
+    const key = trade.playbook_id ?? null;
+    const list = playbookGroups.get(key);
+    if (list) list.push(trade);
+    else playbookGroups.set(key, [trade]);
+
+    for (const tag of new Set(trade.quick_tags)) {
+      const tagged = tagGroups.get(tag);
+      if (tagged) tagged.push(trade);
+      else tagGroups.set(tag, [trade]);
+    }
+  }
+  const byPlaybook: PlaybookStats[] = [...playbookGroups.entries()]
+    .map(([playbookId, list]) => ({
+      playbookId,
+      ...summarizeTrades(list),
+    }))
+    .sort((a, b) => b.tradeCount - a.tradeCount || (a.playbookId ?? "").localeCompare(b.playbookId ?? "", "en"));
+  const byTag: TagStats[] = [...tagGroups.entries()]
+    .map(([tag, list]) => ({
+      tag,
+      ...summarizeTrades(list),
+    }))
+    .sort((a, b) => b.tradeCount - a.tradeCount || a.tag.localeCompare(b.tag, "en"));
+
+  return {
+    overall: summarizeTrades(eligible),
+    last20: summarizeTrades(datedTrades.slice(-20)),
+    thisWeek: summarizeTrades(weekTrades),
+    thisMonth: summarizeTrades(monthTrades),
+    byPlaybook,
+    byTag,
+    excludedSampleCount,
+    excludedOpenCount,
+    undatedCount: undated.length,
+  };
 }
