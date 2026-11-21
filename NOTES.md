@@ -67,6 +67,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-21 — agent (Antigravity) — R-08a pure running stats, Core math lane released
+Did:      Implemented `summarizeTrades`, `sessionWeekMonday`, and `runningStats` in `lib/selectors.ts` per docs/16 §R-08 / Active No-Supabase Queue item 1. Computes rolling windows (last 20, this week, this month), per-playbook, and per-tag stats. Always excludes `is_sample` and `open` trades; skips trades with no stop from R totals and tracks `skippedWithNoStop` without zeroing; reports gross figures only. Added tests in `lib/__tests__/running-stats.test.ts`.
+Files:    `lib/selectors.ts`, `lib/__tests__/running-stats.test.ts` (new), `NOTES.md`.
+Verified: `npm test` 309 passed, 0 failed; `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning; `npm run build` passed (8/8 routes generated).
+Left:     Unblocks `R-08b` (Running stats UI screen/card on Today or `/feed`, Shield-safe, gross-labelled).
+
 ### 2026-11-21 — Claude — card system spec (`docs/23`), no lane
 Did:      Owner asked how to improve Trade Cards and whether to add playbook and practice cards. Wrote docs/23: shared card frame, Trade Card refresh (`CD-1`), drill / flash cards built on BET-03 (`CD-2`), playbook card (`CD-3`), later day / plan / mistake / week cards, and uses. Opened `OD-46` with interim rules so `CD-1`/`CD-2` are not blocked.
 Files:    `docs/23-card-system.md` (new), `DECISIONS.md`, `AGENTS.md`, `docs/03-trade-cards-and-note-taking.md`, `docs/16-floor-roadmap.md`, `NOTES.md`.
