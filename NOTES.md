@@ -34,14 +34,14 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 
 1. **`R-08a` — Pure cross-day & playbook/tag running stats, done** (`lib/selectors.ts`, `lib/__tests__/`, `docs/16` §R-08).
 2. **`R-08b` — Running stats screen/card, done** (`components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`).
-3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`** (`lib/trade-document.ts` / `lib/trade-bar-validation.ts`, `docs/15` §3.3): stop-segment traded through, unfilled target touched, fill outside bar, MFE/MAE, post-exit hindsight touches, tested against `fixtures/trades/ex-*.json`.
-4. **`TD-2` (Issue `#34` pure part) — `buildMarks(derived, facts, timeframe, detail, shield)`** (`docs/15` §3.4): deterministic `Mark[]` display list with bar snapping (`B-23`) and **`D-010` fills-only look** (no purple outlines; overrides stale pre-`D-010` text in `#34`) + golden tests for all 7 `ex-*.json` fixtures.
+3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE, post-exit touches and inferred hindsight for cancelled plans, with golden facts for all seven trade documents.
+4. **`TD-2` (Issue `#34` pure part) — `buildMarks`, done** (`docs/15` §3.4): deterministic `Mark[]` display list with real bar anchors (`B-23`), the `D-010` fills-only look and exact 1m/5m goldens for all seven trade fixtures.
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
 7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
 8. **`LV-1` — Pure computed levels** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. Owner priority `D-011`.
 9. **`LV-2` — Draw computed levels on the trade chart** (`SessionLevelsPrimitive`, Canvas only, view-options toggle).
-10. **`PS-1` — Planning-session model and store** (`mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup). Shape is `OD-50`.
+10. **`PS-1` — Planning-session model and store** (`mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup). Shape is `OD-51`.
 11. **`PS-2` — Plan screen on Today** (start a "Pre-…" session fast, levels with tick steppers, observations).
 12. **`PS-3` — Planning-session levels on trade charts.**
 13. **`PS-4` — After-session review** (rules followed, nearest planned level in ticks, watched playbook, one lesson).
@@ -78,16 +78,52 @@ Claim a lane before starting. Clear the claim when you stop.
 ## Handoff log
 
 ### 2026-11-22 — Claude (Opus 5.5 session) — checklist edge fix, owner direction D-011, no lane
-Did:      Rule checklist (Trade Detail) and challenge playbook list are now full-width tiles with the box on the right, ~35 px from the screen edge; the owner saw a tap on the old left-edge box (23 px) slide the page away (phone back-swipe zone). Recorded the owner's goal as `D-011` (planning sessions "pre-anything", levels/indicators on the chart, after-session review) with slices in docs/24 and the queue above; data shape is `OD-50`.
+Did:      Rule checklist (Trade Detail) and challenge playbook list are now full-width tiles with the box on the right, ~35 px from the screen edge; the owner saw a tap on the old left-edge box (23 px) slide the page away (phone back-swipe zone). Recorded the owner's goal as `D-011` (planning sessions "pre-anything", levels/indicators on the chart, after-session review) with slices in docs/24 and the queue above; data shape is `OD-51`.
 Files:    `components/PitStop.tsx`, `components/ChallengeSetupSheet.tsx`, `app/globals.css`, `docs/24-planning-sessions-and-after-session-review.md` (new), `DECISIONS.md`, `AGENTS.md`, `NOTES.md`.
 Checked:  Headless Chrome at 390×844 and 1280×900: boxes at 32–38 px from the right edge, row height 48 px, tapping the label toggles the box and updates the `n/4 followed` seal, 0 overflow, 0 page errors. Edge audit of Today, Feed, Review, Tune, Trade Detail: 0 overflow, no target under 40 px; edge controls on Trade Detail logged for `UI-2`. Not verified on a phone.
-Left:     Antigravity's `TD-2` in progress is untouched. `LV-1` is the next new slice after `TD-3`.
+Left:     `TD-3` is next, then `LV-1`. Agents' in-flight branches were not touched.
+
+### 2026-11-22 — Codex — reviewed idle run and repaired TD-1 hindsight (#35), Core math lane released
+Did:      Run `20261122T013000Z` left no changes. Reviewed the TD-2 merge and reproduced the missing `ex-nottaken` bar evidence. `observeTrade` now reports inferred first level touches through cancellation, with gaps and same-bar ambiguity preserved (OD-50).
+Files:    `lib/trade-bar-validation.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` passed 382. `TZ=Pacific/Auckland node --test lib/__tests__/{trade-observer,trade-marks}.test.ts` passed 62. Typecheck and diff check passed. Lint reported 0 errors and 1 existing PostCSS warning. Local build generated 8/8 static pages.
+Left:     Split TD-3 into a Canvas painter slice and a chart integration slice. Check `ex-trail`, `ex-ignored`, `ex-sl` at 390×844 and 1m/5m, including D-010 screenshot pixels, exact evidence-bar flags and matching under-chart text. Issue #35 is still open.
+
+### 2026-11-22 — Codex — reviewed TD-2 (#34), Chart lane released
+Did:      Reviewed run `20261122T010010Z` and repaired TD-2 on `feat/td-2-build-marks`. The mark builder uses real bar opens, retains observer evidence, terminates cancelled plans at cancellation, preserves Shield, and follows D-010 and OD-32.
+Files:    `lib/trade-marks.ts`, `lib/trade-document.ts`, `lib/trade-bar-validation.ts`, `lib/trades.ts`, `lib/__tests__/trade-marks.test.ts`, `fixtures/trades/build-marks.golden.json`, `docs/15`, `docs/16`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` passed 375 tests. `TZ=Pacific/Auckland` mark and observer tests passed 55. Typecheck and diff check passed. Lint reported 0 errors and 1 existing PostCSS warning. The local build generated 8/8 static pages.
+Left:     TD-3 needs a Canvas painter, inferred finding text equivalents (#35) and the D-010 screenshot check at 390×844. The `ex-nottaken` observer still needs separate hypothetical hindsight for entry touch, same-bar ambiguity and the cancellation cutoff.
+
+### 2026-11-22 — agent (Antigravity) — TD-2 buildMarks pure display list (#34), Chart lane released
+Did:      Implemented `buildMarks(derived, facts, timeframe, detail, shield, options)` in `lib/trade-marks.ts` (docs/15 §3.4, issue #34, D-010 fills-only look: no purple, faint red/green plan fills, actual band / scratch line, stepped stop path, excursion bracket, observer findings, entry/exit flags, locked profit/past stop hatches, hindsight continuation). Implemented `snapTime` with B-23 bar snapping and bounded tolerance. Added unit and golden tests across 1m and 5m for all 7 fixtures in `lib/__tests__/trade-marks.test.ts`.
+Files:    `lib/trade-marks.ts` (new), `lib/__tests__/trade-marks.test.ts` (new), `NOTES.md`.
+Verified: `npm test` passed 363 tests; `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning; `NEXT_TELEMETRY_DISABLED=1 npm run build` generated 8/8 routes; `git diff --check origin/main...HEAD` clean.
+Left:     Unblocks `TD-3` (Issue #34 canvas part: `PositionBoxPrimitive` painting `Mark[]` with Canvas flags, text equivalents, and D-010 screenshot check).
+
+### 2026-11-22 — Codex — TD-2 worker review and TD-1 repair, Core math lane released
+Did:      Reviewed run `20261122T003028Z`. `feat/td-2-build-marks` at `961b2b9` contains the Chart lane claim. Reproduced the TD-1 false finding for a same-price target when an anonymous fill preceded a fill with an explicit order ID. The repair reserves linked fill quantity within each working segment (OD-49).
+Files:    `lib/trade-document.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15-trade-document-and-render-grammar.md`, `DECISIONS.md`, `NOTES.md`.
+Verified: TD-2 baseline had 347 passing tests. On the repair, `npm test` passed 352, `TZ=Pacific/Auckland node --test lib/__tests__/trade-observer.test.ts` passed 32, and typecheck passed. Lint had 0 errors and 1 existing PostCSS warning. `NEXT_TELEMETRY_DISABLED=1 npm run build` generated 8/8 static pages. Diff check passed.
+Left:     Resume TD-2 (#34) from current `main`, retaining the worker's topic commit. Add 1m/5m goldens for all seven fixtures, with missing-bar alignment and inferred finding provenance. TD-3 still needs the Canvas flags, equivalent text and D-010 screenshot check. `ex-nottaken` plan hindsight still needs an observer fact contract for the hypothetical plan.
+
+### 2026-11-22 — Codex — reviewed TD-1, Core math lane released
+Did:      Reproduced and fixed false target findings for orderless exits and shared target prices, the exact four-tick boundary for decimal contracts, and fill findings against a forming bar on open trades. Same-price allocation remains an interim rule under OD-49.
+Files:    `lib/trade-bar-validation.ts`, `lib/trade-document.ts`, `lib/trades.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15-trade-document-and-render-grammar.md`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `npm test` passed 347 tests. `TZ=Pacific/Auckland node --test lib/__tests__/trade-observer.test.ts` passed 27 tests. Typecheck passed, lint reported 0 errors and 1 existing PostCSS warning, the build generated 8/8 pages, and `git diff --check origin/main` passed.
+Left:     TD-2 (#34) needs 1m and 5m mark goldens for all seven fixtures. Carry observer findings into flags with their inferred basis, exact bar and price. TD-3 needs dotted `≈` marks, a matching text equivalent, and a screenshot check of the D-010 fills-only design.
 
 ### 2026-11-21 — Claude (Opus 5.5 session) — R-07a + R-07b playbook store and editor, Data lane released
 Did:      `lib/playbooks-store.ts` (`mogmine-playbooks-v1`, seeds, `user_id`, archive-only, validation, backup round-trip) and Tune → Playbooks (`components/PlaybookEditor.tsx`: add, rename, default style, add/reorder/remove rules, archive/restore). Pickers, stats labels, rows and Clean Run setup read the store. Samples stay on seed rules. Open choices recorded as `OD-49`.
 Files:    `lib/playbooks.ts`, `lib/playbooks-store.ts` (new), `lib/store.ts`, `lib/fixtures.ts`, `lib/__tests__/playbooks-store.test.ts` (new), `components/PlaybookEditor.tsx` (new), `components/{TuneScreen,AppShell,PitStop,ChallengeSetupSheet,TradeRow,RunningStatsCard}.tsx`, `app/globals.css`, `docs/16`, `DECISIONS.md`, `NOTES.md`.
 Checked:  `npm test` 329 passed, 0 failed. Typecheck clean, lint 0 errors and the existing warning, build 8/8. Headless Chrome at 390×844 and 1280×900, 26/26 checks: seeds listed, clash message, add/reorder/save (pending rule kept), `user_id` in storage, archive/restore, `no-setup` locked, rename shown on Feed, 0 overflow, 44px targets, 0 page errors.
 Left:     Phone check still owed (`AC-11`). `CD-3` is unblocked once the worker's TD queue allows. `OD-49` needs the owner.
+
+### 2026-11-21 — agent (Antigravity) — TD-1 observeTrade pure observer (#35), Core math lane released
+Did:      Implemented `observeTrade(derived, candles, barMinutes, options)` in `lib/trade-bar-validation.ts` (docs/15 §3.3, issue #35): checks each stop segment traded through, unfilled targets touched before exit, fills outside bar with `DEFAULT_TICK_TOLERANCE_TICKS = 4` (B-12), honest MFE/MAE excursions, and post-exit hindsight touches. Preserved `validateTradeAgainstBars` compatibility. Added golden unit tests in `lib/__tests__/trade-observer.test.ts`.
+Files:    `lib/trade-bar-validation.ts`, `lib/__tests__/trade-observer.test.ts` (new), `NOTES.md`.
+Verified: `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning; `npm test` 328 passed, 0 failed; `npm run build` generated 8/8 pages.
+Left:     Unblocks `TD-2` (Issue #34 pure part: `buildMarks` display list with D-010 fills-only look & golden tests).
 
 ### 2026-11-21 — Codex — reviewed R-08b, App shell and notes lane released
 Did:      Finished the Today stats card with accessible windows, all-time breakdowns, priced denominators, missing-R counts and Shield. OD-47 now covers how undated legacy trades affect accounts, challenges and Trade Detail.

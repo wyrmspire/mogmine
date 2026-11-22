@@ -3,7 +3,7 @@
 The owner's direction of 2026-11-22 (`D-011`), and the slices that get the app there. It builds on [11 §1](11-product-workflows-and-api-context.md#1-the-daily-loop-beyond-the-chart) (daily loop), [12](12-levels-zones-and-daily-markup.md) (levels, zones, formulas) and [22](22-development-mode-and-backend-boundary.md) (local-first, no Supabase needed).
 
 > [!NOTE]
-> **Scope.** The goal (`D-011`) is decided. The data shape in §2 is a proposal under `OD-50`. Build it local-first, like playbooks and challenges, until a feature needs cross-device storage.
+> **Scope.** The goal (`D-011`) is decided. The data shape in §2 is a proposal under `OD-51`. Build it local-first, like playbooks and challenges, until a feature needs cross-device storage.
 
 ---
 
@@ -18,7 +18,7 @@ The app should be ready for a full trading day:
 
 [11 §1](11-product-workflows-and-api-context.md#1-the-daily-loop-beyond-the-chart) and [12 §8](12-levels-zones-and-daily-markup.md#8-the-daily-plan-and-news) plan for **one** plan per day. The owner described **several** short planning sessions in one day. §2 resolves that.
 
-## 2. A planning session is a "pre-X" checkpoint (proposal, `OD-50`)
+## 2. A planning session is a "pre-X" checkpoint (proposal, `OD-51`)
 
 A day's plan is the ordered list of its planning sessions. Each one is small and quick to fill in on a phone.
 

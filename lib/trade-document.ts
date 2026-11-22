@@ -190,6 +190,8 @@ export interface PositionPoint {
   avg_entry_price: number | null;
   order?: string;
   reason?: ExitReason;
+  /** Quantity matched to working target orders, including inferred price matches. */
+  target_order_qty?: number;
   basis: EventBasis;
   fees_cents: number;
 }
@@ -234,9 +236,10 @@ export interface WorkingOrderSegment {
   to: string | null;
   price: number;
   qty: number;
+  filled_qty: number;
   target?: string;
   basis: EventBasis;
-  end_reason: "filled" | "cancelled" | "position_closed" | null;
+  end_reason: "filled" | "modified" | "cancelled" | "position_closed" | null;
 }
 
 export interface PlannedTargetResult {
@@ -256,6 +259,8 @@ export interface DerivedFact {
   price: number;
   basis: EventBasis;
   order?: string;
+  /** The reference stop used for an exit_past_stop comparison. */
+  stop_price?: number;
   /** Signed R beyond the initial stop for `exit_past_stop` (e.g. -0.6). */
   extra_r?: number | null;
 }
@@ -300,6 +305,8 @@ export interface DerivedTrade {
   entry_time: string | null;
   /** Final exit fill time when closed, or null otherwise. */
   exit_time: string | null;
+  /** End of a never-filled entry attempt, including cancellations of implicit manual orders. */
+  entry_cancelled_at: string | null;
   /** Weighted average entry price across all non-voided entry fills, or null. */
   avg_entry_price: number | null;
   /** Weighted average exit price across all non-voided exit fills, or null. */
@@ -352,6 +359,14 @@ export interface DerivedTrade {
   facts: DerivedFact[];
   /** Structural validation errors. Reported, never thrown. */
   errors: StructuralError[];
+}
+
+/** The last stop still working when the final fill flattened the trade. */
+export function stopAtExit(derived: DerivedTrade): StopSegment | undefined {
+  if (derived.status !== "closed") return undefined;
+  const exitSeq = derived.position_timeline.at(-1)?.seq;
+  return derived.stop_path.findLast((stop) => stop.to_seq === exitSeq
+    && (stop.end_reason === "filled" || stop.end_reason === "position_closed"));
 }
 
 const TICK_TOLERANCE = 1e-6;
@@ -438,6 +453,53 @@ interface ActiveOrder {
   segmentIndex: number;
 }
 
+interface ActiveTargetOrder extends ActiveOrder {
+  linkedQtyRemaining: number;
+}
+
+// An anonymous fill can use only the capacity left after explicit fills in
+// the same working segment. A modify, cancellation or flat position ends it.
+function linkedTargetFillQuantities(events: TradeEvent[]) {
+  const segments = new Map<string, OrderEvent | ModifyEvent>();
+  const linkedQuantities = new Map<OrderEvent | ModifyEvent, number>();
+  let position = 0;
+  let hasEntry = false;
+
+  for (const event of events) {
+    switch (event.type) {
+      case "order":
+        if (event.role === "target") segments.set(event.order, event);
+        break;
+      case "modify":
+        if (segments.has(event.order) && (event.price !== undefined || event.qty !== undefined)) {
+          segments.set(event.order, event);
+        }
+        break;
+      case "cancel":
+        segments.delete(event.order);
+        break;
+      case "fill": {
+        const qty = isWholeQuantity(event.qty) ? event.qty : 0;
+        if (event.role === "entry") {
+          hasEntry = true;
+          position += qty;
+          break;
+        }
+        const segment = event.order ? segments.get(event.order) : undefined;
+        if (segment && position > 0) {
+          const linkedQty = Math.min(position, qty);
+          linkedQuantities.set(segment, (linkedQuantities.get(segment) ?? 0) + linkedQty);
+        }
+        position -= qty;
+        if (hasEntry && position === 0) segments.clear();
+        break;
+      }
+    }
+  }
+
+  return linkedQuantities;
+}
+
 /**
  * Pure trade deriver: events -> derived facts (docs/15 §3.3, issue #33).
  *
@@ -496,6 +558,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     if (event.type === "void") voidedSeqs.add(event.ref);
   }
   const activeEvents = ordered.filter((event) => event.type !== "void" && !voidedSeqs.has(event.seq));
+  const linkedTargetQty = linkedTargetFillQuantities(activeEvents);
 
   let plan: PlanEvent | null = null;
   let position = 0;
@@ -513,7 +576,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
   let totalContractTicks = 0;
   let closedQty = 0;
   let hasEntryFill = false;
-  let entryCancelled = false;
+  let entryCancellation: CancelEvent | null = null;
   let ocoCancelledWhileOpen = false;
   let stopMoveCount = 0;
   let stopWidened = false;
@@ -525,7 +588,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
   const workingOrders: WorkingOrderSegment[] = [];
   const activeStops = new Map<string, ActiveStop>();
   const activeEntryOrders = new Map<string, ActiveOrder>();
-  const activeTargetOrders = new Map<string, ActiveOrder>();
+  const activeTargetOrders = new Map<string, ActiveTargetOrder>();
 
   let initialStop: InitialStopInfo | null = null;
   let initialStopChecked = false;
@@ -563,11 +626,14 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     return firstEntryOrder ? firstEntryOrder.price : null;
   };
 
-  const inferExitReasonFromPrice = (
+  const resolveExitReason = (
     fill: FillEvent,
   ): { reason: ExitReason; basis: EventBasis } => {
     if (fill.reason && fill.reason !== "unknown") {
       return { reason: fill.reason, basis: fill.reason_basis ?? fill.basis };
+    }
+    if (fill.order && activeTargetOrders.has(fill.order)) {
+      return { reason: "target", basis: "inferred" };
     }
     // Check targets (active working target orders or plan targets) first, then active/plan stop.
     const targetPrices: number[] = [];
@@ -667,6 +733,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             to: null,
             price: event.price,
             qty: event.qty,
+            filled_qty: 0,
             basis: event.basis,
             end_reason: null,
           });
@@ -689,6 +756,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             to: null,
             price: event.price,
             qty: event.qty,
+            filled_qty: 0,
             target: event.target,
             basis: event.basis,
             end_reason: null,
@@ -702,6 +770,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             target: event.target,
             basis: event.basis,
             segmentIndex,
+            linkedQtyRemaining: linkedTargetQty.get(event) ?? 0,
           });
 
           const totalWorkingTargetQty = Array.from(activeTargetOrders.values()).reduce(
@@ -863,15 +932,24 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             }
           }
           const targetOrder = activeTargetOrders.get(event.order);
-          if (targetOrder) {
-            if (event.price !== undefined) {
-              targetOrder.price = event.price;
-              workingOrders[targetOrder.segmentIndex].price = event.price;
-            }
-            if (event.qty !== undefined) {
-              targetOrder.qty = event.qty;
-              workingOrders[targetOrder.segmentIndex].qty = event.qty;
-            }
+          if (targetOrder && (event.price !== undefined || event.qty !== undefined)) {
+            const previous = workingOrders[targetOrder.segmentIndex];
+            previous.to = event.t;
+            previous.end_reason = "modified";
+            targetOrder.price = event.price ?? targetOrder.price;
+            targetOrder.qty = event.qty ?? targetOrder.qty;
+            targetOrder.segmentIndex = workingOrders.length;
+            targetOrder.linkedQtyRemaining = linkedTargetQty.get(event) ?? 0;
+            workingOrders.push({
+              ...previous,
+              from: event.t,
+              to: null,
+              price: targetOrder.price,
+              qty: targetOrder.qty,
+              filled_qty: 0,
+              basis: event.basis,
+              end_reason: null,
+            });
           }
         }
         break;
@@ -885,7 +963,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             workingOrders[entryOrder.segmentIndex].end_reason = "cancelled";
             activeEntryOrders.delete(event.order);
           }
-          if (!hasEntryFill) entryCancelled = true;
+          if (!hasEntryFill) entryCancellation = event;
         }
 
         const targetOrder = activeTargetOrders.get(event.order);
@@ -954,6 +1032,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
 
           if (event.order && activeEntryOrders.has(event.order)) {
             const entryOrder = activeEntryOrders.get(event.order)!;
+            workingOrders[entryOrder.segmentIndex].filled_qty = validQty ? event.qty : 0;
             workingOrders[entryOrder.segmentIndex].to = event.t;
             workingOrders[entryOrder.segmentIndex].end_reason = "filled";
             activeEntryOrders.delete(event.order);
@@ -1032,7 +1111,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
           });
         } else {
           // Exit fill
-          const inferred = inferExitReasonFromPrice(event);
+          const inferred = resolveExitReason(event);
           resolvedExitReasons.push({
             reason: inferred.reason,
             basis: inferred.basis,
@@ -1066,14 +1145,38 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             }
           }
 
-          if (event.order && activeTargetOrders.has(event.order)) {
-            const targetOrder = activeTargetOrders.get(event.order)!;
-            workingOrders[targetOrder.segmentIndex].to = event.t;
-            workingOrders[targetOrder.segmentIndex].end_reason = "filled";
-            activeTargetOrders.delete(event.order);
+          const qty = validQty ? event.qty : 0;
+          const linkedTarget = event.order ? activeTargetOrders.get(event.order) : undefined;
+          let matchedTargets = linkedTarget ? [linkedTarget] : [];
+          if (event.order == null && inferred.reason === "target") {
+            const targetRanks = new Map(plan?.targets.map(({ key }, index) => [key, index]));
+            const rank = (order: ActiveOrder) => targetRanks.get(order.target ?? order.order) ?? Number.MAX_SAFE_INTEGER;
+            matchedTargets = [...activeTargetOrders.values()]
+              .filter((order) => samePrice(order.price, event.price, resolvedSpec))
+              .sort((a, b) => rank(a) - rank(b));
+          }
+          const eligibleQty = Math.min(qty, Math.max(position, 0));
+          let unmatchedQty = eligibleQty;
+          for (const targetOrder of matchedTargets) {
+            if (unmatchedQty === 0) break;
+            if (!isWholeQuantity(targetOrder.qty)) continue;
+            const availableQty = linkedTarget
+              ? targetOrder.qty
+              : Math.max(0, targetOrder.qty - targetOrder.linkedQtyRemaining);
+            const matchedQty = Math.min(availableQty, unmatchedQty);
+            if (matchedQty === 0) continue;
+            const targetSegment = workingOrders[targetOrder.segmentIndex];
+            targetSegment.filled_qty += matchedQty;
+            targetOrder.qty -= matchedQty;
+            if (linkedTarget) targetOrder.linkedQtyRemaining = Math.max(0, targetOrder.linkedQtyRemaining - matchedQty);
+            unmatchedQty -= matchedQty;
+            if (targetOrder.qty === 0) {
+              targetSegment.to = event.t;
+              targetSegment.end_reason = "filled";
+              activeTargetOrders.delete(targetOrder.order);
+            }
           }
 
-          const qty = validQty ? event.qty : 0;
           position -= qty;
           totalExitQty += qty;
           exitWeightedSum += event.price * qty;
@@ -1157,6 +1260,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             avg_entry_price: currentOpenAvgEntry(),
             order: event.order,
             reason: inferred.reason,
+            ...(eligibleQty > unmatchedQty ? { target_order_qty: eligibleQty - unmatchedQty } : {}),
             basis: event.basis,
             fees_cents: legFeesCents,
           });
@@ -1190,7 +1294,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     status = position > 0 ? "open" : "closed";
   } else if (activeEntryOrders.size > 0) {
     status = "working";
-  } else if (entryCancelled) {
+  } else if (entryCancellation != null) {
     status = "not_taken";
   } else if (plan) {
     status = "planned";
@@ -1271,6 +1375,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
           seq: finalExit.seq,
           t: finalExit.t,
           price: finalExit.price,
+          stop_price: referenceStopPrice,
           basis: finalExit.fillBasis,
           extra_r: extraR,
         });
@@ -1283,8 +1388,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
   let outcomeBasis: EventBasis | null = null;
   if (status === "not_taken") {
     outcome = "not_taken";
-    const cancelEv = [...activeEvents].reverse().find((e) => e.type === "cancel");
-    outcomeBasis = cancelEv?.basis ?? plan?.basis ?? null;
+    outcomeBasis = entryCancellation?.basis ?? plan?.basis ?? null;
   } else if (status === "closed") {
     const combineBasis = (bases: EventBasis[]): EventBasis => {
       if (bases.includes("inferred")) return "inferred";
@@ -1367,6 +1471,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     outcome_basis: outcomeBasis,
     entry_time: firstEntryTime,
     exit_time: status === "closed" ? lastExitTime : null,
+    entry_cancelled_at: status === "not_taken" ? entryCancellation?.t ?? null : null,
     avg_entry_price: totalEntryQty > 0 ? entryWeightedSum / totalEntryQty : null,
     avg_exit_price: totalExitQty > 0 ? exitWeightedSum / totalExitQty : null,
     first_entry_price: firstEntryPrice,
