@@ -3,9 +3,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { freshEntryDraft, upgradeDraft } from "../entry-form.ts";
 import { deriveTrade, fromLegacy } from "../trade-document.ts";
+import type { FillEvent, TradeDocument, TradeEvent } from "../trade-document.ts";
 import { buildMarks } from "../trade-marks.ts";
+import type { FlagMark, Mark } from "../trade-marks.ts";
 import { closeTradePatch, EXIT_REASONS, isExitReason, normalizeTrade } from "../trades.ts";
-import type { TradeRecord } from "../trades.ts";
+import type { TradeExitReason, TradeRecord } from "../trades.ts";
+
+function exitFillOf(doc: TradeDocument): FillEvent {
+  const fill = doc.events.find((e: TradeEvent): e is FillEvent => e.type === "fill" && e.role === "exit");
+  assert.ok(fill, "expected an exit fill");
+  return fill;
+}
 
 function closedTrade(patch: Partial<TradeRecord> = {}): TradeRecord {
   return normalizeTrade({
@@ -46,7 +54,7 @@ test("normalizeTrade preserves valid exit_reason on closed trades and forces nul
   const t = closedTrade({ exit_reason: "target" });
   assert.equal(t.exit_reason, "target");
 
-  const invalid = closedTrade({ exit_reason: "bad" as any });
+  const invalid = closedTrade({ exit_reason: "bad" as unknown as TradeExitReason });
   assert.equal(invalid.exit_reason, null);
 
   const open = normalizeTrade({
@@ -81,7 +89,7 @@ test("fromLegacy and deriveTrade assign stated basis and map to outcomes", () =>
   // Stated target
   const tpTrade = closedTrade({ exit_reason: "target" });
   const tpDoc = fromLegacy(tpTrade);
-  const tpExitFill = tpDoc.events.find((e) => e.type === "fill" && (e as any).role === "exit") as any;
+  const tpExitFill = exitFillOf(tpDoc);
   assert.equal(tpExitFill.reason, "target");
   assert.equal(tpExitFill.reason_basis, "stated");
   const tpDerived = deriveTrade(tpDoc);
@@ -90,7 +98,7 @@ test("fromLegacy and deriveTrade assign stated basis and map to outcomes", () =>
   // Stated stop
   const slTrade = closedTrade({ exit_reason: "stop" });
   const slDoc = fromLegacy(slTrade);
-  const slExitFill = slDoc.events.find((e) => e.type === "fill" && (e as any).role === "exit") as any;
+  const slExitFill = exitFillOf(slDoc);
   assert.equal(slExitFill.reason, "stop");
   assert.equal(slExitFill.reason_basis, "stated");
   const slDerived = deriveTrade(slDoc);
@@ -99,7 +107,7 @@ test("fromLegacy and deriveTrade assign stated basis and map to outcomes", () =>
   // Stated trail
   const trailTrade = closedTrade({ exit_reason: "trail" });
   const trailDoc = fromLegacy(trailTrade);
-  const trailExitFill = trailDoc.events.find((e) => e.type === "fill" && (e as any).role === "exit") as any;
+  const trailExitFill = exitFillOf(trailDoc);
   assert.equal(trailExitFill.reason, "trail");
   assert.equal(trailExitFill.reason_basis, "stated");
   const trailDerived = deriveTrade(trailDoc);
@@ -108,7 +116,7 @@ test("fromLegacy and deriveTrade assign stated basis and map to outcomes", () =>
   // Stated breakeven
   const beTrade = closedTrade({ exit_reason: "breakeven" });
   const beDoc = fromLegacy(beTrade);
-  const beExitFill = beDoc.events.find((e) => e.type === "fill" && (e as any).role === "exit") as any;
+  const beExitFill = exitFillOf(beDoc);
   assert.equal(beExitFill.reason, "breakeven");
   assert.equal(beExitFill.reason_basis, "stated");
   const beDerived = deriveTrade(beDoc);
@@ -118,7 +126,7 @@ test("fromLegacy and deriveTrade assign stated basis and map to outcomes", () =>
   // Stated manual / market
   const mktTrade = closedTrade({ exit_reason: "manual" });
   const mktDoc = fromLegacy(mktTrade);
-  const mktExitFill = mktDoc.events.find((e) => e.type === "fill" && (e as any).role === "exit") as any;
+  const mktExitFill = exitFillOf(mktDoc);
   assert.equal(mktExitFill.reason, "manual");
   assert.equal(mktExitFill.reason_basis, "stated");
   const mktDerived = deriveTrade(mktDoc);
@@ -127,14 +135,16 @@ test("fromLegacy and deriveTrade assign stated basis and map to outcomes", () =>
 
 test("buildMarks displays corresponding exit flag text: TP, SL, TRAIL, BE, MKT", () => {
   const times = [Date.parse("2026-11-20T14:30:00.000Z"), Date.parse("2026-11-20T15:00:00.000Z")];
-  const flagsFor = (reason: any) => {
+  const flagsFor = (reason: TradeExitReason) => {
     const t = closedTrade({ exit_reason: reason });
     const doc = fromLegacy(t);
     const derived = deriveTrade(doc);
     const marks = buildMarks(derived, null, "1m", "medium", false, { candleTimes: times });
-    const flags = marks.filter((m) => m.kind === "flag");
-    const exitFlag = flags.find((f: any) => (f as any).text !== "▲");
-    return (exitFlag as any)?.text;
+    const flags = marks.filter((m: Mark): m is FlagMark => m.kind === "flag");
+    // The exit flag sits at the exit bar and exit price (the entry arrow sits at entry).
+    const exitMs = Date.parse(t.exit_time ?? "");
+    const exitFlag = flags.find((f) => f.t === exitMs && f.price === t.exit_price);
+    return exitFlag?.text;
   };
 
   assert.equal(flagsFor("target"), "TP");
