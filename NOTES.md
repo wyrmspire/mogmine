@@ -47,7 +47,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 13. **`PS-4` — After-session review, done** (rules followed, nearest planned level in ticks, watched playbook, one lesson). **Done:** `PS-4a` pure model (`lib/session-review.ts`, `planStateAsOf`, `setPlanLesson`) and `PS-4b` screen (`components/SessionReview.tsx`, a Review button on each plan in `components/PlanCard.tsx`).
 14. **`IND-1` — Session VWAP, done** (`lib/chart-indicators.ts`, `components/TradeChart.tsx`, `components/TradeDetail.tsx`): View → Session VWAP Off / RTH / Globex, default Off because the anchor is open under `OD-18`. Withheld, with a note, when the anchored window has a gap. Value in the crosshair HUD. Bands wait for `OD-18`.
 15. **`UI-1` — Chart OHLC HUD & honest freshness, done** (`components/TradeDetail.tsx`, `app/globals.css`, `lib/freshness.ts`, `OD-40`, #114): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
-16. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`. Also move small controls off the screen edges (`1m` at 13 px, change-target chip at 9 px, After-the-exit note at 15 px, Mood button at 9 px; docs/24 §6) — edge taps trigger the phone's back swipe.
+16. **`UI-2` — Desktop 3-column workstation & toolbar polish, done** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `docs/24 §6`, `#114`): refine `>=1024px` layout and chart surface hierarchy with balanced chart frame height clamp and single-row 7-column levels ribbon so `.trade-levels-card` sits immediately below `.chart-card` and stays visible without scrolling; move small controls off mobile screen edges (`1m` at 24 px, change-target chip at 22 px, After-the-exit note at 30 px, Mood button at 28 px) to clear the back-swipe gesture zone (<15px).
 17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
 18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check, done** (`lib/market-data/coverage.ts`: the route and the client cache use `coversTradeWindow` / `anchorsTradeWindow`; no `length >= 4` bypass remains).
 19. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
@@ -91,6 +91,13 @@ Claim a lane before starting. Clear the claim when you stop.
 - Bars come only from the IndexedDB candle cache. Nothing is fetched (invariant 2), and a trade opened once is drillable after 7 days.
 - Headless Chrome 390×844 on a seeded Nov 12 trade: the front ended at 09:04 for a 09:05 entry, with no exit or marks. Pass revealed the trade and stored the answer. Overflow 0.
 - Simplified from docs/23 §4.1: the reveal does not animate bars forward or show the Trade Card front yet. Other drill kinds (§4.2) are later.
+
+### 2026-11-22 — Gemini — UI-2 (OD-40, docs/24 §6, #114), Desktop 3-column workstation & edge tap spacing
+
+- Refined desktop `>=1024px` workstation: balanced chart frame height clamp (`clamp(360px, calc(100dvh - 440px), 580px)`) and 7-column single-row levels ribbon so `.trade-levels-card` sits immediately under `.chart-card` and remains visible without scrolling.
+- Moved small interactive controls on Trade Detail off mobile screen edges (<15px back-swipe gesture zone): `1m` timeframe button (now 24px from edge), change-target chip (now 22px), After-the-exit note (now 30px), and Mood button (now 28px).
+- Added unit test suite `lib/__tests__/trade-detail-layout.test.ts`.
+- Verification passed: typecheck clean, lint 0 errors (1 existing PostCSS warning), test 455/455 passed, build 8/8 pages. Claim on #114 released.
 
 ### 2026-11-22 — Claude — CD-2b drills store and backup (#165), Data lane released
 
