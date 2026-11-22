@@ -59,7 +59,12 @@ export function DrillScreen() {
   const score = useMemo(() => takeVsPass(records, journal.trades), [records, journal.trades]);
 
   if (!journal.hydrated || !bars) {
-    return <div className="page drill-page"><div className="page-head"><div><span className="eyebrow">Drills</span><h1>Loading…</h1></div></div><div className="skeleton" style={{ height: 320 }} /></div>;
+    return (
+      <div className="page drill-page" role="status" aria-label="Loading drills…">
+        <div className="page-head"><div><span className="eyebrow">Drills</span><h1>Loading…</h1></div></div>
+        <div className="skeleton" style={{ height: 320 }} aria-hidden="true" />
+      </div>
+    );
   }
 
   const start = (next: Deck, name: string, pb: string | null = null) => { setDeck({ ...next, name, playbook: pb }); setPosition(0); setAnswered(new Map()); };
@@ -71,18 +76,18 @@ export function DrillScreen() {
       <div className="page drill-page">
         <div className="page-head"><div><span className="eyebrow">Drills</span><h1>Take it?</h1><p>Judge your own older trades from the chart at entry. The result shows after you answer.</p></div></div>
         <div className="specular-card card-pad drill-decks">
-          <button type="button" className="btn-primary" disabled={!warm.trade_ids.length} onClick={() => start(warm, "Warm-up")}>
+          <button type="button" className="btn-primary" disabled={!warm.trade_ids.length} onClick={() => start(warm, "Warm-up")} aria-label={`Start Warm-up drill, ${warm.trade_ids.length} ${warm.trade_ids.length === 1 ? "trade" : "trades"}`}>
             Warm-up · {warm.trade_ids.length} {warm.trade_ids.length === 1 ? "trade" : "trades"}
           </button>
-          <button type="button" className="btn-secondary" disabled={!misses?.trade_ids.length} onClick={() => misses && start(misses, "Misses")}>
+          <button type="button" className="btn-secondary" disabled={!misses?.trade_ids.length} onClick={() => misses && start(misses, "Misses")} aria-label={`Start Misses due drill, ${misses?.trade_ids.length ?? 0} ${misses?.trade_ids.length === 1 ? "trade" : "trades"}`}>
             Misses due · {misses?.trade_ids.length ?? 0}
           </button>
           <div className="drill-playbook">
-            <select value={playbook} onChange={(event) => setPlaybook(event.target.value)} aria-label="Playbook deck">
+            <select value={playbook} onChange={(event) => setPlaybook(event.target.value)} aria-label="Choose a playbook deck">
               <option value="">Choose a playbook…</option>
               {playbooks.map((id) => <option key={id} value={id}>{playbookName(id) ?? id}</option>)}
             </select>
-            <button type="button" className="btn-secondary" disabled={!playbook} onClick={() => start(playbookDeck(journal.trades, playbook, now, hasBars), playbookName(playbook) ?? "Playbook", playbook)}>Start</button>
+            <button type="button" className="btn-secondary" disabled={!playbook} onClick={() => start(playbookDeck(journal.trades, playbook, now, hasBars), playbookName(playbook) ?? "Playbook", playbook)} aria-label={playbook ? `Start drill for playbook ${playbookName(playbook) ?? playbook}` : "Start playbook drill"}>Start</button>
           </div>
           <SkipLine skipped={warm.skipped} />
         </div>
@@ -98,7 +103,7 @@ export function DrillScreen() {
         <div className="specular-card card-pad drill-decks">
           <p className="num">{answered.size} answered this round.</p>
           <SkipLine skipped={deck.skipped} />
-          <button type="button" className="btn-primary" onClick={() => setDeck(null)}>Choose another deck</button>
+          <button type="button" className="btn-primary" onClick={() => setDeck(null)} aria-label="Choose another drill deck">Choose another deck</button>
         </div>
         <ScoreCard score={score} />
       </div>
@@ -164,19 +169,50 @@ function DrillCard({ trade, stored, answer, showPlaybook, zone, privacy, onAnswe
       <div className="card-pad">
         {!answer ? (
           <div className="drill-answers" role="group" aria-label="Would you take this trade?">
-            {ANSWERS.map(([value, label]) => <button key={value} type="button" className={value === "take" ? "btn-primary" : "btn-secondary"} onClick={() => onAnswer(value)}>{label}</button>)}
+            {ANSWERS.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={value === "take" ? "btn-primary" : "btn-secondary"}
+                onClick={() => onAnswer(value)}
+                aria-label={`Answer: ${label}`}
+                style={{ minHeight: 46 }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         ) : (
-          <div className="drill-reveal" role="status">
+          <div className="drill-reveal" role="status" aria-live="polite">
             <p className="num">
               <b>{formatR(r)}</b>
-              {process && <span> · rules {process === "clean" ? "followed" : "broken"}</span>}
+              {process && <span> · rules {process === "clean" ? "followed (clean)" : "broken"}</span>}
               <span> · you said {ANSWERS.find(([value]) => value === answer)?.[1]}</span>
             </p>
-            {miss && <p className="drill-miss">This one comes back tomorrow: your answer disagreed with how it went.</p>}
+            {miss && (
+              <p className="drill-miss" role="alert">
+                <span aria-hidden="true">⚠️ </span>
+                This one comes back tomorrow: your answer disagreed with how it went.
+              </p>
+            )}
             <div className="drill-answers">
-              <Link className="btn-secondary" href={`/trades/${trade.id}`}>Open trade</Link>
-              <button type="button" className="btn-primary" onClick={onNext}>Next</button>
+              <Link
+                className="btn-secondary"
+                href={`/trades/${trade.id}`}
+                aria-label={`Open trade ${trade.symbol} entered at ${formatListTime(trade.entry_time, zone)}`}
+                style={{ minHeight: 46 }}
+              >
+                Open trade
+              </Link>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={onNext}
+                aria-label="Next drill trade"
+                style={{ minHeight: 46 }}
+              >
+                Next
+              </button>
             </div>
           </div>
         )}
@@ -194,7 +230,7 @@ function SkipLine({ skipped }: { skipped: Deck["skipped"] }) {
 function ScoreCard({ score }: { score: ReturnType<typeof takeVsPass> }) {
   const answered = score.take.n + score.smaller.n + score.pass.n + score.noR;
   return (
-    <div className="specular-card card-pad drill-score num">
+    <div className="specular-card card-pad drill-score num" role="region" aria-label="Drill score summary">
       <span className="eyebrow">Your read</span>
       {score.ready ? (
         <p>Take it: {formatR(score.take.avgR)} avg (n {score.take.n}) · Pass: {formatR(score.pass.avgR)} avg (n {score.pass.n})</p>

@@ -19,3 +19,39 @@ export function stackLabels(wanted: readonly number[], height: number, top: numb
   order.forEach(({ index }, i) => { result[index] = placed[i]; });
   return result;
 }
+
+/** A text label as drawn: left edge, width and wanted vertical centre, in pixels. */
+export interface PlacedLabel {
+  x: number;
+  width: number;
+  y: number;
+}
+
+/**
+ * Chart text labels that would print on top of each other (UX-a: `≈ SL` over `MAE ≈ −5.00 pts`).
+ * Labels whose boxes overlap, directly or through a chain, form a group; each group is stacked with
+ * `stackLabels`. Labels that touch nothing keep their wanted position. Output keeps input order.
+ */
+export function separateLabels(labels: readonly PlacedLabel[], height: number, top: number, bottom: number): number[] {
+  const parent = labels.map((_, index) => index);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const overlaps = (a: PlacedLabel, b: PlacedLabel) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && Math.abs(a.y - b.y) < height;
+  for (let i = 0; i < labels.length; i += 1) {
+    for (let j = i + 1; j < labels.length; j += 1) {
+      if (overlaps(labels[i], labels[j])) parent[find(i)] = find(j);
+    }
+  }
+  const groups = new Map<number, number[]>();
+  labels.forEach((_, index) => {
+    const root = find(index);
+    groups.set(root, [...(groups.get(root) ?? []), index]);
+  });
+  const result = labels.map((label) => label.y);
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const stacked = stackLabels(members.map((index) => labels[index].y), height, top, bottom);
+    members.forEach((index, i) => { result[index] = stacked[i]; });
+  }
+  return result;
+}

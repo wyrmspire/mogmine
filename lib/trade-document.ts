@@ -4,6 +4,7 @@
 import {
   DEFAULT_OWNER_USER_ID,
   canonicalSymbol,
+  isStopMove,
   isWholeQuantity,
   specFor,
   tickDecimals,
@@ -13,6 +14,7 @@ import type {
   ChecklistItem,
   FuturesContractSpec,
   ReviewStatus,
+  StopMove,
   TradeRecord,
   TradeStyle,
 } from "./trades.ts";
@@ -144,6 +146,7 @@ export interface TradeDocAnnotations {
   take_again_at: string | null;
   initial_stop_set_at?: string | null;
   initial_stop_price?: number | null;
+  stop_moves?: StopMove[];
   yahoo_ticker?: string;
   sparkline?: number[];
   candle_source?: TradeRecord["candle_source"];
@@ -408,7 +411,7 @@ function isStopOnWrongSide(entryPrice: number, stopPrice: number, sign: 1 | -1, 
   return (entryPrice - stopPrice) * sign <= 0;
 }
 
-function isStopWidened(prevPrice: number, nextPrice: number, sign: 1 | -1, spec: FuturesContractSpec | null): boolean {
+export function isStopWidened(prevPrice: number, nextPrice: number, sign: 1 | -1, spec: FuturesContractSpec | null): boolean {
   const prevTicks = priceToTicks(prevPrice, spec);
   const nextTicks = priceToTicks(nextPrice, spec);
   if (prevTicks != null && nextTicks != null) {
@@ -417,7 +420,7 @@ function isStopWidened(prevPrice: number, nextPrice: number, sign: 1 | -1, spec:
   return (nextPrice - prevPrice) * sign < 0;
 }
 
-function isStopLockingProfit(entryPrice: number, stopPrice: number, sign: 1 | -1, spec: FuturesContractSpec | null): boolean {
+export function isStopLockingProfit(entryPrice: number, stopPrice: number, sign: 1 | -1, spec: FuturesContractSpec | null): boolean {
   const entryTicks = priceToTicks(entryPrice, spec);
   const stopTicks = priceToTicks(stopPrice, spec);
   if (entryTicks != null && stopTicks != null) {
@@ -1560,11 +1563,22 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
     price: record.entry_price,
   });
 
-  // Preserve stop moves when R-10 frozen initial_stop_price differs from the working stop_loss_price.
-  // Note: legacy records only record when initial_stop_price was frozen (`initial_stop_set_at`),
-  // not when subsequent edits occurred. Because the timing of later edits is uncertain/inferred,
-  // we emit modify/cancel events with `basis: "inferred"` so renderers do not treat inferred timing as stated truth.
-  if (record.initial_stop_price != null && record.stop_loss_price !== record.initial_stop_price) {
+  // Preserve stop moves:
+  // 1. Explicit stated "I moved my stop" rows on TradeRecord (docs/15 §3, issue #36 G2).
+  // 2. Fallback for legacy records where only initial_stop_price and stop_loss_price exist.
+  if (record.stop_moves && record.stop_moves.length > 0) {
+    const sortedMoves = [...record.stop_moves].sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+    for (const move of sortedMoves) {
+      events.push({
+        seq: seq++,
+        t: move.time,
+        type: "modify",
+        basis: "stated",
+        order: "stop",
+        price: move.price,
+      });
+    }
+  } else if (record.initial_stop_price != null && record.stop_loss_price !== record.initial_stop_price) {
     const moveTime = pickStopMoveTime(record.entry_time, record.exit_time, record.initial_stop_set_at);
     if (record.stop_loss_price != null) {
       events.push({
@@ -1672,6 +1686,7 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
       take_again_at: record.take_again_at,
       initial_stop_set_at: record.initial_stop_set_at,
       initial_stop_price: record.initial_stop_price,
+      stop_moves: record.stop_moves ? [...record.stop_moves] : undefined,
       yahoo_ticker: record.yahoo_ticker,
       sparkline: [...record.sparkline],
       candle_source: record.candle_source,
@@ -1800,6 +1815,7 @@ function isAnnotations(value: unknown): value is TradeDocAnnotations {
     (value.take_again_at === null || isTimestamp(value.take_again_at)) &&
     (value.initial_stop_set_at === undefined || value.initial_stop_set_at === null || isTimestamp(value.initial_stop_set_at)) &&
     (value.initial_stop_price === undefined || value.initial_stop_price === null || typeof value.initial_stop_price === "number") &&
+    (value.stop_moves === undefined || (Array.isArray(value.stop_moves) && value.stop_moves.every(isStopMove))) &&
     (value.yahoo_ticker === undefined || typeof value.yahoo_ticker === "string") &&
     (value.sparkline === undefined || (Array.isArray(value.sparkline) && value.sparkline.every((price) => typeof price === "number"))) &&
     (value.candle_source === undefined || value.candle_source === "Yahoo Finance" || value.candle_source === "Demo fixture") &&

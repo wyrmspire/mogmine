@@ -3,7 +3,7 @@
 > **Read this file FIRST before planning, scaffolding, or editing any code in this repository.**  
 > This guide protects smaller/faster models and specialized subagents from common charting, market-data, futures-math, and architecture pitfalls.
 >
-> **Then read [NOTES.md](NOTES.md)** for the current state and the last handoff, and check [DECISIONS.md](DECISIONS.md) before choosing a name or re-opening a settled choice. Workflow for people and agents is in [CONTRIBUTING.md](CONTRIBUTING.md). Before treating Supabase as a blocker, read [22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
+> **Then read [BOARD.md](BOARD.md)** for what to do next and how agents share work, and **[NOTES.md](NOTES.md)** for the current state and the last handoff, and check [DECISIONS.md](DECISIONS.md) before choosing a name or re-opening a settled choice. Workflow for people and agents is in [CONTRIBUTING.md](CONTRIBUTING.md). Before treating Supabase as a blocker, read [22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
 
 ---
 
@@ -132,11 +132,37 @@ More UI checks (states, gestures, offline notes, colour-blind safety, wide scree
 ## 5. Before You Finish a Session
 
 1. Report the exact files changed and the commands run with their real output. A claim without output counts as not verified.
-2. Add a handoff entry to [NOTES.md](NOTES.md) and update your lane claim.
+2. Write your handoff in a new file under `notes/handoffs/` (or the PR body) and release or keep your lock, per §6 and [BOARD.md](BOARD.md) §3–4. Do not append to NOTES.md in a feature PR; the reviewer folds handoffs in.
 3. If you met a spec conflict or made a choice the specs do not cover, record it in [DECISIONS.md](DECISIONS.md) as an open item. Agents propose. The project owner decides.
 4. If behaviour now differs from a spec, update the spec in the same change.
 
 **One agent guide.** This file is the only agent instruction file. A tool-specific file (`CLAUDE.md`, `GEMINI.md`, `.cursorrules`, Copilot instructions) must be a one-line pointer here, never a copy.
+
+## 6. Working Alongside Other Agents
+
+Several agents may work on this repo at once. [BOARD.md](BOARD.md) is the work order and holds the full rules. For multi-lane sprint planning (`board init <N> lanes`) and dispatching copyable agent prompts with a final integration pass, see [boardinit.md](boardinit.md).
+
+**"Look at the board and go"** means: read BOARD.md, take the top `ready` row in §1 that nobody holds, lock it (§3), build it as one slice, open a PR, and hand off (§4). If §1 has no `ready` row, pick the next unclaimed item from NOTES.md "Next up" or docs/16 §2b the same way, and say so in your report. The contract rules:
+
+1. **Work items are GitHub issues.** Workers never edit `BOARD.md`, `NOTES.md`, or `DECISIONS.md` directly. Only the planner or final integrator edits them.
+2. **Isolate parallel waves with Git worktrees.** Never run 7 concurrent sessions in one shared working directory; use `git worktree add` off one reviewed baseline commit (`MM-W1` baseline commit `699c537`), or assign strictly disjoint writable files per lane.
+3. **Bounded file ownership.** Every parallel assignment lists exact writable files/modules. Unlisted production files are read-only unless the planner reallocates ownership. Never modify another lane's claimed file "to help".
+4. **Freeze cross-agent interfaces first.** Pure selectors/models (e.g. plan-vs-actual, neighbour projection) export agreed types/functions without editing shared UI shells (`TradeDetail.tsx`, `TradeChart.tsx`, `app/globals.css`) in parallel.
+5. **Distinguish fact vs. history vs. hindsight.** Keep **observed market facts**, **user-reported history** (preserving true `recorded_at` separately from retrospective entry/exit times), and **computed hindsight** distinct. Retrospective feelings/moods must record true `recorded_at` wall-clock time distinct from the trade's historical timestamp `captured_at` or `entry_time`.
+6. **Canonical atomic locks.** Use one canonical claim key per issue (`refs/heads/claim/<issue>`), never lane-specific branch names that can coexist, or central planner assignment before launch.
+7. **Stay in your lane & never reset others' work.** Never delete, reset, or overwrite another agent's worktree, folder, or branch. An agent must never rewrite unrelated changes or resolve a collision by resetting someone else's work.
+8. **Tests belong to the implementation.** Tests change with the behavior and must be co-delivered with the feature/bugfix.
+9. **Hand off with proof.** Write handoffs in new files under `notes/handoffs/` (never append to `NOTES.md` in a worker lane). Completion requires real test/typecheck/lint/build output, not a claim.
+10. **Target slice size:** Keep individual diffs reviewable (~300–450 lines target). If a complete fix is 170 lines, do not pad it; the boundary applies to the whole diff including tests.
+11. **Duplicates lose & release on finish.** Close duplicate PRs, delete claim branches, and unassign on merge.
+
+## 7. Repo Dumps for Chat (printcode / gitrdif)
+
+When the owner asks for a dump or a diff dump, run from the repo root (Windows: `.\printcode.cmd` / `.\gitrdif.cmd`; bash: `./printcode.sh` / `./gitrdif.sh`):
+
+- **Full dump:** `printcode` writes `dump00.md`... with the whole repo and records the baseline commit in `.last-dump-commit`. `--help` lists options (`--area app|components|lib|docs|notes|tests|config`, `--ext`, `--list`, `--head`/`--tail`).
+- **Diff dump:** `gitrdif` writes `gitrdif00.md`... with commits, patch and uncommitted changes since the last full dump.
+- Outputs are git-ignored. Never commit them. Tell the owner which files were written.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

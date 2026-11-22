@@ -129,6 +129,10 @@ Built as `playbookCardData` in `lib/playbook-card.ts` (CD-3a). Win rate and aver
 
 Glance before the session; a **binder** view (grid of all playbook cards); share a setup with Shield on, which hides results entirely and shows rules and example only.
 
+**Built (CD-3b, `/playbooks`, linked from Tune → Playbooks):** the binder is a grid of text tiles, one per active playbook in the trader's order. It counts archived playbooks and leaves them out, and mounts no charts. Tapping a tile opens the card. The front shows the example chart from the candle cache (never fetched), why that example was picked, and the stats row. The Rules button flips to the back: the numbered rules and the drill line. The flip is a fade, with no animation under reduced motion. With Shield on, the stats row and drill result are replaced by a line saying results are hidden. All text comes from `lib/playbook-binder.ts`.
+
+**Built (CD-3c, `lib/playbook-card-image.ts`, `components/PlaybookCardSheet.tsx`):** Share card on the playbook card opens an export sheet with Shield on, whatever the app setting. The PNG uses the Trade Card's layout tables (`getCardLayout`) at `4:5`, `9:16` and `1:1`. The front's main area is the example chart's `takeScreenshot(true)`, or "No example yet". The back shows the numbered rules and the drill line. Under Shield the stats row and drill result are not printed. The example chart is redrawn in privacy mode before its snapshot is used, so its pill shows R and points, never dollars or size. Whether a Shielded share should also drop the example's own R, points and MFE/MAE is `OD-56`. File names are `playbook-<name>-card[-9x16|-1x1][-back].png`. The sheet mirrors `TradeCardSheet`; merge the two when a third card type needs an export sheet.
+
 ---
 
 ## 6. Later cards

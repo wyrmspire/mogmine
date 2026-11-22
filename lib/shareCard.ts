@@ -166,7 +166,7 @@ export function shareCardContent(
     // An open trade is labelled OPEN and shows no result (OD-38, R-03c).
     outcome: trade.exit_time == null ? "OPEN" : privacy ? formattedR : formatMoney(tradePnl(trade)),
     outcomeDetail: trade.exit_time == null ? "" : privacy ? points : `${formattedR} · ${points}`,
-    playbook: playbookName(trade.playbook_id),
+    playbook: playbookName(trade.playbook_id) ?? (trade.playbook_id ? (playbookName(trade.playbook_id.replace(/^pb-/, "")) ?? trade.playbook_id) : null),
     tags: trade.quick_tags,
     rules: trade.checklist_state,
     ruleSeal: score ? `${score.followed}/${score.total} FOLLOWED` : null,
@@ -355,6 +355,35 @@ export function renderCardCanvas(
   const headerTag = side === "back" ? `${content.typeLabel} · ${content.subject} · BACK` : `${content.typeLabel} · ${content.subject}`;
   ctx.fillText(headerTag, layout.paddingX, headerY + 28);
 
+  // Playbook tag in header band if present (M3-Card, #42, docs/23 §2)
+  if (content.playbook) {
+    const headerTagWidth = ctx.measureText(headerTag).width;
+    const pbTagText = content.playbook.toUpperCase();
+    ctx.font = "700 18px system-ui";
+    const pbTagWidth = ctx.measureText(pbTagText).width;
+    const pillX = layout.paddingX + headerTagWidth + 18;
+    const maxPillRight = privacy ? layout.width - layout.paddingX - 120 : layout.width - layout.paddingX - 16;
+    if (pillX + pbTagWidth + 24 <= maxPillRight) {
+      const pillW = pbTagWidth + 20;
+      const pillH = 26;
+      const pillY = headerY + 8;
+      ctx.fillStyle = theme.surface;
+      ctx.strokeStyle = theme.goldMid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(pillX, pillY, pillW, pillH, 6);
+      } else {
+        ctx.rect(pillX, pillY, pillW, pillH);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = theme.goldLight;
+      ctx.fillText(pbTagText, pillX + 10, pillY + 19);
+    }
+  }
+
   if (privacy) {
     ctx.textAlign = "right";
     ctx.font = "700 24px system-ui";
@@ -516,11 +545,12 @@ export function renderCardCanvas(
   // Context Band: why: playbook · thesis · rules
   let ctxY = layout.context.y + 24;
   if (content.playbook) {
-    ctx.fillStyle = theme.textMuted;
-    ctx.font = "700 22px system-ui";
+    ctx.fillStyle = theme.goldMid;
+    ctx.font = "800 22px system-ui";
     ctx.fillText("PLAYBOOK", layout.paddingX + 16, ctxY);
     ctx.fillStyle = theme.textPrimary;
-    ctx.fillText(fitText(ctx, content.playbook, 700), layout.paddingX + 180, ctxY);
+    ctx.font = "650 22px system-ui";
+    ctx.fillText(fitText(ctx, content.playbook, layout.main.width - 200), layout.paddingX + 180, ctxY);
     ctxY += 34;
   }
 

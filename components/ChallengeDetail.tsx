@@ -84,8 +84,10 @@ function DrawdownPathChart({
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label="Equity and drawdown floor path"
+        aria-label={`Drawdown path chart: equity and floor across ${points.length} trades`}
       >
+        <title>Drawdown path chart</title>
+        <desc>Shows equity step line against trailing drawdown floor limit across {points.length} trades.</desc>
         {/* Zero baseline */}
         {zeroY >= padY && zeroY <= height - padY && (
           <line
@@ -127,8 +129,8 @@ function DrawdownPathChart({
         ))}
       </svg>
       <div className="challenge-chart-legend">
-        <span className="legend-item"><i className="legend-swatch equity" /> Equity</span>
-        <span className="legend-item"><i className="legend-swatch floor" /> Floor (limit)</span>
+        <span className="legend-item"><i className="legend-swatch equity" aria-hidden="true" /> Equity</span>
+        <span className="legend-item"><i className="legend-swatch floor" aria-hidden="true" /> Floor (limit)</span>
         {!shield && (
           <span className="legend-scale num">
             Floor: {formatBalance(floors[floors.length - 1])}
@@ -146,17 +148,27 @@ function CleanRunDotsDetail({
 }) {
   return (
     <div className="challenge-dots-detail" aria-label="Clean Run process history">
-      <div className="challenge-dots-grid">
+      <div className="challenge-dots-grid" role="list" aria-label="Clean Run trade results">
         {points.map((pt, idx) => {
           const isClean = pt.read === "clean";
           const isBroken = pt.read === "broken";
           const isOffPlan = pt.read === "off_plan";
+
+          const statusText = isClean
+            ? "Clean (rules followed)"
+            : isBroken
+              ? "Broken rule"
+              : isOffPlan
+                ? "Off-plan"
+                : "Pending or ungraded";
 
           return (
             <div
               key={pt.trade_id}
               className={`challenge-dot-cell ${isClean ? "clean" : isBroken ? "broken" : isOffPlan ? "off-plan" : "pending"}`}
               title={`Trade #${idx + 1}: ${pt.read ?? "ungraded"}`}
+              role="listitem"
+              aria-label={`Trade #${idx + 1}: ${statusText}`}
             >
               <span className="dot-shape" aria-hidden="true">
                 {isClean ? "●" : isBroken ? "▲" : isOffPlan ? "■" : "○"}
@@ -166,10 +178,10 @@ function CleanRunDotsDetail({
           );
         })}
       </div>
-      <div className="challenge-dots-legend">
-        <span className="legend-item"><span className="legend-dot clean">●</span> Clean (followed)</span>
-        <span className="legend-item"><span className="legend-dot broken">▲</span> Broken rule</span>
-        <span className="legend-item"><span className="legend-dot off-plan">■</span> Off-plan</span>
+      <div className="challenge-dots-legend" role="list" aria-label="Shape legend">
+        <span className="legend-item" role="listitem"><span className="legend-dot clean" aria-hidden="true">●</span> Clean (followed)</span>
+        <span className="legend-item" role="listitem"><span className="legend-dot broken" aria-hidden="true">▲</span> Broken rule</span>
+        <span className="legend-item" role="listitem"><span className="legend-dot off-plan" aria-hidden="true">■</span> Off-plan</span>
       </div>
     </div>
   );
@@ -265,7 +277,7 @@ export function ChallengeDetail({ id }: { id: string }) {
     <div className="page challenge-detail-page">
       <div className="page-head">
         <div>
-          <Link href="/" className="btn-secondary challenge-back-link">← Today</Link>
+          <Link href="/" className="btn-secondary challenge-back-link" aria-label="Back to Today screen" style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}>← Today</Link>
           <span className="eyebrow">
             {isDrawdown ? "Drawdown Defender" : "Clean Run"} · {isEnded ? "Ended" : "Active"}
           </span>
@@ -280,13 +292,13 @@ export function ChallengeDetail({ id }: { id: string }) {
       </div>
 
       {!saved && (
-        <div className="banner warn" style={{ margin: "0 0 14px" }}>
+        <div className="banner warn" role="status" style={{ margin: "0 0 14px" }}>
           Not saved on this device — storage is blocked
         </div>
       )}
 
       {resultDiffers && (
-        <div className="banner warn" style={{ margin: "0 0 14px" }}>
+        <div className="banner warn" role="status" style={{ margin: "0 0 14px" }}>
           A trade was edited after this ended. Today&apos;s numbers differ. Showing saved final result below.
           {liveResult && (
             <div className="num">
@@ -299,9 +311,9 @@ export function ChallengeDetail({ id }: { id: string }) {
       )}
 
       {/* Primary Headline Card */}
-      <section className="specular-card card-pad challenge-headline-card">
+      <section className="specular-card card-pad challenge-headline-card" aria-label="Challenge Status">
         {displayResult.state === "passed" && (
-          <div className="challenge-status-passed" style={{ marginBottom: 12 }}>
+          <div className="challenge-status-passed" role="status" style={{ marginBottom: 12 }}>
             <span className="challenge-detail-banner-title">
               Done: {isDrawdown
                 ? `${rules.kind === "drawdown" ? rules.sessions : ""} days inside ${prefs.shield ? "the limit" : formatBalance(rules.kind === "drawdown" ? rules.max_drawdown_cents : 0)}`
@@ -312,7 +324,7 @@ export function ChallengeDetail({ id }: { id: string }) {
         )}
 
         {displayResult.state === "failed" && (
-          <div className="challenge-status-failed" style={{ marginBottom: 12 }}>
+          <div className="challenge-status-failed" role="status" style={{ marginBottom: 12 }}>
             <span className="challenge-detail-banner-title">
               {isDrawdown ? "Limit reached" : "Failed rule"}
             </span>
@@ -320,44 +332,44 @@ export function ChallengeDetail({ id }: { id: string }) {
           </div>
         )}
 
-        <div className="challenge-metrics-grid">
+        <div className="challenge-metrics-grid" role="region" aria-label="Challenge metrics summary">
           {isDrawdown && rules.kind === "drawdown" && (
             <>
               <div className="metric-box">
-                <small>Days Completed</small>
-                <b className="num">{displayResult.sessions_done ?? 0} / {rules.sessions}</b>
+                <small id="metric-sessions-label">Days Completed</small>
+                <b className="num" aria-labelledby="metric-sessions-label">{displayResult.sessions_done ?? 0} / {rules.sessions}</b>
               </div>
               <div className="metric-box">
-                <small>Drawdown Used</small>
+                <small id="metric-dd-label">Drawdown Used</small>
                 {prefs.shield ? (
-                  <b className="num">
+                  <b className="num" aria-labelledby="metric-dd-label">
                     {Math.round(((displayResult.drawdown_cents ?? 0) / rules.max_drawdown_cents) * 100)}% of limit
                   </b>
                 ) : (
-                  <b className="num">
+                  <b className="num" aria-labelledby="metric-dd-label">
                     {formatBalance(displayResult.drawdown_cents ?? 0)}
                     <span className="metric-sub"> / {formatBalance(rules.max_drawdown_cents)}</span>
                   </b>
                 )}
               </div>
               <div className="metric-box">
-                <small>Room Remaining</small>
+                <small id="metric-room-label">Room Remaining</small>
                 {prefs.shield ? (
-                  <b className="num">
+                  <b className="num" aria-labelledby="metric-room-label">
                     {Math.max(0, 100 - Math.round(((displayResult.drawdown_cents ?? 0) / rules.max_drawdown_cents) * 100))}%
                   </b>
                 ) : (
-                  <b className="num">
+                  <b className="num" aria-labelledby="metric-room-label">
                     {formatBalance(displayResult.remaining_cents ?? 0)}
                   </b>
                 )}
               </div>
               <div className="metric-box">
-                <small>Peak Equity</small>
+                <small id="metric-peak-label">Peak Equity</small>
                 {prefs.shield ? (
-                  <b className="num">—</b>
+                  <b className="num" aria-labelledby="metric-peak-label">—</b>
                 ) : (
-                  <b className="num">{formatBalance(displayResult.peak_cents ?? 0)}</b>
+                  <b className="num" aria-labelledby="metric-peak-label">{formatBalance(displayResult.peak_cents ?? 0)}</b>
                 )}
               </div>
             </>
@@ -366,23 +378,23 @@ export function ChallengeDetail({ id }: { id: string }) {
           {!isDrawdown && rules.kind === "clean_run" && (
             <>
               <div className="metric-box">
-                <small>Current Streak</small>
-                <b className="num gold">{displayResult.run ?? 0} / {rules.target_trades}</b>
+                <small id="metric-streak-label">Current Streak</small>
+                <b className="num gold" aria-labelledby="metric-streak-label">{displayResult.run ?? 0} / {rules.target_trades}</b>
               </div>
               <div className="metric-box">
-                <small>Best Streak</small>
-                <b className="num gold">{displayResult.best_run ?? 0}</b>
+                <small id="metric-best-label">Best Streak</small>
+                <b className="num gold" aria-labelledby="metric-best-label">{displayResult.best_run ?? 0}</b>
               </div>
               <div className="metric-box">
-                <small>Playbooks Included</small>
-                <b>{rules.playbook_ids.length > 0 ? `${rules.playbook_ids.length} playbooks` : "None selected"}</b>
+                <small id="metric-playbooks-label">Playbooks Included</small>
+                <b aria-labelledby="metric-playbooks-label">{rules.playbook_ids.length > 0 ? `${rules.playbook_ids.length} playbooks` : "None selected"}</b>
               </div>
             </>
           )}
         </div>
 
         {displayResult.provisional && (
-          <div className="challenge-estimate" style={{ marginTop: 12 }}>
+          <div className="challenge-estimate" role="note" style={{ marginTop: 12 }}>
             ⚠️ Numbers are estimates while trades need attention.
           </div>
         )}
@@ -429,7 +441,7 @@ export function ChallengeDetail({ id }: { id: string }) {
                       </span>
                     )}
                   </div>
-                  <Link href={`/trades/${encodeURIComponent(issue.trade_id)}`} className="btn-secondary issue-fix-link">
+                  <Link href={`/trades/${encodeURIComponent(issue.trade_id)}`} className="btn-secondary issue-fix-link" aria-label={`${issue.reason === "undated" ? "View" : "Fix"} trade ${trade ? `${trade.symbol} ${trade.direction}` : ""}`} style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}>
                     {issue.reason === "undated" ? "View trade →" : "Fix trade →"}
                   </Link>
                 </div>
@@ -461,22 +473,22 @@ export function ChallengeDetail({ id }: { id: string }) {
               return (
                 <div key={pt.trade_id} className={`challenge-trade-row-wrap ${isDeciding ? "deciding" : ""}`}>
                   {isDeciding && (
-                    <div className="challenge-deciding-badge">
+                    <div className="challenge-deciding-badge" role="status">
                       {displayResult.state === "failed" ? "Deciding Trade (Breached Limit)" : "Deciding Trade (Target Reached)"}
                     </div>
                   )}
-                  <Link href={`/trades/${encodeURIComponent(pt.trade_id)}`} className="trade-row">
+                  <Link href={`/trades/${encodeURIComponent(pt.trade_id)}`} className="trade-row" aria-label={`Trade #${scoredPointsNewestFirst.length - index}: ${trade?.symbol ?? "Trade"} ${trade?.direction ?? ""}, ${pt.read ? (pt.read === "clean" ? "Clean rules followed" : pt.read === "broken" ? "Broken rule" : "Off-plan") : "unclassified"}, closed ${formatSessionDate(pt.session)}`}>
                     <span className="row-main">
                       <span className="row-title">
                         <strong>{trade?.symbol ?? "Trade unavailable"}</strong>
                         {trade && (
                           <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}>
-                            {trade.direction}
+                            {trade.direction === "LONG" ? "▲ LONG" : "▼ SHORT"}
                           </span>
                         )}
                         {pt.read && (
                           <span className={`challenge-read-chip ${pt.read}`}>
-                            {pt.read === "clean" ? "Clean" : pt.read === "broken" ? "Broken Rule" : "Off-Plan"}
+                            {pt.read === "clean" ? "● Clean" : pt.read === "broken" ? "▲ Broken Rule" : "■ Off-Plan"}
                           </span>
                         )}
                       </span>
@@ -512,13 +524,20 @@ export function ChallengeDetail({ id }: { id: string }) {
       {!isEnded && (
         <div className="challenge-end-section" style={{ marginTop: 20 }}>
           {confirmEnd ? (
-            <div className="challenge-confirm-box specular-card card-pad">
-              <p>Are you sure you want to end this challenge? It will be saved in your past attempts and cannot be resumed.</p>
+            <div
+              className="challenge-confirm-box specular-card card-pad"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="confirm-end-title"
+              aria-describedby="confirm-end-desc"
+            >
+              <h4 id="confirm-end-title" style={{ margin: "0 0 8px" }}>End Challenge Early?</h4>
+              <p id="confirm-end-desc">Are you sure you want to end this challenge? It will be saved in your past attempts and cannot be resumed.</p>
               <div className="challenge-confirm-actions">
-                <button type="button" className="btn-secondary" onClick={() => setConfirmEndId(null)}>
+                <button type="button" className="btn-secondary" onClick={() => setConfirmEndId(null)} aria-label="Cancel ending challenge" style={{ minHeight: 44 }}>
                   Cancel
                 </button>
-                <button type="button" className="btn-primary" onClick={handleEndChallenge}>
+                <button type="button" className="btn-primary" onClick={handleEndChallenge} aria-label="Confirm end challenge" style={{ minHeight: 44 }}>
                   Confirm End Challenge
                 </button>
               </div>
@@ -528,6 +547,8 @@ export function ChallengeDetail({ id }: { id: string }) {
               type="button"
               className="btn-ghost challenge-end-btn"
               onClick={() => setConfirmEndId(id)}
+              aria-label="End this challenge early"
+              style={{ minHeight: 44 }}
             >
               End challenge…
             </button>
@@ -537,7 +558,7 @@ export function ChallengeDetail({ id }: { id: string }) {
 
       {/* Past Attempts */}
       {pastAttempts.length > 0 && (
-        <section className="specular-card card-pad challenge-past-section" style={{ marginTop: 24 }}>
+        <section className="specular-card card-pad challenge-past-section" style={{ marginTop: 24 }} aria-label="Past challenge attempts">
           <h3>Past Attempts</h3>
           <div className="challenge-past-list">
             {pastAttempts.map((past) => {
@@ -549,6 +570,8 @@ export function ChallengeDetail({ id }: { id: string }) {
                   key={past.id}
                   href={`/challenges/${encodeURIComponent(past.id)}`}
                   className="challenge-past-row"
+                  aria-label={`View attempt from ${formatSessionDate(sessionDate(new Date(past.started_at).getTime()))}, status ${passed ? "Passed" : failed ? "Failed" : "Ended"}`}
+                  style={{ minHeight: 44, display: "flex", alignItems: "center" }}
                 >
                   <div className="past-info">
                     <span className="past-dates num">

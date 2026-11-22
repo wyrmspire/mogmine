@@ -76,7 +76,7 @@ Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CO
 14. **`CD-2a` — Drill decks, pure (`lib/drills.ts` + tests, docs/23 §4):** Eligibility (closed, not sample, bars cached, older than 7 days), warm-up / playbook / misses decks, chart cut at entry, scoring.
 15. **`CD-2b` — Drill store & backup (`lib/drill-store.ts`, `lib/store.ts`):** `mogmine-drills-v1` + `user_id`, in journal backup/restore, never writes `take_again`.
 16. **`CD-2c` — Drill screen:** Sealed front, *Take it / Smaller / Pass*, reveal (instant under reduced motion), missing-bars skip count.
-17. **`CD-3` — Playbook card (docs/23 §5):** `CD-3a` data done (`lib/playbook-card.ts`). `CD-3b` in-app card and `/playbooks` binder done (`components/PlaybookCard.tsx`, `components/PlaybookBinder.tsx`, `lib/playbook-binder.ts`). `CD-3c`: PNG export on the shared frame, after `CD-1b`.
+17. **`CD-3` — Playbook card (docs/23 §5):** `CD-3a` data done (`lib/playbook-card.ts`). `CD-3b` in-app card and `/playbooks` binder done (`components/PlaybookCard.tsx`, `components/PlaybookBinder.tsx`, `lib/playbook-binder.ts`). `CD-3c` PNG export on the shared frame done (`lib/playbook-card-image.ts`, `components/PlaybookCardSheet.tsx`).
 
 ---
 

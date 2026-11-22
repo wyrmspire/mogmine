@@ -31,7 +31,7 @@ This is what `components/PositionBoxPrimitive.ts` draws today. It is fills only:
 4. **KEY level (optional):** a faint dotted line across the pane with a small low-contrast `KEY` pill at the right edge.
 5. **OBSERVATIONS:** a dotted flag at the observed bar and price, with an `≈` label for inferred evidence. The Data notes chip below the chart gives each flag's time and price as text.
 
-The target design is in [15 — Trade Document & Render Grammar](15-trade-document-and-render-grammar.md) §2: fills-only plan and actual zones, a stepped stop path, MFE and MAE brackets, dotted hindsight continuation, and the archived style. The owner decisions of 2026-11-15 are in doc 15 §1.
+Since `TD-3` the primitive paints the `Mark[]` display list from `buildMarks` ([15 — Trade Document & Render Grammar](15-trade-document-and-render-grammar.md) §2–3), which adds a stepped stop path, the MFE / MAE bracket with point labels, `PAST STOP` and locked-profit hatches, exit-reason flags and dotted hindsight continuation. Fills are flags on the box, not lightweight-charts series markers, and carry no text. The archived style for neighbouring trades is not built yet (issue #40). The owner decisions of 2026-11-15 are in doc 15 §1.
 
 The price autoscale always includes the planned target, planned stop and actual exit in addition to the visible candles. The primitive exposes those bounds and the candlestick series merges them into its own autoscale range; **Fit** restores price autoscale as well as the duration-derived time window. A missing planned target is labelled “No target set” and does not invent a profit zone.
 

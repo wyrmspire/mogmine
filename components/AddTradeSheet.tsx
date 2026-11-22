@@ -123,10 +123,10 @@ export function AddTradeSheet() {
   const stopPrice = priceOrNull(draft.stopPrice);
   const targetPrice = priceOrNull(draft.targetPrice);
   // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50).
-  // Under Shield the Contracts input is hidden, so an invalid draft quantity cannot be seen or
-  // fixed; fall back to 1 there and keep the typed draft untouched for when Shield turns off.
+  // Under Shield, the Contracts input is masked on screen but remains editable (UX-e, #15),
+  // so multi-contract trades preserve their true size and underlying dollar P&L.
   const typedQuantity = Number(draft.quantity);
-  const quantity = prefs.shield ? (isWholeQuantity(typedQuantity) ? typedQuantity : 1) : typedQuantity;
+  const quantity = isWholeQuantity(typedQuantity) ? typedQuantity : typedQuantity;
   const times = entryTimes(draft, zone);
   const { entry, exit } = times;
 
@@ -139,7 +139,7 @@ export function AddTradeSheet() {
   });
   const errors: Partial<Record<ErrorKey, string>> = {
     symbol: executionErrors.symbol,
-    quantity: prefs.shield ? undefined : executionErrors.quantity,
+    quantity: executionErrors.quantity,
     entryPrice: executionErrors.entry_price,
     exitPrice: executionErrors.exit_price,
     stopPrice: executionErrors.stop_loss_price,
@@ -243,11 +243,13 @@ export function AddTradeSheet() {
     });
     addTrade(trade);
     if (draft.entryMoodSpoke) {
+      const nowIso = new Date().toISOString();
       recordUserMood(
         trade.id,
         { [draft.entryMoodSpoke]: ONE_TAP_MOOD_SCORE },
-        new Date().toISOString(),
+        nowIso,
         entry.toISOString(),
+        nowIso,
       );
     }
     keepDraft(DRAFT_KEY, null);
@@ -372,14 +374,24 @@ export function AddTradeSheet() {
               </select>
               {show("symbol") && <span className="error">{show("symbol")}</span>}
             </label>
-            {/* Shield hides position size (#15): the input is masked, the draft keeps the
-                quantity and the saved execution preserves it. The preview never shows it. */}
-            {!prefs.shield && (
-              <label className="field"><span>Contracts</span>
-                <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} aria-invalid={!!show("quantity")} onChange={(event) => change({ quantity: event.target.value })} />
-                {show("quantity") && <span className="error">{show("quantity")}</span>}
-              </label>
-            )}
+            {/* UX-e (#15): Under Shield, Contracts remains editable and fully bound to state so
+                multi-contract positions retain true economics, but the input digits are masked
+                on screen with password security styling. */}
+            <label className="field">
+              <span>Contracts {prefs.shield && <i className="shield-tag" style={{ opacity: 0.6, fontSize: "0.8em", marginLeft: 4 }}>masked</i>}</span>
+              <input
+                inputMode="numeric"
+                type={prefs.shield ? "password" : "number"}
+                min={1}
+                step={1}
+                value={draft.quantity}
+                placeholder={prefs.shield ? "••" : "1"}
+                aria-label={prefs.shield ? "Contracts (masked under Shield)" : "Contracts"}
+                aria-invalid={!!show("quantity")}
+                onChange={(event) => change({ quantity: event.target.value })}
+              />
+              {show("quantity") && <span className="error">{show("quantity")}</span>}
+            </label>
             <label className="field wide"><span>Date <i>{zoneName}</i></span>
               <input type="date" value={draft.date} aria-invalid={!!show("date")} onChange={(event) => change({ date: event.target.value, dateEdited: true })} />
               {show("date") && <span className="error">{show("date")}</span>}

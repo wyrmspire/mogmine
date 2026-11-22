@@ -14,13 +14,17 @@ import { useToday } from "@/lib/ui";
 function DrawdownBar({ share, isClose, isBreached }: { share: number; isClose: boolean; isBreached: boolean }) {
   const clamped = Math.max(0, Math.min(1, share));
   const fillClass = isBreached ? "breached" : isClose ? "close" : "";
+  const pct = Math.round(clamped * 100);
   return (
     <span
       className={`challenge-meter ${fillClass}`}
-      role="img"
-      aria-label={`${Math.round(clamped * 100)}% of limit used`}
+      role="progressbar"
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={`Drawdown limit used: ${pct}%${isBreached ? " (limit breached)" : isClose ? " (approaching limit)" : ""}`}
     >
-      <i style={{ width: `${clamped * 100}%` }} />
+      <i style={{ width: `${pct}%` }} />
     </span>
   );
 }
@@ -45,7 +49,18 @@ function CleanRunDots({
       </span>,
     );
   }
-  return <div className="challenge-dots" aria-hidden="true">{elements}</div>;
+  return (
+    <div
+      className="challenge-dots"
+      role="progressbar"
+      aria-valuenow={run}
+      aria-valuemin={0}
+      aria-valuemax={target}
+      aria-label={`Clean run progress: ${run} of ${target} trades`}
+    >
+      {elements}
+    </div>
+  );
 }
 
 function DrawdownRow({
@@ -80,7 +95,7 @@ function DrawdownRow({
   const renderContent = () => {
     if (result.state === "passed") {
       return (
-        <div className="challenge-status-passed">
+        <div className="challenge-status-passed" role="status">
           <span>Done: {targetSessions} {targetSessions === 1 ? "day" : "days"} inside {shield ? "the limit" : formatBalance(maxDrawdownCents)}</span>
           <span className="challenge-badge-check" aria-hidden="true">✓</span>
         </div>
@@ -95,7 +110,7 @@ function DrawdownRow({
         ? formatSessionDate(breachPoint.session)
         : "";
       return (
-        <div className="challenge-status-failed">
+        <div className="challenge-status-failed" role="status">
           <span>Limit reached{sessionDateStr ? ` on ${sessionDateStr}` : ""}</span>
           <span className="challenge-badge-fail" aria-hidden="true">✕</span>
         </div>
@@ -125,9 +140,15 @@ function DrawdownRow({
     );
   };
 
+  const statusDesc = result.state === "passed"
+    ? `Passed, ${targetSessions} days inside limit`
+    : result.state === "failed"
+      ? "Failed, limit reached"
+      : `${sessionsDone} of ${targetSessions} days completed, ${pctUsed}% of limit used`;
+
   return (
     <div className={`challenge-row ${isBreached ? "failed" : ""}`}>
-      <Link href={`/challenges/${encodeURIComponent(challenge.id)}`} className="challenge-row-link" aria-label={`Drawdown Defender challenge details`}>
+      <Link href={`/challenges/${encodeURIComponent(challenge.id)}`} className="challenge-row-link" aria-label={`Drawdown Defender challenge: ${statusDesc}`}>
         <div className="challenge-row-head">
           <span className="challenge-name">DRAWDOWN DEFENDER</span>
           <span className="challenge-header-stat num">
@@ -137,7 +158,7 @@ function DrawdownRow({
         {renderContent()}
       </Link>
       {result.state === "failed" && onRestart && (
-        <button type="button" className="btn-ghost challenge-failed-action" onClick={onRestart}>
+        <button type="button" className="btn-ghost challenge-failed-action" onClick={onRestart} aria-label="Start Drawdown Defender challenge again" style={{ minHeight: 44 }}>
           Start again
         </button>
       )}
@@ -161,16 +182,20 @@ function CleanRunRow({
   const ungraded = result.issues.filter((i) => i.reason === "ungraded");
   const undatedCount = result.issues.filter((issue) => issue.reason === "undated").length;
 
+  const cleanStatusDesc = result.state === "passed"
+    ? `Passed, ${targetTrades} in a row by the rules`
+    : `${run} of ${targetTrades} by the rules, best streak ${bestRun}`;
+
   return (
     <div className="challenge-row">
-      <Link href={`/challenges/${encodeURIComponent(challenge.id)}`} className="challenge-row-link" aria-label="Clean Run challenge details">
+      <Link href={`/challenges/${encodeURIComponent(challenge.id)}`} className="challenge-row-link" aria-label={`Clean Run challenge: ${cleanStatusDesc}`}>
         <div className="challenge-row-head">
           <span className="challenge-name">CLEAN RUN</span>
           <span className="challenge-header-stat num">best {bestRun}</span>
         </div>
 
         {result.state === "passed" ? (
-          <div className="challenge-status-passed">
+          <div className="challenge-status-passed" role="status">
             <span>Done: {targetTrades} in a row by the rules</span>
             <span className="challenge-badge-check" aria-hidden="true">✓</span>
           </div>
@@ -186,7 +211,7 @@ function CleanRunRow({
         <div className="challenge-grading-note">
           <span>{ungraded.length} {ungraded.length === 1 ? "needs" : "need"} grading</span>
           {ungraded.map(({ trade_id }, index) => (
-            <Link key={trade_id} href={`/trades/${encodeURIComponent(trade_id)}`}>
+            <Link key={trade_id} href={`/trades/${encodeURIComponent(trade_id)}`} aria-label={`Grade trade ${index + 1} for Clean Run`} style={{ display: "inline-flex", alignItems: "center", minHeight: 44, padding: "0 6px" }}>
               Grade trade {index + 1}
             </Link>
           ))}
@@ -257,6 +282,8 @@ export function ChallengeCard({ shield }: { shield: boolean }) {
             type="button"
             className="challenge-start-link"
             onClick={() => setSetup({ kind: availableKind ?? "drawdown" })}
+            aria-label="Start a trading challenge"
+            style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}
           >
             Start a challenge →
           </button>
@@ -279,6 +306,8 @@ export function ChallengeCard({ shield }: { shield: boolean }) {
                 type="button"
                 className="btn-ghost"
                 onClick={() => setSetup({ kind: availableKind ?? "drawdown" })}
+                aria-label="Start another challenge"
+                style={{ minHeight: 44 }}
               >
                 ＋ Start another challenge
               </button>
@@ -288,7 +317,13 @@ export function ChallengeCard({ shield }: { shield: boolean }) {
       )}
 
       {manualHistory.map((attempt) => (
-        <Link key={attempt.id} className="challenge-past-row" href={`/challenges/${encodeURIComponent(attempt.id)}`}>
+        <Link
+          key={attempt.id}
+          className="challenge-past-row"
+          href={`/challenges/${encodeURIComponent(attempt.id)}`}
+          aria-label={`View past ${attempt.rules.kind === "drawdown" ? "Drawdown Defender" : "Clean Run"} attempts`}
+          style={{ minHeight: 44, display: "flex", alignItems: "center" }}
+        >
           Past {attempt.rules.kind === "drawdown" ? "Drawdown Defender" : "Clean Run"} attempts
         </Link>
       ))}

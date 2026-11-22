@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PastSessionReviews } from "./PastSessionReviews";
 import { PitStop } from "./PitStop";
 import { RStrip } from "./RStrip";
+import { ReviewChart } from "./ReviewChart";
 import { MoodShape, useTradeMood } from "./MoodShape";
 import { describeMood } from "@/lib/mood";
 import { formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
@@ -49,7 +50,7 @@ function Queue() {
         <div className="specular-card empty-state">
           <h3>{ids.length ? `${done} of ${ids.length} reviewed this pass` : "Nothing is waiting"}</h3>
           <p>{ids.length && done < ids.length ? "Skipped trades stay in the queue for next time." : "Every trade has been reviewed."}</p>
-          <div className="actions"><Link className="btn-secondary" href="/feed">Open the feed</Link><Link className="btn-secondary" href="/drills">Drills: Take it?</Link></div>
+          <div className="actions"><Link className="btn-secondary" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/feed">Open the feed</Link><Link className="btn-secondary" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills: Take it?</Link></div>
         </div>
         <PastSessionReviews />
       </div>
@@ -76,11 +77,11 @@ function Queue() {
     <div className="page" style={{ maxWidth: 720 }}>
       <div className="page-head">
         <div><span className="eyebrow">Review queue</span><h1>{position + 1} of {ids.length}</h1><p>Playbook, tags, one line. Then mark it reviewed.</p></div>
-        <Link className="btn-secondary drill-link" href="/drills">Drills</Link>
+        <Link className="btn-secondary drill-link" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills</Link>
       </div>
 
       <section className="specular-card queue-card" aria-label={`Trade ${position + 1} of ${ids.length}`}>
-        <div className="queue-progress" aria-hidden="true"><i style={{ width: `${(position / ids.length) * 100}%` }} /></div>
+        <div className="queue-progress" role="progressbar" aria-valuenow={position + 1} aria-valuemin={1} aria-valuemax={ids.length} aria-label={`Review progress, trade ${position + 1} of ${ids.length}`}><i style={{ width: `${(position / ids.length) * 100}%` }} /></div>
         <div className="queue-head">
           <span className="row-main">
             <span className="row-title">
@@ -88,16 +89,32 @@ function Queue() {
               <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
               {trade.is_sample && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}
             </span>
-            <span className="row-meta" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-muted)" }}>
-              {formatSessionDate(sessionDate(trade.entry_time))} · {formatListTime(trade.entry_time, prefs.timeZone)} · in at {formatPrice(trade.entry_price, trade.symbol)}{sealed ? "" : ` · ${formatDuration(holdSeconds(trade))}`}
+            {/* UX-c: each unit stays whole ("Fri, Nov 13", "3m 30s"); the line breaks only between units. */}
+            <span className="row-meta queue-meta">
+              <span>{formatSessionDate(sessionDate(trade.entry_time))}</span>
+              <span>· {formatListTime(trade.entry_time, prefs.timeZone)}</span>
+              <span>· in at {formatPrice(trade.entry_price, trade.symbol)}</span>
+              {!sealed && <span>· {formatDuration(holdSeconds(trade))}</span>}
             </span>
           </span>
-          <span className={sealed ? "sealed" : ""} aria-hidden={sealed}><RStrip trade={trade} blind={sealed} /></span>
-          <span className={`row-result num ${sealed ? "sealed" : ""}`} aria-hidden={sealed} style={{ textAlign: "right" }}>
-            <b className={(pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
-            <span className="muted" style={{ fontSize: 11 }}>{prefs.shield ? (r != null ? points : "") : formatR(r)}</span>
-          </span>
+          {sealed ? (
+            // Not rendered at all while sealed: a blur still showed the result's red or green.
+            <>
+              <span aria-hidden="true" />
+              <span className="row-result muted" style={{ textAlign: "right", fontSize: 12 }}>Result hidden</span>
+            </>
+          ) : (
+            <>
+              <span><RStrip trade={trade} blind={false} /></span>
+              <span className="row-result num" style={{ textAlign: "right" }}>
+                <b className={(pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
+                <span className="muted" style={{ fontSize: 11 }}>{prefs.shield ? (r != null ? points : "") : formatR(r)}</span>
+              </span>
+            </>
+          )}
         </div>
+
+        <ReviewChart key={trade.id} trade={trade} sealed={sealed} zone={prefs.timeZone} privacy={prefs.shield} />
 
         {sealed ? (
           <div className="blind-ask">
@@ -105,9 +122,9 @@ function Queue() {
             <p>Judge the entry before you see how it ended. The result stays hidden until you answer.</p>
             <SealedMood trade={trade} />
             <div className="choices">
-              <button type="button" className="btn-secondary" onClick={() => grade("yes")}>Yes</button>
-              <button type="button" className="btn-secondary" onClick={() => grade("smaller")}>Smaller</button>
-              <button type="button" className="btn-secondary" onClick={() => grade("pass")}>Pass</button>
+              <button type="button" className="btn-secondary" style={{ minHeight: 44, minWidth: 44 }} onClick={() => grade("yes")}>Yes</button>
+              <button type="button" className="btn-secondary" style={{ minHeight: 44, minWidth: 44 }} onClick={() => grade("smaller")}>Smaller</button>
+              <button type="button" className="btn-secondary" style={{ minHeight: 44, minWidth: 44 }} onClick={() => grade("pass")}>Pass</button>
             </div>
           </div>
         ) : (
@@ -115,16 +132,16 @@ function Queue() {
         )}
 
         <div className="queue-foot">
-          <button type="button" className="btn-ghost" onClick={advance}>Skip</button>
-          <Link className="btn-secondary" href={`/trades/${trade.id}`} onClick={() => rememberList({ ids, label: "Review queue", href: "/review" })}>{sealed ? "Chart later" : "Open chart"}</Link>
-          <button type="button" className="btn-primary" disabled={sealed} onClick={finish}>Reviewed ✓</button>
+          <button type="button" className="btn-ghost" style={{ minHeight: 44, minWidth: 44 }} onClick={advance} aria-label="Skip trade">Skip</button>
+          <Link className="btn-secondary" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href={`/trades/${trade.id}`} onClick={() => rememberList({ ids, label: "Review queue", href: "/review" })}>{sealed ? "Chart later" : "Full chart"}</Link>
+          <button type="button" className="btn-primary" style={{ minHeight: 44, minWidth: 44 }} disabled={sealed} onClick={finish} aria-label="Mark trade reviewed">Reviewed ✓</button>
         </div>
       </section>
 
       <div className="card card-pad" style={{ marginTop: 14 }}>
         <div className="toggle-row">
           <span>Blind review<small>Hide the result until you have judged the entry. Works best on trades older than a week.</small></span>
-          <button type="button" className="switch-hit" role="switch" aria-checked={prefs.blindReview} aria-label="Blind review" onClick={() => setPrefs({ blindReview: !prefs.blindReview })}><span className="switch" data-checked={prefs.blindReview} aria-hidden="true" /></button>
+          <button type="button" className="switch-hit" style={{ minHeight: 44, minWidth: 44 }} role="switch" aria-checked={prefs.blindReview} aria-label="Blind review" onClick={() => setPrefs({ blindReview: !prefs.blindReview })}><span className="switch" data-checked={prefs.blindReview} aria-hidden="true" /></button>
         </div>
       </div>
       <PastSessionReviews />

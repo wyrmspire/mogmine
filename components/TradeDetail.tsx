@@ -13,6 +13,7 @@ import { recordUserMood, setSpokeScore, undoMoodRecord, useMood } from "@/lib/mo
 import { EXIT_REASONS } from "@/lib/trades";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
+import { StopMovesEditor } from "./StopMovesEditor";
 import { TradeCardSheet } from "./TradeCardSheet";
 import { RStrip } from "./RStrip";
 import { TradeChart } from "./TradeChart";
@@ -24,6 +25,9 @@ import { tradeSessionVwap, vwapOnBars } from "@/lib/chart-indicators";
 import type { VwapAnchor, VwapPoint } from "@/lib/chart-indicators";
 import type { TradeLevelsState } from "./useTradeLevels";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
+import { calculateExitEfficiency } from "@/lib/exit-efficiency";
+import { findNeighbourTrades } from "@/lib/neighbour-trades";
+import { derivePlanVsActual } from "@/lib/plan-vs-actual";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
@@ -288,11 +292,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   );
   const showEarlier = extension.before > 0;
   const keyPrice = trade.key_level_price;
+  const neighbours = useMemo(() => findNeighbourTrades(trade, list), [trade, list]);
   const marks = useMemo(() => {
     if (!displayedBars?.length) return [];
     const candleTimes = displayedBars.map(({ time }) => time);
     const marks = buildMarks(derived, observation, timeframe, detailLevel, renderPrivacy, {
-      candleTimes, continuationEdges: { before: showEarlier },
+      candleTimes, continuationEdges: { before: showEarlier }, showRuler: true,
     });
     if (keyPrice != null) {
       const keyLevel: Mark = {
@@ -301,11 +306,33 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       };
       marks.push(keyLevel);
     }
+    // K (#40): Neighbouring archived trades in view rendered as faint boxes
+    for (const nb of neighbours) {
+      const nbEntryMs = Date.parse(nb.entryTime);
+      const nbExitMs = nb.exitTime ? Date.parse(nb.exitTime) : nbEntryMs;
+      const t0 = Math.min(nbEntryMs, nbExitMs);
+      const t1 = Math.max(nbEntryMs, nbExitMs);
+      if (t1 >= candleTimes[0] && t0 <= candleTimes[candleTimes.length - 1] && nb.exitPrice != null) {
+        marks.push({
+          kind: "zone",
+          layer: "archived",
+          style: "faint",
+          tone: nb.isProfit ? "profit" : "risk",
+          opacityMultiplier: nb.opacity,
+          t0,
+          t1,
+          p0: nb.entryPrice,
+          p1: nb.exitPrice,
+        });
+      }
+    }
     return marks;
-  }, [displayedBars, derived, observation, timeframe, detailLevel, renderPrivacy, showEarlier, keyPrice]);
+  }, [displayedBars, derived, observation, timeframe, detailLevel, renderPrivacy, showEarlier, keyPrice, neighbours]);
   const ex = useMemo(() => (ready ? excursions(trade, candles.candles, baseMinutes) : null), [ready, candles, trade, baseMinutes]);
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
+  const exitEff = useMemo(() => calculateExitEfficiency(trade, mfe), [trade, mfe]);
+  const planVsActual = useMemo(() => derivePlanVsActual(trade), [trade]);
   // Do the fills sit inside the bars they are drawn on? If not, say so instead of looking like a bug (B-12).
   // A missing bar is a coverage issue, not a fill-alignment issue: only test bars that exist (issue #60).
   const misaligned = useMemo(() => {
@@ -375,7 +402,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
               {trade.is_sample && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}
             </div>
-            <p className="when">{formatSessionDate(sessionDate(trade.entry_time))} · {formatDetailTime(trade.entry_time, zone)} · {formatDuration(holdSeconds(trade))}{prefs.shield ? "" : ` · ${trade.quantity}×`}</p>
+            <p className="when">{formatSessionDate(sessionDate(trade.entry_time))} · {formatDetailTime(trade.entry_time, zone)} · <span style={{ whiteSpace: "nowrap" }}>{formatDuration(holdSeconds(trade))}</span>{prefs.shield ? "" : ` · ${trade.quantity}×`}</p>
             {trade.is_sample && <p className="muted" style={{ fontSize: 11, margin: "4px 0 0" }}>{SAMPLE_CAPTION}</p>}
           </div>
           <div className="headline-result"><b className={tone}>{headline}</b><span>{secondary}</span></div>
@@ -531,7 +558,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} vwap={vwapLine} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} vwap={vwapLine} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
@@ -565,6 +592,14 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
         </>}
 
+        {/* UX-b: Pit Stop sits right beneath the chart on mobile so notes are taken with chart in view */}
+        <div className="mobile-pitstop">
+          <section className="specular-card card-pad">
+            <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
+            <PitStop trade={trade} />
+          </section>
+        </div>
+
         <div className="trade-levels-card specular-card">
           <div className="rstrip-row">
             <RStrip trade={trade} excursions={ex} size="detail" />
@@ -580,6 +615,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <TradeLevelEditor trade={trade} field="key_level_price" />
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
+            <div title={exitEff ? exitEff.summary : "Ratio of realized gain to the best gain available during the hold"}><small>EFFICIENCY{ex?.coverage === "partial" ? " · partial" : ""}</small><b className={exitEff == null ? "empty" : ""}>{exitEff ? `${exitEff.efficiencyPercent}%` : "—"}</b></div>
           </div>
           {!open && (
             <div className="exit-reason-detail-row">
@@ -615,6 +651,51 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           {/* The frozen first stop, shown as a quiet fact only once the working stop has moved (R-10). */}
           {trade.initial_stop_price != null && trade.initial_stop_set_at != null && trade.stop_loss_price !== trade.initial_stop_price && (
             <p className="initial-stop">Initial stop {formatPrice(trade.initial_stop_price, trade.symbol)}, set {formatListTime(trade.initial_stop_set_at, zone)}</p>
+          )}
+
+          {/* G2 (#36): Interactive stop-move editor & widening suggestion (UX-33) */}
+          <StopMovesEditor
+            trade={trade}
+            onChange={(moves) => updateTrade(trade.id, { stop_moves: moves })}
+            onSuggestMovedStop={
+              !trade.quick_tags.includes("Moved Stop")
+                ? () => updateTrade(trade.id, { quick_tags: [...trade.quick_tags, "Moved Stop"] })
+                : undefined
+            }
+          />
+
+          {planVsActual.hasPlan && planVsActual.rows.length > 0 && (
+            <div className="plan-vs-actual-card" style={{ marginTop: 14, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span className="eyebrow" style={{ fontSize: 10, letterSpacing: "0.08em", color: "var(--gold-mid, #d4af37)" }}>PLAN VS ACTUAL</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: planVsActual.fidelity === "Executed to Plan" ? "#34d399" : planVsActual.fidelity === "Widened Stop" ? "#f87171" : "var(--text-dim)" }}>
+                  {planVsActual.fidelity}
+                </span>
+              </div>
+              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
+                <thead>
+                  <tr style={{ color: "var(--text-dim)", textAlign: "left", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <th style={{ padding: "4px 0", fontWeight: 500 }}>Item</th>
+                    <th style={{ padding: "4px 0", fontWeight: 500 }}>Plan</th>
+                    <th style={{ padding: "4px 0", fontWeight: 500 }}>Actual</th>
+                    <th style={{ padding: "4px 0", fontWeight: 500, textAlign: "right" }}>Delta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {planVsActual.rows.map((row) => (
+                    <tr key={row.label} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <td style={{ padding: "6px 0", color: "var(--text-dim)" }}>{row.label}</td>
+                      <td style={{ padding: "6px 0" }}>{row.planned}</td>
+                      <td style={{ padding: "6px 0" }}>{row.actual}</td>
+                      <td style={{ padding: "6px 0", textAlign: "right", color: row.tone === "positive" ? "#34d399" : row.tone === "negative" ? "#f87171" : "inherit" }}>
+                        {row.deltaDisplay}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--text-dim)" }}>{planVsActual.fidelityNote}</p>
+            </div>
           )}
         </div>
 
@@ -694,10 +775,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       </section>
 
       <aside className="detail-side">
-        <section className="specular-card card-pad">
-          <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
-          <PitStop trade={trade} />
-        </section>
+        <div className="desktop-pitstop">
+          <section className="specular-card card-pad">
+            <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
+            <PitStop trade={trade} />
+          </section>
+        </div>
         {!trade.is_sample && <AccountSelect className="field account-pick" value={trade.account_id} onChange={(id) => updateTrade(trade.id, { account_id: id })} />}
         <MoodCard trade={trade} onEdit={() => setMoodOpen(true)} />
         <div className="review-actions">

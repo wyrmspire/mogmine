@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChangeEvent, KeyboardEvent, useRef, useState } from "react";
 import { GOLD_PRESETS, getTuneRiskBudgetDisplay, setPrefs, usePrefs } from "@/lib/prefs";
 import type { GoldPreset } from "@/lib/prefs";
@@ -11,6 +12,7 @@ import { getAccountsBackup, restoreAccounts } from "@/lib/accounts-store";
 import { getPlaybooksBackup, restorePlaybooks } from "@/lib/playbooks-store";
 import { getPlansBackup, restorePlans } from "@/lib/plans-store";
 import { getDrillsBackup, restoreDrills } from "@/lib/drills-store";
+import { getCallsBackup, restoreCalls } from "@/lib/calls-store";
 import { PlaybookEditor } from "./PlaybookEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -83,7 +85,7 @@ export function TuneScreen() {
   const sampleCount = journal.trades.length - realCount;
 
   const downloadBackup = () => {
-    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup(), getDrillsBackup());
+    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup(), getDrillsBackup(), getCallsBackup());
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -129,6 +131,8 @@ export function TuneScreen() {
     if (pending.plans) restorePlans(pending.plans);
     // Drill answers merge by id, so an older backup never erases newer answers (CD-2b).
     if (pending.drills) restoreDrills(pending.drills);
+    // Calls merge by id the same way, and this device's copy of an edited call wins (DC-2).
+    if (pending.calls) restoreCalls(pending.calls);
     const total = pending.trades.length;
     setPending(null);
     setError(null);
@@ -166,6 +170,7 @@ export function TuneScreen() {
                     key={preset}
                     type="button"
                     className="preset-btn"
+                    style={{ minHeight: 44 }}
                     aria-pressed={active}
                     onClick={() => setPrefs({ goldPreset: preset })}
                   >
@@ -191,6 +196,7 @@ export function TuneScreen() {
               </b>
             </div>
             <input
+              id="tune-gold-intensity"
               type="range"
               min="0"
               max="1"
@@ -216,6 +222,7 @@ export function TuneScreen() {
               </b>
             </div>
             <input
+              id="tune-box-opacity"
               type="range"
               min="0.15"
               max="0.65"
@@ -243,6 +250,7 @@ export function TuneScreen() {
             <div className="segmented" role="group" aria-label="Profit and risk palette">
               <button
                 type="button"
+                style={{ minHeight: 44 }}
                 aria-pressed={prefs.palette === "classic"}
                 onClick={() => setPrefs({ palette: "classic" })}
               >
@@ -253,6 +261,7 @@ export function TuneScreen() {
               </button>
               <button
                 type="button"
+                style={{ minHeight: 44 }}
                 aria-pressed={prefs.palette === "blue-orange"}
                 onClick={() => setPrefs({ palette: "blue-orange" })}
               >
@@ -309,6 +318,7 @@ export function TuneScreen() {
                   <button
                     key={amount}
                     type="button"
+                    style={{ minHeight: 44, minWidth: 44 }}
                     aria-pressed={prefs.riskBudgetUsd === amount}
                     onClick={() => {
                       setDraftRisk(null);
@@ -327,7 +337,7 @@ export function TuneScreen() {
 
           <label className="field wide">
             <span>Display time zone</span>
-            <select value={prefs.timeZone} onChange={(event) => setPrefs({ timeZone: event.target.value })}>
+            <select value={prefs.timeZone} style={{ minHeight: 44 }} onChange={(event) => setPrefs({ timeZone: event.target.value })}>
               {TIME_ZONE_OPTIONS.map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
             </select>
             <span className="hint">Changes how times are shown. Sessions are always computed in exchange time (America/New_York).</span>
@@ -342,12 +352,31 @@ export function TuneScreen() {
               <button
                 type="button"
                 className="switch-hit"
+                style={{ minHeight: 44, minWidth: 44 }}
                 role="switch"
                 aria-checked={prefs.shield}
-                aria-label="Shield mode"
+                aria-label="Shield mode (privacy)"
                 onClick={() => setPrefs({ shield: !prefs.shield })}
               >
                 <span className="switch" data-checked={prefs.shield} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="toggle-row" style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 10 }}>
+              <span>
+                Color-blind mode
+                <small>Blue for profit and orange for risk, replacing green and red across all charts and badges (UX-80).</small>
+              </span>
+              <button
+                type="button"
+                className="switch-hit"
+                style={{ minHeight: 44, minWidth: 44 }}
+                role="switch"
+                aria-checked={prefs.palette === "blue-orange"}
+                aria-label="Color-blind mode"
+                onClick={() => setPrefs({ palette: prefs.palette === "blue-orange" ? "classic" : "blue-orange" })}
+              >
+                <span className="switch" data-checked={prefs.palette === "blue-orange"} aria-hidden="true" />
               </button>
             </div>
 
@@ -359,6 +388,7 @@ export function TuneScreen() {
               <button
                 type="button"
                 className="switch-hit"
+                style={{ minHeight: 44, minWidth: 44 }}
                 role="switch"
                 aria-checked={prefs.showSamples}
                 aria-label="Show sample trades"
@@ -373,7 +403,7 @@ export function TuneScreen() {
 
       <div className="section-title" id="playbooks">
         <h2>Playbooks</h2>
-        <span>Setups &amp; rules</span>
+        <Link href="/playbooks">Open the binder</Link>
       </div>
       <PlaybookEditor />
 
@@ -390,10 +420,10 @@ export function TuneScreen() {
         </p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-          <button type="button" className="btn-primary" onClick={downloadBackup} disabled={!journal.hydrated}>
+          <button type="button" className="btn-primary" style={{ minHeight: 44, minWidth: 44 }} onClick={downloadBackup} disabled={!journal.hydrated}>
             Download backup
           </button>
-          <button type="button" className="btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={!journal.hydrated}>
+          <button type="button" className="btn-secondary" style={{ minHeight: 44, minWidth: 44 }} onClick={() => fileInputRef.current?.click()} disabled={!journal.hydrated}>
             Restore from file
           </button>
           <input
@@ -409,7 +439,7 @@ export function TuneScreen() {
         {error && (
           <div className="banner warn" role="alert" style={{ margin: "12px 0 0" }}>
             <span>{error} Your current journal was not changed.</span>
-            <button type="button" onClick={() => setError(null)}>Dismiss</button>
+            <button type="button" style={{ minHeight: 44, minWidth: 44 }} onClick={() => setError(null)}>Dismiss</button>
           </div>
         )}
 
@@ -429,10 +459,10 @@ export function TuneScreen() {
               {pending.prefs ? ", plus saved preferences" : ""}. Saved challenges will also be replaced{pending.challenges?.length ? ` with ${pending.challenges.length} from this file` : " with an empty list"}.{pending.playbooks ? ` Playbooks will be replaced with the ${pending.playbooks.length} in this file.` : " This file has no playbooks, so the ones on this device stay."} Charts for real trades will re-fetch Yahoo Finance candles when opened (and samples keep their offline fixture bars).
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-              <button type="button" className="btn-primary" onClick={confirmRestore}>
+              <button type="button" className="btn-primary" style={{ minHeight: 44, minWidth: 44 }} onClick={confirmRestore}>
                 Replace journal
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setPending(null)}>
+              <button type="button" className="btn-secondary" style={{ minHeight: 44, minWidth: 44 }} onClick={() => setPending(null)}>
                 Cancel
               </button>
             </div>

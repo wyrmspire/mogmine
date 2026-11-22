@@ -396,6 +396,13 @@ h1, h2, h3, p { margin: 0; }
 .levels .empty { color: var(--text-faint); font-weight: 500; }
 .detail-actions { display: flex; gap: 8px; padding: 10px 16px 4px; flex-wrap: wrap; }
 .detail-actions .btn-primary { flex: 1; }
+/* UX-b: Pit Stop sits right beneath the chart on mobile viewports so notes are written with chart in view */
+.mobile-pitstop { display: block; margin: 10px 16px 0; }
+.desktop-pitstop { display: none; }
+@media (min-width: 900px) {
+  .mobile-pitstop { display: none; }
+  .desktop-pitstop { display: block; }
+}
 .detail-side { display: grid; gap: 10px; padding: 8px 16px 0; }
 .note-card textarea, .field textarea {
   width: 100%; min-height: 92px; padding: 11px 12px; border: 1px solid var(--border-subtle); border-radius: 12px;

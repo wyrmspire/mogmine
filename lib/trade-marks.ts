@@ -87,6 +87,11 @@ export interface BuildMarksOptions {
   /** Live chart rays reach the pane edge as it pans. Earlier rays are enabled by ‹30. */
   continuationEdges?: { before: boolean };
   archived?: boolean;
+  /** Whether to draw R ruler marks at whole R multiples (M3, #42). */
+  showRuler?: boolean;
+  /** Optional playbook tag or title to mark on the plan box corner (M3, #42). */
+  playbookTag?: string;
+  playbookName?: string;
 }
 
 const exitText: Record<ExitReason, string> = {
@@ -213,6 +218,51 @@ export function buildMarks(
         });
         innerPrice = target.price;
       }
+
+      // M3 (#42): R ruler at whole R multiples along the plan box span
+      const initialRisk = plannedStop != null ? Math.abs(plannedEntry - plannedStop) : null;
+      if (options.showRuler && initialRisk != null && initialRisk > 0) {
+        const targetR = targets.find((t) => t.planned_r != null)?.planned_r;
+        const maxR = targetR != null && targetR > 0 ? Math.ceil(targetR) : 3;
+        for (let r = 1; r <= Math.min(5, maxR); r++) {
+          const rPrice = plannedEntry + r * initialRisk * (isLong ? 1 : -1);
+          marks.push({
+            kind: "segment",
+            ...planSpan,
+            layer: "plan",
+            p0: rPrice,
+            p1: rPrice,
+            dash: "dotted",
+            tone: "neutral",
+            width: 1,
+            faint: true,
+            basis: plan?.basis ?? initialStop?.basis,
+          });
+          if (detail !== "low") {
+            marks.push({
+              kind: "label",
+              anchor: { t: planSpan.t0, price: rPrice },
+              text: `+${r}R`,
+              priority: 2,
+              tone: "neutral",
+              basis: plan?.basis ?? initialStop?.basis,
+            });
+          }
+        }
+      }
+
+      const pbTag = options.playbookTag ?? options.playbookName;
+      if (pbTag && from) {
+        marks.push({
+          kind: "label",
+          anchor: { t: from.t, price: plannedEntry },
+          text: `📖 ${pbTag}`,
+          priority: 1,
+          tone: "entry",
+          basis: plan?.basis,
+        });
+      }
+
       if (cancelled && from) {
         marks.push({
           kind: "label", anchor: { t: from.t, price: plannedEntry },

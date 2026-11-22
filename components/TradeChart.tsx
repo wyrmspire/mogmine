@@ -12,6 +12,7 @@ import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
 import { TIMEFRAME_MINUTES, alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, specFor, visibleLogicalBars } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
+import type { NeighbourTradeProjection } from "@/lib/neighbour-trades";
 import type { LevelLine } from "@/lib/chart-levels";
 import type { VwapPoint } from "@/lib/chart-indicators";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
@@ -63,6 +64,10 @@ interface Props {
   /** Whether the visible range is still the fitted trade window. */
   onFitChange?: (fitted: boolean) => void;
   onExtensionChange?: (extension: ChartExtension) => void;
+  /** K (#40): Invoked when user taps an archived neighbour trade box */
+  onSelectNeighbour?: (tradeId: string) => void;
+  /** K (#40): Optional neighbour trade projections to associate archived marks with tradeIds */
+  neighbourTrades?: readonly NeighbourTradeProjection[];
 }
 
 interface Live {
@@ -153,16 +158,16 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
 const NO_LEVELS: readonly LevelLine[] = [];
 const NO_VWAP: readonly VwapPoint[] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, zone, privacy, readout, onRendered, onFitChange, onExtensionChange }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -271,7 +276,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     const end = boxEnd(tr, bars);
     const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
-    l.primitive.update(p.marks, t);
+    l.primitive.update(p.marks, t, p.neighbourTrades);
     l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000);
     l.vwapSeries.applyOptions({ color: t.vwap, visible: p.vwap.length > 0 });
     if (l.renderedVwap !== p.vwap) {
@@ -366,6 +371,17 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
           target.parentElement?.toggleAttribute("data-tracking", !!bar);
         }
       });
+
+      const onChartClick = (param: import("lightweight-charts").MouseEventParams<Time>) => {
+        if (!param.point) return;
+        const hitTradeId = state.primitive.hitTestTradeId(param.point.x, param.point.y)
+          ?? state.primitive.hitTest(param.point.x, param.point.y)?.externalId
+          ?? (param.hoveredObjectId as string | undefined);
+        if (hitTradeId) {
+          latest.current.onSelectNeighbour?.(hitTradeId);
+        }
+      };
+      chart.subscribeClick(onChartClick);
 
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         if (!range || !state.baseFitRange) return;
@@ -531,6 +547,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         grip?.removeEventListener("pointerup", onGripEnd);
         grip?.removeEventListener("pointercancel", onGripEnd);
         grip?.removeEventListener("wheel", onGripWheel);
+        chart.unsubscribeClick(onChartClick);
         resize.disconnect();
         live.current = null;
         chart.remove();
@@ -544,7 +561,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme]);
+  }, [trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, neighbourTrades]);
 
   return <><div
     ref={hostRef}

@@ -12,6 +12,10 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const painter = ts.transpileModule(read("../components/PositionBoxPrimitive.ts"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
+// The painter imports `separateLabels` (UX-a); hand it label-stack through a tiny require shim.
+const labelStack = ts.transpileModule(read("../lib/label-stack.ts"), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
 const lightweightCharts = fileURLToPath(new URL(
   "../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js", import.meta.url,
 ));
@@ -39,7 +43,8 @@ try {
   const html = join(folder, "position-box.html");
   writeFileSync(html, `<!doctype html><meta charset="utf-8"><pre id="result"></pre><div id="chart"></div>
     <script src="${pathToFileURL(lightweightCharts)}"></script>
-    <script>const exports = {}; ${painter}</script>
+    <script>const stack = (() => { const exports = {}; ${labelStack}; return exports; })();
+      const require = () => stack; const exports = {}; ${painter}</script>
     <script>
     const result = document.querySelector("#result");
     try {

@@ -91,8 +91,10 @@ export interface MoodRecord {
   source: MoodSource;
   /** Parser or model that made a `voice_ai` record. Null for the trader's own. */
   model: string | null;
-  /** When the feeling was captured (the tap, the memo), or null when not known (a re-score of old notes). */
+  /** When the feeling was experienced or stated to apply (e.g. historical entry timestamp). */
   captured_at: string | null;
+  /** True wall-clock timestamp when this record was captured/entered on device (UX-e, Invariant 5b). */
+  recorded_at?: string;
   created_at: string;
 }
 
@@ -710,9 +712,25 @@ export function acceptSuggestion(suggestion: MoodSuggestion, records: MoodRecord
   return { id: meta.id, trade_id: suggestion.trade_id, spoke_set_version: suggestion.spoke_set_version, scores, evidence, source: "voice_ai", model: suggestion.model, captured_at: suggestion.captured_at, created_at: meta.now };
 }
 
+/**
+ * Checks whether a mood score was recorded retrospectively (in hindsight after the trade closed),
+ * preserving epistemological separation between contemporaneous feeling and retrospective memory.
+ */
+export function isRetrospectiveMood(
+  record: Pick<MoodRecord, "captured_at"> & { recorded_at?: string; created_at?: string },
+  trade: Pick<TradeRecord, "exit_time">,
+): boolean {
+  if (!trade.exit_time) return false;
+  const exitMs = Date.parse(trade.exit_time);
+  if (!Number.isFinite(exitMs)) return false;
+  const recordedMs = Date.parse(record.recorded_at ?? record.created_at ?? "");
+  if (Number.isFinite(recordedMs) && recordedMs > exitMs) return true;
+  return false;
+}
+
 /** The trader sets one or more spokes (e.g. one-tap mood at entry). */
 export function userMoodRecord(
-  meta: { id: string; trade_id: string; now: string; captured_at?: string | null },
+  meta: { id: string; trade_id: string; now: string; captured_at?: string | null; recorded_at?: string | null },
   registry: MoodSpokeRegistry,
   scores: Record<string, number | null>,
 ): MoodRecord {
@@ -720,6 +738,7 @@ export function userMoodRecord(
   for (const [spoke, value] of Object.entries(scores)) {
     sanitized[spoke] = value == null ? null : round2(clampScore(value));
   }
+  const recordedAt = meta.recorded_at ?? meta.now;
   return {
     id: meta.id,
     trade_id: meta.trade_id,
@@ -729,12 +748,18 @@ export function userMoodRecord(
     source: "user",
     model: null,
     captured_at: meta.captured_at ?? meta.now,
+    recorded_at: recordedAt,
     created_at: meta.now,
   };
 }
 
 /** The trader sets one spoke (a drag, or back to unknown with `null`). */
-export function userScoreRecord(meta: { id: string; trade_id: string; now: string; captured_at?: string | null }, registry: MoodSpokeRegistry, spoke: string, value: number | null): MoodRecord {
+export function userScoreRecord(
+  meta: { id: string; trade_id: string; now: string; captured_at?: string | null; recorded_at?: string | null },
+  registry: MoodSpokeRegistry,
+  spoke: string,
+  value: number | null,
+): MoodRecord {
   return userMoodRecord(meta, registry, { [spoke]: value });
 }
 
