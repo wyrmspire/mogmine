@@ -150,7 +150,7 @@ test("an explicit cancelled entry spans the working order and creates no executi
   assert.ok(!marks.some((mark) => mark.kind === "flag"));
 });
 
-test("a later scale-in does not move the reference entry for a recorded stop step", () => {
+test("a scale-in ends the locked-profit hatch when the unchanged stop falls below the open average", () => {
   const doc = fixture("ex-be");
   const [plan, entry, move] = doc.events;
   assert.ok(move.type === "modify");
@@ -163,9 +163,10 @@ test("a later scale-in does not move the reference entry for a recorded stop ste
   const marks = buildMarks(derived, null, "1m", "medium", false, {
     candleTimes: ["15:34", "15:44", "15:45", "15:50"].map(utc),
   });
-  const hatch = marks.find((mark) => mark.kind === "hatch");
-  assert.ok(hatch);
-  assert.deepEqual([hatch.p0, hatch.p1], [7600, 7601]);
+  const hatches = marks.filter((mark) => mark.kind === "hatch");
+  assert.deepEqual(hatches.map(({ t0, t1, p0, p1 }) => [t0, t1, p0, p1]), [
+    [utc("15:44"), utc("15:45"), 7600, 7601],
+  ]);
 });
 
 test("D-010 and OD-32 bound default hindsight to Medium detail and the last visible real bar", () => {

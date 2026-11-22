@@ -225,8 +225,6 @@ export interface StopSegment {
   widened: boolean;
   /** True when this stop sits at or beyond entry on the winning side. */
   locked_profit: boolean;
-  /** Entry price used to classify this stop when it was placed or moved. */
-  entry_price_at_placement: number | null;
   end_reason: StopSegmentEndReason;
 }
 
@@ -822,7 +820,6 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             seg.basis = event.basis;
             seg.from_seq = event.seq;
             seg.locked_profit = refEntry != null ? isStopLockingProfit(refEntry, event.price, sign, resolvedSpec) : false;
-            seg.entry_price_at_placement = refEntry;
             activeStops.delete("stop");
             activeStops.set(event.order, {
               order: event.order,
@@ -852,7 +849,6 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
               basis: event.basis,
               widened: false,
               locked_profit: refEntry != null ? isStopLockingProfit(refEntry, event.price, sign, resolvedSpec) : false,
-              entry_price_at_placement: refEntry,
               end_reason: null,
             });
             activeStops.set(event.order, {
@@ -905,7 +901,6 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             basis: event.basis,
             widened,
             locked_profit: lockedProfit,
-            entry_price_at_placement: refEntry,
             end_reason: null,
           });
           activeStop.price = event.price;
@@ -1073,7 +1068,6 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
               basis: plan.basis,
               widened: false,
               locked_profit: isStopLockingProfit(event.price, plan.stop, sign, resolvedSpec),
-              entry_price_at_placement: event.price,
               end_reason: null,
             });
             activeStops.set("stop", {

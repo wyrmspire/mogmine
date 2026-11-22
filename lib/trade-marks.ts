@@ -275,20 +275,36 @@ export function buildMarks(
   const previousStops = new Map<string, (typeof derived.stop_path)[number]>();
   for (const stop of derived.stop_path) {
     const start = snap(stop.from);
-    const stopSpan = span(start, stop.to == null ? end : snap(stop.to));
+    const finish = stop.to == null ? end : snap(stop.to);
+    const stopSpan = span(start, finish);
     const previous = previousStops.get(stop.order);
     previousStops.set(stop.order, stop);
     if (!start || !stopSpan) continue;
 
     const tone = stop.widened ? "risk" : "muted";
     const dash = stop.basis === "inferred" ? "dotted" : "dashed";
-    const placementEntry = stop.entry_price_at_placement;
-    if (stop.locked_profit && placementEntry != null && placementEntry !== stop.price) {
+    let openFill = fills.findLast((fill) => fill.seq <= stop.from_seq);
+    let hatchStart: Anchor = start;
+    const hatchTo = (until: Anchor) => {
+      const openAverage = openFill?.avg_entry_price;
+      if (!openFill || openAverage == null || (stop.price - openAverage) * (isLong ? 1 : -1) <= 0) return;
+      const hatchSpan = span(hatchStart, until);
+      if (!hatchSpan || hatchSpan.t0 === hatchSpan.t1) return;
       marks.push({
-        kind: "hatch", ...stopSpan, p0: placementEntry, p1: stop.price,
-        tone: "profit", basis: stop.basis, faint: true,
+        kind: "hatch", ...hatchSpan, p0: openAverage, p1: stop.price,
+        tone: "profit", basis: combineBasis(stop.basis, openFill.basis), faint: true,
       });
+    };
+    for (const fill of fills) {
+      if (fill.seq <= stop.from_seq || (stop.to_seq != null && fill.seq >= stop.to_seq)
+        || fill.avg_entry_price === openFill?.avg_entry_price) continue;
+      const at = snap(fill.t);
+      if (at && at.t > stopSpan.t1) break;
+      hatchTo(at);
+      openFill = fill;
+      hatchStart = at;
     }
+    hatchTo(finish);
     marks.push({
       kind: "segment", ...stopSpan, layer: "actual", p0: stop.price, p1: stop.price,
       dash, tone, width: 1.5, basis: stop.basis,

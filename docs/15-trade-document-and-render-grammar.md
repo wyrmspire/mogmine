@@ -186,7 +186,7 @@ Every event also has `seq`, `t` (UTC) and `basis`.
 - Position over time, average entry and exit, maximum size.
 - Result in ticks, points and dollars. Fees. R against the **first stop in force at the first entry fill** (or an attached opening bracket stop). Gross or net R is open (`OD-10`); the examples have no fees, so the question does not arise in them.
   - A stop reported after the first entry fill can supply initial risk when its order explicitly references that fill with `opening_entry_seq` (issue #33, `OD-43`). An unlinked later stop contributes to the stop path from placement and leaves initial risk and R null when no stop was in force at entry (B-32).
-- `stop_path`: segments built from `order` and `modify` events. The locked-profit hatch uses the entry reference from the time of each stop placement or move.
+- `stop_path`: segments built from `order` and `modify` events. The locked-profit hatch follows the open position's average entry as fills change it.
 - `exit_past_stop` keeps the stop price used for the comparison so the hatch starts at that price after a move.
 - `outcome`: `target` · `stop` · `trail` · `scratch` · `manual` · `partial_targets` · `not_taken`. From exit reasons, and from price equality with the plan when a reason is missing (then `basis: inferred`).
 - Planned R:R per target.
