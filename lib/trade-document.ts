@@ -441,6 +441,53 @@ interface ActiveOrder {
   segmentIndex: number;
 }
 
+interface ActiveTargetOrder extends ActiveOrder {
+  linkedQtyRemaining: number;
+}
+
+// An anonymous fill can use only the capacity left after explicit fills in
+// the same working segment. A modify, cancellation or flat position ends it.
+function linkedTargetFillQuantities(events: TradeEvent[]) {
+  const segments = new Map<string, OrderEvent | ModifyEvent>();
+  const linkedQuantities = new Map<OrderEvent | ModifyEvent, number>();
+  let position = 0;
+  let hasEntry = false;
+
+  for (const event of events) {
+    switch (event.type) {
+      case "order":
+        if (event.role === "target") segments.set(event.order, event);
+        break;
+      case "modify":
+        if (segments.has(event.order) && (event.price !== undefined || event.qty !== undefined)) {
+          segments.set(event.order, event);
+        }
+        break;
+      case "cancel":
+        segments.delete(event.order);
+        break;
+      case "fill": {
+        const qty = isWholeQuantity(event.qty) ? event.qty : 0;
+        if (event.role === "entry") {
+          hasEntry = true;
+          position += qty;
+          break;
+        }
+        const segment = event.order ? segments.get(event.order) : undefined;
+        if (segment && position > 0) {
+          const linkedQty = Math.min(position, qty);
+          linkedQuantities.set(segment, (linkedQuantities.get(segment) ?? 0) + linkedQty);
+        }
+        position -= qty;
+        if (hasEntry && position === 0) segments.clear();
+        break;
+      }
+    }
+  }
+
+  return linkedQuantities;
+}
+
 /**
  * Pure trade deriver: events -> derived facts (docs/15 §3.3, issue #33).
  *
@@ -499,6 +546,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     if (event.type === "void") voidedSeqs.add(event.ref);
   }
   const activeEvents = ordered.filter((event) => event.type !== "void" && !voidedSeqs.has(event.seq));
+  const linkedTargetQty = linkedTargetFillQuantities(activeEvents);
 
   let plan: PlanEvent | null = null;
   let position = 0;
@@ -528,7 +576,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
   const workingOrders: WorkingOrderSegment[] = [];
   const activeStops = new Map<string, ActiveStop>();
   const activeEntryOrders = new Map<string, ActiveOrder>();
-  const activeTargetOrders = new Map<string, ActiveOrder>();
+  const activeTargetOrders = new Map<string, ActiveTargetOrder>();
 
   let initialStop: InitialStopInfo | null = null;
   let initialStopChecked = false;
@@ -710,6 +758,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             target: event.target,
             basis: event.basis,
             segmentIndex,
+            linkedQtyRemaining: linkedTargetQty.get(event) ?? 0,
           });
 
           const totalWorkingTargetQty = Array.from(activeTargetOrders.values()).reduce(
@@ -878,6 +927,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             targetOrder.price = event.price ?? targetOrder.price;
             targetOrder.qty = event.qty ?? targetOrder.qty;
             targetOrder.segmentIndex = workingOrders.length;
+            targetOrder.linkedQtyRemaining = linkedTargetQty.get(event) ?? 0;
             workingOrders.push({
               ...previous,
               from: event.t,
@@ -1098,10 +1148,15 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
           for (const targetOrder of matchedTargets) {
             if (unmatchedQty === 0) break;
             if (!isWholeQuantity(targetOrder.qty)) continue;
+            const availableQty = linkedTarget
+              ? targetOrder.qty
+              : Math.max(0, targetOrder.qty - targetOrder.linkedQtyRemaining);
+            const matchedQty = Math.min(availableQty, unmatchedQty);
+            if (matchedQty === 0) continue;
             const targetSegment = workingOrders[targetOrder.segmentIndex];
-            const matchedQty = Math.min(targetOrder.qty, unmatchedQty);
             targetSegment.filled_qty += matchedQty;
             targetOrder.qty -= matchedQty;
+            if (linkedTarget) targetOrder.linkedQtyRemaining = Math.max(0, targetOrder.linkedQtyRemaining - matchedQty);
             unmatchedQty -= matchedQty;
             if (targetOrder.qty === 0) {
               targetSegment.to = event.t;
