@@ -54,7 +54,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 20. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
 21. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
 
-22. **`DC-2`–`DC-7` — Discretionary calls** ([docs/25](docs/25-discretionary-calls.md) §8, proposal `OD-52`): store, call sheet, chart pins, Skip/Flip grading, discretion score. `DC-1` (pure model) is done; wait for the owner's yes on `OD-52` before `DC-3` UI.
+22. **`DC-2`–`DC-7` — Discretionary calls** ([docs/25](docs/25-discretionary-calls.md) §8, proposal `OD-52`): store, call sheet, chart pins, Skip/Flip grading, discretion score. `DC-1` (pure model) and `DC-1b` (stable reason ids with frozen labels) are done; wait for the owner's yes on `OD-52` before `DC-3` UI.
 
 ### Supabase-gated / Owner-gated (do not block on or pick up unasked)
 
@@ -86,6 +86,19 @@ Claim a lane before starting. Clear the claim when you stop.
 - Added backup export/restore round-trip support in `lib/store.ts`, `components/AppShell.tsx`, and `components/TuneScreen.tsx`.
 - 100% test coverage for presets, planned level creation, tick snapping, after-the-fact detection, revisions, and backup round-trip (`lib/__tests__/plans.test.ts`).
 - Next is `PS-2` (Plan screen on Today: start a "Pre-…" session fast, levels with tick steppers, observations).
+
+### 2026-11-22 — Codex — DC-1b PR #147 review, no lane
+
+- Rebased the PR onto `11056cd`, preserving all newer handoffs. Reviewed the pure call/reason contract against docs/25, playbook-design/04 §1.4 and OD-52.
+- Fixed seed ids to use explicit immutable keys rather than display-label slugs; a regression proves a wording change keeps the same id. No persisted calls exist, so no migration is required.
+- `npm run typecheck` passed; lint had 0 errors/1 existing PostCSS warning; `npm test` passed 429/429; `npm run build` compiled and generated 8/8 pages; `git diff --check` passed.
+- DC-2 may build storage on this contract. DC-3 UI remains owner-gated by OD-52.
+
+### 2026-11-22 — Claude — DC-1b frozen call reasons, no lane
+Did:      Calls now save reasons as `{ id, label, family }` (`FrozenReason`) instead of bare labels, as playbook-design/04 §1.4 requires before `DC-2`. Seed chips get stable ids (`seed:cut:thesis-broken`, `seed:shared:gut`) and families. `validateCall(call, offered, previous)` keeps a call valid after its chip is renamed, retired or deleted. No call was ever stored, so `DiscretionCall` changed in place.
+Files:    `lib/calls.ts`, `lib/__tests__/calls.test.ts`, `docs/25-discretionary-calls.md`, `docs/playbook-design/04-discretionary-prompts-integration.md`, `NOTES.md`.
+Checked:  `npm test` 416 passed (12 in calls). Typecheck clean. Lint 0 errors, the existing warning. Build 8/8 pages. `git diff --check` clean. No UI.
+Left:     Code PR left open for review (owner's merge rule). Next in this thread: `DP-1` (`detectDeviations`, `pendingAsks`). `OD-52` and the `OD-DP-*` items still need the owner.
 
 ### 2026-11-22 — Antigravity — LV-2 (#26), Chart lane released
 
@@ -159,7 +172,6 @@ Left:     Unblocks `LV-2` (`SessionLevelsPrimitive` canvas painter and toggle on
 Did:      Two `OD-49` rows existed. The playbook-editor limits became `OD-54`; observer target attribution keeps `OD-49` (docs/15 cites it). The indicator choices that Codex's docs cited as `OD-50` are the `OD-53` row, so those docs now say `OD-53`.
 Files:    `DECISIONS.md`, `NOTES.md`, `docs/16-floor-roadmap.md`, `docs/codex-indicator-summary.md`, `docs/codex-indicator-audit.md`.
 Left:     Check the highest `OD-` number on `origin/main` right before adding one; two agents in parallel caused both collisions.
-
 ### 2026-11-22 — Codex — recurring review and TD-2 bracket labels (#34), Chart lane released
 Did:      Reviewed run `20261122T023021Z`. The worker left no source diff or TD-3 commits. `buildMarks` now pairs excursion labels to the low and high price caps for either direction, so the Canvas painter can use the mark alone.
 Files:    `lib/trade-marks.ts`, `lib/__tests__/trade-marks.test.ts`, `fixtures/trades/build-marks.golden.json`, `docs/15`, `NOTES.md`.

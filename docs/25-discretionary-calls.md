@@ -3,7 +3,7 @@
 How the trader records judgement: the moments they leave the setup, the signal or the plan on purpose, and why. The owner asked for this on 2026-11-22: "here's my setup, but I'm not taking it because…", "I'm getting a short entry but I'm taking a long, and here's why", "here's why I'm cutting this trade", "here's why my stop is here", "here's why I'm taking profit early".
 
 > [!NOTE]
-> **Status: proposal (`OD-52`).** The owner asked for ideas and a plan, not a settled design. Names, colours and chips below are proposals. The pure model in `lib/calls.ts` is the first slice (`DC-1`); nothing is drawn or stored yet.
+> **Status: proposal (`OD-52`).** The owner asked for ideas and a plan, not a settled design. Names, colours and chips below are proposals. The pure model in `lib/calls.ts` is built (`DC-1`, `DC-1b`); nothing is drawn or stored yet. The prompt library, deviation triggers and playbook judgement rules that build on this are in [playbook-design/04](playbook-design/04-discretionary-prompts-integration.md).
 
 It builds on [03 §2](03-trade-cards-and-note-taking.md#2-simple-vs-advanced-note-taking) (Simple and Advanced notes), [11 §3](11-product-workflows-and-api-context.md#3-notes-attach-to-market-objects) (anchored comments), [15](15-trade-document-and-render-grammar.md) (trade document, hindsight), [24](24-planning-sessions-and-after-session-review.md) (planning sessions and review) and the hindsight block (issue #37, `lib/hindsight.ts`).
 
@@ -35,7 +35,7 @@ Cut and Early take are separate on purpose: cutting a loser and banking a winner
 
 ## 3. Reasons: chips first, words second
 
-Each kind offers its own short chip set, ordered by the trader's use (like the setup chips today). All kinds share a few: `Gut`, `News soon`, `Tired / tilted`, `Daily limit close`.
+Each kind offers its own short chip set, ordered by the trader's use (like the setup chips today). Every chip has a stable id (`seed:cut:thesis-broken`) and a family (`market`, `plan`, `risk`, `state`, `other`) for filters; a call saves the id with the label it had then, so renaming or retiring a chip never rewrites or invalidates an old call (`DC-1b`). All kinds share a few: `Gut`, `News soon`, `Tired / tilted`, `Daily limit close`.
 
 | Kind | Proposed chips |
 | :--- | :--- |
@@ -109,7 +109,8 @@ Local-first in `mogmine-calls-v1` with backup, like playbooks and challenges ([2
 - `trade_id` (nullable: a Skip has no trade), `plan_session_id` (nullable, `OD-51`), `playbook_id` (nullable).
 - `price` (nullable; the stop price for Stop here, the plan entry for Skip) and `price_ticks` with it (guardrail 4).
 - `signal_direction` (Flip and Skip only).
-- `reasons[]` (chip ids), `note` (text), `conviction`: `1 | 2 | 3 | null`.
+- `reasons[]`: `{ id, label, family }` frozen at save time (`FrozenReason`, `DC-1b`), `note` (text), `conviction`: `1 | 2 | 3 | null`.
+- `DC-2` adds `prompt_id`, `prompt_question`, `origin`, `trigger`, `rule` and `made_at_basis` from [playbook-design/04 §1.4](playbook-design/04-discretionary-prompts-integration.md#14-the-call-record-grows-changes-to-discretioncall-before-dc-2).
 - `after_the_fact` is **derived**, never stored: true when `recorded_at` is more than five minutes after `made_at` (`isAfterTheFact`). A Cut written down a minute after the exit is fine; the same Cut written that evening is flagged.
 - Grades are **derived**, never stored (docs/15 §3.3).
 
@@ -117,8 +118,9 @@ Local-first in `mogmine-calls-v1` with backup, like playbooks and challenges ([2
 
 | Slice | What | Needs |
 | :--- | :--- | :--- |
-| `DC-1` | **Done (this change).** Pure model: kinds, chips, validation, after-the-fact rule, Cut / Early take grading from `buildHindsight`. `lib/calls.ts`, tests. CSS tokens in `app/globals.css`. | — |
-| `DC-2` | Store `mogmine-calls-v1`, backup round-trip, `user_id`. | `DC-1` |
+| `DC-1` | **Done.** Pure model: kinds, chips, validation, after-the-fact rule, Cut / Early take grading from `buildHindsight`. `lib/calls.ts`, tests. CSS tokens in `app/globals.css`. | — |
+| `DC-1b` | **Done.** Reasons are chips with stable seed ids and families; calls freeze `{ id, label, family }`; `validateCall(call, offered, previous)` keeps renamed, retired and deleted chips valid on calls that already had them. | `DC-1` |
+| `DC-2` | Store `mogmine-calls-v1`, backup round-trip, `user_id`, plus the call fields and dismissals in playbook-design/04 §1.4. | `DC-1b` |
 | `DC-3` | Call sheet (seven tiles, chips, conviction, note) from the open-trade bar and Trade Detail. Flip line on the add-trade form. Skip from the plan screen. | `DC-2`, `PS-2` for Skip |
 | `DC-4` | Calls list under the chart; pins on the chart in `PositionBoxPrimitive`. | `TD-3` |
 | `DC-5` | Skip and Flip grading; calls ledger in the after-session review. | `PS-4` |

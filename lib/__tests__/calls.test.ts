@@ -1,8 +1,8 @@
 // Discretionary calls, DC-1 (docs/25, OD-52).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CALL_KINDS, gradeCall, isAfterTheFact, reasonsFor, validateCall } from "../calls.ts";
-import type { DiscretionCall } from "../calls.ts";
+import { CALL_KINDS, freezeReason, gradeCall, isAfterTheFact, reasonChipsFor, seedReasonId, validateCall } from "../calls.ts";
+import type { DiscretionCall, FrozenReason, SeedReason } from "../calls.ts";
 import type { Candle } from "../trades.ts";
 
 const minute = 60_000;
@@ -11,6 +11,12 @@ const exit = Date.parse(exitIso);
 
 function bar(minutes: number, low: number, high: number): Candle {
   return { time: exit + minutes * minute, open: (low + high) / 2, high, low, close: (low + high) / 2, volume: 1 };
+}
+
+function seed(kind: Parameters<typeof reasonChipsFor>[0], label: string): FrozenReason {
+  const chip = reasonChipsFor(kind).find((item) => item.label === label);
+  assert.ok(chip, `no ${kind} chip "${label}"`);
+  return freezeReason(chip);
 }
 
 function call(patch: Partial<DiscretionCall> = {}): DiscretionCall {
@@ -26,7 +32,7 @@ function call(patch: Partial<DiscretionCall> = {}): DiscretionCall {
     price: null,
     price_ticks: null,
     signal_direction: null,
-    reasons: ["Stalled at level"],
+    reasons: [seed("cut", "Stalled at level")],
     note: "",
     conviction: 2,
     ...patch,
@@ -47,9 +53,31 @@ const longCut = {
 
 test("seven kinds, each with its own reasons plus the shared ones", () => {
   assert.deepEqual(CALL_KINDS.map((k) => k.kind), ["skip", "flip", "cut", "early_take", "stop_here", "hold", "size"]);
-  assert.ok(reasonsFor("cut").includes("Thesis broken"));
-  assert.ok(reasonsFor("cut").includes("Gut"));
-  assert.ok(!reasonsFor("cut").includes("Into a level"));
+  const labels = reasonChipsFor("cut").map((chip) => chip.label);
+  assert.ok(labels.includes("Thesis broken"));
+  assert.ok(labels.includes("Gut"));
+  assert.ok(!labels.includes("Into a level"));
+});
+
+test("seed chips have stable, unique ids and a family", () => {
+  assert.equal(seedReasonId("cut", "thesis-broken"), "seed:cut:thesis-broken");
+  assert.equal(seedReasonId("size", "a-plus-setup"), "seed:size:a-plus-setup");
+  assert.equal(seedReasonId("stop_here", "atr-adr"), "seed:stop_here:atr-adr");
+  const original: SeedReason = ["thesis-broken", "Thesis broken", "plan"];
+  const renamed: SeedReason = [original[0], "Thesis failed", "plan"];
+  assert.equal(seedReasonId("cut", original[0]), seedReasonId("cut", renamed[0]), "wording does not define the id");
+  assert.equal(reasonChipsFor("cut").find((chip) => chip.label === "Gut")?.id, "seed:shared:gut");
+  for (const spec of CALL_KINDS) {
+    const chips = reasonChipsFor(spec.kind);
+    assert.equal(new Set(chips.map((chip) => chip.id)).size, chips.length, `${spec.kind} ids unique`);
+    for (const chip of chips) {
+      assert.ok(["market", "plan", "risk", "state", "other"].includes(chip.family));
+      assert.ok(chip.label.length <= 32);
+      assert.equal(chip.retired, false);
+    }
+  }
+  // "Scared" is offered by Cut and Early take as two chips, so their stats stay apart.
+  assert.notEqual(seed("cut", "Scared").id, seed("early_take", "Scared").id);
 });
 
 test("a valid call has no problems", () => {
@@ -59,16 +87,41 @@ test("a valid call has no problems", () => {
 test("validation: trade link, flip direction, reasons, time order, ticks, conviction", () => {
   assert.match(validateCall(call({ trade_id: null })).join(" "), /Cut belongs to a trade/);
   assert.match(validateCall(call({ kind: "skip", reasons: [] })).join(" "), /no trade/);
-  assert.deepEqual(validateCall(call({ kind: "skip", trade_id: null, reasons: ["Chop"] })), []);
+  assert.deepEqual(validateCall(call({ kind: "skip", trade_id: null, reasons: [seed("skip", "Chop")] })), []);
   assert.match(validateCall(call({ kind: "flip", reasons: [] })).join(" "), /signal's direction/);
-  assert.match(validateCall(call({ reasons: ["Chop"] })).join(" "), /not a Cut reason/);
-  assert.match(validateCall(call({ reasons: ["Gut", "Gut"] })).join(" "), /twice/);
+  assert.match(validateCall(call({ reasons: [seed("skip", "Chop")] })).join(" "), /not a Cut reason/);
+  assert.match(validateCall(call({ reasons: [seed("cut", "Gut"), seed("cut", "Gut")] })).join(" "), /twice/);
   assert.match(validateCall(call({ recorded_at: "2026-11-10T19:00:00.000Z" })).join(" "), /before it was made/);
   assert.match(validateCall(call({ price: 5990 })).join(" "), /go together/);
   assert.match(validateCall(call({ price: 5990, price_ticks: 23960.5 })).join(" "), /whole number/);
   assert.match(validateCall(call({ conviction: 4 as 1 })).join(" "), /Conviction/);
   assert.match(validateCall(call({ user_id: "" })).join(" "), /user_id/);
   assert.deepEqual(validateCall(call({ kind: "bogus" as "cut" })), ['Unknown call kind "bogus".']);
+});
+
+test("frozen reasons: renamed and retired chips keep old calls valid", () => {
+  const original = call({ reasons: [seed("cut", "NQ turned")] });
+  // The owner renames the chip; the id stays, the saved call keeps its own label.
+  const renamed = reasonChipsFor("cut").map((chip) => (chip.label === "NQ turned" ? { ...chip, label: "NQ rolled over" } : chip));
+  assert.deepEqual(validateCall(original, renamed), []);
+  assert.equal(original.reasons[0].label, "NQ turned");
+  // Retired chips still validate, they are only hidden from pickers.
+  const retired = reasonChipsFor("cut").map((chip) => ({ ...chip, retired: chip.label === "NQ turned" }));
+  assert.deepEqual(validateCall(original, retired), []);
+  // A chip deleted from the library stays valid on the call that already had it, but not on a new one.
+  const deleted = reasonChipsFor("cut").filter((chip) => chip.label !== "NQ turned");
+  assert.match(validateCall(original, deleted).join(" "), /not a Cut reason/);
+  assert.deepEqual(validateCall(original, deleted, original), []);
+  // Owner-made chips validate when the library offers them.
+  const own = { id: "own:vix-spike", label: "VIX spike", family: "market" as const, retired: false };
+  assert.deepEqual(validateCall(call({ reasons: [freezeReason(own)] }), [...reasonChipsFor("cut"), own]), []);
+});
+
+test("frozen reason labels and families are checked", () => {
+  const gut = seed("cut", "Gut");
+  assert.match(validateCall(call({ reasons: [{ ...gut, label: " " }] })).join(" "), /1–32 characters/);
+  assert.match(validateCall(call({ reasons: [{ ...gut, label: "x".repeat(33) }] })).join(" "), /1–32 characters/);
+  assert.match(validateCall(call({ reasons: [{ ...gut, family: "mood" as "state" }] })).join(" "), /unknown family/);
 });
 
 test("after the fact: more than five minutes between decision and writing it down", () => {
@@ -88,7 +141,7 @@ test("cut paid: the stop was hit later, saving exit-to-stop", () => {
 
 test("early take cost: the target was hit later, leaving exit-to-target", () => {
   const trade = { ...longCut, exit_price: 6010 };
-  const fact = gradeCall(call({ kind: "early_take", reasons: ["Into a level"] }), trade, [bar(10, 6005, 6012), bar(30, 6015, 6021)]);
+  const fact = gradeCall(call({ kind: "early_take", reasons: [seed("early_take", "Into a level")] }), trade, [bar(10, 6005, 6012), bar(30, 6015, 6021)]);
   assert.equal(fact.grade, "cost");
   assert.equal(fact.ticks, -40);
   assert.equal(fact.r, -1);
