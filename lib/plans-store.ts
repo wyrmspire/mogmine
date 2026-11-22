@@ -167,6 +167,7 @@ export function sanitizePlanningSession(raw: unknown): PlanningSession | null {
     levels,
     revisions,
     archived: obj.archived === true,
+    ...(typeof obj.lesson === "string" && obj.lesson.trim() ? { lesson: obj.lesson.slice(0, PLAN_LIMITS.lesson) } : {}),
   };
 }
 
@@ -276,6 +277,18 @@ export function updatePlan(id: string, patch: PlanUpdatePayload) {
 
   const plans = state.plans.map((p) => (p.id === id ? updated : p));
   set({ plans });
+  persist();
+}
+
+/** PS-4: save the review's lesson. It is not a plan edit, so it adds no revision. Empty text clears it. */
+export function setPlanLesson(id: string, lesson: string) {
+  const current = state.plans.find((p) => p.id === id);
+  if (!current) return;
+  const text = lesson.slice(0, PLAN_LIMITS.lesson);
+  const { lesson: _previous, ...rest } = current;
+  void _previous;
+  const updated: PlanningSession = text.trim() ? { ...rest, lesson: text } : rest;
+  set({ plans: state.plans.map((p) => (p.id === id ? updated : p)) });
   persist();
 }
 

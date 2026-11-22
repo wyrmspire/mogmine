@@ -58,6 +58,8 @@ Pick a planning session or a time window, for example "Pre-market → Pre-power 
 
 The review ends with one lesson for the next session. A session with no trades is a valid review.
 
+Built as `sessionReview` in `lib/session-review.ts` (PS-4a). The window runs from the checkpoint's anchor (or its creation time for an event preset) to the next checkpoint's anchor or the 17:00 ET close. Levels and the watch list are read as the plan stood at each entry. A plan with a `symbol` reviews only that instrument's trades. The lesson is stored on the plan (`lesson`, 280 characters) and adds no revision.
+
 ## 5. Build slices (in order, after `TD-2` and `TD-3`)
 
 | ID | Slice | Files (expected) | Done when |
