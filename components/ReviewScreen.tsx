@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { PastSessionReviews } from "./PastSessionReviews";
 import { PitStop } from "./PitStop";
 import { RStrip } from "./RStrip";
 import { MoodShape, useTradeMood } from "./MoodShape";
@@ -50,6 +51,7 @@ function Queue() {
           <p>{ids.length && done < ids.length ? "Skipped trades stay in the queue for next time." : "Every trade has been reviewed."}</p>
           <div className="actions"><Link className="btn-secondary" href="/feed">Open the feed</Link><Link className="btn-secondary" href="/drills">Drills: Take it?</Link></div>
         </div>
+        <PastSessionReviews />
       </div>
     );
   }
@@ -125,6 +127,7 @@ function Queue() {
           <button type="button" className="switch-hit" role="switch" aria-checked={prefs.blindReview} aria-label="Blind review" onClick={() => setPrefs({ blindReview: !prefs.blindReview })}><span className="switch" data-checked={prefs.blindReview} aria-hidden="true" /></button>
         </div>
       </div>
+      <PastSessionReviews />
     </div>
   );
 }

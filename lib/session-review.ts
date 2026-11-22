@@ -83,3 +83,19 @@ export function sessionReview(plan: PlanningSession, trades: readonly TradeRecor
     lesson: plan.lesson ?? "",
   };
 }
+
+/**
+ * Planning sessions to review on past days (PS-4c): live plans from the `days` session dates up to and
+ * including `today`, newest day first, checkpoints in time order within a day.
+ */
+export function recentPlanDays(plans: readonly PlanningSession[], today: string, days = 14) {
+  const earliest = new Date(Date.parse(`${today}T00:00:00Z`) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  const byDate = new Map<string, PlanningSession[]>();
+  for (const plan of plans) {
+    if (plan.archived || plan.session_date > today || plan.session_date < earliest) continue;
+    byDate.set(plan.session_date, [...(byDate.get(plan.session_date) ?? []), plan]);
+  }
+  return [...byDate.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, list]) => ({ date, plans: list.sort((a, b) => startOf(a) - startOf(b)) }));
+}
