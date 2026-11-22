@@ -301,7 +301,7 @@ Today `lib/playbooks.ts` holds four fixed setups that share `STANDARD_RULES`. Bu
 - Editor in Tune or its own screen: add, rename, reorder rules, archive. No hard delete: old trades reference the playbook.
 - **A trade keeps the checklist it was saved with** (UX-50, `checklistFor` already copies it). Editing a playbook never changes a past trade.
 - Seed the four current playbooks so nothing existing breaks, and include custom playbooks in `buildBackup`/`parseBackupFile`.
-- **Built (2026-11-21):** `lib/playbooks-store.ts` and Tune → Playbooks. Pickers hide archived playbooks except the one a trade is filed under; names still resolve for old trades. `no-setup` stays rule-free and cannot be archived. Name clash is case-insensitive and includes archived playbooks. Limits: 40-character names, 12 rules, 80-character rules (`OD-49`). Sample fixtures always use the seed rules. Backups without `playbooks` leave the device list alone.
+- **Built (2026-11-21):** `lib/playbooks-store.ts` and Tune → Playbooks. Pickers hide archived playbooks except the one a trade is filed under; names still resolve for old trades. `no-setup` stays rule-free and cannot be archived. Name clash is case-insensitive and includes archived playbooks. Limits: 40-character names, 12 rules, 80-character rules (`OD-54`). Sample fixtures always use the seed rules. Backups without `playbooks` leave the device list alone.
 
 ---
 
