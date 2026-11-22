@@ -43,13 +43,13 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 9. **`LV-2` — Draw computed levels on the trade chart, done** (`components/SessionLevelsPrimitive.ts`, `lib/chart-levels.ts`, `components/useTradeLevels.ts`): Canvas rays and stacked right-edge pills from prior-session and overnight day-mode bars, View → Session levels toggle, in the Trade Card PNG. Follow-ups under `OD-55`: `5m` fallback for Yahoo `1m` Globex gaps, right offset for labels (`UI-2`).
 10. **`PS-1` — Planning-session model and store, done** (`lib/plans.ts`, `lib/plans-store.ts`, `mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup round-trip). Shape is `OD-51`.
 11. **`PS-2` — Plan screen on Today, done** (`components/PlanSheet.tsx`, `components/PlanCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/plans-view.test.ts`): start a "Pre-…" session fast (<10s), add levels with tick steppers, observations, bias, watch playbooks, and state matrix coverage.
-12. **`PS-3` — Planning-session levels on trade charts.**
+12. **`PS-3` — Planning-session levels on trade charts, done** (`lib/chart-levels.ts` `plannedLineSources`, `components/useTradeLevels.ts`): same-instrument plans for the trade's `session_date`, as they stood at entry. Plans gain an optional `symbol`; **PS-2 must set it** or the plan is never drawn.
 13. **`PS-4` — After-session review** (rules followed, nearest planned level in ticks, watched playbook, one lesson).
 14. **`IND-1` — Session VWAP.**
 15. **`UI-1` — Chart OHLC HUD & honest freshness, done** (`components/TradeDetail.tsx`, `app/globals.css`, `lib/freshness.ts`, `OD-40`, #114): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
 16. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`. Also move small controls off the screen edges (`1m` at 13 px, change-target chip at 9 px, After-the-exit note at 15 px, Mood button at 9 px; docs/24 §6) — edge taps trigger the phone's back swipe.
 17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
-18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check in `/api/market-data` & `lib/candles.ts`:** replace `candles.length >= 4` acceptance with shared `expectedInsideBarTimes` coverage check.
+18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check, done** (`lib/market-data/coverage.ts`: the route and the client cache use `coversTradeWindow` / `anchorsTradeWindow`; no `length >= 4` bypass remains).
 19. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
 20. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
 21. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
@@ -78,6 +78,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — PS-3 plan levels on trade charts (#26), Chart lane released
+
+- PS-1 plans had no instrument, so an MNQ plan could land on an MES chart (OD-15, docs/24 §3). `PlanningSession.symbol` is now optional and sanitized to a known contract; a plan without it is not drawn. PS-2 should set it from the chosen instrument.
+- `planLevelsAsOf` reads the revision history: a level added or moved after the entry never appears on that trade (B-14). Planned levels share pills with computed levels at the same tick and colour by side of the entry price; the View toggle counts them in its tooltip.
+- `npm test` 454 pass, typecheck clean, lint 0 errors (existing PostCSS warning), build 8/8, `check-session-levels.mjs` passed. Headless Chrome 390×844: a seeded Nov 19 plan drew "7395.00 Plan shelf" stacked above RTH high; its post-entry level was absent ("6 shown · 6 missing").
+- MD-1 (#90) was already on main; the queue line is marked done. Also fixed PS-2 (#158) `PlanSheet`: new plans carry `symbol` and `DEFAULT_OWNER_USER_ID` (was `"default-owner"`). Next free items: PS-4, IND-1, the OD-55 `5m` fallback once the owner agrees.
 
 ### 2026-11-22 — Gemini — PS-2 (OD-51), Plan screen on Today
 

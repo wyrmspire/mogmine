@@ -15,7 +15,7 @@ import {
   type PlanPreset,
   type PlanRevision,
 } from "./plans.ts";
-import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
+import { DEFAULT_OWNER_USER_ID, specFor } from "./trades.ts";
 
 export const PLANS_STORAGE_KEY = "mogmine-plans-v1";
 
@@ -149,10 +149,13 @@ export function sanitizePlanningSession(raw: unknown): PlanningSession | null {
     if (rev) revisions.push(rev);
   }
 
+  const symbol = typeof obj.symbol === "string" && specFor(obj.symbol.trim()) ? obj.symbol.trim().toUpperCase() : undefined;
+
   return {
     id,
     user_id: userId,
     session_date: sessionDateStr,
+    ...(symbol ? { symbol } : {}),
     name,
     preset,
     anchor_time_utc: anchorTimeUtc,
