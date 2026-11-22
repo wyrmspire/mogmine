@@ -40,7 +40,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
 7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
 8. **`LV-1` — Pure computed levels, done** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. PR #152 follows the merged TD-3 painter under `D-011`.
-9. **`LV-2` — Draw computed levels on the trade chart** (`SessionLevelsPrimitive`, Canvas only, view-options toggle).
+9. **`LV-2` — Draw computed levels on the trade chart, done** (`SessionLevelsPrimitive`, Canvas only, view-options toggle).
 10. **`PS-1` — Planning-session model and store** (`mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup). Shape is `OD-51`.
 11. **`PS-2` — Plan screen on Today** (start a "Pre-…" session fast, levels with tick steppers, observations).
 12. **`PS-3` — Planning-session levels on trade charts.**
@@ -78,6 +78,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Antigravity — LV-2 (#26), Chart lane released
+
+- Implemented `SessionLevelsPrimitive` (`components/SessionLevelsPrimitive.ts`) using Canvas 2D API (`ISeriesPrimitive<Time>`), drawing point-in-time session levels as 1px rays and right-edge pill labels (`price label`).
+- Theme tokens: added `--level-resistance`, `--level-support`, `--level-adr`, `--level-neutral`, `--level-label-text` in `app/globals.css` (with blue-orange color-blind overrides) and exposed in `lib/theme.ts`.
+- Integrated into `components/TradeChart.tsx` and `components/TradeDetail.tsx`: derives same-instrument levels snapshot from `lib/levels.ts`, wired view-options toggle "Session levels" (on by default), and verified `takeScreenshot(true)` inclusion in headless Chrome at 390×844 (`scripts/check-session-levels.mjs`).
+- Next is `PS-1` (Planning-session model and store, `mogmine-plans-v1`).
 
 ### 2026-11-22 — Codex — LV-1 (#26), recurring review 20261122T170003Z, Core math lane released
 

@@ -29,6 +29,8 @@ import { observeTrade, validateTradeAgainstBars } from "@/lib/trade-bar-validati
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
 import { buildMarks } from "@/lib/trade-marks";
 import type { Mark } from "@/lib/trade-marks";
+import { computeLevelsFromInputs, extractSessionInputsFromCandles } from "@/lib/levels";
+import { specFor } from "@/lib/trades";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, aggregateCandles, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
@@ -85,6 +87,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [fitted, setFitted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
+  const [showLevels, setShowLevels] = useState(true);
   const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
@@ -298,6 +301,29 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     symbol: trade.symbol,
     zone,
   });
+  // Computed session levels (LV-1 / LV-2, docs/24 §3, §5, OD-15)
+  const computedLevels = useMemo(() => {
+    if (!ready || !candles?.candles?.length) return [];
+    if (trade.symbol !== "MES" && trade.symbol !== "MNQ") return [];
+    const sDate = sessionDate(trade.entry_time);
+    const spec = specFor(trade.symbol);
+    const providerSymbol = spec?.yahooTicker ?? `${trade.symbol}=F`;
+    try {
+      const extracted = extractSessionInputsFromCandles({
+        symbol: trade.symbol,
+        provider: "yahoo_finance",
+        providerSymbol,
+        sessionDate: sDate,
+        candles: candles.candles,
+        timeframe: base,
+        asOf: Date.parse(trade.entry_time),
+      });
+      return computeLevelsFromInputs(extracted);
+    } catch {
+      return [];
+    }
+  }, [ready, candles, trade, base]);
+
   const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
   const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
 
@@ -401,6 +427,19 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                     <button
                       type="button"
                       className="view-menu-item"
+                      role="menuitemcheckbox"
+                      aria-checked={showLevels}
+                      onClick={() => setShowLevels((prev) => !prev)}
+                      title="Toggle session levels"
+                    >
+                      <span>Session levels</span>
+                      <span className="shortcut">{showLevels ? "On ✓" : "Off"}</span>
+                    </button>
+                  </div>
+                  <div className="view-menu-section">
+                    <button
+                      type="button"
+                      className="view-menu-item"
                       role="menuitem"
                       onClick={() => {
                         setFullscreen(!fullscreen);
@@ -444,7 +483,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="chart-frame">
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={computedLevels} showLevels={showLevels} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
