@@ -42,7 +42,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 8. **`LV-1` — Pure computed levels, done** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. PR #152 follows the merged TD-3 painter under `D-011`.
 9. **`LV-2` — Draw computed levels on the trade chart, done** (`components/SessionLevelsPrimitive.ts`, `lib/chart-levels.ts`, `components/useTradeLevels.ts`): Canvas rays and stacked right-edge pills from prior-session and overnight day-mode bars, View → Session levels toggle, in the Trade Card PNG. Follow-ups under `OD-55`: `5m` fallback for Yahoo `1m` Globex gaps, right offset for labels (`UI-2`).
 10. **`PS-1` — Planning-session model and store, done** (`lib/plans.ts`, `lib/plans-store.ts`, `mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup round-trip). Shape is `OD-51`.
-11. **`PS-2` — Plan screen on Today** (start a "Pre-…" session fast, levels with tick steppers, observations).
+11. **`PS-2` — Plan screen on Today, done** (`components/PlanSheet.tsx`, `components/PlanCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/plans-view.test.ts`): start a "Pre-…" session fast (<10s), add levels with tick steppers, observations, bias, watch playbooks, and state matrix coverage.
 12. **`PS-3` — Planning-session levels on trade charts.**
 13. **`PS-4` — After-session review** (rules followed, nearest planned level in ticks, watched playbook, one lesson).
 14. **`IND-1` — Session VWAP.**
@@ -78,6 +78,14 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Gemini — PS-2 (OD-51), Plan screen on Today
+
+- Built `components/PlanSheet.tsx` (<10s fast checkpoint entry, tick-stepper price builder, label/kind, bias selector, watch setups, after-the-fact warning).
+- Built `components/PlanCard.tsx` and wired into `components/TodayScreen.tsx` (quick preset chips for Pre-Globex, Pre-market, Pre-power hour, Pre-MOC, active plans list, edit sheet, storage blocked fallback).
+- Added integration test suite `lib/__tests__/plans-view.test.ts` covering level creation, tick snapping, session grouping, revisions and presets.
+- Verification passed: typecheck clean, lint 0 errors (1 PostCSS warning), test 453/453 passed, build 8/8 pages.
+- Next is `PS-3` (Planning-session levels on trade charts).
 
 ### 2026-11-22 — Claude — LV-2 follow-up to PR #154 (#26), Chart lane released
 

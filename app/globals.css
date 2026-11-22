@@ -1046,3 +1046,18 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .rule-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
 .playbook-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .playbook-actions .btn-ghost { margin-left: auto; }
+
+/* Planning Sessions (PS-2, docs/24 §2) */
+.plan-sheet { max-width: 560px; max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.plan-form-body { display: grid; gap: 14px; }
+.planned-level-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.planned-level-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 6px 10px; border-radius: 8px; background: var(--bg-inset); border: 1px solid var(--border-subtle); }
+.planned-level-label b { font-size: 0.8125rem; color: var(--text-primary); }
+.planned-level-label small { font-size: 0.6875rem; color: var(--text-muted); }
+.planned-level-price { font-size: 0.875rem; font-weight: 750; color: var(--text-primary); margin-left: auto; }
+.level-del-btn { width: 36px; height: 36px; min-height: 36px; }
+.add-level-box { margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--bg-surface-elevated, var(--bg-inset)); border: 1px dashed var(--border-subtle); display: grid; gap: 8px; }
+.level-inputs-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.level-controls-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.add-level-btn { min-height: 44px; font-weight: 750; }
+
