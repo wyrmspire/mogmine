@@ -234,9 +234,9 @@ Why this shape:
 - **One source for every surface.** The chart, the Trade Card, the AI snapshot and the archived view all call `buildMarks` with different `detail` and `shield` arguments. Shield cannot be forgotten on one of them.
 - **The same facts feed the AI as text** ([04](04-ai-review-engine.md), B-62). The model is told "exit reason: trail, stop moved 2 times, never widened". It does not read that off an image.
 
-Call `buildMarks` with `options.candleTimes` containing the displayed timeframe's sorted UTC candle opens. Pass observer facts computed from those same candles. Unresolved anchors omit their marks. Nearby execution anchors carry `approximate` (OD-28). Observer flags keep the exact original bar, price, finding identity and basis. At Medium detail, `options.viewRightTime` bounds the continuation to the last visible candle. `options.archived` returns the execution geometry in archived style.
+Call `buildMarks` with `options.candleTimes` containing the displayed timeframe's sorted UTC candle opens. Pass observer facts computed from those same candles. Unresolved anchors omit their marks. Nearby execution anchors carry `approximate` (OD-28). Observer flags keep the exact original bar, price, finding identity and basis. At Medium detail, `options.viewRightTime` bounds the continuation to the last visible candle. The live chart uses `options.continuationEdges` to paint rays to the pane edge, with leftward rays enabled after ‹30. `options.archived` returns the execution geometry in archived style.
 
-Trade Detail uses one set of displayed candles for the chart, `observeTrade` and its text equivalents in Data notes (#35). The Canvas flag subset is built by `buildFindingMarks`, which `buildMarks` also calls. Source-candle coverage warnings remain visible when grouping source candles into a coarser chart.
+Trade Detail uses one set of displayed candles for the chart, `observeTrade` and its text equivalents in Data notes (#35). The Canvas list contains the finding flags emitted by `buildMarks`. Source-candle coverage warnings remain visible when grouping source candles into a coarser chart.
 
 Bracket labels are keyed to their price caps (`low` at `pLow`, `high` at `pHigh`). For a short trade, MFE is the lower cap and MAE is the higher cap. The painter can place either label using its cap alone.
 
@@ -263,7 +263,7 @@ The results were checked by hand against the examples: for example, ex-ignored i
 | Source | What it has | What the document gets | What the chart can show |
 | :--- | :--- | :--- | :--- |
 | **Manual entry (now)** | What the trader types | `plan` (stated), entry and exit `fill` (stated), optional `modify` rows for stop moves, exit `reason` from one tap | Everything in §2, with `stated` basis. Stop-through is `inferred`. |
-| **Current stored trades** | Flat fields: entry, exit, stop, target | A converter builds `plan` from `stop_loss_price` and `planned_target_price`, and two `fill` events. Exit reason is inferred only when the exit price **equals** the stop or target. | Plan, actual, excursion. No stop path. |
+| **Current stored trades** | Flat fields: entry, exit, stop, target | A converter builds `plan` from `stop_loss_price` and `planned_target_price`, and two `fill` events. Exit reason is inferred only when the exit price **equals** the stop or target. | Plan, actual and excursion. If the frozen initial stop and current stop differ, the change appears with inferred timing. |
 | **CSV (parked, `D-009`)** | Usually fills only | `fill` events (broker basis) | Actual only, plus "No stop or target on record → Add plan" |
 | **Broker pull, `Trade/search` (parked)** | Legs, no orders (B-07) | `fill` events per leg, `void` for voided legs | Same as CSV |
 | **Broker stream, `GatewayUserOrder` and `GatewayUserTrade` (parked)** | Orders with stop and limit prices, type, status, update time, and legs | `order`, `modify`, `cancel`, `fill` | Everything, with `broker` basis: real stop path, real cancels, real exit reasons |
@@ -292,17 +292,19 @@ Agents propose and the owner decides. Each item is also in [DECISIONS.md](../DEC
 
 | Element | On `main` today | Target (this doc) |
 | :--- | :--- | :--- |
-| Plan zones | Faint red and green fills, no outline, no `PLAN` tag, no `TP` / `SL` labels | §2.1: the same fills and no outline; optional typography only |
+| Plan zones | Canvas draws faint red and green fills with optional text when it fits | §2.1 |
 | Actual band | Stronger fill in result colour, no frame | §2.1: the same, still no frame |
-| Path | One dotted diagonal, entry fill to exit fill | §2.4: polyline through the fills |
-| Stop path | None | §2.2 |
-| Excursion | None | §2.1 bracket |
-| Hindsight | Dotted extension on the existing Position Box, plus the text below the chart | §2.5, using the display list and observer facts |
+| Path | Dotted polyline for multi-fill trades | §2.4 |
+| Stop path | Stepped segments and hatched price strips | §2.2 |
+| Excursion | Canvas bracket from the displayed candle observations | §2.1 |
+| Hindsight | Dotted rays from the display list and the existing text below the chart | §2.5 |
 | Archived style | None | §2.6 |
-| Flags | Entry and exit flags at fill prices | §2.4 (adds the reason text) |
+| Flags | Entry, exit and reason text from the display list, plus observer finding flags | §2.4 |
 | `deriveTrade`, `fromLegacy` | Built (`lib/trade-document.ts`, issue #33) | §3.2, §3.3, §3.6 |
 | `observeTrade` | Built. Displayed-candle findings have Canvas flags and text equivalents (#35). | §3.3–3.4 |
-| `buildMarks` | Built as a pure display list (`lib/trade-marks.ts`, issue #34 TD-2) | Canvas integration and pixel verification in TD-3 |
+| `buildMarks` | Trade Detail and Trade Card export use the same Canvas display list (`lib/trade-marks.ts`, issue #34) | §3.4 |
 | Fixtures | `fixtures/sample-bars.json`, `fixtures/levelsets/` | `fixtures/trades/`, §3.5 |
+
+Run `node scripts/check-position-box.mjs` with Chrome installed to sample the frameless fills in `takeScreenshot(true)` and verify the stop fixtures. Set `CHROME_BIN` when the browser executable has a different name.
 
 Each chart addition needs the §4 mobile checks in [AGENTS.md](../AGENTS.md) when it lands. Native phone verification is tracked by AC-11.
