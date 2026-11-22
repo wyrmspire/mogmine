@@ -25,41 +25,44 @@ export interface CallKindSpec {
 /** Groups chips across kinds for filters and Mood Shape evidence (docs/18). */
 export type ReasonFamily = "market" | "plan" | "risk" | "state" | "other";
 
-/** A seed reason: label and family. Its stable id comes from `seedReasonId`. */
-export type SeedReason = readonly [label: string, family: ReasonFamily];
+/** A seed reason: immutable key, editable label and family. The key keeps its id stable across wording changes. */
+export type SeedReason = readonly [key: string, label: string, family: ReasonFamily];
 
 export const SHARED_CALL_REASONS: readonly SeedReason[] = [
-  ["Gut", "state"], ["News soon", "market"], ["Tired / tilted", "state"], ["Daily limit close", "risk"],
+  ["gut", "Gut", "state"],
+  ["news-soon", "News soon", "market"],
+  ["tired-tilted", "Tired / tilted", "state"],
+  ["daily-limit-close", "Daily limit close", "risk"],
 ];
 
 export const CALL_KINDS: readonly CallKindSpec[] = [
   {
     kind: "skip", label: "Skip", glyph: "⊘", prompt: "Setup's here. Why not?", against: true, trade: "forbidden",
-    reasons: [["Late in move", "market"], ["No room to level", "plan"], ["Against HTF", "market"], ["NQ not confirming", "market"], ["Chop", "market"], ["Already hit target for the day", "risk"], ["Spread / speed", "market"]],
+    reasons: [["late-in-move", "Late in move", "market"], ["no-room-to-level", "No room to level", "plan"], ["against-htf", "Against HTF", "market"], ["nq-not-confirming", "NQ not confirming", "market"], ["chop", "Chop", "market"], ["already-hit-target-for-the-day", "Already hit target for the day", "risk"], ["spread-speed", "Spread / speed", "market"]],
   },
   {
     kind: "flip", label: "Flip", glyph: "⇅", prompt: "Signal says one way. Why the other?", against: true, trade: "optional",
-    reasons: [["Failed breakout", "market"], ["Trapped traders", "market"], ["NQ diverging", "market"], ["Level held", "plan"], ["Absorption", "market"], ["HTF says other way", "market"]],
+    reasons: [["failed-breakout", "Failed breakout", "market"], ["trapped-traders", "Trapped traders", "market"], ["nq-diverging", "NQ diverging", "market"], ["level-held", "Level held", "plan"], ["absorption", "Absorption", "market"], ["htf-says-other-way", "HTF says other way", "market"]],
   },
   {
     kind: "cut", label: "Cut", glyph: "✂", prompt: "Why out before stop or target?", against: false, trade: "required",
-    reasons: [["Thesis broken", "plan"], ["Stalled at level", "market"], ["NQ turned", "market"], ["Time stop", "plan"], ["Volume dried up", "market"], ["Scared", "state"]],
+    reasons: [["thesis-broken", "Thesis broken", "plan"], ["stalled-at-level", "Stalled at level", "market"], ["nq-turned", "NQ turned", "market"], ["time-stop", "Time stop", "plan"], ["volume-dried-up", "Volume dried up", "market"], ["scared", "Scared", "state"]],
   },
   {
     kind: "early_take", label: "Early take", glyph: "◎", prompt: "Why bank it before target?", against: false, trade: "required",
-    reasons: [["Into a level", "plan"], ["Momentum fading", "market"], ["Spike / wick", "market"], ["Locked the day", "risk"], ["Scared", "state"]],
+    reasons: [["into-a-level", "Into a level", "plan"], ["momentum-fading", "Momentum fading", "market"], ["spike-wick", "Spike / wick", "market"], ["locked-the-day", "Locked the day", "risk"], ["scared", "Scared", "state"]],
   },
   {
     kind: "stop_here", label: "Stop here", glyph: "⊢", prompt: "Why is the stop at this price?", against: false, trade: "required",
-    reasons: [["Behind level", "plan"], ["Behind swing", "market"], ["ATR / ADR", "risk"], ["Fixed ticks", "risk"], ["Round number", "market"], ["Below liquidity", "market"]],
+    reasons: [["behind-level", "Behind level", "plan"], ["behind-swing", "Behind swing", "market"], ["atr-adr", "ATR / ADR", "risk"], ["fixed-ticks", "Fixed ticks", "risk"], ["round-number", "Round number", "market"], ["below-liquidity", "Below liquidity", "market"]],
   },
   {
     kind: "hold", label: "Hold", glyph: "→", prompt: "Why still in past target or time?", against: false, trade: "required",
-    reasons: [["Trend day", "market"], ["No opposing level", "plan"], ["Trailing", "plan"], ["NQ leading", "market"]],
+    reasons: [["trend-day", "Trend day", "market"], ["no-opposing-level", "No opposing level", "plan"], ["trailing", "Trailing", "plan"], ["nq-leading", "NQ leading", "market"]],
   },
   {
     kind: "size", label: "Size", glyph: "±", prompt: "Why more or less than normal?", against: false, trade: "required",
-    reasons: [["A+ setup", "plan"], ["Low conviction", "state"], ["Near loss limit", "risk"], ["After a loss", "state"], ["Playing with profit", "state"]],
+    reasons: [["a-plus-setup", "A+ setup", "plan"], ["low-conviction", "Low conviction", "state"], ["near-loss-limit", "Near loss limit", "risk"], ["after-a-loss", "After a loss", "state"], ["playing-with-profit", "Playing with profit", "state"]],
   },
 ];
 
@@ -86,17 +89,13 @@ export interface FrozenReason {
 export const REASON_FAMILIES: readonly ReasonFamily[] = ["market", "plan", "risk", "state", "other"];
 export const REASON_LABEL_MAX = 32;
 
-function slug(label: string) {
-  return label.toLowerCase().replace(/\+/g, " plus ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
 /** Stable seed id, for example `seed:cut:thesis-broken` or `seed:shared:gut`. Never changes once shipped. */
-export function seedReasonId(scope: CallKind | "shared", label: string) {
-  return `seed:${scope}:${slug(label)}`;
+export function seedReasonId(scope: CallKind | "shared", key: string) {
+  return `seed:${scope}:${key}`;
 }
 
 function seedChips(scope: CallKind | "shared", seeds: readonly SeedReason[]): ReasonChip[] {
-  return seeds.map(([label, family]) => ({ id: seedReasonId(scope, label), label, family, retired: false }));
+  return seeds.map(([key, label, family]) => ({ id: seedReasonId(scope, key), label, family, retired: false }));
 }
 
 /** The shared seed chips (Gut, News soon, …), offered with every kind. */

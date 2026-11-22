@@ -54,7 +54,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 20. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
 21. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
 
-22. **`DC-2`–`DC-7` — Discretionary calls** ([docs/25](docs/25-discretionary-calls.md) §8, proposal `OD-52`): store, call sheet, chart pins, Skip/Flip grading, discretion score. `DC-1` (pure model) is done; wait for the owner's yes on `OD-52` before `DC-3` UI.
+22. **`DC-2`–`DC-7` — Discretionary calls** ([docs/25](docs/25-discretionary-calls.md) §8, proposal `OD-52`): store, call sheet, chart pins, Skip/Flip grading, discretion score. `DC-1` (pure model) and `DC-1b` (stable reason ids with frozen labels) are done; wait for the owner's yes on `OD-52` before `DC-3` UI.
 
 ### Supabase-gated / Owner-gated (do not block on or pick up unasked)
 
@@ -78,6 +78,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — DC-1b PR #147 review, no lane
+
+- Rebased the PR onto `11056cd`, preserving all newer handoffs. Reviewed the pure call/reason contract against docs/25, playbook-design/04 §1.4 and OD-52.
+- Fixed seed ids to use explicit immutable keys rather than display-label slugs; a regression proves a wording change keeps the same id. No persisted calls exist, so no migration is required.
+- `npm run typecheck` passed; lint had 0 errors/1 existing PostCSS warning; `npm test` passed 429/429; `npm run build` compiled and generated 8/8 pages; `git diff --check` passed.
+- DC-2 may build storage on this contract. DC-3 UI remains owner-gated by OD-52.
 
 ### 2026-11-22 — Claude — DC-1b frozen call reasons, no lane
 Did:      Calls now save reasons as `{ id, label, family }` (`FrozenReason`) instead of bare labels, as playbook-design/04 §1.4 requires before `DC-2`. Seed chips get stable ids (`seed:cut:thesis-broken`, `seed:shared:gut`) and families. `validateCall(call, offered, previous)` keeps a call valid after its chip is renamed, retired or deleted. No call was ever stored, so `DiscretionCall` changed in place.

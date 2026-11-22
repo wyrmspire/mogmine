@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CALL_KINDS, freezeReason, gradeCall, isAfterTheFact, reasonChipsFor, seedReasonId, validateCall } from "../calls.ts";
-import type { DiscretionCall, FrozenReason } from "../calls.ts";
+import type { DiscretionCall, FrozenReason, SeedReason } from "../calls.ts";
 import type { Candle } from "../trades.ts";
 
 const minute = 60_000;
@@ -60,9 +60,12 @@ test("seven kinds, each with its own reasons plus the shared ones", () => {
 });
 
 test("seed chips have stable, unique ids and a family", () => {
-  assert.equal(seedReasonId("cut", "Thesis broken"), "seed:cut:thesis-broken");
-  assert.equal(seedReasonId("size", "A+ setup"), "seed:size:a-plus-setup");
-  assert.equal(seedReasonId("stop_here", "ATR / ADR"), "seed:stop_here:atr-adr");
+  assert.equal(seedReasonId("cut", "thesis-broken"), "seed:cut:thesis-broken");
+  assert.equal(seedReasonId("size", "a-plus-setup"), "seed:size:a-plus-setup");
+  assert.equal(seedReasonId("stop_here", "atr-adr"), "seed:stop_here:atr-adr");
+  const original: SeedReason = ["thesis-broken", "Thesis broken", "plan"];
+  const renamed: SeedReason = [original[0], "Thesis failed", "plan"];
+  assert.equal(seedReasonId("cut", original[0]), seedReasonId("cut", renamed[0]), "wording does not define the id");
   assert.equal(reasonChipsFor("cut").find((chip) => chip.label === "Gut")?.id, "seed:shared:gut");
   for (const spec of CALL_KINDS) {
     const chips = reasonChipsFor(spec.kind);
