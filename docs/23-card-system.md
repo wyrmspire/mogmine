@@ -95,11 +95,15 @@ A drill is BET-03 made repeatable. The Review queue's blind review ([ReviewScree
 
 - Closed trades only, not `is_sample`, with candles available. Drills read the per-trade candle cache (IndexedDB, `candleCacheKey`, `lib/candles.ts`) and never fetch only on the fly for old trades (invariant 2). Yahoo drops `1m` after 30 days, so a trade with no cached bars is skipped with a count (`3 trades skipped: no saved bars`), never drawn empty.
 - Cutting the chart is passing a shorter bar array; the Position Box draws only up to the cut (BET-03 cost note).
-- Drill answers live in a new local store `mogmine-drills-v1` with `user_id` (invariant 7), included in journal backup/restore. They never overwrite `take_again`.
+- Drill answers live in a new local store `mogmine-drills-v1` with `user_id` (invariant 7), included in journal backup/restore. They never overwrite `take_again`. Built in CD-2b (`lib/drills-store.ts`). Answers are append-only, and a restore merges them by id so an older backup never erases newer answers.
 
 ### 4.5 What drills produce
 
 After 30+ answered *Take it?* drills: average R of trades answered *Take it* against trades answered *Pass*, with `n` for each. If *Pass* trades did as well as *Take it* trades, the trader's read of their setups is not adding edge. Shown on the playbook card (§5) and the drill screen.
+
+**Built (CD-2a, `lib/drills.ts`):** the sealed front keeps only bars that closed by the entry, so the entry bar is hidden too: its high, low and close include prices after the fill. A miss is *Take it* on a losing trade that broke its rules, or *Pass* on a winning trade that followed them. The take-vs-pass averages use each trade's latest answer and `rMultiple`, and trades without a stop are counted apart.
+
+**Built (CD-2c, `/drills`):** decks for warm-up, due misses and one playbook, opened from Review. The front is drawn as an open trade on the cut bars, with no marks. The reveal shows the full chart with marks, R and the rules read. It does not yet play the bars forward or show the Trade Card front. Bars come only from the candle cache.
 
 **Split for PRs:** `CD-2a` pure deck selection, eligibility, cut-off and scoring + tests; `CD-2b` local store + backup; `CD-2c` drill screen with flip and reveal.
 

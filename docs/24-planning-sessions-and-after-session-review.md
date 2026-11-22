@@ -33,7 +33,7 @@ A day's plan is the ordered list of its planning sessions. Each one is small and
 
 Proposed record (`mogmine-plans-v1`, with `user_id` per Invariant 7):
 
-- `id`, `user_id`, `session_date`, `name`, `preset` (or `null` for a custom name), `anchor_time_utc` (nullable), `created_at`.
+- `id`, `user_id`, `session_date`, `symbol` (the instrument the levels were marked on; PS-3 draws a plan only on a chart of that instrument, `OD-15`), `name`, `preset` (or `null` for a custom name), `anchor_time_utc` (nullable), `created_at`.
 - `levels[]`: `{ id, price_ticks, price, label, kind: "level" | "zone_low" | "zone_high", note }`, entered with the tick steppers from [20](20-price-first-entry.md). Prices are stored in integer ticks as well (guardrail 4).
 - `observations` (text), optional `bias`, and `watch_playbook_ids[]`.
 - `revisions[]`: every edit is kept. An edit saved after `anchor_time_utc` is marked **after the fact**, so the review never treats it as a plan that existed before the trade (LV-15).
@@ -58,6 +58,8 @@ Pick a planning session or a time window, for example "Pre-market → Pre-power 
 
 The review ends with one lesson for the next session. A session with no trades is a valid review.
 
+Built as `sessionReview` in `lib/session-review.ts` (PS-4a). The window runs from the checkpoint's anchor (or its creation time for an event preset) to the next checkpoint's anchor or the 17:00 ET close. Levels and the watch list are read as the plan stood at each entry. A plan with a `symbol` reviews only that instrument's trades. The lesson is stored on the plan (`lesson`, 280 characters) and adds no revision.
+
 ## 5. Build slices (in order, after `TD-2` and `TD-3`)
 
 | ID | Slice | Files (expected) | Done when |
@@ -67,9 +69,9 @@ The review ends with one lesson for the next session. A session with no trades i
 | | *LV-2 data and layout (2026-11-22, after PR #154):* `components/useTradeLevels.ts` loads the prior session and this session up to entry through two cached day-mode requests (the trade's own candle window never holds the prior session). `lib/chart-levels.ts` colours by role and side of the entry price, puts levels at one tick in one pill, and stacks pills with a leader tick (`lib/label-stack.ts`). Levels never feed autoscale. View counts missing levels. Gaps under `OD-55`. | | |
 | `PS-1` | Pure planning-session model and store | `lib/plans.ts`, `lib/plans-store.ts`, backup round-trip in `lib/store.ts` | Presets, revisions, after-the-fact flag, `user_id`, backup/restore tests (done) |
 | `PS-2` | Plan screen on Today | `components/PlanSheet.tsx`, `components/TodayScreen.tsx` | Done: start a "Pre-…" session in under 10 seconds, add levels with tick steppers, write observations, all states from docs/08 §4 |
-| `PS-3` | Plan levels on charts | `components/SessionLevelsPrimitive.ts` | A trade chart shows the planning-session levels for its `session_date` |
-| `PS-4` | After-session review | `components/SessionReview.tsx`, `lib/selectors.ts` | §4 above, no-trade sessions handled |
-| `IND-1` | Session VWAP | `lib/indicators.ts`, chart toggle | Matches a hand-checked session |
+| `PS-3` | Plan levels on charts | `lib/chart-levels.ts`, `components/useTradeLevels.ts` | Done: a trade chart shows the same-instrument planning-session levels for its `session_date`, as they stood at entry |
+| `PS-4` | After-session review | `lib/session-review.ts`, `components/SessionReview.tsx`, `components/PlanCard.tsx` | Done: §4 above, no-trade sessions handled. Opened from a plan on Today; past days need a day picker (follow-up). |
+| `IND-1` | Session VWAP | `lib/chart-indicators.ts` (math in `lib/session-indicators.ts`), chart toggle | Done: matches a hand-checked session. The trader picks the RTH or Globex anchor in View (default Off) while `OD-18` is open; a gap in the anchored window withholds the line. |
 
 Each slice is one branch and one PR (~250–450 lines, [CONTRIBUTING §3](../CONTRIBUTING.md)). Run the four checks in [16 §0](16-floor-roadmap.md#0-rules-for-every-step).
 

@@ -1,6 +1,8 @@
 // LV-2 (docs/24 §5, docs/12 §5): turn LV-1 levels into the lines the chart paints. Pure, no I/O.
 import { computeLevelsFromInputs, extractSessionInputsFromCandles } from "./levels.ts";
 import type { ComputedLevel, ComputedLevelType } from "./levels.ts";
+import { planStateAsOf } from "./plans.ts";
+import type { PlanningSession } from "./plans.ts";
 import { equityIndexSessionBounds, previousRegularSessionDate, sessionDate } from "./session.ts";
 import { formatPrice } from "./format.ts";
 import { specFor } from "./trades.ts";
@@ -15,7 +17,7 @@ export interface LevelLine {
   role: LevelRole;
   /** `7547.50 PDL / ADR Low`: one pill for every level at this price (LV-09). */
   label: string;
-  keys: ComputedLevelType[];
+  keys: string[];
   /** A member is a settlement proxy (LV-1): the ray is dashed. */
   proxy: boolean;
   /** UTC ms where the ray starts. Null runs from the left edge (prior-day levels). */
@@ -26,23 +28,30 @@ export interface LevelLine {
 const NEUTRAL = new Set<ComputedLevelType>(["pdc", "pp", "rth_open", "rth_close", "globex_open"]);
 // Levels formed in the trade's own session start at the bar that formed them.
 const SAME_SESSION = new Set<ComputedLevelType>(["globex_open", "onh", "onl", "adr_high", "adr_low", "adr_inner_high", "adr_inner_low"]);
+/** One drawable level: computed by LV-1, or authored in a planning session (`planned`, PS-3). */
+export type LineSource = Pick<ComputedLevel, "price" | "price_ticks" | "formed_at"> & {
+  key: string;
+  type: ComputedLevelType | "planned";
+  label: string;
+};
+
 const ROLE_RANK: Record<LevelRole, number> = { adr: 3, resistance: 2, support: 2, neutral: 1 };
 
 /** Role by type, then by side of the reference price. */
-export function levelRole(level: Pick<ComputedLevel, "type" | "price">, referencePrice: number): LevelRole {
+export function levelRole(level: Pick<LineSource, "type" | "price">, referencePrice: number): LevelRole {
   if (level.type.startsWith("adr_")) return "adr";
-  if (NEUTRAL.has(level.type) || level.price === referencePrice) return "neutral";
+  if ((level.type !== "planned" && NEUTRAL.has(level.type)) || level.price === referencePrice) return "neutral";
   return level.price > referencePrice ? "resistance" : "support";
 }
 
 /** One line per exact price, highest first. Levels at the same tick share one label. */
-export function levelLines(levels: readonly ComputedLevel[], referencePrice: number, symbol: string): LevelLine[] {
-  const byTick = new Map<number, ComputedLevel[]>();
+export function levelLines(levels: readonly LineSource[], referencePrice: number, symbol: string): LevelLine[] {
+  const byTick = new Map<number, LineSource[]>();
   for (const level of levels) byTick.set(level.price_ticks, [...(byTick.get(level.price_ticks) ?? []), level]);
   return [...byTick.values()].map((group) => {
     const roles = group.map((level) => levelRole(level, referencePrice));
     const role = roles.reduce((best, next) => ROLE_RANK[next] > ROLE_RANK[best] ? next : best);
-    const starts = group.map((level) => SAME_SESSION.has(level.type) && level.formed_at ? Date.parse(level.formed_at) : null);
+    const starts = group.map((level) => level.type !== "planned" && SAME_SESSION.has(level.type) && level.formed_at ? Date.parse(level.formed_at) : null);
     const startAt = starts.some((start) => start == null || !Number.isFinite(start)) ? null : Math.min(...(starts as number[]));
     return {
       price: group[0].price,
@@ -111,4 +120,28 @@ export function tradeLevels(
   });
   const levels = computeLevelsFromInputs({ symbol, sessionDate: windows.sessionDate, inputs: inputs.inputs });
   return levels.length ? levels : null;
+}
+
+/** A planning session's levels as they stood at `asOf` (PS-3, B-14). Empty when the plan did not exist yet. */
+export function planLevelsAsOf(plan: PlanningSession, asOf: number) {
+  return planStateAsOf(plan, asOf)?.levels ?? [];
+}
+
+/** Planned levels for a trade: same instrument (OD-15), same session date, as of the entry. */
+export function plannedLineSources(
+  plans: readonly PlanningSession[], trade: { symbol: string; entry_time: string },
+): LineSource[] {
+  const asOf = Date.parse(trade.entry_time);
+  if (!Number.isFinite(asOf)) return [];
+  const symbol = trade.symbol.toUpperCase();
+  const date = sessionDate(asOf);
+  return plans
+    .filter((plan) => !plan.archived && plan.session_date === date && plan.symbol === symbol)
+    .flatMap((plan) => planLevelsAsOf(plan, asOf).map((level) => ({
+      key: `plan:${plan.id}:${level.id}`,
+      type: "planned" as const,
+      price: level.price,
+      price_ticks: level.price_ticks,
+      label: level.label,
+    })));
 }

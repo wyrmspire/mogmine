@@ -13,12 +13,14 @@ import { TIMEFRAME_MINUTES, alignTradeToBars, defaultVisibleRange, fitWindow, in
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
 import type { LevelLine } from "@/lib/chart-levels";
+import type { VwapPoint } from "@/lib/chart-indicators";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
 
 type LWC = typeof import("lightweight-charts");
 type IChartApi = import("lightweight-charts").IChartApi;
 type CandleSeries = import("lightweight-charts").ISeriesApi<"Candlestick">;
+type LineSeries = import("lightweight-charts").ISeriesApi<"Line">;
 type UTCTimestamp = import("lightweight-charts").UTCTimestamp;
 type Time = import("lightweight-charts").Time;
 type AutoscaleInfoProvider = import("lightweight-charts").AutoscaleInfoProvider;
@@ -49,6 +51,8 @@ interface Props {
   marks: readonly Mark[];
   /** LV-2: computed session levels as drawable lines. Empty hides them. */
   levels?: readonly LevelLine[];
+  /** IND-1: session VWAP on the displayed bars. Empty hides it. */
+  vwap?: readonly VwapPoint[];
   zone: string;
   /** Shield / privacy: the on-chart pill shows R and points, never dollars (UX-71). */
   privacy: boolean;
@@ -68,6 +72,8 @@ interface Live {
   series: CandleSeries;
   primitive: PositionBoxPrimitive;
   levelsPrimitive: SessionLevelsPrimitive;
+  vwapSeries: LineSeries;
+  renderedVwap: readonly VwapPoint[] | null;
   fitRange: { from: number; to: number } | null;
   renderedBars: Candle[];
   renderedTimeframe: Timeframe | null;
@@ -145,17 +151,18 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
 }
 
 const NO_LEVELS: readonly LevelLine[] = [];
+const NO_VWAP: readonly VwapPoint[] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, zone, privacy, readout, onRendered, onFitChange, onExtensionChange }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, zone, privacy, readout, onRendered, onFitChange, onExtensionChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -266,6 +273,12 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t);
     l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000);
+    l.vwapSeries.applyOptions({ color: t.vwap, visible: p.vwap.length > 0 });
+    if (l.renderedVwap !== p.vwap) {
+      // Points sit on displayed bar times only, so the time scale gains no new indices.
+      setProgrammaticRange(l, () => { l.vwapSeries.setData(p.vwap.map((point) => ({ time: toTime(point.time), value: point.value }))); });
+      l.renderedVwap = p.vwap;
+    }
 
     // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
     const fittedWindow = fitWindow(tr.entry_time, end, barTimeframe);
@@ -324,8 +337,15 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       series.attachPrimitive(levelsPrimitive);
       const primitive = new PositionBoxPrimitive();
       series.attachPrimitive(primitive);
+      // VWAP never widens the price scale: the trade's candles set it (docs/12 §5 rule for overlays).
+      const vwapSeries = chart.addSeries(lwc.LineSeries, {
+        // No axis tag: the series' last value is the session close, not the line in view. The crosshair readout shows it.
+        lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+        crosshairMarkerVisible: false, autoscaleInfoProvider: () => null,
+        priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
+      });
       const state: Live = {
-        lwc, host, chart, series, primitive, levelsPrimitive,
+        lwc, host, chart, series, primitive, levelsPrimitive, vwapSeries, renderedVwap: null,
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
         userPanned: false, programmaticRangeChange: false,
@@ -340,7 +360,9 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         const target = latest.current.readout?.current;
         if (target) {
           const symbol = latest.current.trade.symbol;
-          target.textContent = bar ? `O ${formatPrice(bar.open, symbol)}  H ${formatPrice(bar.high, symbol)}  L ${formatPrice(bar.low, symbol)}  C ${formatPrice(bar.close, symbol)}  ·  ${formatPoints(bar.close - latest.current.trade.entry_price, symbol)} vs entry` : "";
+          const vwapAt = bar ? param.seriesData.get(vwapSeries) as { value?: number } | undefined : undefined;
+          const vwapText = vwapAt?.value != null ? `  ·  VWAP ${formatPrice(vwapAt.value, symbol)}` : "";
+          target.textContent = bar ? `O ${formatPrice(bar.open, symbol)}  H ${formatPrice(bar.high, symbol)}  L ${formatPrice(bar.low, symbol)}  C ${formatPrice(bar.close, symbol)}  ·  ${formatPoints(bar.close - latest.current.trade.entry_price, symbol)} vs entry${vwapText}` : "";
           target.parentElement?.toggleAttribute("data-tracking", !!bar);
         }
       });
@@ -522,7 +544,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, levels, zone, privacy, theme]);
+  }, [trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme]);
 
   return <><div
     ref={hostRef}

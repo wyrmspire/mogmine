@@ -10,6 +10,7 @@ import { getMoodBackup, restoreMood } from "@/lib/mood-store";
 import { getAccountsBackup, restoreAccounts } from "@/lib/accounts-store";
 import { getPlaybooksBackup, restorePlaybooks } from "@/lib/playbooks-store";
 import { getPlansBackup, restorePlans } from "@/lib/plans-store";
+import { getDrillsBackup, restoreDrills } from "@/lib/drills-store";
 import { PlaybookEditor } from "./PlaybookEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -82,7 +83,7 @@ export function TuneScreen() {
   const sampleCount = journal.trades.length - realCount;
 
   const downloadBackup = () => {
-    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup());
+    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup(), getDrillsBackup());
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -126,6 +127,8 @@ export function TuneScreen() {
     if (pending.playbooks) restorePlaybooks(pending.playbooks);
     // An older backup has no plans: keep this device's plans.
     if (pending.plans) restorePlans(pending.plans);
+    // Drill answers merge by id, so an older backup never erases newer answers (CD-2b).
+    if (pending.drills) restoreDrills(pending.drills);
     const total = pending.trades.length;
     setPending(null);
     setError(null);

@@ -42,6 +42,8 @@
   --level-adr: #f5b544;
   --level-neutral: #9ca3af;
   --level-label-text: #ffffff;
+  /* Session VWAP line (IND-1). Not gold, not profit or loss. */
+  --indicator-vwap: #f472b6;
   --level-zone-opacity: 0.14;
 
   --gold-intensity: 0.76;
@@ -348,6 +350,7 @@ h1, h2, h3, p { margin: 0; }
 .view-menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
 .view-menu-item .shortcut { font-size: 0.6875rem; color: var(--text-muted); font-family: var(--font-mono); }
 .view-menu-toggle-group { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg-inset); padding: 3px; border-radius: 10px; border: 1px solid var(--border-subtle); }
+.view-menu-toggle-group.three { grid-template-columns: repeat(3, 1fr); }
 .view-menu-toggle-group button {
   min-height: 44px; padding: 0 6px; border-radius: 7px; border: 1px solid transparent; background: transparent;
   color: var(--text-muted); font-size: 0.75rem; font-weight: 700; cursor: pointer; display: flex; flex-direction: column;
@@ -595,7 +598,9 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
   border-radius: 6px;
   border: 1px solid var(--border-subtle);
   backdrop-filter: blur(4px);
-  white-space: pre;
+  /* Wrap inside the frame: one line ran past a 390 px chart and hid the entry delta and VWAP. */
+  white-space: pre-wrap;
+  max-width: calc(100% - 20px);
 }
 .chart-hud[data-tracking] {
   display: block;
@@ -1050,6 +1055,17 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 /* Planning Sessions (PS-2, docs/24 §2) */
 .plan-sheet { max-width: 560px; max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
 .plan-form-body { display: grid; gap: 14px; }
+/* PS-4b after-session review */
+.plan-review-button { min-height: 44px; padding: 0 12px; font-size: 0.75rem; flex: none; }
+.review-until, .review-lesson { display: grid; gap: 6px; font-size: 0.75rem; color: var(--text-muted); }
+.review-until select, .review-lesson textarea { min-height: 44px; font: inherit; font-size: 0.875rem; color: var(--text-primary); background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 10px; }
+.review-lesson textarea { resize: vertical; }
+.review-summary { margin: 0; font-size: 0.8125rem; color: var(--text-primary); }
+.review-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.review-row { display: grid; gap: 4px; min-height: 44px; padding: 8px 12px; border-radius: 8px; background: var(--bg-inset); border: 1px solid var(--border-subtle); color: var(--text-primary); text-decoration: none; }
+.review-row-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.8125rem; }
+.review-row-facts { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.75rem; color: var(--text-muted); }
+.review-empty { margin: 0; font-size: 0.8125rem; color: var(--text-muted); }
 .planned-level-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
 .planned-level-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 6px 10px; border-radius: 8px; background: var(--bg-inset); border: 1px solid var(--border-subtle); }
 .planned-level-label b { font-size: 0.8125rem; color: var(--text-primary); }
@@ -1061,3 +1077,20 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .level-controls-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .add-level-btn { min-height: 44px; font-weight: 750; }
 
+
+/* CD-2c drill cards (docs/23 §4) */
+.drill-page { max-width: 720px; }
+.drill-link { min-height: 44px; display: inline-flex; align-items: center; align-self: flex-start; }
+.drill-decks { display: grid; gap: 10px; }
+.drill-decks button, .drill-answers > * { min-height: 44px; }
+.drill-playbook { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.drill-playbook select { min-height: 44px; font: inherit; font-size: 0.875rem; color: var(--text-primary); background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 0 10px; }
+.drill-skips, .drill-score p { margin: 0; font-size: 0.75rem; color: var(--text-muted); }
+.drill-score { margin-top: 14px; display: grid; gap: 4px; }
+.drill-front-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.8125rem; }
+.drill-chart { position: relative; height: min(52vh, 420px); }
+.drill-answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+.drill-answers a { display: inline-flex; align-items: center; justify-content: center; }
+.drill-reveal { display: grid; gap: 8px; }
+.drill-reveal p { margin: 0; }
+.drill-miss { color: var(--warn-amber); font-size: 0.8125rem; }

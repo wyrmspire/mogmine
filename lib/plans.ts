@@ -4,7 +4,7 @@
 // Edits after `anchor_time_utc` are marked after the fact, so reviews never treat them as
 // a plan that existed before the trade (docs/24 §2, LV-15).
 
-import { specFor, toTicks } from "./trades.ts";
+import { DEFAULT_OWNER_USER_ID, specFor, toTicks } from "./trades.ts";
 
 export type PlanPreset =
   | "pre_globex"
@@ -96,6 +96,11 @@ export interface PlanningSession {
   id: string;
   user_id: string;
   session_date: string; // YYYY-MM-DD
+  /**
+   * The instrument the levels were marked on (`MES`, `MNQ`), PS-3. Levels are drawn only on a chart of
+   * the same instrument (OD-15, docs/24 §3). Optional: a plan without one is never drawn on a chart.
+   */
+  symbol?: string;
   name: string;
   preset: PlanPreset | null;
   /** ISO UTC timestamp representing the planned start/cutoff time. */
@@ -109,6 +114,8 @@ export interface PlanningSession {
   /** Revision history tracking every edit. */
   revisions: readonly PlanRevision[];
   archived?: boolean;
+  /** PS-4: the one lesson the after-session review carries to the next session. Not part of the plan, so no revision. */
+  lesson?: string;
 }
 
 export const PLAN_LIMITS = {
@@ -117,6 +124,7 @@ export const PLAN_LIMITS = {
   label: 40,
   note: 200,
   maxLevels: 30,
+  lesson: 280,
 } as const;
 
 export function isAfterTheFact(savedAtUtc: string, anchorTimeUtc: string | null | undefined): boolean {
@@ -152,4 +160,33 @@ export function createPlannedLevel(input: {
     kind,
     ...(note ? { note } : {}),
   };
+}
+
+/** A new planning session as the plan sheet saves it: owner id (Invariant 7) and instrument (PS-3, OD-15). */
+export function newPlanningSession(input: Pick<PlanningSession,
+  "id" | "session_date" | "name" | "preset" | "anchor_time_utc" | "observations" | "bias" | "watch_playbook_ids" | "levels"
+> & { symbol: string; now: string }): PlanningSession {
+  const { now, symbol, ...rest } = input;
+  return {
+    ...rest,
+    user_id: DEFAULT_OWNER_USER_ID,
+    symbol: symbol.toUpperCase(),
+    created_at: now,
+    updated_at: now,
+    revisions: [],
+  };
+}
+
+/**
+ * The plan's levels, watch list, bias and observations as they stood at `asOf` (PS-3, PS-4, B-14). Each
+ * revision holds what its edit replaced, so the first revision saved after `asOf` is the state at that
+ * moment. Null when the plan was created after `asOf`.
+ */
+export function planStateAsOf(plan: PlanningSession, asOf: number): Pick<PlanRevision, "levels" | "watch_playbook_ids" | "bias" | "observations"> | null {
+  if (!(Date.parse(plan.created_at) <= asOf)) return null;
+  const later = [...plan.revisions]
+    .filter((revision) => Date.parse(revision.saved_at) > asOf)
+    .sort((a, b) => Date.parse(a.saved_at) - Date.parse(b.saved_at))[0];
+  const state = later ?? plan;
+  return { levels: state.levels, watch_playbook_ids: state.watch_playbook_ids, bias: state.bias ?? null, observations: state.observations };
 }

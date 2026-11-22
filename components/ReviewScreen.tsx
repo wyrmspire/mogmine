@@ -48,7 +48,7 @@ function Queue() {
         <div className="specular-card empty-state">
           <h3>{ids.length ? `${done} of ${ids.length} reviewed this pass` : "Nothing is waiting"}</h3>
           <p>{ids.length && done < ids.length ? "Skipped trades stay in the queue for next time." : "Every trade has been reviewed."}</p>
-          <div className="actions"><Link className="btn-secondary" href="/feed">Open the feed</Link></div>
+          <div className="actions"><Link className="btn-secondary" href="/feed">Open the feed</Link><Link className="btn-secondary" href="/drills">Drills: Take it?</Link></div>
         </div>
       </div>
     );
@@ -74,6 +74,7 @@ function Queue() {
     <div className="page" style={{ maxWidth: 720 }}>
       <div className="page-head">
         <div><span className="eyebrow">Review queue</span><h1>{position + 1} of {ids.length}</h1><p>Playbook, tags, one line. Then mark it reviewed.</p></div>
+        <Link className="btn-secondary drill-link" href="/drills">Drills</Link>
       </div>
 
       <section className="specular-card queue-card" aria-label={`Trade ${position + 1} of ${ids.length}`}>
