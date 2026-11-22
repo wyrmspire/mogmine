@@ -123,6 +123,8 @@ Ordered rules from the playbook (R-07 store), a **Skip when…** list (new optio
 
 From `R-08a` selectors only: excludes `is_sample` and `open`, skips `rMultiple === null` and prints the skip count, gross only. Minimum sample for any rate: 10 trades (interim; `OD-46` e).
 
+Built as `playbookCardData` in `lib/playbook-card.ts` (CD-3a). Win rate and average R stay empty below 10 trades. The trade count and R skips always print. A blind *Take it* means `take_again: "yes"`. The **Skip when…** list waits for `OD-46` (d).
+
 ### 5.4 Uses
 
 Glance before the session; a **binder** view (grid of all playbook cards); share a setup with Shield on, which hides results entirely and shows rules and example only.
