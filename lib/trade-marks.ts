@@ -30,6 +30,7 @@ export type SegmentMark = MarkArea & {
   width?: number;
   basis?: EventBasis;
   faint?: true;
+  paneEdge?: "left" | "right" | "both";
 };
 
 export interface FlagMark {
@@ -83,6 +84,8 @@ export interface BuildMarksOptions {
   /** Current visible right edge, as a UTC instant. */
   viewRightTime?: number;
   showContinuation?: boolean;
+  /** Live chart rays reach the pane edge as it pans. Earlier rays are enabled by ‹30. */
+  continuationEdges?: { before: boolean };
   archived?: boolean;
 }
 
@@ -416,12 +419,22 @@ export function buildMarks(
   }
 
   const continuation = span(exit, right);
-  if (detail === "medium" && options.showContinuation !== false && continuation
-    && continuation.t0 < continuation.t1) {
-    const extend = (price: number, tone: MarkTone, basis?: EventBasis, width = 1) => marks.push({
-      kind: "segment", ...continuation, layer: "plan", p0: price, p1: price,
-      dash: "dotted", tone, width, faint: true, ...(basis ? { basis } : {}),
-    });
+  const { continuationEdges } = options;
+  if (detail === "medium" && options.showContinuation !== false && exit
+    && (continuationEdges || (continuation && continuation.t0 < continuation.t1))) {
+    const extend = (price: number, tone: MarkTone, basis?: EventBasis, width = 1) => {
+      const ray = {
+        kind: "segment", layer: "plan", p0: price, p1: price, dash: "dotted", tone,
+        width, faint: true, ...(basis ? { basis } : {}),
+      } as const;
+      marks.push({
+        ...ray, ...(continuation ?? { t0: exit.t, t1: exit.t }),
+        ...(continuationEdges ? { paneEdge: "right" } as const : {}),
+      });
+      if (entry && continuationEdges?.before) {
+        marks.push({ ...ray, t0: candleTimes[0], t1: entry.t, paneEdge: "left" });
+      }
+    };
     if (entryPrice != null) extend(entryPrice, "muted", fillBasis);
     const lastStop = stopAtExit(derived);
     if (lastStop) {
@@ -434,7 +447,7 @@ export function buildMarks(
 
     const touches = [facts?.hindsight.last_stop_touch, ...(facts?.hindsight.target_touches ?? [])];
     for (const touch of touches) {
-      if (touch && touch.time > continuation.t0 && touch.time <= continuation.t1 && exactBarTimes.has(touch.time)) {
+      if (touch && continuation && touch.time > continuation.t0 && touch.time <= continuation.t1 && exactBarTimes.has(touch.time)) {
         marks.push({
           kind: "flag", t: touch.time, price: touch.price, shape: "dot", text: "", basis: "inferred",
           tone: touch.kind === "stop" ? "risk" : "profit", hollow: true,

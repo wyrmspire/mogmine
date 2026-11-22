@@ -36,10 +36,10 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 2. **`R-08b` — Running stats screen/card, done** (`components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`).
 3. **`TD-1` (Issue `#35`) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE, post-exit touches and inferred hindsight for cancelled plans, with golden facts for all seven trade documents. Displayed bars supply both the Canvas flags and their Data notes.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks`, done** (`docs/15` §3.4): deterministic `Mark[]` display list with real bar anchors (`B-23`), the `D-010` fills-only look and exact 1m/5m goldens for all seven trade fixtures.
-5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
+5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`, done** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
 7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
-8. **`LV-1` — Pure computed levels** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. Draft PR #152 is queued behind the full `TD-3` painter per `D-011`.
+8. **`LV-1` — Pure computed levels, done** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. PR #152 follows the merged TD-3 painter under `D-011`.
 9. **`LV-2` — Draw computed levels on the trade chart** (`SessionLevelsPrimitive`, Canvas only, view-options toggle).
 10. **`PS-1` — Planning-session model and store** (`mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup). Shape is `OD-51`.
 11. **`PS-2` — Plan screen on Today** (start a "Pre-…" session fast, levels with tick steppers, observations).
@@ -78,6 +78,19 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — LV-1 (#26), recurring review 20261122T170003Z, Core math lane released
+
+- GitHub merged TD-3 in PR #153 at `0c2196f`. PR #152 incorporates that commit, keeps both branches' handoffs, and covers the LV-1 calculations in docs/24 §5.
+- The combined checkout passed 424 tests and 96 targeted tests with `TZ=Pacific/Auckland`. Typecheck and diff checks passed, lint reported one existing PostCSS warning, the build generated 8/8 pages, and the Chrome pixel test passed.
+- Next is LV-2. Feed `SessionLevelsPrimitive` the same-instrument LV-1 snapshot. Test proxy settlement, withheld levels when a native bar is missing, view-toggle state and unchanged zoom across timeframes, and legible labels in a 390×844 Trade Card PNG. Keep the exchange calendar under OD-35.
+
+### 2026-11-22 — Codex — TD-3 (#34), recurring review 20261122T170003Z, Chart lane released
+
+- Trade Detail, Data notes and Trade Card export share displayed-candle facts. The Canvas painter draws zones, stop steps, flags, excursion brackets and hatches from `Mark[]`. Medium detail rays follow the pane, and ‹30 and Fit toggle the leftward rays.
+- `npm test` passed 415. The Auckland-time chart, mark, observer and Data-note suites passed 74. Typecheck and diff check passed. Lint reported one existing PostCSS warning. The webpack build generated 8/8 pages. The Chrome pixel test verified D-010 alpha, frameless fills, one-bar width, the trail steps and both hatches.
+- Chrome at 390×844 passed 45 → 75 bars → Fit, the timeframe round trip and 1080×1350 PNG export. A same-time high correction from 7611 to 7609 removed the target-touch flag and its 09:36/09:35 Data note without replacing the canvas. Real-phone checks remain under AC-11.
+- After TD-3 lands, update LV-1 (#26, draft PR #152) from `main`, check it again, and merge before starting LV-2.
 
 ### 2026-11-22 — Codex — recurring review 20261122T163003Z, Core math lane released
 
