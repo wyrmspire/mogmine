@@ -127,6 +127,11 @@ Did:      Reproduced and fixed false target findings for orderless exits and sha
 Files:    `lib/trade-bar-validation.ts`, `lib/trade-document.ts`, `lib/trades.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15-trade-document-and-render-grammar.md`, `DECISIONS.md`, `NOTES.md`.
 Checked:  `npm test` passed 347 tests. `TZ=Pacific/Auckland node --test lib/__tests__/trade-observer.test.ts` passed 27 tests. Typecheck passed, lint reported 0 errors and 1 existing PostCSS warning, the build generated 8/8 pages, and `git diff --check origin/main` passed.
 Left:     TD-2 (#34) needs 1m and 5m mark goldens for all seven fixtures. Carry observer findings into flags with their inferred basis, exact bar and price. TD-3 needs dotted `≈` marks, a matching text equivalent, and a screenshot check of the D-010 fills-only design.
+### 2026-11-22 — Codex — session indicators and trend math, Core math lane released
+Did: Added point-in-time VWAP, POC/value area, prior-day, overnight and week-to-date extremes, dated settlement, and trend/level distances. Uses regular New York hours and an explicit anchor. Interim profile and trend choices are in `OD-50`.
+Files: [Indicator summary](docs/codex-indicator-summary.md#files-changed) and [audit](docs/codex-indicator-audit.md).
+Checked: `npm test` 342 passed, 0 failed. Indicator tests under `TZ=Pacific/Auckland` 13 passed. Typecheck exited 0, lint had 0 errors and the existing PostCSS warning, and diff check exited 0.
+Left: Supply session coverage and freeze the entry snapshot before wiring the chart and card. The audit details candle-only autoscale and off-frame flags. Work is local on `codex/indicator-level-trend-math`.
 
 ### 2026-11-21 — Claude (Opus 5.5 session) — R-07a + R-07b playbook store and editor, Data lane released
 Did:      `lib/playbooks-store.ts` (`mogmine-playbooks-v1`, seeds, `user_id`, archive-only, validation, backup round-trip) and Tune → Playbooks (`components/PlaybookEditor.tsx`: add, rename, default style, add/reorder/remove rules, archive/restore). Pickers, stats labels, rows and Clean Run setup read the store. Samples stay on seed rules. Open choices recorded as `OD-49`.

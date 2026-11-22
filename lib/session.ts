@@ -6,7 +6,7 @@ const NEW_YORK = "America/New_York";
 const nyFormat = new Intl.DateTimeFormat("en-US", {
   timeZone: NEW_YORK,
   hourCycle: "h23",
-  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit",
+  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
 });
 
 const DAY_MS = 86_400_000;
@@ -77,19 +77,10 @@ export function expectedInsideBarTimes(entry: number, exit: number, barMs: numbe
   return times;
 }
 
-function zonedHourUtc(date: string, hour: number): number {
+function zonedTimeUtc(date: string, hour: number, minute = 0): number {
   const [year, month, day] = date.split("-").map(Number);
-  const utcGuess = Date.UTC(year, month - 1, day, hour, 0);
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: NEW_YORK,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const parts = Object.fromEntries(fmt.formatToParts(new Date(utcGuess)).map((part) => [part.type, part.value]));
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+  const parts = Object.fromEntries(nyFormat.formatToParts(new Date(utcGuess)).map((part) => [part.type, part.value]));
   const asIfUtc = Date.UTC(
     Number(parts.year),
     Number(parts.month) - 1,
@@ -98,6 +89,26 @@ function zonedHourUtc(date: string, hour: number): number {
     Number(parts.minute),
   );
   return utcGuess - (asIfUtc - utcGuess);
+}
+
+/** Session dates are day labels. UTC here performs calendar arithmetic on the label. */
+export function offsetSessionDate(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+export function sessionWeekMonday(date: string): string {
+  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return offsetSessionDate(date, -((weekday + 6) % 7));
+}
+
+/** Regular MES/MNQ hours for a trading date, in UTC milliseconds (OD-35). */
+export function equityIndexSessionBounds(date: string) {
+  return {
+    open: zonedTimeUtc(offsetSessionDate(date, -1), 18),
+    rthOpen: zonedTimeUtc(date, 9, 30),
+    rthClose: zonedTimeUtc(date, 16),
+    close: zonedTimeUtc(date, 17),
+  };
 }
 
 /**
@@ -118,8 +129,8 @@ export function sessionDate(instant: number | string) {
 /** The 17:00 America/New_York close after an exit, including evening and weekend session assignment. */
 export function sessionCloseUtc(instant: number | string) {
   const ms = typeof instant === "string" ? Date.parse(instant) : instant;
-  const assignedClose = zonedHourUtc(sessionDate(ms), 17);
-  return assignedClose >= ms ? assignedClose : zonedHourUtc(sessionDate(ms + DAY_MS), 17);
+  const assignedClose = zonedTimeUtc(sessionDate(ms), 17);
+  return assignedClose >= ms ? assignedClose : zonedTimeUtc(sessionDate(ms + DAY_MS), 17);
 }
 
 const dayLabel = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
