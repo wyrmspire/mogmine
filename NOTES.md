@@ -60,7 +60,7 @@ Claim a lane before starting. Clear the claim when you stop.
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
 | Core math | — | | |
-| Chart | Antigravity | 2026-11-22 | TD-2: pure `buildMarks` display list + golden tests (#34) |
+| Chart | — | | |
 | App shell and notes | — | | |
 | Data | Claude (Opus 5.5 session) | 2026-11-21 | `R-07a` + `R-07b` playbook store and editor. Worker: skip R-07, take TD-1 → TD-3. |
 | Market data | — | | |
@@ -68,6 +68,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — agent (Antigravity) — TD-2 buildMarks pure display list (#34), Chart lane released
+Did:      Implemented `buildMarks(derived, facts, timeframe, detail, shield, options)` in `lib/trade-marks.ts` (docs/15 §3.4, issue #34, D-010 fills-only look: no purple, faint red/green plan fills, actual band / scratch line, stepped stop path, excursion bracket, observer findings, entry/exit flags, locked profit/past stop hatches, hindsight continuation). Implemented `snapTime` with B-23 bar snapping and bounded tolerance. Added unit and golden tests across 1m and 5m for all 7 fixtures in `lib/__tests__/trade-marks.test.ts`.
+Files:    `lib/trade-marks.ts` (new), `lib/__tests__/trade-marks.test.ts` (new), `NOTES.md`.
+Verified: `npm test` passed 363 tests; `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning; `NEXT_TELEMETRY_DISABLED=1 npm run build` generated 8/8 routes; `git diff --check origin/main...HEAD` clean.
+Left:     Unblocks `TD-3` (Issue #34 canvas part: `PositionBoxPrimitive` painting `Mark[]` with Canvas flags, text equivalents, and D-010 screenshot check).
 
 ### 2026-11-22 — Codex — TD-2 worker review and TD-1 repair, Core math lane released
 Did:      Reviewed run `20261122T003028Z`. `feat/td-2-build-marks` at `961b2b9` contains the Chart lane claim. Reproduced the TD-1 false finding for a same-price target when an anonymous fill preceded a fill with an explicit order ID. The repair reserves linked fill quantity within each working segment (OD-49).
