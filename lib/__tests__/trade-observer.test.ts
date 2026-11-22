@@ -256,6 +256,88 @@ test("anonymous fills are allocated to working orders in plan order and can span
   assert.deepEqual(observeTrade(deriveTrade(doc), prices).findings, []);
 });
 
+for (const firstQty of [1, 2]) {
+  test(`an anonymous target fill leaves room for a later linked fill in a ${firstQty}-lot segment`, () => {
+    const doc = fixture("ex-partials");
+    const [plan, entry, partial, , exit] = doc.events;
+    assert.equal(plan.type, "plan");
+    assert.equal(entry.type, "fill");
+    assert.equal(partial.type, "fill");
+    assert.equal(exit.type, "fill");
+    plan.qty = firstQty + 1;
+    plan.targets = [{ key: "t1", price: 7605, qty: firstQty }, { key: "t2", price: 7605, qty: 1 }];
+    doc.events = [
+      plan, { ...entry, qty: plan.qty },
+      { seq: 3, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "first", target: "t1", qty: firstQty, price: 7605, basis: "broker" },
+      { seq: 4, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "second", target: "t2", qty: 1, price: 7605, basis: "broker" },
+      { ...partial, seq: 5, qty: firstQty },
+      { ...exit, seq: 6, order: "first", price: 7605.25, reason: undefined },
+    ];
+
+    const derived = deriveTrade(doc);
+    assert.deepEqual(observeTrade(derived, bars([["15:38", 7601, 7605]])).findings, []);
+    assert.deepEqual(derived.working_orders.map(({ order, filled_qty, end_reason }) => [order, filled_qty, end_reason]), [
+      ["first", firstQty, "filled"], ["second", 1, "filled"],
+    ]);
+    assert.deepEqual(derived.position_timeline.slice(1).map(({ reason, target_order_qty }) => [reason, target_order_qty]), [
+      ["target", firstQty], ["target", 1],
+    ]);
+  });
+}
+
+for (const boundary of ["cancel", "modify"] as const) {
+  test(`a ${boundary} keeps a later linked fill from reserving the old target segment`, () => {
+    const doc = fixture("ex-partials");
+    const [plan, entry, partial, , exit] = doc.events;
+    assert.equal(plan.type, "plan");
+    assert.equal(entry.type, "fill");
+    assert.equal(partial.type, "fill");
+    assert.equal(exit.type, "fill");
+    plan.qty = 4;
+    plan.targets = [{ key: "t1", price: 7605, qty: 3 }, { key: "t2", price: 7605, qty: 1 }];
+    doc.events = [
+      plan, { ...entry, qty: 4 },
+      { seq: 3, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "first", target: "t1", qty: 3, price: 7605, basis: "broker" },
+      { seq: 4, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "second", target: "t2", qty: 1, price: 7605, basis: "broker" },
+      { ...partial, seq: 5, qty: 2 },
+      { seq: 6, t: "2026-11-12T15:45:00Z", type: boundary, order: "first", basis: "broker",
+        ...(boundary === "modify" ? { price: 7610, qty: 2 } : {}) },
+      { ...exit, seq: 7, order: "first", qty: 2, price: boundary === "modify" ? 7610 : 7605 },
+    ];
+
+    const derived = deriveTrade(doc);
+    const segments = derived.working_orders.map(({ order, price, filled_qty, end_reason }) => [order, price, filled_qty, end_reason]);
+    assert.deepEqual(segments, [
+      ["first", 7605, 2, boundary === "modify" ? "modified" : "cancelled"],
+      ["second", 7605, 0, "position_closed"],
+      ...(boundary === "modify" ? [["first", 7610, 2, "filled"]] : []),
+    ]);
+  });
+}
+
+test("a flat position ends reservations from later linked fills", () => {
+  const doc = fixture("ex-partials");
+  const [plan, entry, partial, , exit] = doc.events;
+  assert.equal(plan.type, "plan");
+  assert.equal(entry.type, "fill");
+  assert.equal(exit.type, "fill");
+  plan.targets[1].price = plan.targets[0].price;
+  doc.events = [
+    plan, entry,
+    { seq: 3, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "first", target: "t1", qty: 1, price: 7605, basis: "broker" },
+    { seq: 4, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "second", target: "t2", qty: 1, price: 7605, basis: "broker" },
+    { ...partial, seq: 5 },
+    { ...exit, seq: 6, reason: "manual" },
+    { ...entry, seq: 7, t: "2026-11-12T16:07:00Z", qty: 1 },
+    { ...exit, seq: 8, t: "2026-11-12T16:08:00Z", price: 7605, order: "first" },
+  ];
+
+  const derived = deriveTrade(doc);
+  assert.deepEqual(derived.working_orders.map(({ order, filled_qty, end_reason }) => [order, filled_qty, end_reason]), [
+    ["first", 1, "filled"], ["second", 0, "position_closed"],
+  ]);
+});
+
 test("an order's explicit target takes precedence over same-price fallback", () => {
   const doc = fixture("ex-partials");
   const [plan, entry, partial, move, exit] = doc.events;

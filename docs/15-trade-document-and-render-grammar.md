@@ -191,7 +191,7 @@ Every event also has `seq`, `t` (UTC) and `basis`.
 
 - MFE and MAE use actual fill prices and bars entirely inside a positive-position window. Fewer than two such bars means the excursion is unavailable. A gap in the expected bars gives partial excursion coverage. Open trades have no final excursion.
 - `stop_traded_through`: for each stop segment, the first completed bar that trades through that segment's price while the position is open.
-- `target_traded_through`: the same for each unfilled target. Use the working order's price and remaining quantity for each segment. Match target fills by order ID when present. For a fill without an ID, match active targets at its price, taking explicit target keys in plan order and breaking ties by placement order. Apply any remaining executed quantity to unmatched planned targets at that price in plan order (`OD-49`).
+- `target_traded_through`: the same for each unfilled target. Use the working order's price and remaining quantity for each segment. Reserve quantity for fills linked by order ID within that segment. For a fill without an ID, match the remaining quantity of active targets at its price, taking explicit target keys in plan order and breaking ties by placement order. A modification, cancellation, or flat position ends the current segment. Apply any remaining executed quantity to unmatched planned targets at that price in plan order (`OD-49`).
 - `fill_outside_bar`: any non-voided fill price outside its own bar's range plus the shared four-tick tolerance for the traded instrument (B-12, `OD-15`).
 - After-exit facts: the first later touch of the stop in force at the exit and of each planned target, up to the assigned New York session close (hindsight, §2.5).
 

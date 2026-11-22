@@ -69,6 +69,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Codex — TD-2 worker review and TD-1 repair, Core math lane released
+Did:      Reviewed run `20261122T003028Z`. `feat/td-2-build-marks` at `961b2b9` contains the Chart lane claim. Reproduced the TD-1 false finding for a same-price target when an anonymous fill preceded a fill with an explicit order ID. The repair reserves linked fill quantity within each working segment (OD-49).
+Files:    `lib/trade-document.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15-trade-document-and-render-grammar.md`, `DECISIONS.md`, `NOTES.md`.
+Verified: TD-2 baseline had 347 passing tests. On the repair, `npm test` passed 352, `TZ=Pacific/Auckland node --test lib/__tests__/trade-observer.test.ts` passed 32, and typecheck passed. Lint had 0 errors and 1 existing PostCSS warning. `NEXT_TELEMETRY_DISABLED=1 npm run build` generated 8/8 static pages. Diff check passed.
+Left:     Resume TD-2 (#34) from current `main`, retaining the worker's topic commit. Add 1m/5m goldens for all seven fixtures, with missing-bar alignment and inferred finding provenance. TD-3 still needs the Canvas flags, equivalent text and D-010 screenshot check. `ex-nottaken` plan hindsight still needs an observer fact contract for the hypothetical plan.
+
 ### 2026-11-22 — Codex — reviewed TD-1, Core math lane released
 Did:      Reproduced and fixed false target findings for orderless exits and shared target prices, the exact four-tick boundary for decimal contracts, and fill findings against a forming bar on open trades. Same-price allocation remains an interim rule under OD-49.
 Files:    `lib/trade-bar-validation.ts`, `lib/trade-document.ts`, `lib/trades.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15-trade-document-and-render-grammar.md`, `DECISIONS.md`, `NOTES.md`.
