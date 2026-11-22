@@ -25,8 +25,10 @@ import { buildShareCard, shouldBuildShareCard } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime, formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { validateTradeAgainstBars } from "@/lib/trade-bar-validation";
-import { TIMEFRAMES, TIMEFRAME_MINUTES, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { observeTrade, validateTradeAgainstBars } from "@/lib/trade-bar-validation";
+import { deriveTrade, fromLegacy } from "@/lib/trade-document";
+import { buildFindingMarks } from "@/lib/trade-marks";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, aggregateCandles, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext } from "@/lib/ui";
@@ -231,6 +233,21 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const ready = candles?.status === "ready";
   const baseMinutes = TIMEFRAME_MINUTES[base];
+  const displayedBars = useMemo(() => {
+    if (!ready) return null;
+    return timeframe === base ? candles.candles : aggregateCandles(candles.candles, timeframe);
+  }, [ready, candles, base, timeframe]);
+  const derived = useMemo(() => deriveTrade(fromLegacy(trade)), [trade]);
+  const observation = useMemo(
+    () => displayedBars && observeTrade(derived, displayedBars, TIMEFRAME_MINUTES[timeframe]),
+    [derived, displayedBars, timeframe],
+  );
+  const findingMarks = useMemo(
+    () => observation?.findings.length && displayedBars
+      ? buildFindingMarks(observation.findings, new Set(displayedBars.map((bar) => bar.time)))
+      : [],
+    [observation, displayedBars],
+  );
   const ex = useMemo(() => (ready ? excursions(trade, candles.candles, baseMinutes) : null), [ready, candles, trade, baseMinutes]);
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
@@ -246,18 +263,17 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     const exitOff = Boolean(exitBar) && trade.exit_price != null && !fillInsideBar(trade.exit_price, exitBar, trade.symbol);
     return entryOff || exitOff;
   }, [ready, candles, trade, baseMinutes]);
-  const barCheck = useMemo(() => {
-    // The exit-bar checks have nothing to test on an open trade; its entry bar anchors the load (R-03c).
+  const sourceCheck = useMemo(() => {
+    // Keep missing source bars visible when several source bars form one displayed candle.
     if (!ready || trade.is_sample || open) return null;
-    return validateTradeAgainstBars(trade, candles.candles, baseMinutes);
-  }, [ready, candles, trade, baseMinutes, open]);
+    return timeframe === base ? observation : validateTradeAgainstBars(trade, candles.candles, baseMinutes);
+  }, [ready, candles, trade, base, baseMinutes, timeframe, observation, open]);
   // Null for an open trade: there is no "after the exit" yet.
   const hindsight = useMemo(() => {
     if (!ready) return null;
     return buildHindsight(trade, candles.candles, candles.baseTimeframe);
   }, [ready, trade, candles]);
-  const barIssues = barCheck?.issues ?? [];
-  const barCoverage = barCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
+  const barCoverage = sourceCheck?.coverage ?? (candles?.status === "none" && !trade.is_sample ? "missing" as const : null);
   // Issue #83: every data-quality note collapses into one chip. Hindsight is not a data note.
   const dataNotes = collectDataNotes({
     noCandles: candles?.status === "none" && !trade.is_sample,
@@ -265,8 +281,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     misaligned,
     ticker: trade.yahoo_ticker,
     coverage: barCoverage,
-    chronologyUnresolved: barCheck?.chronology === "unresolved",
-    issueCodes: barIssues.map((issue) => issue.code),
+    chronologyUnresolved: observation?.coverage === "complete" && observation.chronology === "unresolved",
+    findings: observation?.findings ?? [],
+    symbol: trade.symbol,
+    zone,
   });
   const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
   const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
@@ -414,7 +432,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="chart-frame">
             {ready ? (
               <>
-                <TradeChart ref={chartRef} trade={trade} candles={candles.candles} baseTimeframe={base} timeframe={timeframe} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} findingMarks={findingMarks} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>

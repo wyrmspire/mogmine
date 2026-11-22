@@ -5,7 +5,9 @@
 // Tone rule: "untrusted" (amber) only when bar coverage is missing or partial, because MAE/MFE and
 // the bar check cannot be fully trusted. Every other note is "quiet" (muted, like `.chart-note.fact`).
 
-import type { BarCoverage, TradeBarIssueCode } from "./trade-bar-validation.ts";
+import { formatPrice } from "./format.ts";
+import { formatDetailTime } from "./time.ts";
+import type { BarCoverage, TradeBarFinding } from "./trade-bar-validation.ts";
 
 export type DataNoteId =
   | "coverage_missing"
@@ -13,9 +15,7 @@ export type DataNoteId =
   | "not_1m"
   | "continuous_contract"
   | "same_bar_unresolved"
-  | "stop_crossed"
-  | "target_crossed"
-  | "exit_outside_bar";
+  | `${TradeBarFinding["code"]}:${string}`;
 
 export type DataNoteTone = "untrusted" | "quiet";
 
@@ -35,10 +35,18 @@ export interface DataNoteInput {
   ticker: string;
   // Null when there is no bar check (sample trades, or still loading).
   coverage: BarCoverage | null;
-  // Only meaningful when coverage is "complete".
+  // The displayed bar contains both fills. Only meaningful when coverage is "complete".
   chronologyUnresolved: boolean;
-  issueCodes: readonly TradeBarIssueCode[];
+  findings: readonly TradeBarFinding[];
+  symbol: string;
+  zone?: string;
 }
+
+const findingSentence: Record<TradeBarFinding["code"], (price: string, time: string) => string> = {
+  stop_traded_through: (price, time) => `The ${time} bar reached or passed the recorded stop at ${price} while the position was open.`,
+  target_traded_through: (price, time) => `The ${time} bar reached or passed the unfilled target at ${price} while the position was open.`,
+  fill_outside_bar: (price, time) => `The recorded fill at ${price} is outside the ${time} bar by more than the price tolerance.`,
+};
 
 export function collectDataNotes(input: DataNoteInput): DataNote[] {
   // With no candles the chart is not shown, so the only note is the coverage one (never duplicated).
@@ -58,14 +66,13 @@ export function collectDataNotes(input: DataNoteInput): DataNote[] {
   if (input.coverage === "complete" && input.chronologyUnresolved) {
     notes.push({ id: "same_bar_unresolved", text: "Entry and exit sit in the same bar, so this check cannot establish order between them.", tone: "quiet" });
   }
-  if (input.issueCodes.includes("stop_crossed_before_exit")) {
-    notes.push({ id: "stop_crossed", text: "Price passed your planned stop before the recorded exit. If you moved or trailed the stop, that is not recorded yet.", tone: "quiet" });
-  }
-  if (input.issueCodes.includes("target_crossed_before_exit")) {
-    notes.push({ id: "target_crossed", text: "Price passed your planned target before the recorded exit, which was worse than that target.", tone: "quiet" });
-  }
-  if (input.issueCodes.includes("exit_outside_bar")) {
-    notes.push({ id: "exit_outside_bar", text: "The recorded exit sits outside the Yahoo bar at that time.", tone: "quiet" });
+  for (const { code, segment, barTime, price, basis } of input.findings) {
+    const sentence = findingSentence[code](formatPrice(price, input.symbol), formatDetailTime(barTime, input.zone));
+    notes.push({
+      id: `${code}:${barTime}:${price}:${segment}`,
+      text: basis === "inferred" ? `≈ ${sentence}` : sentence,
+      tone: "quiet",
+    });
   }
   return notes;
 }

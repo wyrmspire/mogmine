@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useMemo, useRef, useSyncExternalStore } from "react";
+import { useEffect, useImperativeHandle, useRef, useSyncExternalStore } from "react";
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
 import type { PositionBoxConfig } from "./PositionBoxPrimitive";
@@ -9,8 +9,9 @@ import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { TIMEFRAME_MINUTES, aggregateCandles, alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, isScratch, specFor, visibleLogicalBars } from "@/lib/trades";
+import { alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, isScratch, specFor, visibleLogicalBars } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
+import type { FlagMark } from "@/lib/trade-marks";
 import { buildHindsight } from "@/lib/hindsight";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
@@ -44,10 +45,10 @@ interface Props {
   ref?: Ref<TradeChartHandle>;
   /** An open trade (R-03c) is drawn from its entry bar to the last loaded bar, with no exit. */
   trade: TradeRecord;
-  candles: Candle[];
-  /** Minutes per bar of `candles` (1 unless Yahoo no longer serves 1m for this trade). */
-  baseTimeframe: Timeframe;
+  /** The same bars Trade Detail uses for its observer findings. */
+  bars: Candle[];
   timeframe: Timeframe;
+  findingMarks: readonly FlagMark[];
   zone: string;
   /** Shield / privacy: the on-chart pill shows R and points, never dollars (UX-71). */
   privacy: boolean;
@@ -145,21 +146,16 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
   state.holdTimer = window.setTimeout(apply, 80);
 }
 
-export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone, privacy, readout, onRendered, onFitChange, detailLevel = "medium", onExtensionChange }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, findingMarks, zone, privacy, readout, onRendered, onFitChange, detailLevel = "medium", onExtensionChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const barTimeframe = TIMEFRAME_MINUTES[timeframe] <= TIMEFRAME_MINUTES[baseTimeframe] ? baseTimeframe : timeframe;
-  const bars = useMemo(
-    () => barTimeframe === baseTimeframe ? candles : aggregateCandles(candles, barTimeframe),
-    [candles, barTimeframe, baseTimeframe],
-  );
-  const latest = useRef({ trade, bars, barTimeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange });
+  const latest = useRef({ trade, bars, timeframe, findingMarks, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange });
   const renderTimer = useRef<number | undefined>(undefined);
-  const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), barTimeframe);
+  const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, barTimeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, findingMarks, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -217,7 +213,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     const p = latest.current;
     if (!l || !p.theme) return;
     const t: ChartTheme = p.theme;
-    const { trade: tr, bars, barTimeframe } = p;
+    const { trade: tr, bars, timeframe: barTimeframe } = p;
     if (!bars.length) return;
 
     l.chart.applyOptions({
@@ -271,6 +267,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     const end = boxEnd(tr, bars);
     const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
+    l.primitive.setFindingMarks(p.findingMarks, t);
     l.primitive.setHidden(alignment == null);
     if (alignment) {
       const isLong = tr.direction === "LONG";
@@ -558,14 +555,14 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, barTimeframe, zone, privacy, theme, detailLevel]);
+  }, [trade, bars, timeframe, findingMarks, zone, privacy, theme, detailLevel]);
 
   return <><div
     ref={hostRef}
     className="chart-host"
     role="img"
     aria-label={`${describeTrade(trade, zone, privacy)} Candlestick chart with the position box.`}
-    data-timeframe={barTimeframe}
+    data-timeframe={timeframe}
     data-visible-bars={diagnosticWindow.visibleBars.toFixed(3)}
     data-trade-share={(diagnosticWindow.holdBars / diagnosticWindow.visibleBars).toFixed(4)}
   />

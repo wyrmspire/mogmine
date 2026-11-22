@@ -96,6 +96,18 @@ const findingAppearance: Record<TradeBarFinding["code"], [text: string, tone: Ma
   fill_outside_bar: ["fill outside bar", "muted"],
 };
 
+/** Keep observer flags on the exact bars that supplied the evidence. */
+export function buildFindingMarks(findings: readonly TradeBarFinding[], exactBarTimes: ReadonlySet<number>): FlagMark[] {
+  return findings.filter((finding) => exactBarTimes.has(finding.barTime)).map((finding) => {
+    const [text, tone] = findingAppearance[finding.code];
+    return {
+      kind: "flag", t: finding.barTime, price: finding.price, shape: "dot", tone, basis: finding.basis,
+      text: finding.basis === "inferred" ? `≈ ${text}` : text,
+      finding: { code: finding.code, segment: finding.segment },
+    };
+  });
+}
+
 function resultTone(pnl: number | null): MarkTone {
   return pnl == null || pnl === 0 ? "neutral" : pnl > 0 ? "profit" : "risk";
 }
@@ -343,15 +355,7 @@ export function buildMarks(
     }
   }
 
-  for (const finding of facts?.findings ?? []) {
-    if (!exactBarTimes.has(finding.barTime)) continue;
-    const [text, tone] = findingAppearance[finding.code];
-    marks.push({
-      kind: "flag", t: finding.barTime, price: finding.price, shape: "dot", tone, basis: finding.basis,
-      text: finding.basis === "inferred" ? `≈ ${text}` : text,
-      finding: { code: finding.code, segment: finding.segment },
-    });
-  }
+  marks.push(...buildFindingMarks(facts?.findings ?? [], exactBarTimes));
 
   const lotsByExit = new Map<number, DerivedTrade["closed_lots"]>();
   for (const lot of derived.closed_lots) {

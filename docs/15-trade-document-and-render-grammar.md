@@ -236,6 +236,8 @@ Why this shape:
 
 Call `buildMarks` with `options.candleTimes` containing the displayed timeframe's sorted UTC candle opens. Pass observer facts computed from those same candles. Unresolved anchors omit their marks. Nearby execution anchors carry `approximate` (OD-28). Observer flags keep the exact original bar, price, finding identity and basis. At Medium detail, `options.viewRightTime` bounds the continuation to the last visible candle. `options.archived` returns the execution geometry in archived style.
 
+Trade Detail uses one set of displayed candles for the chart, `observeTrade` and its text equivalents in Data notes (#35). The Canvas flag subset is built by `buildFindingMarks`, which `buildMarks` also calls. Source-candle coverage warnings remain visible when grouping source candles into a coarser chart.
+
 Bracket labels are keyed to their price caps (`low` at `pLow`, `high` at `pHigh`). For a short trade, MFE is the lower cap and MAE is the higher cap. The painter can place either label using its cap alone.
 
 ### 3.5 Example documents
@@ -299,8 +301,8 @@ Agents propose and the owner decides. Each item is also in [DECISIONS.md](../DEC
 | Archived style | None | §2.6 |
 | Flags | Entry and exit flags at fill prices | §2.4 (adds the reason text) |
 | `deriveTrade`, `fromLegacy` | Built (`lib/trade-document.ts`, issue #33) | §3.2, §3.3, §3.6 |
-| `observeTrade` | Built (`lib/trade-bar-validation.ts`, pure slice of #35) | Chart flags and text equivalents follow the display list |
+| `observeTrade` | Built. Displayed-candle findings have Canvas flags and text equivalents (#35). | §3.3–3.4 |
 | `buildMarks` | Built as a pure display list (`lib/trade-marks.ts`, issue #34 TD-2) | Canvas integration and pixel verification in TD-3 |
 | Fixtures | `fixtures/sample-bars.json`, `fixtures/levelsets/` | `fixtures/trades/`, §3.5 |
 
-Nothing on the target list is drawn on a phone yet. Each element needs the §4 mobile checks in [AGENTS.md](../AGENTS.md) when it lands.
+Each chart addition needs the §4 mobile checks in [AGENTS.md](../AGENTS.md) when it lands. Native phone verification is tracked by AC-11.

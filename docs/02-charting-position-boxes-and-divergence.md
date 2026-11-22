@@ -29,8 +29,9 @@ This is what `components/PositionBoxPrimitive.ts` draws today. It is fills only:
 2. **ACTUAL:** one stronger fill from the entry fill to the exit fill, in the result colour: green for a win, red for a loss, gray for a scratch (at least 2 px tall, so a flat exit is still visible). Fill opacity follows the **Position Box Opacity** slider (`15%` to `65%`).
 3. **PATH and flags:** a thin dotted line from the entry fill to the exit fill, with a flag at each fill price (entry neutral, exit in the result colour). An approximate alignment (issue #64) gets a finer, fainter dash and a `≈` mark.
 4. **KEY level (optional):** a faint dotted line across the pane with a small low-contrast `KEY` pill at the right edge.
+5. **OBSERVATIONS:** a dotted flag at the observed bar and price, with an `≈` label for inferred evidence. The Data notes chip below the chart gives each flag's time and price as text.
 
-The target design is in [15 — Trade Document & Render Grammar](15-trade-document-and-render-grammar.md) §2: a purple outline on the plan, a teal frame on the actual, a stepped stop path, MFE and MAE brackets (never rectangles), dotted hindsight continuation, and the archived style. Where this section and doc 15 differ, this section describes what is built and doc 15 describes what is intended. The owner decisions of 2026-11-15 that change the box are in doc 15 §1.
+The target design is in [15 — Trade Document & Render Grammar](15-trade-document-and-render-grammar.md) §2: fills-only plan and actual zones, a stepped stop path, MFE and MAE brackets, dotted hindsight continuation, and the archived style. The owner decisions of 2026-11-15 are in doc 15 §1.
 
 The price autoscale always includes the planned target, planned stop and actual exit in addition to the visible candles. The primitive exposes those bounds and the candlestick series merges them into its own autoscale range; **Fit** restores price autoscale as well as the duration-derived time window. A missing planned target is labelled “No target set” and does not invent a profit zone.
 
@@ -46,7 +47,7 @@ The stored `trade_style` field and `classifyTrade` remain for data compatibility
 
 Samples are historical market-based scenarios, not broker-confirmed fills. They follow the same market-data rule as real trades: cached or fetched Yahoo bars, with a planned target so both zones can be reviewed. Their entry comes from the real entry bar; stop, target and exit are derived from real bar extrema. The sample exits at the first bar that touches either planned level, so MAE never passes its stop and MFE never passes its target. A bar touching a level shows that the price traded there; it does not prove a particular order would have filled. The UI labels them as a scenario, not as executed trades. Synthetic sample candles are forbidden; when market bars are unavailable, no chart is rendered.
 
-Real trades are never rewritten to fit the bars. A pure validator checks completed bars before the recorded exit for a passed planned stop, or a passed target followed by a worse exit, and checks that the exit sits inside its bar. Trade Detail reports those as neutral facts. A same-bar touch is not called “before exit” because OHLC cannot prove event order within one candle; stop-move recording remains tracked in issue #24.
+Trade Detail checks the displayed candles against the derived trade. Completed bars are checked against active stop segments and unfilled targets, and each fill is checked against its own bar with the instrument's tick tolerance. OHLC evidence establishes that a bar reached a level and leaves the order of events within that bar unresolved. Trade Detail reports those observations without rewriting the trade.
 
 ---
 
