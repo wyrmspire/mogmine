@@ -67,6 +67,8 @@ Keep them separated by:
 
 Shared-project risks are understood: common quotas, authentication configuration, and blast radius. Those tradeoffs are acceptable for now and do not justify blocking development.
 
+Specified 2026-11-22 (`D-012`): both apps use the existing project `showmob-dev` (ref `vsasmtsifuylhfrrsrso`). Showmob tables stay prefixed `showmob_`. MogMine tables must be prefixed `mogmine_` and must never alter `showmob_` tables. Auth users are shared. The separate `mogmine` project stays paused. Migrations go in `supabase/migrations/` and are applied with the Supabase CLI on the VM.
+
 ## Agent decision procedure
 
 Before doing any Supabase work:
