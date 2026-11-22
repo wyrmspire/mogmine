@@ -51,6 +51,7 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 | Card family: Trade Card refresh, drill / flash cards, playbook, day, plan and mistake cards, card sizes and the shared frame | [23 — Card System](docs/23-card-system.md) (`CD-1`–`CD-3`, `OD-46`) |
 | Planning sessions ("pre-anything"), levels and indicators on the chart, after-session review, the `D-011` build slices | [24 — Planning Sessions & After-Session Review](docs/24-planning-sessions-and-after-session-review.md) (`D-011`, `OD-51`) |
 | Discretionary calls: skip a setup, flip the signal, cut, early take, stop placement, hold, size; reason chips, call colours, hindsight grades | [25 — Discretionary Calls](docs/25-discretionary-calls.md) (proposal `OD-52`) |
+| Storage-portable persistence contract, repository interfaces, `mogmine_` tables, RLS owner rules, persist-or-defer per record type | [26 — Persistence Contract & DB Readiness](docs/26-persistence-contract-and-db-readiness.md) (#173, `D-012`) |
 | A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
 | Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |
 

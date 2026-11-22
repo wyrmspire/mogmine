@@ -45,7 +45,7 @@ _Built 2026-11-22 from NOTES.md "Next up", docs/16 §2b and the open GitHub issu
 
 _Added 2026-11-22: Supabase-ready wave (`D-012`). Dependency order: #173 first, then #174 and #175 in parallel, then #176. #177 may be claimed in parallel with any of them. Owner-decision rows above stay untouched._
 
-| 18 | #173 | Persistence contract + database-readiness checklist (every record type in `lib/`) | #173, docs/22, docs/06, `D-012` | M | ready |
+| 18 | #173 | Persistence contract + database-readiness checklist (every record type in `lib/`) | #173, docs/22, docs/06, `D-012` | M | done (docs/26, `lib/persistence/`) |
 | 19 | #174 | AI-operable command layer (typed create/read/update, no UI) | #174, after #173 | M | ready |
 | 20 | #175 | Local/mock adapter implementing the contract (env flag to stay on mocks) | #175, after #173, parallel with #174 | M | ready |
 | 21 | #176 | Supabase adapter: `mogmine_` migrations, RLS, shared tests on `showmob-dev` | #176, after #173–#175, `D-012` | L | ready |
