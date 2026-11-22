@@ -1077,3 +1077,20 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .level-controls-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .add-level-btn { min-height: 44px; font-weight: 750; }
 
+
+/* CD-2c drill cards (docs/23 §4) */
+.drill-page { max-width: 720px; }
+.drill-link { min-height: 44px; display: inline-flex; align-items: center; align-self: flex-start; }
+.drill-decks { display: grid; gap: 10px; }
+.drill-decks button, .drill-answers > * { min-height: 44px; }
+.drill-playbook { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.drill-playbook select { min-height: 44px; font: inherit; font-size: 0.875rem; color: var(--text-primary); background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 0 10px; }
+.drill-skips, .drill-score p { margin: 0; font-size: 0.75rem; color: var(--text-muted); }
+.drill-score { margin-top: 14px; display: grid; gap: 4px; }
+.drill-front-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.8125rem; }
+.drill-chart { position: relative; height: min(52vh, 420px); }
+.drill-answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+.drill-answers a { display: inline-flex; align-items: center; justify-content: center; }
+.drill-reveal { display: grid; gap: 8px; }
+.drill-reveal p { margin: 0; }
+.drill-miss { color: var(--warn-amber); font-size: 0.8125rem; }

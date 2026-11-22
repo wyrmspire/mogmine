@@ -51,7 +51,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
 18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check, done** (`lib/market-data/coverage.ts`: the route and the client cache use `coversTradeWindow` / `anchorsTradeWindow`; no `length >= 4` bypass remains).
 19. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
-20. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4, issue #165; **`CD-2a` done**: `lib/drills.ts`; **`CD-2b` done**: `lib/drills-store.ts`, backup `drills`): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
+20. **`CD-2a`–`CD-2c` — Drill cards, done** (docs/23 §4, issue #165; **`CD-2a` done**: `lib/drills.ts`; **`CD-2b` done**: `lib/drills-store.ts`, backup `drills`; **`CD-2c` done**: `/drills`, `components/DrillScreen.tsx`): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
 21. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
 
 22. **`DC-2`–`DC-7` — Discretionary calls** ([docs/25](docs/25-discretionary-calls.md) §8, proposal `OD-52`): store, call sheet, chart pins, Skip/Flip grading, discretion score. `DC-1` (pure model) and `DC-1b` (stable reason ids with frozen labels) are done; wait for the owner's yes on `OD-52` before `DC-3` UI.
@@ -78,6 +78,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — CD-2c drill screen (#165), App shell lane released
+
+- `/drills` (linked from Review) opens the decks: warm-up, due misses and one playbook, with skip counts by reason. The sealed front is a `TradeChart` of an open copy of the trade on bars that closed by the entry, with no marks. Take it / Smaller / Pass saves to `mogmine-drills-v1` with the hidden list. The reveal shows the full chart with marks, R, the rules read, and a "comes back tomorrow" note on a miss. The take-versus-pass card appears from 30 answers.
+- Bars come only from the IndexedDB candle cache. Nothing is fetched (invariant 2), and a trade opened once is drillable after 7 days.
+- Headless Chrome 390×844 on a seeded Nov 12 trade: the front ended at 09:04 for a 09:05 entry, with no exit or marks. Pass revealed the trade and stored the answer. Overflow 0.
+- Simplified from docs/23 §4.1: the reveal does not animate bars forward or show the Trade Card front yet. Other drill kinds (§4.2) are later.
 
 ### 2026-11-22 — Claude — CD-2b drills store and backup (#165), Data lane released
 
