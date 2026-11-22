@@ -649,7 +649,15 @@ export const DEFAULT_TICK_TOLERANCE_TICKS = 4;
  */
 export function fillInsideBar(priceValue: number, bar: Candle | undefined, symbol: string, toleranceTicks = DEFAULT_TICK_TOLERANCE_TICKS) {
   if (!bar) return false;
-  const tolerance = (specFor(symbol)?.tickSize ?? 0) * toleranceTicks;
+  const tickSize = specFor(symbol)?.tickSize ?? 0;
+  const fillTicks = toTicks(priceValue, symbol);
+  if (fillTicks != null && Number.isInteger(toleranceTicks)) {
+    // Keep off-grid bar prices on the conservative side of each tick boundary.
+    const lowTicks = toTicks(bar.low, symbol) ?? Math.ceil(bar.low / tickSize);
+    const highTicks = toTicks(bar.high, symbol) ?? Math.floor(bar.high / tickSize);
+    return fillTicks >= lowTicks - toleranceTicks && fillTicks <= highTicks + toleranceTicks;
+  }
+  const tolerance = tickSize * toleranceTicks;
   return priceValue >= bar.low - tolerance && priceValue <= bar.high + tolerance;
 }
 

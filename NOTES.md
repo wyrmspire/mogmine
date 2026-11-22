@@ -17,7 +17,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-48`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-49`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
@@ -59,7 +59,7 @@ Claim a lane before starting. Clear the claim when you stop.
 
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
-| Core math | Codex | 2026-11-21 | Review and repair TD-1 (#35 pure observer). |
+| Core math | — | | |
 | Chart | — | | |
 | App shell and notes | — | | |
 | Data | Claude (Opus 5.5 session) | 2026-11-21 | `R-07a` + `R-07b` playbook store and editor. Worker: skip R-07, take TD-1 → TD-3. |
@@ -68,6 +68,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — reviewed TD-1, Core math lane released
+Did:      Reproduced and fixed false target findings for orderless exits and shared target prices, the exact four-tick boundary for decimal contracts, and fill findings against a forming bar on open trades. Same-price allocation remains an interim rule under OD-49.
+Files:    `lib/trade-bar-validation.ts`, `lib/trade-document.ts`, `lib/trades.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15-trade-document-and-render-grammar.md`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `npm test` passed 347 tests. `TZ=Pacific/Auckland node --test lib/__tests__/trade-observer.test.ts` passed 27 tests. Typecheck passed, lint reported 0 errors and 1 existing PostCSS warning, the build generated 8/8 pages, and `git diff --check origin/main` passed.
+Left:     TD-2 (#34) needs 1m and 5m mark goldens for all seven fixtures. Carry observer findings into flags with their inferred basis, exact bar and price. TD-3 needs dotted `≈` marks, a matching text equivalent, and a screenshot check of the D-010 fills-only design.
 
 ### 2026-11-21 — agent (Antigravity) — TD-1 observeTrade pure observer (#35), Core math lane released
 Did:      Implemented `observeTrade(derived, candles, barMinutes, options)` in `lib/trade-bar-validation.ts` (docs/15 §3.3, issue #35): checks each stop segment traded through, unfilled targets touched before exit, fills outside bar with `DEFAULT_TICK_TOLERANCE_TICKS = 4` (B-12), honest MFE/MAE excursions, and post-exit hindsight touches. Preserved `validateTradeAgainstBars` compatibility. Added golden unit tests in `lib/__tests__/trade-observer.test.ts`.

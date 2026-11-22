@@ -115,6 +115,17 @@ test("fill alignment uses the shared four-tick threshold and skips voided execut
   assert.deepEqual(result.findings, [finding("fill_outside_bar", "15:52", 7610, 7)]);
 });
 
+test("four decimal ticks count as inside the bar at the exact tolerance boundary", () => {
+  const doc = fixture("ex-sl");
+  doc.instrument.symbol = "MCL";
+  doc.events = [
+    { seq: 1, t: "2026-11-12T15:34:00Z", type: "fill", role: "entry", qty: 1, price: 60.02, basis: "stated" },
+    { seq: 2, t: "2026-11-12T15:41:00Z", type: "fill", role: "exit", qty: 1, price: 60.03, basis: "stated" },
+  ];
+  const result = observeTrade(deriveTrade(doc), bars([["15:34", 59.96, 59.98], ["15:41", 59.96, 59.98]]));
+  assert.deepEqual(result.findings, [finding("fill_outside_bar", "15:41", 60.03, 2)]);
+});
+
 test("a stop working before entry can only be crossed while the trade is open", () => {
   const doc = fixture("ex-tp");
   const [stop] = doc.events.splice(3, 1);
@@ -152,6 +163,16 @@ test("an open trade uses completed bars and keeps its newest bar and excursions 
   assert.equal(result.coverage, "partial");
   assert.equal(result.excursions, null);
   assert.deepEqual(result.findings, [finding("stop_traded_through", "15:35", 7595, 0)]);
+});
+
+test("an open trade waits for the fill bar to complete before flagging its range", () => {
+  const doc = fixture("ex-sl");
+  doc.events.pop();
+  const derived = deriveTrade(doc);
+  const prices = bars([["15:34", 7597, 7598]]);
+  assert.deepEqual(observeTrade(derived, prices).findings, []);
+  prices.push(...bars([["15:35", 7599, 7601]]));
+  assert.deepEqual(observeTrade(derived, prices).findings, [finding("fill_outside_bar", "15:34", 7600, 2)]);
 });
 
 test("target fills count by order and remaining quantity, and reprices stay local to their own span", () => {
@@ -199,6 +220,59 @@ test("one anonymous execution at a shared target price consumes only its recorde
   plan.targets[1].price = plan.targets[0].price;
   const result = observeTrade(deriveTrade(doc), bars([["15:38", 7601, 7605]]));
   assert.deepEqual(result.findings, [finding("target_traded_through", "15:38", 7605, "t2")]);
+});
+
+test("an anonymous target execution at the working price clears that quantity", () => {
+  const doc = fixture("ex-tp");
+  const exit = doc.events[6];
+  assert.equal(exit.type, "fill");
+  delete exit.order;
+  const prices = bars([["15:40", 7600, 7611]]);
+  assert.deepEqual(observeTrade(deriveTrade(doc), prices).findings, []);
+});
+
+test("anonymous fills are allocated to working orders in plan order and can span orders", () => {
+  const doc = fixture("ex-partials");
+  const [plan, entry, partial, move, exit] = doc.events;
+  assert.equal(plan.type, "plan");
+  assert.equal(partial.type, "fill");
+  assert.equal(exit.type, "fill");
+  plan.targets[1].price = plan.targets[0].price;
+  doc.events = [
+    plan, entry,
+    { seq: 3, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "second", target: "t2", qty: 1, price: 7605, basis: "broker" },
+    { seq: 4, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "first", target: "t1", qty: 1, price: 7605, basis: "broker" },
+    { ...partial, seq: 5 },
+    { ...move, seq: 6 },
+    { ...exit, seq: 7, reason: "manual" },
+  ];
+  const prices = bars([["15:38", 7601, 7605]]);
+  assert.deepEqual(observeTrade(deriveTrade(doc), prices).findings, [
+    finding("target_traded_through", "15:38", 7605, "t2"),
+  ]);
+
+  doc.events = doc.events.slice(0, 5);
+  doc.events[4] = { ...partial, seq: 5, qty: 2 };
+  assert.deepEqual(observeTrade(deriveTrade(doc), prices).findings, []);
+});
+
+test("an order's explicit target takes precedence over same-price fallback", () => {
+  const doc = fixture("ex-partials");
+  const [plan, entry, partial, move, exit] = doc.events;
+  assert.equal(plan.type, "plan");
+  assert.equal(partial.type, "fill");
+  plan.targets[1].price = plan.targets[0].price;
+  doc.events = [
+    plan, entry,
+    { seq: 3, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "anonymous", qty: 1, price: 7605, basis: "broker" },
+    { seq: 4, t: "2026-11-12T15:37:00Z", type: "order", role: "target", kind: "limit", order: "explicit", target: "t1", qty: 1, price: 7605, basis: "broker" },
+    { ...partial, seq: 5, order: "explicit" },
+    { ...move, seq: 6 },
+    { ...exit, seq: 7 },
+  ];
+  assert.deepEqual(observeTrade(deriveTrade(doc), bars([["15:38", 7601, 7605]])).findings, [
+    finding("target_traded_through", "15:38", 7605, "t2"),
+  ]);
 });
 
 test("a 5m scalp reports alignment without using the entry/exit wick as an excursion", () => {
@@ -257,8 +331,8 @@ test("hindsight keeps the last stop in force and each target separate from trade
   });
 });
 
-for (const close of ["2026-10-30T21:00:00Z", "2026-11-02T22:00:00Z"]) {
-  test(`hindsight stops at New York session close ${close} across the fall DST weekend`, () => {
+for (const close of ["2026-03-06T22:00:00Z", "2026-03-09T21:00:00Z", "2026-10-30T21:00:00Z", "2026-11-02T22:00:00Z"]) {
+  test(`hindsight stops at New York session close ${close} around a DST weekend`, () => {
     const doc = fixture("ex-sl");
     const closeMs = utc(close);
     const minute = 60_000;

@@ -1,7 +1,7 @@
 import { laterTouch } from "./hindsight.ts";
 import type { LaterTouch } from "./hindsight.ts";
 import { expectedInsideBarTimes, isRegularTradingBarInterval, sessionCloseUtc } from "./session.ts";
-import type { DerivedTrade, EventBasis, PositionPoint } from "./trade-document.ts";
+import type { DerivedTrade, EventBasis, PositionPoint, WorkingOrderSegment } from "./trade-document.ts";
 import { excursionsFromBars, fillInsideBar, isWholeQuantity } from "./trades.ts";
 import type { Candle, Excursions, TradeDirection, TradeRecord } from "./trades.ts";
 
@@ -158,16 +158,17 @@ function positionWindows(timeline: PositionPoint[], openThrough: number): Positi
 function unfilledPlannedTargets(
   derived: DerivedTrade,
   workedTargets: Set<string>,
-  targetOrders: ReadonlyMap<string, string | null>,
 ) {
   const pending = derived.planned_targets
     .filter(({ key, qty }) => !workedTargets.has(key) && isWholeQuantity(qty))
     .map((target) => ({ ...target, remaining: target.qty }));
-  const fills = new Map(derived.position_timeline.map((fill) => [fill.seq, fill]));
+  const workedQty = new Map(derived.position_timeline.map((fill) => [fill.seq, fill.target_order_qty ?? 0]));
   for (const lot of derived.closed_lots) {
-    const fill = fills.get(lot.exit_seq);
-    if (lot.exit_reason !== "target" || (fill?.order && targetOrders.has(fill.order))) continue;
-    let qty = lot.qty;
+    if (lot.exit_reason !== "target") continue;
+    const alreadyMatched = workedQty.get(lot.exit_seq) ?? 0;
+    const appliedQty = Math.min(lot.qty, alreadyMatched);
+    workedQty.set(lot.exit_seq, alreadyMatched - appliedQty);
+    let qty = lot.qty - appliedQty;
     for (const target of pending) {
       if (target.price !== lot.exit_price) continue;
       const matched = Math.min(qty, target.remaining);
@@ -189,7 +190,7 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
     hindsight: { last_stop_touch: null, target_touches: [] },
   };
   const barMs = barMinutes * 60_000;
-  if (!Number.isSafeInteger(barMs) || barMs <= 0 || !derived.entry_time) return result;
+  if (!Number.isSafeInteger(barMinutes) || barMinutes <= 0 || !Number.isSafeInteger(barMs) || !derived.entry_time) return result;
 
   const { symbol, position_timeline: fills, stop_path: stops } = derived;
   const direction: TradeDirection = derived.side === "long" ? "LONG" : "SHORT";
@@ -204,8 +205,10 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
     if (bar.time % barMs === 0 && !barsByTime.has(bar.time)) barsByTime.set(bar.time, bar);
   }
   const bars = [...barsByTime.values()].sort((a, b) => a.time - b.time);
-  // Without an exit, the newest bar may still be forming.
-  const windows = positionWindows(fills, bars.at(-1)?.time ?? entry);
+  if (!bars.length) return result;
+  // On an open trade the newest bar may still be forming.
+  const newestBarTime = bars[bars.length - 1].time;
+  const windows = positionWindows(fills, closed ? exit : newestBarTime);
   const expected = closed ? windows.flatMap(({ from, to }) => expectedInsideBarTimes(from, to, barMs, symbol)) : [];
   const inside = closed
     ? expected.flatMap((time) => barsByTime.get(time) ?? [])
@@ -215,6 +218,7 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
   const required = new Set(expected);
   for (const fill of fills) {
     const time = barOpen(Date.parse(fill.t));
+    if (!closed && time + barMs > newestBarTime) continue;
     required.add(time);
     const bar = barsByTime.get(time);
     if (bar && !fillInsideBar(fill.price, bar, symbol)) {
@@ -239,8 +243,16 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
     }
   }
 
-  const workedTargets = new Set<string>();
   const targetOrders = new Map<string, string | null>();
+  const targetSegments = derived.working_orders.filter(({ role }) => role === "target");
+  const plannedKeys = new Set(derived.planned_targets.map(({ key }) => key));
+  const explicitTarget = (order: WorkingOrderSegment) =>
+    order.target ?? (plannedKeys.has(order.order) ? order.order : undefined);
+  const workedTargets = new Set<string>();
+  for (const order of targetSegments) {
+    const key = explicitTarget(order);
+    if (key != null) workedTargets.add(key);
+  }
   const observeTarget = (key: string, price: number, from: number, to: number) => {
     const hit = inside.find((bar) => bar.time >= from && bar.time + barMs <= to && targetTouched(direction, price, bar));
     if (hit) {
@@ -249,22 +261,20 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
       });
     }
   };
-  for (const order of derived.working_orders) {
-    if (order.role !== "target") continue;
-    if (!targetOrders.has(order.order)) {
-      const key = order.target ?? derived.planned_targets.find((target) => target.key === order.order)?.key
-        ?? derived.planned_targets.find((target) => target.price === order.price && !workedTargets.has(target.key))?.key
-        ?? null;
+  for (const order of targetSegments) {
+    let key = explicitTarget(order) ?? targetOrders.get(order.order);
+    if (key === undefined) {
+      key = derived.planned_targets.find((target) => target.price === order.price && !workedTargets.has(target.key))?.key ?? null;
       if (key != null) workedTargets.add(key);
-      targetOrders.set(order.order, key);
     }
-    if (order.filled_qty < order.qty) {
-      observeTarget(targetOrders.get(order.order) ?? order.order, order.price, Date.parse(order.from),
+    targetOrders.set(order.order, key);
+    if (isWholeQuantity(order.qty) && order.filled_qty < order.qty) {
+      observeTarget(key ?? order.order, order.price, Date.parse(order.from),
         order.to == null ? Infinity : Date.parse(order.to));
     }
   }
   const planTime = Date.parse(derived.plan?.t ?? "");
-  for (const target of unfilledPlannedTargets(derived, workedTargets, targetOrders)) {
+  for (const target of unfilledPlannedTargets(derived, workedTargets)) {
     observeTarget(target.key, target.price, planTime, Infinity);
   }
 
