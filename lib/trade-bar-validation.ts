@@ -1,5 +1,5 @@
 import { laterTouch } from "./hindsight.ts";
-import type { LaterTouch } from "./hindsight.ts";
+import type { HindsightOutcome, LaterTouch } from "./hindsight.ts";
 import { expectedInsideBarTimes, isRegularTradingBarInterval, sessionCloseUtc } from "./session.ts";
 import { stopAtExit } from "./trade-document.ts";
 import type { DerivedTrade, EventBasis, PositionPoint, WorkingOrderSegment } from "./trade-document.ts";
@@ -127,6 +127,20 @@ export interface TradeBarFinding {
   segment: number | string;
 }
 
+export interface NotTakenPlanHindsight {
+  basis: "inferred";
+  /** Candle coverage from plan placement through the first observed exit touch or cancellation. */
+  coverage: BarCoverage;
+  entry_bar_time: number | null;
+  first_exit_touch: {
+    barTime: number;
+    stop: number | null;
+    targets: Array<{ target: string; price: number }>;
+  } | null;
+  /** Entry-bar exit touches are ambiguous. Gaps leave the outcome null. */
+  outcome: HindsightOutcome | "entry_bar" | null;
+}
+
 export interface ObservedTrade {
   coverage: BarCoverage;
   chronology: ChronologyResolution;
@@ -135,6 +149,7 @@ export interface ObservedTrade {
   hindsight: {
     last_stop_touch: LaterTouch | null;
     target_touches: Array<LaterTouch & { target: string }>;
+    not_taken_plan?: NotTakenPlanHindsight;
   };
 }
 
@@ -181,6 +196,67 @@ function unfilledPlannedTargets(
   return pending.filter(({ remaining }) => remaining > 0);
 }
 
+function observeNotTakenPlan(
+  derived: DerivedTrade,
+  direction: TradeDirection,
+  bars: Candle[],
+  barsByTime: ReadonlyMap<number, Candle>,
+  barMs: number,
+): NotTakenPlanHindsight | undefined {
+  const { plan, entry_cancelled_at: cancelledAt, symbol } = derived;
+  if (!plan || !cancelledAt) return undefined;
+  const start = Date.parse(plan.t);
+  const cancelled = Date.parse(cancelledAt);
+  if (!Number.isFinite(start) || !Number.isFinite(cancelled) || cancelled <= start) return undefined;
+
+  const inside = bars.filter((bar) => bar.time >= start && bar.time + barMs <= cancelled
+    && isRegularTradingBarInterval(symbol, bar.time, barMs));
+  const entryIndex = inside.findIndex((bar) => {
+    if (plan.entry.order === "market") return true;
+    const touches = plan.entry.order === "limit" ? stopTouched : targetTouched;
+    return touches(direction, plan.entry.price, bar);
+  });
+  const entry = inside[entryIndex];
+  let firstExit: NotTakenPlanHindsight["first_exit_touch"] = null;
+  if (entry) {
+    for (let index = entryIndex; index < inside.length; index++) {
+      const bar = inside[index];
+      const stop = plan.stop != null && stopTouched(direction, plan.stop, bar) ? plan.stop : null;
+      const targets = plan.targets.filter(({ price }) => targetTouched(direction, price, bar))
+        .map(({ key, price }) => ({ target: key, price }));
+      if (stop == null && targets.length === 0) continue;
+      firstExit = { barTime: bar.time, stop, targets };
+      break;
+    }
+  }
+
+  const through = firstExit ? firstExit.barTime + barMs : cancelled;
+  let coverage: BarCoverage = "missing";
+  if (inside.length > 0) {
+    coverage = start % barMs === 0 && through % barMs === 0 ? "complete" : "partial";
+    for (let time = start; coverage === "complete" && time < through; time += barMs) {
+      if (!barsByTime.has(time) && isRegularTradingBarInterval(symbol, time, barMs)) coverage = "partial";
+    }
+  }
+
+  let outcome: NotTakenPlanHindsight["outcome"] = null;
+  if (coverage === "complete" && entry) {
+    if (!firstExit) {
+      if (plan.stop != null || plan.targets.length > 0) outcome = "neither";
+    } else if (firstExit.barTime === entry.time) outcome = "entry_bar";
+    else if (firstExit.stop == null) outcome = "target_first";
+    else outcome = firstExit.targets.length ? "same_bar" : "stop_first";
+  }
+
+  return {
+    basis: "inferred",
+    coverage,
+    entry_bar_time: entry?.time ?? null,
+    first_exit_touch: firstExit,
+    outcome,
+  };
+}
+
 /** Observe OHLC evidence against the active, non-voided events in a derived trade. */
 export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinutes = 1): ObservedTrade {
   const result: ObservedTrade = {
@@ -191,21 +267,27 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
     hindsight: { last_stop_touch: null, target_touches: [] },
   };
   const barMs = barMinutes * 60_000;
-  if (!Number.isSafeInteger(barMinutes) || barMinutes <= 0 || !Number.isSafeInteger(barMs) || !derived.entry_time) return result;
+  if (!Number.isSafeInteger(barMinutes) || barMinutes <= 0 || !Number.isSafeInteger(barMs)) return result;
+  if (!derived.entry_time && derived.status !== "not_taken") return result;
 
   const { symbol, position_timeline: fills, stop_path: stops } = derived;
   const direction: TradeDirection = derived.side === "long" ? "LONG" : "SHORT";
-  const entry = Date.parse(derived.entry_time);
-  const exit = Date.parse(derived.exit_time ?? "");
-  const closed = derived.status === "closed" && Number.isFinite(exit) && exit >= entry;
-  const barOpen = (time: number) => Math.floor(time / barMs) * barMs;
-  if (closed && barOpen(entry) !== barOpen(exit)) result.chronology = "resolved";
-
   const barsByTime = new Map<number, Candle>();
   for (const bar of candles) {
     if (bar.time % barMs === 0 && !barsByTime.has(bar.time)) barsByTime.set(bar.time, bar);
   }
   const bars = [...barsByTime.values()].sort((a, b) => a.time - b.time);
+  if (!derived.entry_time) {
+    const hindsight = observeNotTakenPlan(derived, direction, bars, barsByTime, barMs);
+    if (hindsight) result.hindsight.not_taken_plan = hindsight;
+    return result;
+  }
+
+  const entry = Date.parse(derived.entry_time);
+  const exit = Date.parse(derived.exit_time ?? "");
+  const closed = derived.status === "closed" && Number.isFinite(exit) && exit >= entry;
+  const barOpen = (time: number) => Math.floor(time / barMs) * barMs;
+  if (closed && barOpen(entry) !== barOpen(exit)) result.chronology = "resolved";
   if (!bars.length) return result;
   // On an open trade the newest bar may still be forming.
   const newestBarTime = bars[bars.length - 1].time;

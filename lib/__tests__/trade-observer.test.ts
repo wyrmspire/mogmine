@@ -413,6 +413,128 @@ test("hindsight keeps the last stop in force and each target separate from trade
   });
 });
 
+test("not-taken hindsight records a target after a limit entry touch without creating a trade", () => {
+  const derived = deriveTrade(fixture("ex-nottaken"));
+  const inputs: BarInput[] = [
+    ["15:31", 7601, 7604], ["15:32", 7602, 7611], ["15:33", 7601, 7604],
+    ["15:34", 7601, 7604], ["15:35", 7599, 7603], ["15:36", 7602, 7610],
+    ["15:38", 7594, 7604],
+  ];
+  const observed = observeTrade(derived, bars(inputs).reverse());
+  assert.deepEqual(observed.hindsight.not_taken_plan, {
+    basis: "inferred",
+    coverage: "complete",
+    entry_bar_time: utc("15:35"),
+    first_exit_touch: { barTime: utc("15:36"), stop: null, targets: [{ target: "t1", price: 7610 }] },
+    outcome: "target_first",
+  });
+  assert.deepEqual(observed.findings, []);
+  assert.equal(observed.excursions, null);
+  assert.equal(derived.outcome, "not_taken");
+  assert.deepEqual(derived.position_timeline, []);
+  assert.deepEqual(derived.closed_lots, []);
+  assert.equal(derived.pnl_cents, null);
+  assert.equal(derived.r_multiple, null);
+});
+
+test("not-taken hindsight leaves same-bar exit and entry order unresolved", () => {
+  const derived = deriveTrade(fixture("ex-nottaken"));
+  const both = observeTrade(derived, bars([["15:31", 7599, 7604], ["15:32", 7594, 7611]])).hindsight.not_taken_plan;
+  assert.equal(both?.outcome, "same_bar");
+  assert.deepEqual(both?.first_exit_touch, {
+    barTime: utc("15:32"), stop: 7595, targets: [{ target: "t1", price: 7610 }],
+  });
+  const entryBar = observeTrade(derived, bars([["15:31", 7599, 7611], ["15:32", 7594, 7600]])).hindsight.not_taken_plan;
+  assert.equal(entryBar?.outcome, "entry_bar");
+  assert.equal(entryBar?.first_exit_touch?.barTime, utc("15:31"));
+});
+
+test("not-taken hindsight excludes 5m candles that straddle plan placement or cancellation", () => {
+  const doc = fixture("ex-nottaken");
+  const cancel = doc.events[1];
+  cancel.t = "2026-11-12T16:08:00Z";
+  const derived = deriveTrade(doc);
+  const supplied = bars([
+    ["15:30", 7599, 7604], ["15:35", 7601, 7604], ["16:05", 7599, 7604], ["16:10", 7594, 7610],
+  ]);
+  const observed = observeTrade(derived, supplied, 5).hindsight.not_taken_plan;
+  assert.equal(observed?.coverage, "partial");
+  assert.equal(observed?.entry_bar_time, null);
+  assert.equal(observed?.outcome, null);
+  assert.equal(observeTrade(derived, [], 5).hindsight.not_taken_plan?.coverage, "missing");
+});
+
+test("not-taken hindsight ignores touches at cancellation and distinguishes gaps from complete coverage", () => {
+  const doc = fixture("ex-nottaken");
+  doc.events[1].t = "2026-11-12T15:34:00Z";
+  const derived = deriveTrade(doc);
+  const supplied: BarInput[] = [
+    ["15:31", 7599, 7603], ["15:32", 7600, 7603], ["15:33", 7600, 7604], ["15:34", 7594, 7611],
+  ];
+  const complete = observeTrade(derived, bars(supplied)).hindsight.not_taken_plan;
+  assert.equal(complete?.coverage, "complete");
+  assert.equal(complete?.entry_bar_time, utc("15:31"));
+  assert.equal(complete?.outcome, "neither");
+  assert.equal(complete?.first_exit_touch, null);
+  const gap = observeTrade(derived, bars([supplied[0], ["15:33", 7600, 7611]])).hindsight.not_taken_plan;
+  assert.equal(gap?.coverage, "partial");
+  assert.equal(gap?.outcome, null);
+  assert.equal(gap?.first_exit_touch?.barTime, utc("15:33"));
+});
+
+test("not-taken hindsight supports a short stop entry across the fall DST weekend", () => {
+  const doc = fixture("ex-nottaken");
+  const plan = doc.events[0];
+  assert.equal(plan.type, "plan");
+  doc.side = "short";
+  plan.t = "2026-10-30T20:58:00Z";
+  plan.entry.order = "stop";
+  plan.stop = 7605;
+  plan.targets[0].price = 7590;
+  doc.events[1].t = "2026-11-01T23:02:00Z";
+  const observed = observeTrade(deriveTrade(doc), bars([
+    ["2026-10-30T20:58:00Z", 7601, 7605], ["2026-10-30T20:59:00Z", 7599, 7603],
+    ["2026-11-01T22:59:00Z", 7590, 7606], ["2026-11-01T23:00:00Z", 7600, 7605],
+  ])).hindsight.not_taken_plan;
+  assert.equal(observed?.coverage, "complete");
+  assert.equal(observed?.entry_bar_time, utc("2026-10-30T20:59:00Z"));
+  assert.equal(observed?.first_exit_touch?.barTime, utc("2026-11-01T23:00:00Z"));
+  assert.equal(observed?.outcome, "stop_first");
+});
+
+test("not-taken hindsight keeps each target reached on the first exit bar of a market plan", () => {
+  const doc = fixture("ex-nottaken");
+  const plan = doc.events[0];
+  assert.equal(plan.type, "plan");
+  plan.t = "2026-11-12T15:30:00Z";
+  plan.entry.order = "market";
+  plan.stop = null;
+  plan.targets = [{ key: "t1", price: 7605, qty: 1 }, { key: "t2", price: 7610, qty: 1 }];
+  const observed = observeTrade(deriveTrade(doc), bars([
+    ["15:30", 7601, 7604], ["15:35", 7602, 7611], ["15:40", 7594, 7604],
+  ]), 5).hindsight.not_taken_plan;
+  assert.deepEqual(observed, {
+    basis: "inferred",
+    coverage: "complete",
+    entry_bar_time: utc("15:30"),
+    first_exit_touch: { barTime: utc("15:35"), stop: null, targets: [
+      { target: "t1", price: 7605 }, { target: "t2", price: 7610 },
+    ] },
+    outcome: "target_first",
+  });
+});
+
+test("not-taken hindsight reports complete coverage when a limit never becomes reachable", () => {
+  const doc = fixture("ex-nottaken");
+  doc.events[1].t = "2026-11-12T15:33:00Z";
+  const observed = observeTrade(deriveTrade(doc), bars([
+    ["15:31", 7601, 7605], ["15:32", 7602, 7610],
+  ])).hindsight.not_taken_plan;
+  assert.deepEqual(observed, {
+    basis: "inferred", coverage: "complete", entry_bar_time: null, first_exit_touch: null, outcome: null,
+  });
+});
+
 for (const close of ["2026-03-06T22:00:00Z", "2026-03-09T21:00:00Z", "2026-10-30T21:00:00Z", "2026-11-02T22:00:00Z"]) {
   test(`hindsight stops at New York session close ${close} around a DST weekend`, () => {
     const doc = fixture("ex-sl");

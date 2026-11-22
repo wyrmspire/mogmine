@@ -33,7 +33,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 
 1. **`R-08a` — Pure cross-day & playbook/tag running stats, done** (`lib/selectors.ts`, `lib/__tests__/`, `docs/16` §R-08).
 2. **`R-08b` — Running stats screen/card, done** (`components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`).
-3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE and post-exit touches, with golden facts for all seven trade documents.
+3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE, post-exit touches and inferred hindsight for cancelled plans, with golden facts for all seven trade documents.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks`, done** (`docs/15` §3.4): deterministic `Mark[]` display list with real bar anchors (`B-23`), the `D-010` fills-only look and exact 1m/5m goldens for all seven trade fixtures.
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
@@ -68,6 +68,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — reviewed idle run and repaired TD-1 hindsight (#35), Core math lane released
+Did:      Run `20261122T013000Z` left no changes. Reviewed the TD-2 merge and reproduced the missing `ex-nottaken` bar evidence. `observeTrade` now reports inferred first level touches through cancellation, with gaps and same-bar ambiguity preserved (OD-50).
+Files:    `lib/trade-bar-validation.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` passed 382. `TZ=Pacific/Auckland node --test lib/__tests__/{trade-observer,trade-marks}.test.ts` passed 62. Typecheck and diff check passed. Lint reported 0 errors and 1 existing PostCSS warning. Local build generated 8/8 static pages.
+Left:     Split TD-3 into a Canvas painter slice and a chart integration slice. Check `ex-trail`, `ex-ignored`, `ex-sl` at 390×844 and 1m/5m, including D-010 screenshot pixels, exact evidence-bar flags and matching under-chart text. Issue #35 is still open.
 
 ### 2026-11-22 — Codex — reviewed TD-2 (#34), Chart lane released
 Did:      Reviewed run `20261122T010010Z` and repaired TD-2 on `feat/td-2-build-marks`. The mark builder uses real bar opens, retains observer evidence, terminates cancelled plans at cancellation, preserves Shield, and follows D-010 and OD-32.
