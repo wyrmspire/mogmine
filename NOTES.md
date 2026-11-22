@@ -50,7 +50,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 16. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`. Also move small controls off the screen edges (`1m` at 13 px, change-target chip at 9 px, After-the-exit note at 15 px, Mood button at 9 px; docs/24 §6) — edge taps trigger the phone's back swipe.
 17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
 18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check, done** (`lib/market-data/coverage.ts`: the route and the client cache use `coversTradeWindow` / `anchorsTradeWindow`; no `length >= 4` bypass remains).
-19. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
+19. **`CD-1a` — Card frame & Trade Card layout, done** (`lib/shareCard.ts`, `lib/__tests__/card-system.test.ts`, [docs/23](docs/23-card-system.md) §2–3, `OD-46`, #41): shared frame layout tables for `4:5`, `9:16`, `1:1` with chart main area at 55–60%, hero R + process seal with blind review verdict, specular 1px gold top highlight, Shield copy verified for all sizes. Followed by `CD-1b` (sheet controls, size picker, 390×844 check).
 20. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4, issue #165; **`CD-2a` done**: `lib/drills.ts`; **`CD-2b` done**: `lib/drills-store.ts`, backup `drills`): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
 21. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
 
@@ -79,43 +79,15 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Gemini (gemini-3) — CD-1a shared card frame & layout tables (#41), Chart lane released
+
+- Implemented shared card frame layout tables for 4:5, 9:16 and 1:1 (`getCardLayout`, `CARD_LAYOUT_TABLE`) in `lib/shareCard.ts`.
+- Chart main area occupies 55%–60% across all sizes (4:5: 57.04%, 9:16: 57.29%, 1:1: 55.56%), with specular 1px gold highlight at top edge.
+- Added hero R (`heroResult`), process seal with rules adherence and blind review verdict (`formatBlindAnswer`), and size-aware filenames.
+- Pure canvas rendering function `renderCardCanvas` enables headless verification of frame, drawing bounds and Shield copy across all sizes.
+- Tested: 459 tests pass (6 new in `lib/__tests__/card-system.test.ts`), typecheck clean, lint clean (1 pre-existing warning), build 8/8 routes clean.
+
 ### 2026-11-22 — Claude — CD-2b drills store and backup (#165), Data lane released
-
-- `lib/drills-store.ts`: `mogmine-drills-v1`, append-only answers (`addDrillAnswer`), sanitized with `user_id` (Invariant 7), deduped by id, oldest first. Nothing writes `take_again`.
-- Journal backup gains `drills`. Restore **merges by id**, unlike plans, so an older backup never erases answers given since. A drills-only backup is restorable. Hydrated in `AppShell`, exported and restored in Tune.
-- `npm test`, typecheck, lint and build pass (output in PR). Next: CD-2c (the drill screen: sealed front, Take/Smaller/Pass, reveal).
-
-### 2026-11-22 — Claude — CD-2a drill decks and scoring (#165), Core math lane released
-
-- `lib/drills.ts` (pure): eligibility (closed, not a demo, older than 7 days, saved bars; skips are counted by reason), seeded warm-up deck of 5, playbook deck, misses deck (Take on a rule-breaking loser or Pass on a clean winner; due after 1, 3, 7 days, then retired until missed again), sealed cut that hides the entry bar itself, and take-vs-pass average R over each trade's latest answer, shown from 30 answers.
-- R uses `rMultiple`, the same as the running stats. Trades without a stop are counted as `noR` and left out of the averages.
-- `npm test`, typecheck, lint and build pass (output in PR). Next: CD-2b (`mogmine-drills-v1` store and backup), then CD-2c (screen).
-
-### 2026-11-22 — Claude — PS-4b after-session review screen (#26), App shell lane released
-
-- Each plan on Today's planning card has a Review button (44 px). The sheet shows the window (checkpoint → a later checkpoint or session close, picked in "Until"), a summary (`trades · rules n/total · watched setups n/n`), one row per trade linking to Trade Detail (time, playbook, seal, nearest level in signed ticks, watch-list status), an empty state, and the lesson field, which saves as typed.
-- Headless Chrome 390×844 with the clock set to Nov 19 17:30 ET: rows and summary rendered, overflow 0. A watch list added after entry showed "Not on the watch list" (B-14). Saving the lesson left the revision count unchanged.
-- Today only lists today's plans, so a past day's review needs a day picker. That is a follow-up.
-
-### 2026-11-22 — Claude — PS-4a after-session review model (#26), Core math lane released
-
-- `sessionReview(plan, trades, until?)`: the window runs from the checkpoint's anchor (or creation, for gap fill) to the next checkpoint or the 17:00 ET close; rows in entry order with the `n/total` seal, the nearest planned level in signed ticks and whether the playbook was watched, all read from the plan as it stood at each entry (`planStateAsOf`, B-14). Same-instrument trades only. Zero trades is a valid review.
-- Plans gain an optional `lesson` (280 chars). `setPlanLesson` saves it without a revision, since it is not a plan edit.
-- `npm test`, typecheck, lint and build pass (output in PR). PS-4b builds the screen on this.
-
-### 2026-11-22 — Claude — IND-1 session VWAP (#26), Chart lane released
-
-- `lib/chart-indicators.ts` feeds `computeSessionIndicators` the trade's own candles with the cutoff at its session's 17:00 ET close (the set runs 15 h past exit and would otherwise anchor to the next session), and maps 1m points onto displayed bars by close time. A pink LineSeries (`--indicator-vwap`) never feeds autoscale and has no axis tag (its last value is the session close, not the line in view); the crosshair HUD shows it.
-- docs/11 forbids silently picking RTH vs Globex (`OD-18`), so View offers Off / RTH / Globex, default Off. Globex is usually "unavailable: bars missing" for the same Yahoo `1m` gaps as `OD-55`.
-- Also: the UI-1 HUD used `white-space: pre` and ran past a 390 px frame, hiding "vs entry"; it now wraps inside the frame.
-- `npm test`, typecheck, lint, build and the levels Chrome check pass (output in PR). Headless Chrome 390×844 on the Nov 19 trade: RTH line drawn, HUD `… VWAP 7410.24` at 09:11 CT, overflow 0, Trade Card 1080×1350. Real phone not checked.
-
-### 2026-11-22 — Claude — PS-3 plan levels on trade charts (#26), Chart lane released
-
-- PS-1 plans had no instrument, so an MNQ plan could land on an MES chart (OD-15, docs/24 §3). `PlanningSession.symbol` is now optional and sanitized to a known contract; a plan without it is not drawn. PS-2 should set it from the chosen instrument.
-- `planLevelsAsOf` reads the revision history: a level added or moved after the entry never appears on that trade (B-14). Planned levels share pills with computed levels at the same tick and colour by side of the entry price; the View toggle counts them in its tooltip.
-- `npm test` 454 pass, typecheck clean, lint 0 errors (existing PostCSS warning), build 8/8, `check-session-levels.mjs` passed. Headless Chrome 390×844: a seeded Nov 19 plan drew "7395.00 Plan shelf" stacked above RTH high; its post-entry level was absent ("6 shown · 6 missing").
-- MD-1 (#90) was already on main; the queue line is marked done. Also fixed PS-2 (#158) `PlanSheet`: new plans carry `symbol` and `DEFAULT_OWNER_USER_ID` (was `"default-owner"`). Next free items: PS-4, IND-1, the OD-55 `5m` fallback once the owner agrees.
 
 ### 2026-11-22 — Gemini — PS-2 (OD-51), Plan screen on Today
 
