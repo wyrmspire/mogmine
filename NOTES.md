@@ -39,7 +39,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
 7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
-8. **`LV-1` — Pure computed levels** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. Owner priority `D-011`.
+8. **`LV-1` — Pure computed levels** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. Draft PR #152 is queued behind the full `TD-3` painter per `D-011`.
 9. **`LV-2` — Draw computed levels on the trade chart** (`SessionLevelsPrimitive`, Canvas only, view-options toggle).
 10. **`PS-1` — Planning-session model and store** (`mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup). Shape is `OD-51`.
 11. **`PS-2` — Plan screen on Today** (start a "Pre-…" session fast, levels with tick steppers, observations).
@@ -78,6 +78,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — recurring review 20261122T160003Z, Core math lane released
+
+- LV-1 (#26) now keeps the native candle provider, ticker, calculation version and coverage together. Yahoo ticker mismatches are rejected. Dated settlement requires matching instrument and known source, and an unverified daily close is labeled `PDC (proxy)`.
+- `npm test` passed 422 tests. Auckland-time level/session and chart suites passed 118 tests. Typecheck and diff check passed. Lint reported 0 errors and the existing PostCSS warning. The build generated 8/8 static pages.
+- TD-3 (#34) had no tracked changes or commits beyond GitHub `main` at `4f353b7`. Its Auckland-time chart suites passed 92 tests. Local Chrome at 390×844 widened 45 → 75 bars, painted and cleared backward rays on ‹30/Fit, switched 1m → 5m → 1m, and exported a 1080×1350 PNG with zero overflow or page errors. Real phone verification is pending.
+- Finish `Mark[]` painting on `feat/td-render-pipeline`. Test D-010 fill pixels, `ex-trail` stop steps and hatch, `ex-ignored` cancel and past-stop hatch, and both sides of the excursion bracket. Once TD-3 lands, refresh and check PR #152 before merging. Start LV-2 after LV-1.
 
 ### 2026-11-22 — Codex — recurring review of LV-1 (#26), Core math lane released
 

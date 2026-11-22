@@ -3,7 +3,7 @@ import {
   equityIndexSessionBounds, indexSessionCandles, offsetSessionDate, previousRegularSessionDate,
   readSessionWindow, sessionWeekMonday,
 } from "./session.ts";
-import { snapToTick, TIMEFRAME_MINUTES, toTicks } from "./trades.ts";
+import { snapToTick, specFor, TIMEFRAME_MINUTES, toTicks } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
 
 const LABELS = {
@@ -18,7 +18,7 @@ export type ComputedLevelType = keyof typeof LABELS;
 export interface ComputedLevel {
   key: ComputedLevelType;
   type: ComputedLevelType;
-  label: (typeof LABELS)[ComputedLevelType];
+  label: (typeof LABELS)[ComputedLevelType] | "PDC (proxy)";
   price: number;
   price_ticks: number;
   formed_at?: string;
@@ -31,6 +31,15 @@ interface DailyRange {
   low: number;
 }
 
+interface SettlementQuote {
+  symbol: "MES" | "MNQ";
+  sessionDate: string;
+  availableAt: number;
+  price: number;
+  source: string;
+  isProxy: boolean;
+}
+
 interface LevelSetInputs {
   prior_session: {
     session_date: string;
@@ -40,6 +49,7 @@ interface LevelSetInputs {
     low_at?: string;
     settle?: number;
     settle_at?: string;
+    settle_provenance?: Pick<SettlementQuote, "source" | "isProxy">;
   };
   prior_rth?: {
     open?: number;
@@ -71,12 +81,13 @@ interface ComputeLevelsOptions {
 
 function level(
   symbol: string, type: ComputedLevelType, value: number | undefined, formula: string, formed_at?: string,
+  label: ComputedLevel["label"] = LABELS[type],
 ): ComputedLevel[] {
   if (value === undefined) return [];
   const price = snapToTick(value, symbol);
   const price_ticks = price === null ? null : toTicks(price, symbol);
   if (price === null || price_ticks === null || !Number.isSafeInteger(price_ticks)) return [];
-  return [{ key: type, type, label: LABELS[type], price, price_ticks, formula, ...(formed_at ? { formed_at } : {}) }];
+  return [{ key: type, type, label, price, price_ticks, formula, ...(formed_at ? { formed_at } : {}) }];
 }
 
 export function computeFloorPivots(h: number, l: number, c: number, symbol: string): ComputedLevel[] {
@@ -127,6 +138,7 @@ export function calculateAdrValue(history: readonly DailyRange[], sessionDate: s
 export function computeLevelsFromInputs({ symbol, sessionDate, inputs }: ComputeLevelsOptions): ComputedLevel[] {
   const { prior_session: prior, prior_rth: rth, overnight: on, adr, week } = inputs;
   const { high, low, settle } = prior;
+  const isSettlementProxy = prior.settle_provenance?.isProxy;
   const pivots = high !== undefined && low !== undefined && settle !== undefined
     ? computeFloorPivots(high, low, settle, symbol)
     : [];
@@ -137,7 +149,9 @@ export function computeLevelsFromInputs({ symbol, sessionDate, inputs }: Compute
   return [
     ...level(symbol, "pdh", high, `Globex high ${prior.session_date}`, prior.high_at),
     ...level(symbol, "pdl", low, `Globex low ${prior.session_date}`, prior.low_at),
-    ...level(symbol, "pdc", settle, `Settlement ${prior.session_date}`, prior.settle_at),
+    ...level(symbol, "pdc", settle,
+      `${isSettlementProxy ? "Settlement proxy" : "Settlement"} ${prior.session_date}`, prior.settle_at,
+      isSettlementProxy ? "PDC (proxy)" : "PDC"),
     ...level(symbol, "rth_open", rth?.open, "Open of prior 08:30 CT bar", rth?.open_at),
     ...level(symbol, "rth_high", rth?.high, "Prior RTH high", rth?.high_at),
     ...level(symbol, "rth_low", rth?.low, "Prior RTH low", rth?.low_at),
@@ -165,14 +179,20 @@ const iso = (time: number) => new Date(time).toISOString();
 /** The caller supplies native candles from the stated MES or MNQ series and timeframe. */
 export function extractSessionInputsFromCandles(options: {
   symbol: "MES" | "MNQ";
+  provider: string;
+  providerSymbol: string;
   sessionDate: string;
   candles: readonly Candle[];
   timeframe: Timeframe;
   asOf: number;
-  settlement?: { sessionDate: string; availableAt: number; price: number };
+  settlement?: SettlementQuote;
   adr?: LevelSetInputs["adr"];
 }) {
-  const { symbol, sessionDate, candles, timeframe, asOf, settlement, adr } = options;
+  const { symbol, provider, providerSymbol, sessionDate, candles, timeframe, asOf, settlement, adr } = options;
+  const spec = specFor(symbol);
+  if (provider === "yahoo_finance" && providerSymbol !== spec?.yahooTicker) {
+    throw new RangeError(`Expected ${spec?.yahooTicker} candles for ${symbol}, received ${providerSymbol}`);
+  }
   const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
   const priorDate = previousRegularSessionDate(sessionDate);
   const prior = equityIndexSessionBounds(priorDate);
@@ -194,14 +214,17 @@ export function extractSessionInputsFromCandles(options: {
   const week = weekWindows.every(({ coverage }) => coverage.complete)
     ? extremes(weekWindows.flatMap(({ bars }) => bars))
     : undefined;
-  const knownSettle = settlement?.sessionDate === priorDate
-    && Number.isFinite(settlement.availableAt) && settlement.availableAt <= asOf ? settlement : undefined;
+  const knownSettle = settlement?.symbol === symbol && settlement.sessionDate === priorDate
+    && Number.isFinite(settlement.price) && settlement.source.trim().length > 0
+    && Number.isFinite(new Date(settlement.availableAt).getTime()) && settlement.availableAt <= asOf
+    ? settlement : undefined;
   const inputs: LevelSetInputs = {
     prior_session: {
       session_date: priorDate,
       ...(previous.coverage.complete && previous.coverage.to === prior.close ? extremes(previous.bars) : undefined),
       settle: knownSettle?.price,
       settle_at: knownSettle && iso(knownSettle.availableAt),
+      settle_provenance: knownSettle && { source: knownSettle.source, isProxy: knownSettle.isProxy },
     },
     prior_rth: {
       ...(rth.coverage.complete && rth.coverage.to === prior.rthClose ? extremes(rth.bars) : undefined),
@@ -223,7 +246,7 @@ export function extractSessionInputsFromCandles(options: {
     },
   };
   return {
-    symbol, sessionDate, timeframe, asOf, inputs,
+    symbol, provider, providerSymbol, calcVersion: "levels-v1", sessionDate, timeframe, asOf, inputs,
     coverage: { previous: previous.coverage, rth: rth.coverage, overnight: overnight.coverage, week: weekWindows.map(({ coverage }) => coverage) },
   };
 }

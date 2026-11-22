@@ -5,6 +5,7 @@ import type { Candle } from "../trades.ts";
 import fixture from "../../fixtures/levelsets/MES-2026-11-12.json" with { type: "json" };
 
 const minute = 60_000;
+const mesSource = { provider: "yahoo_finance", providerSymbol: "MES=F" } as const;
 const bar = (time: number, price = 6000): Candle => ({
   time, open: price, high: price, low: price, close: price, volume: 10,
 });
@@ -56,6 +57,45 @@ test("ADR 7 and 14 select completed sessions by date, with no current-session or
   assert.equal(levels.adr_low.price, 7561.5);
 });
 
+test("LV-1 preserves the candle series and labels a dated daily close as a settlement proxy", () => {
+  const open = Date.parse("2026-11-11T23:00Z");
+  const settlement = {
+    symbol: "MES", sessionDate: "2026-11-11", availableAt: open - minute, price: 7640.5,
+    source: "Yahoo MES=F 1d close", isProxy: true,
+  } as const;
+  const options = {
+    ...mesSource, symbol: "MES", timeframe: "1m", sessionDate: "2026-11-12",
+    asOf: open + minute, candles: [bar(open, 7616.5)], settlement,
+  } as const;
+  const snapshot = extractSessionInputsFromCandles(options);
+  assert.equal(snapshot.provider, mesSource.provider);
+  assert.equal(snapshot.providerSymbol, mesSource.providerSymbol);
+  assert.equal(snapshot.calcVersion, "levels-v1");
+  assert.equal(snapshot.timeframe, "1m");
+  assert.equal(snapshot.asOf, open + minute);
+  assert.equal(snapshot.coverage.overnight.from, open);
+  assert.equal(snapshot.coverage.overnight.to, open + minute);
+  assert.deepEqual(snapshot.inputs.prior_session.settle_provenance, {
+    source: settlement.source, isProxy: true,
+  });
+  const pdc = byKey(computeLevelsFromInputs(snapshot)).pdc;
+  assert.equal(pdc.label, "PDC (proxy)");
+  assert.equal(pdc.formula, "Settlement proxy 2026-11-11");
+  assert.equal(pdc.price, 7640.5);
+  assert.equal(pdc.formed_at, "2026-11-11T22:59:00.000Z");
+
+  const earlier = extractSessionInputsFromCandles({ ...options, asOf: settlement.availableAt - 1 });
+  assert.equal(earlier.inputs.prior_session.settle_provenance, undefined);
+  assert.equal(byKey(computeLevelsFromInputs(earlier)).pdc, undefined);
+  const verified = extractSessionInputsFromCandles({
+    ...options, settlement: { ...settlement, source: "CME settlement", isProxy: false },
+  });
+  assert.equal(byKey(computeLevelsFromInputs(verified)).pdc.label, "PDC");
+  const otherContract = extractSessionInputsFromCandles({ ...options, settlement: { ...settlement, symbol: "MNQ" } });
+  assert.equal(byKey(computeLevelsFromInputs(otherContract)).pdc, undefined);
+  assert.throws(() => extractSessionInputsFromCandles({ ...options, providerSymbol: "ES=F" }), /MES=F/);
+});
+
 for (const { sessionDate, previousDate, priorOpen, priorClose, globexOpen, rthOpen } of [
   {
     sessionDate: "2026-03-09", previousDate: "2026-03-06", priorOpen: "2026-03-05T23:00Z",
@@ -74,9 +114,12 @@ for (const { sessionDate, previousDate, priorOpen, priorClose, globexOpen, rthOp
     overnight[3] = bar(overnight[3].time, 5975);
     const asOf = Date.parse(globexOpen) + 5 * minute + 20_000;
     const snapshot = extractSessionInputsFromCandles({
-      symbol: "MNQ", timeframe: "1m", sessionDate, asOf,
+      provider: "yahoo_finance", providerSymbol: "MNQ=F", symbol: "MNQ", timeframe: "1m", sessionDate, asOf,
       candles: [...overnight, ...prior, bar(Date.parse(priorClose), 9999), bar(asOf - 20_000, 8000)].reverse(),
-      settlement: { sessionDate: previousDate, availableAt: Date.parse(priorClose), price: 6001.25 },
+      settlement: {
+        symbol: "MNQ", sessionDate: previousDate, availableAt: Date.parse(priorClose), price: 6001.25,
+        source: "CME settlement", isProxy: false,
+      },
     });
     const levels = byKey(computeLevelsFromInputs(snapshot));
     assert.equal(snapshot.inputs.prior_session.session_date, previousDate);
@@ -100,8 +143,8 @@ test("An exact final RTH minute supplies the close, with missing and misdated in
   const candles = [bar(finalRth - minute, 6200), bar(finalRth, 6100), bar(finalRth + minute, 6400),
     bar(Date.parse("2026-11-11T14:35Z"), 6005), bar(start + minute, 6005)];
   const options = {
-    symbol: "MES", timeframe: "1m", sessionDate: "2026-11-12", asOf: start + 2 * minute,
-    settlement: { sessionDate: "2026-11-10", availableAt: finalRth, price: 6105 },
+    ...mesSource, symbol: "MES", timeframe: "1m", sessionDate: "2026-11-12", asOf: start + 2 * minute,
+    settlement: { symbol: "MES", sessionDate: "2026-11-10", availableAt: finalRth, price: 6105, source: "CME settlement", isProxy: false },
     adr: { value: 120 },
   } as const;
   const snapshot = extractSessionInputsFromCandles({ ...options, candles });
@@ -114,7 +157,7 @@ test("An exact final RTH minute supplies the close, with missing and misdated in
 
   const missingClose = extractSessionInputsFromCandles({
     ...options, candles: candles.filter(({ time }) => time !== finalRth),
-    settlement: { sessionDate: "2026-11-11", availableAt: options.asOf + minute, price: 6105 },
+    settlement: { ...options.settlement, sessionDate: "2026-11-11", availableAt: options.asOf + minute },
   });
   assert.deepEqual(computeLevelsFromInputs(missingClose), []);
 });
@@ -125,7 +168,7 @@ test("Weekly extremes exclude maintenance and use only complete session coverage
   const tuesday = bars("2026-11-02T23:00Z", "2026-11-02T23:03Z");
   tuesday[1] = bar(tuesday[1].time, 6100);
   const options = {
-    symbol: "MES", timeframe: "1m", asOf: Date.parse("2026-11-02T23:03Z"), sessionDate: "2026-11-03",
+    ...mesSource, symbol: "MES", timeframe: "1m", asOf: Date.parse("2026-11-02T23:03Z"), sessionDate: "2026-11-03",
   } as const;
   const candles = [...all, ...tuesday, bar(Date.parse("2026-11-02T22:20Z"), 9000)];
   const levels = byKey(computeLevelsFromInputs(extractSessionInputsFromCandles({ ...options, candles })));
@@ -148,7 +191,7 @@ test("Hourly bars cannot supply RTH opens, RTH closes or overnight extremes acro
   const candles = Array.from({ length: 39 }, (_, i) => bar(prev + i * hour))
     .filter(({ time }) => time !== open - hour);
   const snapshot = extractSessionInputsFromCandles({
-    symbol: "MES", timeframe: "1h", asOf: Date.parse("2026-11-12T15:00Z"), sessionDate: "2026-11-12", candles,
+    ...mesSource, symbol: "MES", timeframe: "1h", asOf: Date.parse("2026-11-12T15:00Z"), sessionDate: "2026-11-12", candles,
   });
   const levels = byKey(computeLevelsFromInputs(snapshot));
   assert.equal(levels.pdh.price, 6000);
