@@ -208,6 +208,30 @@ test("D-010 and OD-32 bound default hindsight to Medium detail and the last visi
   assert.ok(!clipped.some((mark) => mark.kind === "flag" && mark.hollow && mark.t === utc("15:55")));
 });
 
+test("live continuation uses pane edges, and only the earlier view adds entry-side rays", () => {
+  const { derived, facts, options } = setup("ex-trail");
+  const rays = (earlier: boolean, detail: "low" | "medium") =>
+    buildMarks(derived, facts, "1m", detail, false, {
+      ...options, continuationEdges: { before: earlier },
+    }).filter((mark) => mark.kind === "segment").filter((mark) => mark.paneEdge);
+  const left = rays(true, "medium").filter((mark) => mark.paneEdge === "left");
+  assert.deepEqual(left.map(({ t0, t1, p0, width }) => [t0, t1, p0, width]), [
+    [utc("15:34"), utc("15:34"), 7600, 1],
+    [utc("15:34"), utc("15:34"), 7606, 1],
+    [utc("15:34"), utc("15:34"), 7595, 0.5],
+  ]);
+  assert.deepEqual(rays(false, "medium").map(({ paneEdge, p0 }) => [paneEdge, p0]), [
+    ["right", 7600], ["right", 7606], ["right", 7595],
+  ]);
+  assert.deepEqual(rays(true, "low"), []);
+  const noLaterBars = buildMarks(derived, null, "1m", "medium", false, {
+    candleTimes: options.candleTimes.filter((time) => time <= utc("16:03")),
+    continuationEdges: { before: false },
+  });
+  assert.ok(noLaterBars.some((mark) => mark.kind === "segment" && mark.paneEdge === "right"
+    && mark.t0 === utc("16:03") && mark.t1 === utc("16:03")));
+});
+
 test("Shield hides counts and quantities and retains R, and archive emits actual geometry alone", () => {
   const { derived, facts, options } = setup("ex-partials");
   const planLabels = (shield: boolean) => buildMarks(derived, facts, "1m", "medium", shield, options)

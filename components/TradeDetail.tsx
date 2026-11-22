@@ -27,7 +27,8 @@ import { formatDetailTime, formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { observeTrade, validateTradeAgainstBars } from "@/lib/trade-bar-validation";
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
-import { buildFindingMarks } from "@/lib/trade-marks";
+import { buildMarks } from "@/lib/trade-marks";
+import type { Mark } from "@/lib/trade-marks";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, aggregateCandles, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
@@ -242,12 +243,23 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     () => displayedBars && observeTrade(derived, displayedBars, TIMEFRAME_MINUTES[timeframe]),
     [derived, displayedBars, timeframe],
   );
-  const findingMarks = useMemo(
-    () => observation?.findings.length && displayedBars
-      ? buildFindingMarks(observation.findings, new Set(displayedBars.map((bar) => bar.time)))
-      : [],
-    [observation, displayedBars],
-  );
+  const showEarlier = extension.before > 0;
+  const keyPrice = trade.key_level_price;
+  const marks = useMemo(() => {
+    if (!displayedBars?.length) return [];
+    const candleTimes = displayedBars.map(({ time }) => time);
+    const marks = buildMarks(derived, observation, timeframe, detailLevel, renderPrivacy, {
+      candleTimes, continuationEdges: { before: showEarlier },
+    });
+    if (keyPrice != null) {
+      const keyLevel: Mark = {
+        kind: "segment", layer: "plan", tone: "muted", dash: "dotted", faint: true, paneEdge: "both",
+        t0: candleTimes[0], t1: candleTimes[candleTimes.length - 1], p0: keyPrice, p1: keyPrice,
+      };
+      marks.push(keyLevel);
+    }
+    return marks;
+  }, [displayedBars, derived, observation, timeframe, detailLevel, renderPrivacy, showEarlier, keyPrice]);
   const ex = useMemo(() => (ready ? excursions(trade, candles.candles, baseMinutes) : null), [ready, candles, trade, baseMinutes]);
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
@@ -432,7 +444,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="chart-frame">
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} findingMarks={findingMarks} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} detailLevel={detailLevel} onExtensionChange={setExtension} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>

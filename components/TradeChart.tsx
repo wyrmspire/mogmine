@@ -3,26 +3,22 @@
 import { useEffect, useImperativeHandle, useRef, useSyncExternalStore } from "react";
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
-import type { PositionBoxConfig } from "./PositionBoxPrimitive";
 import { describeTrade } from "@/lib/describe";
 import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, isScratch, specFor, visibleLogicalBars } from "@/lib/trades";
+import { alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, specFor, visibleLogicalBars } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
-import type { FlagMark } from "@/lib/trade-marks";
-import { buildHindsight } from "@/lib/hindsight";
+import type { Mark } from "@/lib/trade-marks";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
-import type { ChartDetailLevel } from "@/lib/hindsight";
 
 type LWC = typeof import("lightweight-charts");
 type IChartApi = import("lightweight-charts").IChartApi;
 type CandleSeries = import("lightweight-charts").ISeriesApi<"Candlestick">;
 type UTCTimestamp = import("lightweight-charts").UTCTimestamp;
 type Time = import("lightweight-charts").Time;
-type IPriceLine = import("lightweight-charts").IPriceLine;
 type AutoscaleInfoProvider = import("lightweight-charts").AutoscaleInfoProvider;
 
 export interface ChartExtension {
@@ -48,7 +44,7 @@ interface Props {
   /** The same bars Trade Detail uses for its observer findings. */
   bars: Candle[];
   timeframe: Timeframe;
-  findingMarks: readonly FlagMark[];
+  marks: readonly Mark[];
   zone: string;
   /** Shield / privacy: the on-chart pill shows R and points, never dollars (UX-71). */
   privacy: boolean;
@@ -58,8 +54,6 @@ interface Props {
   onRendered?: () => void;
   /** Whether the visible range is still the fitted trade window. */
   onFitChange?: (fitted: boolean) => void;
-  /** Low hides after-exit dotted continuation and later-touch marks. Default Medium shows them. */
-  detailLevel?: ChartDetailLevel;
   onExtensionChange?: (extension: ChartExtension) => void;
 }
 
@@ -69,7 +63,6 @@ interface Live {
   chart: IChartApi;
   series: CandleSeries;
   primitive: PositionBoxPrimitive;
-  lines: IPriceLine[];
   fitRange: { from: number; to: number } | null;
   renderedBars: Candle[];
   renderedTimeframe: Timeframe | null;
@@ -146,16 +139,16 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
   state.holdTimer = window.setTimeout(apply, 80);
 }
 
-export function TradeChart({ ref, trade, bars, timeframe, findingMarks, zone, privacy, readout, onRendered, onFitChange, detailLevel = "medium", onExtensionChange }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, zone, privacy, readout, onRendered, onFitChange, onExtensionChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, bars, timeframe, findingMarks, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange });
+  const latest = useRef({ trade, bars, timeframe, marks, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, findingMarks, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -165,7 +158,6 @@ export function TradeChart({ ref, trade, bars, timeframe, findingMarks, zone, pr
       l.heldDefaultRange = null;
       l.extraBefore = 0;
       l.extraAfter = 0;
-      l.primitive.setBackwardContinuation(false);
       l.chart.priceScale("right").applyOptions({ autoScale: true });
       l.host.dataset.priceScale = "auto";
       l.fitRange = l.baseFitRange;
@@ -195,7 +187,6 @@ export function TradeChart({ ref, trade, bars, timeframe, findingMarks, zone, pr
       const room = Math.max(0, currentFrom - 0);
       const applied = Math.min(bars, room);
       l.extraBefore += applied;
-      l.primitive.setBackwardContinuation(l.extraBefore > 0);
       const nextFrom = Math.max(0, currentFrom - applied);
       const view = { from: nextFrom, to: currentTo };
       l.fitRange = view;
@@ -229,8 +220,7 @@ export function TradeChart({ ref, trade, bars, timeframe, findingMarks, zone, pr
       downColor: t.candleDown,
       wickUpColor: t.candleUp,
       wickDownColor: t.candleDown,
-      // The series owns autoscale, so merge these trade prices into the candle range as well as
-      // exposing them from the primitive. Planned TP, SL and the actual exit must never be clipped.
+      // Keep recorded fill, stop and target prices in view even when a missing bar prevents anchoring a mark.
       autoscaleInfoProvider: ((baseImplementation) => {
         const base = baseImplementation();
         const priceRange = includeInPriceRange(base?.priceRange ?? null, [tr.entry_price, tr.exit_price, tr.stop_loss_price, tr.planned_target_price]);
@@ -267,35 +257,7 @@ export function TradeChart({ ref, trade, bars, timeframe, findingMarks, zone, pr
     const end = boxEnd(tr, bars);
     const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
-    l.primitive.setFindingMarks(p.findingMarks, t);
-    l.primitive.setHidden(alignment == null);
-    if (alignment) {
-      const isLong = tr.direction === "LONG";
-      const scratch = isScratch(tr);
-      // An open trade has no after-exit continuation (R-03c).
-      const showContinuation = p.detailLevel !== "low" && tr.exit_time != null;
-      const fact = showContinuation ? buildHindsight(tr, bars, barTimeframe) : null;
-      const laterTouches = [fact?.target, fact?.stop].flatMap((touch) => touch ? [{ time: toTime(touch.time), kind: touch.kind }] : []);
-      const config: PositionBoxConfig = {
-        entryTime: toTime(alignment.entryBar), exitTime: toTime(alignment.exitBar),
-        entryPrice: tr.entry_price, exitPrice: tr.exit_price,
-        stopPrice: tr.stop_loss_price, targetPrice: tr.planned_target_price,
-        isLong, scratch,
-        profitColor: t.profit, riskColor: t.risk, mutedColor: t.textMuted,
-        textColor: t.textMuted,
-        keyPrice: tr.key_level_price, opacity: t.boxOpacity,
-        approximate: alignment.approximate,
-        showContinuation,
-        extendBackward: l.extraBefore > 0,
-        laterTouches,
-      };
-      l.primitive.update(config);
-    }
-
-    // No axis tags: the fills say where the stop, target, entry and exit are, and the price scale
-    // stays readable. Remove any lines left by an older build.
-    l.lines.forEach((line) => l.series.removePriceLine(line));
-    l.lines = [];
+    l.primitive.update(p.marks, t);
 
     // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
     const fittedWindow = fitWindow(tr.entry_time, end, barTimeframe);
@@ -349,15 +311,10 @@ export function TradeChart({ ref, trade, bars, timeframe, findingMarks, zone, pr
         borderVisible: false, priceLineVisible: false, lastValueVisible: false,
         priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
       });
-      const primitive = new PositionBoxPrimitive({
-        entryTime: 0 as UTCTimestamp, exitTime: 0 as UTCTimestamp, entryPrice: trade.entry_price, exitPrice: trade.exit_price,
-        stopPrice: null, targetPrice: null, isLong: true, scratch: false,
-        profitColor: "", riskColor: "", mutedColor: "", textColor: "", keyPrice: null, opacity: 0,
-        approximate: false,
-      });
+      const primitive = new PositionBoxPrimitive();
       series.attachPrimitive(primitive);
       const state: Live = {
-        lwc, host, chart, series, primitive, lines: [],
+        lwc, host, chart, series, primitive,
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
         userPanned: false, programmaticRangeChange: false,
@@ -549,13 +506,12 @@ export function TradeChart({ ref, trade, bars, timeframe, findingMarks, zone, pr
     })();
     return () => { alive = false; cleanup(); };
     // The chart is rebuilt only for a different trade or instrument.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trade.id, trade.symbol]);
 
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, findingMarks, zone, privacy, theme, detailLevel]);
+  }, [trade, bars, timeframe, marks, zone, privacy, theme]);
 
   return <><div
     ref={hostRef}

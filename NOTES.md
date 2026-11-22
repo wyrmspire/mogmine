@@ -36,7 +36,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 2. **`R-08b` — Running stats screen/card, done** (`components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`).
 3. **`TD-1` (Issue `#35`) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE, post-exit touches and inferred hindsight for cancelled plans, with golden facts for all seven trade documents. Displayed bars supply both the Canvas flags and their Data notes.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks`, done** (`docs/15` §3.4): deterministic `Mark[]` display list with real bar anchors (`B-23`), the `D-010` fills-only look and exact 1m/5m goldens for all seven trade fixtures.
-5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
+5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`, done** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
 7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
 8. **`LV-1` — Pure computed levels** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. Owner priority `D-011`.
@@ -78,6 +78,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — TD-3 (#34), recurring review 20261122T170003Z, Chart lane released
+
+- Trade Detail, Data notes and Trade Card export share displayed-candle facts. The Canvas painter draws zones, stop steps, flags, excursion brackets and hatches from `Mark[]`. Medium detail rays follow the pane, and ‹30 and Fit toggle the leftward rays.
+- `npm test` passed 415. The Auckland-time chart, mark, observer and Data-note suites passed 74. Typecheck and diff check passed. Lint reported one existing PostCSS warning. The webpack build generated 8/8 pages. The Chrome pixel test verified D-010 alpha, frameless fills, one-bar width, the trail steps and both hatches.
+- Chrome at 390×844 passed 45 → 75 bars → Fit, the timeframe round trip and 1080×1350 PNG export. A same-time high correction from 7611 to 7609 removed the target-touch flag and its 09:36/09:35 Data note without replacing the canvas. Real-phone checks remain under AC-11.
+- After TD-3 lands, update LV-1 (#26, draft PR #152) from `main`, check it again, and merge before starting LV-2.
 
 ### 2026-11-22 — Codex — recurring review and displayed-bar findings (#35), Chart lane released
 
