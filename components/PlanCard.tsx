@@ -4,17 +4,24 @@ import { usePlansStore } from "@/lib/plans-store";
 import type { PlanPreset } from "@/lib/plans";
 import { useState } from "react";
 import { PlanSheet } from "./PlanSheet";
+import { SessionReview } from "./SessionReview";
+import type { TradeRecord } from "@/lib/trades";
 
 interface PlanCardProps {
   sessionDate: string;
+  /** For the after-session review (PS-4). */
+  trades: readonly TradeRecord[];
+  zone: string;
 }
 
-export function PlanCard({ sessionDate }: PlanCardProps) {
+export function PlanCard({ sessionDate, trades, zone }: PlanCardProps) {
   const { plans, saved } = usePlansStore();
   const sessionPlans = plans.filter((p) => p.session_date === sessionDate && !p.archived);
 
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [reviewId, setReviewId] = useState<string | null>(null);
+  const reviewPlan = sessionPlans.find((p) => p.id === reviewId) ?? null;
   const [newPreset, setNewPreset] = useState<PlanPreset | null>("pre_market");
 
   const openNew = (preset: PlanPreset = "pre_market") => {
@@ -109,6 +116,15 @@ export function PlanCard({ sessionDate }: PlanCardProps) {
                       )}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    className="btn-secondary plan-review-button"
+                    onClick={(e) => { e.stopPropagation(); setReviewId(plan.id); }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    aria-label={`Review ${plan.name}`}
+                  >
+                    Review
+                  </button>
                   <span className="muted" aria-hidden="true" style={{ fontSize: "0.875rem" }}>
                     →
                   </span>
@@ -152,6 +168,10 @@ export function PlanCard({ sessionDate }: PlanCardProps) {
           )}
         </div>
       </div>
+
+      {reviewPlan && (
+        <SessionReview plan={reviewPlan} trades={trades} zone={zone} onClose={() => setReviewId(null)} />
+      )}
 
       {sheetOpen && (
         <PlanSheet

@@ -44,7 +44,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 10. **`PS-1` — Planning-session model and store, done** (`lib/plans.ts`, `lib/plans-store.ts`, `mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup round-trip). Shape is `OD-51`.
 11. **`PS-2` — Plan screen on Today, done** (`components/PlanSheet.tsx`, `components/PlanCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/plans-view.test.ts`): start a "Pre-…" session fast (<10s), add levels with tick steppers, observations, bias, watch playbooks, and state matrix coverage.
 12. **`PS-3` — Planning-session levels on trade charts, done** (`lib/chart-levels.ts` `plannedLineSources`, `components/useTradeLevels.ts`): same-instrument plans for the trade's `session_date`, as they stood at entry. Plans gain an optional `symbol`; **PS-2 must set it** or the plan is never drawn.
-13. **`PS-4` — After-session review** (rules followed, nearest planned level in ticks, watched playbook, one lesson). **`PS-4a` pure model done** (`lib/session-review.ts`, `planStateAsOf` in `lib/plans.ts`, `setPlanLesson`); `PS-4b` screen next (Claude).
+13. **`PS-4` — After-session review, done** (rules followed, nearest planned level in ticks, watched playbook, one lesson). **Done:** `PS-4a` pure model (`lib/session-review.ts`, `planStateAsOf`, `setPlanLesson`) and `PS-4b` screen (`components/SessionReview.tsx`, a Review button on each plan in `components/PlanCard.tsx`).
 14. **`IND-1` — Session VWAP, done** (`lib/chart-indicators.ts`, `components/TradeChart.tsx`, `components/TradeDetail.tsx`): View → Session VWAP Off / RTH / Globex, default Off because the anchor is open under `OD-18`. Withheld, with a note, when the anchored window has a gap. Value in the crosshair HUD. Bands wait for `OD-18`.
 15. **`UI-1` — Chart OHLC HUD & honest freshness, done** (`components/TradeDetail.tsx`, `app/globals.css`, `lib/freshness.ts`, `OD-40`, #114): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
 16. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`. Also move small controls off the screen edges (`1m` at 13 px, change-target chip at 9 px, After-the-exit note at 15 px, Mood button at 9 px; docs/24 §6) — edge taps trigger the phone's back swipe.
@@ -78,6 +78,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — PS-4b after-session review screen (#26), App shell lane released
+
+- Each plan on Today's planning card has a Review button (44 px). The sheet shows the window (checkpoint → a later checkpoint or session close, picked in "Until"), a summary (`trades · rules n/total · watched setups n/n`), one row per trade linking to Trade Detail (time, playbook, seal, nearest level in signed ticks, watch-list status), an empty state, and the lesson field, which saves as typed.
+- Headless Chrome 390×844 with the clock set to Nov 19 17:30 ET: rows and summary rendered, overflow 0. A watch list added after entry showed "Not on the watch list" (B-14). Saving the lesson left the revision count unchanged.
+- Today only lists today's plans, so a past day's review needs a day picker. That is a follow-up.
 
 ### 2026-11-22 — Claude — PS-4a after-session review model (#26), Core math lane released
 
