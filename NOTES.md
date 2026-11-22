@@ -60,7 +60,7 @@ Claim a lane before starting. Clear the claim when you stop.
 | Lane | Claimed by | Since | Working on |
 | :--- | :--- | :--- | :--- |
 | Core math | — | | |
-| Chart | — | | |
+| Chart | Antigravity | 2026-11-22 | TD-2: pure `buildMarks` display list + golden tests (#34) |
 | App shell and notes | — | | |
 | Data | Claude (Opus 5.5 session) | 2026-11-21 | `R-07a` + `R-07b` playbook store and editor. Worker: skip R-07, take TD-1 → TD-3. |
 | Market data | — | | |
