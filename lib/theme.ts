@@ -27,6 +27,7 @@ export interface ChartTheme {
   levelAdr: string;
   levelNeutral: string;
   levelLabelText: string;
+  vwap: string;
 }
 
 const NEUTRAL = "#888888";
@@ -63,6 +64,7 @@ function read(): ChartTheme {
     levelAdr: value("--level-adr"),
     levelNeutral: value("--level-neutral"),
     levelLabelText: value("--level-label-text"),
+    vwap: value("--indicator-vwap"),
   };
 }
 

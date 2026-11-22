@@ -45,7 +45,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 11. **`PS-2` — Plan screen on Today, done** (`components/PlanSheet.tsx`, `components/PlanCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/plans-view.test.ts`): start a "Pre-…" session fast (<10s), add levels with tick steppers, observations, bias, watch playbooks, and state matrix coverage.
 12. **`PS-3` — Planning-session levels on trade charts, done** (`lib/chart-levels.ts` `plannedLineSources`, `components/useTradeLevels.ts`): same-instrument plans for the trade's `session_date`, as they stood at entry. Plans gain an optional `symbol`; **PS-2 must set it** or the plan is never drawn.
 13. **`PS-4` — After-session review** (rules followed, nearest planned level in ticks, watched playbook, one lesson).
-14. **`IND-1` — Session VWAP.**
+14. **`IND-1` — Session VWAP, done** (`lib/chart-indicators.ts`, `components/TradeChart.tsx`, `components/TradeDetail.tsx`): View → Session VWAP Off / RTH / Globex, default Off because the anchor is open under `OD-18`. Withheld, with a note, when the anchored window has a gap. Value in the crosshair HUD. Bands wait for `OD-18`.
 15. **`UI-1` — Chart OHLC HUD & honest freshness, done** (`components/TradeDetail.tsx`, `app/globals.css`, `lib/freshness.ts`, `OD-40`, #114): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
 16. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`. Also move small controls off the screen edges (`1m` at 13 px, change-target chip at 9 px, After-the-exit note at 15 px, Mood button at 9 px; docs/24 §6) — edge taps trigger the phone's back swipe.
 17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
@@ -78,6 +78,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — IND-1 session VWAP (#26), Chart lane released
+
+- `lib/chart-indicators.ts` feeds `computeSessionIndicators` the trade's own candles with the cutoff at its session's 17:00 ET close (the set runs 15 h past exit and would otherwise anchor to the next session), and maps 1m points onto displayed bars by close time. A pink LineSeries (`--indicator-vwap`) never feeds autoscale and has no axis tag (its last value is the session close, not the line in view); the crosshair HUD shows it.
+- docs/11 forbids silently picking RTH vs Globex (`OD-18`), so View offers Off / RTH / Globex, default Off. Globex is usually "unavailable: bars missing" for the same Yahoo `1m` gaps as `OD-55`.
+- Also: the UI-1 HUD used `white-space: pre` and ran past a 390 px frame, hiding "vs entry"; it now wraps inside the frame.
+- `npm test`, typecheck, lint, build and the levels Chrome check pass (output in PR). Headless Chrome 390×844 on the Nov 19 trade: RTH line drawn, HUD `… VWAP 7410.24` at 09:11 CT, overflow 0, Trade Card 1080×1350. Real phone not checked.
 
 ### 2026-11-22 — Claude — PS-3 plan levels on trade charts (#26), Chart lane released
 
