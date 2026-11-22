@@ -46,7 +46,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 12. **`PS-3` — Planning-session levels on trade charts.**
 13. **`PS-4` — After-session review** (rules followed, nearest planned level in ticks, watched playbook, one lesson).
 14. **`IND-1` — Session VWAP.**
-15. **`UI-1` — Chart OHLC HUD & honest freshness** (`components/TradeDetail.tsx`, `app/globals.css`, `OD-40`): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
+15. **`UI-1` — Chart OHLC HUD & honest freshness, done** (`components/TradeDetail.tsx`, `app/globals.css`, `lib/freshness.ts`, `OD-40`, #114): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
 16. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`. Also move small controls off the screen edges (`1m` at 13 px, change-target chip at 9 px, After-the-exit note at 15 px, Mood button at 9 px; docs/24 §6) — edge taps trigger the phone's back swipe.
 17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
 18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check in `/api/market-data` & `lib/candles.ts`:** replace `candles.length >= 4` acceptance with shared `expectedInsideBarTimes` coverage check.

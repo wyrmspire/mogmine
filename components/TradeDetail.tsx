@@ -34,7 +34,8 @@ import { specFor } from "@/lib/trades";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, aggregateCandles, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
-import { useListContext } from "@/lib/ui";
+import { useListContext, useOnline } from "@/lib/ui";
+import { getCandleFreshness } from "@/lib/freshness";
 import { DataNotesChip } from "./DataNotesChip";
 import { collectDataNotes } from "@/lib/data-notes";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
@@ -324,6 +325,13 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     }
   }, [ready, candles, trade, base]);
 
+  const online = useOnline();
+  const freshness = getCandleFreshness({
+    candles: candles?.candles,
+    source: candles?.source,
+    fetching: candles?.fetching,
+    online,
+  });
   const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
   const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
 
@@ -481,6 +489,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
           </div>
           <div className="chart-frame">
+            <div className="chart-hud" aria-label="Chart HUD">
+              <span className="readout num" ref={readoutRef} aria-hidden="true" />
+            </div>
             {ready ? (
               <>
                 {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={computedLevels} showLevels={showLevels} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
@@ -491,8 +502,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
           <div className="chart-source">
             <span className="source-text">{sourceText}</span>
-            <span className="readout num" ref={readoutRef} aria-hidden="true" />
-            <span className="source-text">{candles?.fetching ? "Checking Yahoo…" : ""}</span>
+            <div className="source-right">
+              {candles?.fetching && <span className="fetching-text">Checking Yahoo…</span>}
+              <span className={`freshness-pill ${freshness.status}`} title={`Data freshness: ${freshness.label}`}>
+                {freshness.label}
+              </span>
+            </div>
           </div>
           <DataNotesChip notes={dataNotes} />
           {hindsight && detailLevel === "low" && (

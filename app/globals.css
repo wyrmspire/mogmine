@@ -580,9 +580,69 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 }
 
 /* ───────────────────────── Phase 2: chart craft ───────────────────────── */
-.chart-source .readout { display: none; color: var(--text-primary); white-space: pre; }
-.chart-source[data-tracking] .readout { display: inline; }
-.chart-source[data-tracking] .source-text { display: none; }
+/* Chart OHLC HUD & honest freshness (UI-1, OD-40) */
+.chart-hud {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 6;
+  pointer-events: none;
+  display: none;
+  font: 600 0.6875rem/1.4 var(--font-mono);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--chart-bg, #0d0e12) 85%, transparent);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(4px);
+  white-space: pre;
+}
+.chart-hud[data-tracking] {
+  display: block;
+}
+.chart-source {
+  min-height: 30px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font: 500 0.6875rem/1.4 var(--font-mono);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.chart-source .source-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.chart-source .fetching-text {
+  color: var(--text-muted);
+}
+.freshness-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font: 600 0.625rem/1.2 var(--font-mono);
+  letter-spacing: 0.02em;
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+.freshness-pill.delayed {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.freshness-pill.offline {
+  color: var(--warn-amber);
+  border-color: color-mix(in srgb, var(--warn-amber) 40%, transparent);
+}
+.freshness-pill.cached {
+  color: var(--text-muted);
+}
 .tool-button.attention { color: var(--text-primary); border-color: var(--text-primary); }
 .tool-button svg { width: 17px; height: 17px; }
 .levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
