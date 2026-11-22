@@ -79,6 +79,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Claude — DC-1b frozen call reasons, no lane
+Did:      Calls now save reasons as `{ id, label, family }` (`FrozenReason`) instead of bare labels, as playbook-design/04 §1.4 requires before `DC-2`. Seed chips get stable ids (`seed:cut:thesis-broken`, `seed:shared:gut`) and families. `validateCall(call, offered, previous)` keeps a call valid after its chip is renamed, retired or deleted. No call was ever stored, so `DiscretionCall` changed in place.
+Files:    `lib/calls.ts`, `lib/__tests__/calls.test.ts`, `docs/25-discretionary-calls.md`, `docs/playbook-design/04-discretionary-prompts-integration.md`, `NOTES.md`.
+Checked:  `npm test` 416 passed (12 in calls). Typecheck clean. Lint 0 errors, the existing warning. Build 8/8 pages. `git diff --check` clean. No UI.
+Left:     Code PR left open for review (owner's merge rule). Next in this thread: `DP-1` (`detectDeviations`, `pendingAsks`). `OD-52` and the `OD-DP-*` items still need the owner.
+
 ### 2026-11-22 — Codex — recurring review and TD-2 bracket labels (#34), Chart lane released
 Did:      Reviewed run `20261122T023021Z`. The worker left no source diff or TD-3 commits. `buildMarks` now pairs excursion labels to the low and high price caps for either direction, so the Canvas painter can use the mark alone.
 Files:    `lib/trade-marks.ts`, `lib/__tests__/trade-marks.test.ts`, `fixtures/trades/build-marks.golden.json`, `docs/15`, `NOTES.md`.
