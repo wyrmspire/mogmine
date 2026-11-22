@@ -8,8 +8,8 @@ import {
   PLAN_PRESETS,
   type PlannedLevel,
   type PlannedLevelKind,
-  type PlanningSession,
   type PlanPreset,
+  newPlanningSession,
 } from "@/lib/plans";
 import {
   addPlan,
@@ -201,22 +201,19 @@ export function PlanSheet({
       });
       showToast(`Updated ${name}`);
     } else {
-      const nowIso = new Date().toISOString();
-      const newPlan: PlanningSession = {
+      const newPlan = newPlanningSession({
         id: generatePlanId(),
-        user_id: "default-owner",
         session_date: sessionDate,
+        symbol,
         name,
         preset: preset === "custom" ? null : preset,
         anchor_time_utc: anchorTimeUtc,
-        created_at: nowIso,
-        updated_at: nowIso,
         observations,
         bias,
         watch_playbook_ids: selectedPlaybookIds,
         levels,
-        revisions: [],
-      };
+        now: new Date().toISOString(),
+      });
       addPlan(newPlan);
       showToast(`Saved ${name}`);
     }

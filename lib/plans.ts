@@ -4,7 +4,7 @@
 // Edits after `anchor_time_utc` are marked after the fact, so reviews never treat them as
 // a plan that existed before the trade (docs/24 §2, LV-15).
 
-import { specFor, toTicks } from "./trades.ts";
+import { DEFAULT_OWNER_USER_ID, specFor, toTicks } from "./trades.ts";
 
 export type PlanPreset =
   | "pre_globex"
@@ -96,6 +96,11 @@ export interface PlanningSession {
   id: string;
   user_id: string;
   session_date: string; // YYYY-MM-DD
+  /**
+   * The instrument the levels were marked on (`MES`, `MNQ`), PS-3. Levels are drawn only on a chart of
+   * the same instrument (OD-15, docs/24 §3). Optional: a plan without one is never drawn on a chart.
+   */
+  symbol?: string;
   name: string;
   preset: PlanPreset | null;
   /** ISO UTC timestamp representing the planned start/cutoff time. */
@@ -151,5 +156,20 @@ export function createPlannedLevel(input: {
     label,
     kind,
     ...(note ? { note } : {}),
+  };
+}
+
+/** A new planning session as the plan sheet saves it: owner id (Invariant 7) and instrument (PS-3, OD-15). */
+export function newPlanningSession(input: Pick<PlanningSession,
+  "id" | "session_date" | "name" | "preset" | "anchor_time_utc" | "observations" | "bias" | "watch_playbook_ids" | "levels"
+> & { symbol: string; now: string }): PlanningSession {
+  const { now, symbol, ...rest } = input;
+  return {
+    ...rest,
+    user_id: DEFAULT_OWNER_USER_ID,
+    symbol: symbol.toUpperCase(),
+    created_at: now,
+    updated_at: now,
+    revisions: [],
   };
 }

@@ -1,49 +1,68 @@
 "use client";
 
-// LV-2: load the day-mode bars a trade's computed levels need (docs/24 §5) and turn them into lines.
-// The bars come through the same cached route as the entry form (`loadDayCandles`, R-02 rules).
-import { useEffect, useState } from "react";
+// LV-2 / PS-3: the levels drawn on a trade chart (docs/24 §3, §5). Computed levels need the day-mode
+// bars of the prior session and this session up to entry (`loadDayCandles`, R-02 rules). Planned levels
+// come from the day's planning sessions for the same instrument, as they stood at entry.
+import { useEffect, useMemo, useState } from "react";
 import { loadDayCandles } from "@/lib/candles";
-import { levelLines, missingCandleLevels, tradeLevelWindows, tradeLevels } from "@/lib/chart-levels";
+import { levelLines, missingCandleLevels, plannedLineSources, tradeLevelWindows, tradeLevels } from "@/lib/chart-levels";
 import type { LevelLine } from "@/lib/chart-levels";
+import type { ComputedLevel } from "@/lib/levels";
+import { usePlansStore } from "@/lib/plans-store";
 import type { TradeRecord } from "@/lib/trades";
 
-export type TradeLevelsState =
-  | { status: "off" | "loading" | "none"; lines: readonly LevelLine[] }
-  | { status: "ready"; lines: readonly LevelLine[]; missing: readonly string[] };
+export interface TradeLevelsState {
+  status: "off" | "loading" | "none" | "ready";
+  lines: readonly LevelLine[];
+  /** Computed levels withheld for missing bars. */
+  missing: readonly string[];
+  /** How many drawn levels came from planning sessions. */
+  planned: number;
+}
 
 const EMPTY: readonly LevelLine[] = [];
+const OFF: TradeLevelsState = { status: "off", lines: EMPTY, missing: [], planned: 0 };
 
 export function useTradeLevels(trade: TradeRecord, enabled: boolean): TradeLevelsState {
-  const key = `${trade.symbol}|${trade.entry_time}|${trade.entry_price}`;
-  const [state, setState] = useState<{ key: string; value: TradeLevelsState } | null>(null);
-  // Demo trades never touch the network (issue #89), so they have no levels.
-  const active = enabled && !trade.is_sample && Number.isFinite(Date.parse(trade.entry_time));
+  const key = `${trade.symbol}|${trade.entry_time}`;
+  const [computed, setComputed] = useState<{ key: string; levels: readonly ComputedLevel[] } | null>(null);
+  const { plans } = usePlansStore();
+  // Demo trades never touch the network (issue #89), so they have no computed levels.
+  const fetches = enabled && !trade.is_sample && Number.isFinite(Date.parse(trade.entry_time));
 
   useEffect(() => {
-    if (!active) return;
+    if (!fetches) return;
     let alive = true;
     const windows = tradeLevelWindows(trade.entry_time);
     void (async () => {
+      let levels: readonly ComputedLevel[] = [];
       try {
         const [prior, today] = await Promise.all([
           loadDayCandles(trade.symbol, windows.prior.from, windows.prior.to),
           windows.today ? loadDayCandles(trade.symbol, windows.today.from, windows.today.to).catch(() => null) : null,
         ]);
-        const levels = tradeLevels(trade, prior, today);
-        if (!alive) return;
-        setState({ key, value: levels
-          ? { status: "ready", lines: levelLines(levels, trade.entry_price, trade.symbol), missing: missingCandleLevels(levels) }
-          : { status: "none", lines: EMPTY } });
-      } catch {
-        if (alive) setState({ key, value: { status: "none", lines: EMPTY } });
-      }
+        levels = tradeLevels(trade, prior, today) ?? [];
+      } catch { /* no bars: no computed levels */ }
+      if (alive) setComputed({ key, levels });
     })();
     return () => { alive = false; };
-    // The key holds every trade field the levels depend on.
+    // The key holds every trade field the computed levels depend on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, key]);
+  }, [fetches, key]);
 
-  if (!active) return { status: enabled ? "none" : "off", lines: EMPTY };
-  return state?.key === key ? state.value : { status: "loading", lines: EMPTY };
+  const planned = useMemo(() => (enabled ? plannedLineSources(plans, trade) : []), [enabled, plans, trade]);
+  const current = fetches && computed?.key === key ? computed.levels : null;
+  const lines = useMemo(
+    () => levelLines([...(current ?? []), ...planned], trade.entry_price, trade.symbol),
+    [current, planned, trade.entry_price, trade.symbol],
+  );
+
+  if (!enabled) return OFF;
+  const loading = fetches && current == null;
+  return {
+    status: lines.length ? "ready" : loading ? "loading" : "none",
+    lines,
+    missing: current ? missingCandleLevels(current) : [],
+    planned: planned.length,
+  };
 }
