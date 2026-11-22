@@ -538,18 +538,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
           )}
           </div>
-
-
-          <div className="detail-actions">
-            <button type="button" className="btn-primary" disabled={!ready} onClick={openCard}>{ready ? "Trade Card" : "Trade Card needs candles"}</button>
-          </div>
         </>}
-
-        {open && (
-          <div className="detail-actions">
-            <button type="button" className="btn-primary" onClick={() => setClosing(true)}>Close trade</button>
-          </div>
-        )}
 
         <div className="trade-levels-card specular-card">
           <div className="rstrip-row">
@@ -573,6 +562,18 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <p className="initial-stop">Initial stop {formatPrice(trade.initial_stop_price, trade.symbol)}, set {formatListTime(trade.initial_stop_set_at, zone)}</p>
           )}
         </div>
+
+        {undatedExit || candles?.status === "none" ? null : (
+          <div className="detail-actions">
+            <button type="button" className="btn-primary" disabled={!ready} onClick={openCard}>{ready ? "Trade Card" : "Trade Card needs candles"}</button>
+          </div>
+        )}
+
+        {open && (
+          <div className="detail-actions">
+            <button type="button" className="btn-primary" onClick={() => setClosing(true)}>Close trade</button>
+          </div>
+        )}
 
         <div className="pager">
           <button type="button" aria-label="Previous trade (K)" disabled={!previous} onClick={() => go(previous)}>‹ Prev</button>
