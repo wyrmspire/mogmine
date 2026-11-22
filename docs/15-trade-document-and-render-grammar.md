@@ -108,6 +108,7 @@ TD-2 uses `PLAN · cancelled` when a recorded working entry order was cancelled.
 - Average entry and average exit are text in the fills table, not extra lines.
 - Scale-ins: one entry flag per fill. Several fills in one bar collapse to one flag with a count (UX-23). The entry line steps to the new average price.
 - The entry flag sits at the fill price on the entry bar, pointing the way the trade goes (▲ long, ▼ short), in the muted text colour. The exit flag is a hollow triangle at the exit fill price, pointing against the trade, with the reason as text: `TP`, `SL`, `TRAIL`, `BE`, `MKT`. Text, not colour, carries the meaning (UX-80).
+- For multiple targets, a linked exit uses the working order's explicit target key or its order ID if that ID matches a planned target key. A price change preserves that identity (`OD-49`).
 - Flags are placed by price, not by the candle. The `createSeriesMarkers` arrows above and below bars go away.
 
 ### 2.5 Hindsight: after the trade
