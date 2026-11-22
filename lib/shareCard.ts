@@ -296,6 +296,7 @@ export const DEFAULT_CARD_THEME: ChartTheme = {
   levelAdr: "#F59E0B",
   levelNeutral: "#6B7280",
   levelLabelText: "#F3F4F6",
+  vwap: "#F472B6",
 };
 
 export interface RenderCardCanvasOptions {
