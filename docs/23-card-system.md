@@ -101,6 +101,8 @@ A drill is BET-03 made repeatable. The Review queue's blind review ([ReviewScree
 
 After 30+ answered *Take it?* drills: average R of trades answered *Take it* against trades answered *Pass*, with `n` for each. If *Pass* trades did as well as *Take it* trades, the trader's read of their setups is not adding edge. Shown on the playbook card (§5) and the drill screen.
 
+**Built (CD-2a, `lib/drills.ts`):** the sealed front keeps only bars that closed by the entry, so the entry bar is hidden too: its high, low and close include prices after the fill. A miss is *Take it* on a losing trade that broke its rules, or *Pass* on a winning trade that followed them. The take-vs-pass averages use each trade's latest answer and `rMultiple`, and trades without a stop are counted apart.
+
 **Split for PRs:** `CD-2a` pure deck selection, eligibility, cut-off and scoring + tests; `CD-2b` local store + backup; `CD-2c` drill screen with flip and reveal.
 
 ---
