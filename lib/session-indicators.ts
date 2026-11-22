@@ -1,4 +1,7 @@
-import { equityIndexSessionBounds, offsetSessionDate, sessionDate, sessionWeekMonday } from "./session.ts";
+import {
+  equityIndexSessionBounds, indexSessionCandles, offsetSessionDate, previousRegularSessionDate,
+  readSessionWindow, sessionDate, sessionWeekMonday,
+} from "./session.ts";
 import { snapToTick, specFor, TIMEFRAME_MINUTES } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
 
@@ -37,47 +40,12 @@ interface Level {
   availableAt: number;
 }
 
-interface Coverage {
-  from: number;
-  to: number;
-  expectedBars: number;
-  presentBars: number;
-  /** Every whole bar is present and fixed session boundaries align to the bar grid. */
-  complete: boolean;
-}
-
-interface Window {
-  bars: Candle[];
-  coverage: Coverage;
-}
+type Window = ReturnType<typeof readSessionWindow>;
 
 interface VwapPoint {
   /** The candle close time in UTC milliseconds, when its OHLCV becomes usable. */
   time: number;
   value: number;
-}
-
-function validPrices(bar: Candle): boolean {
-  return [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite)
-    && bar.low <= Math.min(bar.open, bar.close) && bar.high >= Math.max(bar.open, bar.close);
-}
-
-function readWindow(index: ReadonlyMap<number, Candle | null>, from: number, end: number, asOf: number, barMs: number): Window {
-  const to = Math.max(from, Math.min(end, asOf));
-  const first = Math.ceil(from / barMs) * barMs;
-  const expectedBars = Math.max(0, Math.floor((to - first) / barMs));
-  const bars: Candle[] = [];
-  for (let i = 0; i < expectedBars; i += 1) {
-    const bar = index.get(first + i * barMs);
-    if (bar && validPrices(bar)) bars.push(bar);
-  }
-  return {
-    bars,
-    coverage: {
-      from, to, expectedBars, presentBars: bars.length,
-      complete: bars.length === expectedBars && first === from && (to < end || end % barMs === 0),
-    },
-  };
 }
 
 function mergeWindows(windows: readonly Window[]): Window {
@@ -147,15 +115,13 @@ export function computeSessionIndicators(candles: readonly Candle[], options: Se
   const barMs = TIMEFRAME_MINUTES[timeframe] * MINUTE_MS;
   if (!spec || !barMs || !Number.isFinite(new Date(asOf).getTime())) return null;
 
-  const index = new Map<number, Candle | null>();
-  for (const bar of candles) index.set(bar.time, index.has(bar.time) ? null : bar);
-
+  const index = indexSessionCandles(candles);
   const date = sessionDate(asOf);
   const monday = sessionWeekMonday(date);
-  const priorDate = offsetSessionDate(date, date === monday ? -3 : -1);
+  const priorDate = previousRegularSessionDate(date);
   const today = equityIndexSessionBounds(date);
   const prior = equityIndexSessionBounds(priorDate);
-  const read = (from: number, to: number) => readWindow(index, from, to, asOf, barMs);
+  const read = (from: number, to: number) => readSessionWindow(index, from, to, asOf, barMs);
   const previousDay = read(prior.open, prior.close);
   const overnight = read(today.open, today.rthOpen);
   const anchored = anchor === "rth" ? read(today.rthOpen, today.rthClose) : read(today.open, today.close);

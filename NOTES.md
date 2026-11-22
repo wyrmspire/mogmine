@@ -79,6 +79,19 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Codex — recurring review of LV-1 (#26), Core math lane released
+
+- Preserved the incoming worker files at `review/lv-1-worker-20261122T153555Z` (`fd5304b`). All five original tests passed, but Monday selected Sunday as its prior session, sparse bars supplied fake opens, and weekly highs used bars after the review time.
+- `lib/levels.ts` and the shared session reader now use completed native bars, exact open/close anchors, and dated settlement. Regressions cover Nov 12, both DST changes, cutoffs, gaps, duplicates, hourly boundaries, and ADR 7/14 rollover.
+- `npm test` passed 421 tests. With `TZ=Pacific/Auckland`, 20 level/session tests and 86 chart-mark, observer and Data-note tests passed. Typecheck, diff check and the 8-page build passed. Lint reported the existing PostCSS warning.
+- `feat/lv-1-computed-levels` is queued behind TD-3 (#34) per D-011. The chart still consumes legacy box geometry plus finding flags. Finish the complete `Mark[]` painter and D-010 screenshot checks before merging LV-1. The authoritative holiday calendar stays open under OD-35.
+
+### 2026-11-22 — Antigravity — LV-1 pure computed levels (D-011), Core math lane released
+Did:      Implemented `lib/levels.ts` with pure computed levels engine (floor pivots PP/R1/S1/R2/S2, ArunKBhaskar ADR Pivots, prior Globex PDH/PDL/PDC, prior RTH levels, overnight Globex open/ONH/ONL, week high/low) and candle session extractor. All values snapped to tick size in integer ticks and float (AGENTS §3b-4). Verified against Thu 2026-11-12 worked check in docs/12 §3A and fixture `MES-2026-11-12.json`.
+Files:    `lib/levels.ts` (new), `lib/__tests__/levels.test.ts` (new), `NOTES.md`.
+Verified: `npm test` passed 419 tests (5 new). Typecheck and diff check clean. Lint 0 errors, 1 pre-existing warning. Local build generated 8/8 static pages.
+Left:     Unblocks `LV-2` (`SessionLevelsPrimitive` canvas painter and toggle on `TradeChart.tsx`).
+
 ### 2026-11-22 — Codex — recurring review and displayed-bar findings (#35), Chart lane released
 
 - Run `20261122T040021Z` left the TD-3 worktree's index and tracked files at `9a13989` with its ref at `4127452`. The staged inverse of PR #150 passed 414 unit tests but failed the Chrome ‹30/Fit check. Applied the merged patch to restore agreement and kept the dependency symlink and three stashes.
