@@ -312,7 +312,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   });
   // Computed session levels (LV-1 / LV-2, docs/24 §5, OD-15): the prior session and this session up to
   // entry, read from the chart's own series. The trade's candle window alone never holds the prior session.
-  const levels = useTradeLevels(trade, showLevels);
+  const levels = useTradeLevels(trade, showLevels, candles);
 
   const online = useOnline();
   const freshness = getCandleFreshness({

@@ -24,6 +24,7 @@ import {
 } from "../plans-store.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { DEFAULT_OWNER_USER_ID } from "../trades.ts";
+import { demoTrades } from "../fixtures.ts";
 
 describe("plans model (PS-1)", () => {
   it("defines the five expected presets and lookup", () => {
@@ -169,7 +170,8 @@ describe("plans store & persistence (PS-1)", () => {
     assert.equal(plan.observations, "Imbalance $1.2B to sell");
     assert.equal(plan.bias, "bearish");
     assert.equal(plan.revisions.length, 1);
-    assert.equal(plan.revisions[0].observations, "Watching closing imbalances");
+    assert.equal(plan.revisions[0].observations, "Imbalance $1.2B to sell");
+    assert.equal(plan.revisions[0].bias, "bearish");
     assert.equal(plan.revisions[0].after_the_fact, true);
   });
 
@@ -255,5 +257,12 @@ describe("plans store & persistence (PS-1)", () => {
       assert.equal(parsed.plans[0].name, "Pre-market Plan");
       assert.equal(parsed.plans[0].levels[0].price, 5925.0);
     }
+  });
+
+  it("keeps an explicit empty plans list so restore can clear stale device plans", () => {
+    const backup = buildBackup([demoTrades[0]], undefined, undefined, undefined, undefined, undefined, []);
+    const parsed = parseBackupFile(JSON.stringify(backup));
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) assert.deepEqual(parsed.plans, []);
   });
 });

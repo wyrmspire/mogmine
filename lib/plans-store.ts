@@ -181,9 +181,11 @@ export function sanitizePlans(raw: unknown): PlanningSession[] {
 }
 
 export function sanitizePlansBackup(raw: unknown): PlanningSession[] | null {
-  if (!raw) return null;
+  if (!Array.isArray(raw)) return null;
   const sanitized = sanitizePlans(raw);
-  return sanitized.length > 0 ? sanitized : null;
+  // An explicit empty list is meaningful: restoring it clears plans. Absence or a wholly corrupt
+  // non-empty list is ignored so an old/bad backup cannot erase good device data.
+  return raw.length === 0 || sanitized.length > 0 ? sanitized : null;
 }
 
 export function getPlansBackup(): PlanningSession[] {
@@ -248,18 +250,7 @@ export function updatePlan(id: string, patch: PlanUpdatePayload) {
   const nowIso = new Date().toISOString();
   const afterTheFact = isAfterTheFact(nowIso, current.anchor_time_utc);
 
-  // Snapshot current state into revisions before mutating
-  const revision: PlanRevision = {
-    id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    saved_at: nowIso,
-    after_the_fact: afterTheFact,
-    observations: current.observations,
-    bias: current.bias,
-    watch_playbook_ids: current.watch_playbook_ids,
-    levels: current.levels,
-  };
-
-  const updated: PlanningSession = {
+  const candidate: PlanningSession = {
     ...current,
     name: patch.name !== undefined ? trimText(patch.name, PLAN_LIMITS.name) || current.name : current.name,
     observations: patch.observations !== undefined ? patch.observations.slice(0, PLAN_LIMITS.observations) : current.observations,
@@ -268,8 +259,21 @@ export function updatePlan(id: string, patch: PlanUpdatePayload) {
     levels: patch.levels !== undefined ? patch.levels : current.levels,
     archived: patch.archived !== undefined ? patch.archived : current.archived,
     updated_at: nowIso,
-    revisions: [...current.revisions, revision],
   };
+  const sanitized = sanitizePlanningSession(candidate);
+  if (!sanitized) return;
+  // A revision is the state produced by this save. Storing the previous state with the new save time
+  // would mislabel pre-anchor text as after-the-fact and lose which content the later edit introduced.
+  const revision: PlanRevision = {
+    id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    saved_at: nowIso,
+    after_the_fact: afterTheFact,
+    observations: sanitized.observations,
+    bias: sanitized.bias,
+    watch_playbook_ids: sanitized.watch_playbook_ids,
+    levels: sanitized.levels,
+  };
+  const updated: PlanningSession = { ...sanitized, revisions: [...sanitized.revisions, revision] };
 
   const plans = state.plans.map((p) => (p.id === id ? updated : p));
   set({ plans });
