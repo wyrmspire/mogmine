@@ -52,7 +52,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check, done** (`lib/market-data/coverage.ts`: the route and the client cache use `coversTradeWindow` / `anchorsTradeWindow`; no `length >= 4` bypass remains).
 19. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
 20. **`CD-2a`–`CD-2c` — Drill cards, done** (docs/23 §4, issue #165; **`CD-2a` done**: `lib/drills.ts`; **`CD-2b` done**: `lib/drills-store.ts`, backup `drills`; **`CD-2c` done**: `/drills`, `components/DrillScreen.tsx`): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
-21. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
+21. **`CD-3` — Playbook card** (docs/23 §5, issue #169): **`CD-3a` data done** (`lib/playbook-card.ts`). `CD-3b` (the card on the CD-1a frame) waits for PR #160.
 
 22. **`DC-2`–`DC-7` — Discretionary calls** ([docs/25](docs/25-discretionary-calls.md) §8, proposal `OD-52`): store, call sheet, chart pins, Skip/Flip grading, discretion score. `DC-1` (pure model) and `DC-1b` (stable reason ids with frozen labels) are done; wait for the owner's yes on `OD-52` before `DC-3` UI.
 
@@ -78,6 +78,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — CD-3a playbook card data (#169), Core math lane released
+
+- `lib/playbook-card.ts` (pure): rules in order. The example is the latest real, closed, all-rules trade with a blind *Take it* (`take_again: "yes"`), else the latest all-rules trade, else none. Stats come from `runningStats().byPlaybook` (R-08a). Win rate and average R stay null below 10 trades (OD-46 e). The trade count and R skips always print. The drill result covers this playbook's real trades only.
+- The "Skip when…" list is not built: `OD-46` (d) waits for the owner, and `Playbook` has no such field.
+- `npm test`, typecheck, lint and build pass (output in PR). CD-3b (the card UI and binder) should sit on the shared frame from CD-1a (#160) once it merges.
 
 ### 2026-11-22 — Claude — CD-2c drill screen (#165), App shell lane released
 
