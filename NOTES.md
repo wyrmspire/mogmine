@@ -50,7 +50,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 16. **`UI-2` — Desktop 3-column workstation & toolbar polish, done** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `docs/24 §6`, `#114`): refine `>=1024px` layout and chart surface hierarchy with balanced chart frame height clamp and single-row 7-column levels ribbon so `.trade-levels-card` sits immediately below `.chart-card` and stays visible without scrolling; move small controls off mobile screen edges (`1m` at 24 px, change-target chip at 22 px, After-the-exit note at 30 px, Mood button at 28 px) to clear the back-swipe gesture zone (<15px).
 17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
 18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check, done** (`lib/market-data/coverage.ts`: the route and the client cache use `coversTradeWindow` / `anchorsTradeWindow`; no `length >= 4` bypass remains).
-19. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
+19. **`CD-1a` — Card frame & Trade Card layout, done** (`lib/shareCard.ts`, `lib/__tests__/card-system.test.ts`, [docs/23](docs/23-card-system.md) §2–3, `OD-46`, #41): shared frame layout tables for `4:5`, `9:16`, `1:1` with chart main area at 55–60%, hero R + process seal with blind review verdict, specular 1px gold top highlight, Shield copy verified for all sizes. Followed by `CD-1b` (sheet controls, size picker, 390×844 check).
 20. **`CD-2a`–`CD-2c` — Drill cards, done** (docs/23 §4, issue #165; **`CD-2a` done**: `lib/drills.ts`; **`CD-2b` done**: `lib/drills-store.ts`, backup `drills`; **`CD-2c` done**: `/drills`, `components/DrillScreen.tsx`): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
 21. **`CD-3` — Playbook card** (docs/23 §5, issue #169): **`CD-3a` data done** (`lib/playbook-card.ts`). `CD-3b` (the card on the CD-1a frame) waits for PR #160.
 
@@ -78,6 +78,14 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Gemini (gemini-3) — CD-1a shared card frame & layout tables (#41), Chart lane released
+
+- Implemented shared card frame layout tables for 4:5, 9:16 and 1:1 (`getCardLayout`, `CARD_LAYOUT_TABLE`) in `lib/shareCard.ts`.
+- Chart main area occupies 55%–60% across all sizes (4:5: 57.04%, 9:16: 57.29%, 1:1: 55.56%), with specular 1px gold highlight at top edge.
+- Added hero R (`heroResult`), process seal with rules adherence and blind review verdict (`formatBlindAnswer`), and size-aware filenames.
+- Pure canvas rendering function `renderCardCanvas` enables headless verification of frame, drawing bounds and Shield copy across all sizes.
+- Tested: 459 tests pass (6 new in `lib/__tests__/card-system.test.ts`), typecheck clean, lint clean (1 pre-existing warning), build 8/8 routes clean.
 
 ### 2026-11-22 — Claude — PS-4c past session reviews (#26), App shell lane released
 
