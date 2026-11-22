@@ -90,7 +90,7 @@ export interface BuildMarksOptions {
 }
 
 const exitText: Record<ExitReason, string> = {
-  target: "TP", stop: "SL", trail: "TRAIL", manual: "MKT", unknown: "",
+  target: "TP", stop: "SL", trail: "TRAIL", breakeven: "BE", manual: "MKT", unknown: "",
 };
 
 const findingAppearance: Record<TradeBarFinding["code"], [text: string, tone: MarkTone]> = {

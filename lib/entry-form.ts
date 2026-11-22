@@ -3,8 +3,8 @@
 // time pickers. This module owns the draft shape, its defaults, the time maths and the tick steppers.
 
 import { fromZonedInput, toZonedInput } from "./time.ts";
-import { snapToTick, specFor, tickDecimals, toTicks } from "./trades.ts";
-import type { TradeDirection, TradeStatus } from "./trades.ts";
+import { isExitReason, snapToTick, specFor, tickDecimals, toTicks } from "./trades.ts";
+import type { TradeDirection, TradeExitReason, TradeStatus } from "./trades.ts";
 
 export interface EntryDraft {
   /** `open`: still running, no exit yet (R-03b). */
@@ -21,6 +21,8 @@ export interface EntryDraft {
   entryPrice: string;
   /** Ignored while `status` is `open`. */
   exitPrice: string;
+  /** Optional. How the trade ended: Target · Stop · Trailed · Breakeven · Market (docs/15 §3, issue #36 G1). */
+  exitReason?: TradeExitReason | null;
   /** Optional. Saved as the stop and frozen as the initial stop (R-10). */
   stopPrice: string;
   /** Optional. Saved as the planned target. */
@@ -33,6 +35,8 @@ export interface EntryDraft {
   entryClock: string;
   /** Exit time, `HH:mm`. Earlier than the entry time means the next calendar day (an overnight hold). */
   exitClock: string;
+  /** Optional. One-tap feeling at entry (docs/19 §4, OD-39 c). */
+  entryMoodSpoke?: string | null;
 }
 
 /** Minutes the default entry sits before the default exit for a closed trade. */
@@ -55,8 +59,9 @@ export function freshEntryDraft(now: Date, zone: string): EntryDraft {
   const exit = zonedParts(now, zone);
   return {
     status: "closed", symbol: "MES", direction: "LONG", quantity: "1",
-    entryPrice: "", exitPrice: "", stopPrice: "", targetPrice: "",
+    entryPrice: "", exitPrice: "", exitReason: null, stopPrice: "", targetPrice: "",
     date: entry.date, entryClock: entry.clock, exitClock: exit.clock,
+    entryMoodSpoke: null,
   };
 }
 
@@ -81,12 +86,14 @@ export function upgradeDraft(raw: unknown, now: Date, zone: string): EntryDraft 
     quantity: text(old.quantity, fresh.quantity),
     entryPrice: text(old.entryPrice, ""),
     exitPrice: text(old.exitPrice, ""),
+    exitReason: isExitReason(old.exitReason) ? old.exitReason : null,
     stopPrice: text(old.stopPrice, ""),
     targetPrice: text(old.targetPrice, ""),
     ...(old.accountId === null || typeof old.accountId === "string" ? { accountId: old.accountId } : {}),
     date: text(old.date, entry?.date || fresh.date),
     entryClock: text(old.entryClock, entry?.clock || fresh.entryClock),
     exitClock: text(old.exitClock, exit?.clock || fresh.exitClock),
+    entryMoodSpoke: typeof old.entryMoodSpoke === "string" ? old.entryMoodSpoke : null,
   };
 }
 

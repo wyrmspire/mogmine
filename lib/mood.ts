@@ -34,6 +34,14 @@ export interface MoodSpokeRegistry {
   spokes: MoodSpoke[];
 }
 
+/** Standard score assigned by one-tap capture at entry or pre-exit (docs/19 §4, OD-39 c). */
+export const ONE_TAP_MOOD_SCORE = 0.8;
+
+/** Concise chip label for one-tap mood selection (e.g. "Calm" instead of "Calm / patience"). */
+export function spokeChipLabel(spoke: Pick<MoodSpoke, "id" | "label">): string {
+  return spoke.id === "calm" ? "Calm" : spoke.label;
+}
+
 /**
  * Starting spokes (owner to confirm, OD-39). Ordered so opposites face each other on the ring:
  * calm ↔ FOMO, confidence ↔ fear, hope ↔ frustration.
@@ -702,19 +710,32 @@ export function acceptSuggestion(suggestion: MoodSuggestion, records: MoodRecord
   return { id: meta.id, trade_id: suggestion.trade_id, spoke_set_version: suggestion.spoke_set_version, scores, evidence, source: "voice_ai", model: suggestion.model, captured_at: suggestion.captured_at, created_at: meta.now };
 }
 
-/** The trader sets one spoke (a drag, or back to unknown with `null`). */
-export function userScoreRecord(meta: { id: string; trade_id: string; now: string; captured_at?: string | null }, registry: MoodSpokeRegistry, spoke: string, value: number | null): MoodRecord {
+/** The trader sets one or more spokes (e.g. one-tap mood at entry). */
+export function userMoodRecord(
+  meta: { id: string; trade_id: string; now: string; captured_at?: string | null },
+  registry: MoodSpokeRegistry,
+  scores: Record<string, number | null>,
+): MoodRecord {
+  const sanitized: Record<string, number | null> = {};
+  for (const [spoke, value] of Object.entries(scores)) {
+    sanitized[spoke] = value == null ? null : round2(clampScore(value));
+  }
   return {
     id: meta.id,
     trade_id: meta.trade_id,
     spoke_set_version: registry.version,
-    scores: { [spoke]: value == null ? null : round2(clampScore(value)) },
+    scores: sanitized,
     evidence: {},
     source: "user",
     model: null,
     captured_at: meta.captured_at ?? meta.now,
     created_at: meta.now,
   };
+}
+
+/** The trader sets one spoke (a drag, or back to unknown with `null`). */
+export function userScoreRecord(meta: { id: string; trade_id: string; now: string; captured_at?: string | null }, registry: MoodSpokeRegistry, spoke: string, value: number | null): MoodRecord {
+  return userMoodRecord(meta, registry, { [spoke]: value });
 }
 
 // ---------------------------------------------------------------------------------------------

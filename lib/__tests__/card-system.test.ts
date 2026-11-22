@@ -185,10 +185,17 @@ test("CD-1a: shareCardFileName formats size suffix and preserves backward compat
   assert.equal(shareCardFileName(trade, "9:16"), "mes-long-2026-11-10-trade-card-9x16.png");
   assert.equal(shareCardFileName(trade, "1:1"), "mes-long-2026-11-10-trade-card-1x1.png");
 
+  // CD-1b: back side adds -back suffix
+  assert.equal(shareCardFileName(trade, "4:5", "back"), "mes-long-2026-11-10-trade-card-back.png");
+  assert.equal(shareCardFileName(trade, "9:16", "back"), "mes-long-2026-11-10-trade-card-9x16-back.png");
+  assert.equal(shareCardFileName(trade, "1:1", "back"), "mes-long-2026-11-10-trade-card-1x1-back.png");
+
   // Never leaks privacy data into file name
   for (const size of ["4:5", "9:16", "1:1"] as CardSize[]) {
     const fn = shareCardFileName(trade, size);
     assert.doesNotMatch(fn, /\$|usd|contract|3|71\.25/i);
+    const fnBack = shareCardFileName(trade, size, "back");
+    assert.doesNotMatch(fnBack, /\$|usd|contract|3|71\.25/i);
   }
 });
 
@@ -310,3 +317,50 @@ test("CD-1a: renderCardCanvas draws specular 1px gold highlight, main chart and 
     assert.ok(textStrings.some((s) => s.includes("MES LONG")), `Subject must be drawn for ${size}`);
   }
 });
+
+test("CD-1b: renderCardCanvas draws back side with thesis, management, post-exit notes and checklist", () => {
+  const sizes: CardSize[] = ["4:5", "9:16", "1:1"];
+  const trade = createMockTrade();
+  const mockSnapshot = { width: 900, height: 600 } as unknown as CanvasImageSource & { width: number; height: number };
+
+  for (const size of sizes) {
+    const { ctx, calls, textStrings } = createMockContext();
+    const layout = getCardLayout(size);
+
+    renderCardCanvas(ctx, mockSnapshot, trade, "America/Chicago", true, null, {
+      size,
+      side: "back",
+      theme: DEFAULT_CARD_THEME,
+    });
+
+    // 1. Specular 1px gold top edge highlight (Invariant 5, docs/23 §2)
+    const goldTopEdge = calls.find(
+      (c) => c.method === "fillRect" && c.args[0] === 0 && c.args[1] === 0 && c.args[2] === layout.width && c.args[3] === 1,
+    );
+    assert.ok(goldTopEdge, `1px gold top edge must be drawn for ${size} back side`);
+
+    // 2. Chart snapshot drawImage should NOT be called for back side
+    const chartDraw = calls.find((c) => c.method === "drawImage");
+    assert.equal(chartDraw, undefined, `Chart snapshot must NOT be drawn on back side for ${size}`);
+
+    // 3. Back side sections: thesis, management, post-exit, checklist
+    assert.ok(textStrings.includes("PRE-TRADE THESIS"), `PRE-TRADE THESIS label must be drawn for ${size}`);
+    assert.ok(textStrings.some((s) => s.includes("ORB reclaim setup")), `Pre-trade thesis text must be drawn for ${size}`);
+    assert.ok(textStrings.includes("TRADE MANAGEMENT"), `TRADE MANAGEMENT label must be drawn for ${size}`);
+    assert.ok(textStrings.some((s) => s.includes("Hold through first pull")), `Management notes text must be drawn for ${size}`);
+    assert.ok(textStrings.includes("POST-EXIT NOTES"), `POST-EXIT NOTES label must be drawn for ${size}`);
+    assert.ok(textStrings.some((s) => s.includes("Clean exit at target")), `Post-exit notes text must be drawn for ${size}`);
+    assert.ok(textStrings.some((s) => s.includes("PLAYBOOK CHECKLIST")), `Playbook checklist label must be drawn for ${size}`);
+    assert.ok(textStrings.some((s) => s.includes("Hard stop placed")), `Rule item must be drawn for ${size}`);
+
+    // 4. Header includes BACK label
+    assert.ok(textStrings.some((s) => s.includes("BACK")), `Header must contain BACK indicator for ${size}`);
+
+    // 5. Privacy sweep under Shield
+    for (const str of textStrings) {
+      assert.doesNotMatch(str, /\$|usd/i, `Rendered text must not contain money under Shield for ${size}: ${str}`);
+      assert.doesNotMatch(str, /contract|3×/i, `Rendered text must not contain contract count under Shield for ${size}: ${str}`);
+    }
+  }
+});
+

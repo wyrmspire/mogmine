@@ -5,6 +5,7 @@ import { test } from "node:test";
 import {
   DEFAULT_MOOD_REGISTRY,
   MIN_MOOD_SAMPLE,
+  ONE_TAP_MOOD_SCORE,
   acceptSuggestion,
   addSpoke,
   capturePhase,
@@ -22,7 +23,9 @@ import {
   sanitizeRegistry,
   scoreAtPoint,
   similarTrades,
+  spokeChipLabel,
   suggestMoodFromText,
+  userMoodRecord,
   userScoreRecord,
 } from "../mood.ts";
 import type { MoodRecord, MoodSpokeRegistry } from "../mood.ts";
@@ -420,4 +423,35 @@ test("backups carry mood data, and an older backup without it restores as before
   }
   const old = parseBackupFile(JSON.stringify(buildBackup([t])));
   assert.equal(old.ok && "mood" in old, false);
+});
+
+test("userMoodRecord and one-tap mood at entry / pre-exit (UI-3, docs/19 §4, OD-39 c)", () => {
+  const meta = { id: "rec-1", trade_id: "trade-1", now: "2026-11-20T14:30:00.000Z", captured_at: "2026-11-20T14:00:00.000Z" };
+  const rec = userMoodRecord(meta, DEFAULT_MOOD_REGISTRY, { calm: ONE_TAP_MOOD_SCORE, fomo: null });
+  assert.equal(rec.id, "rec-1");
+  assert.equal(rec.trade_id, "trade-1");
+  assert.equal(rec.source, "user");
+  assert.equal(rec.captured_at, "2026-11-20T14:00:00.000Z");
+  assert.equal(rec.scores.calm, 0.8);
+  assert.equal(rec.scores.fomo, null);
+
+  // Closed trade: captured_at is before exit_time -> pre_exit
+  const closed = trade("trade-1", { entry_time: "2026-11-20T14:00:00.000Z", exit_time: "2026-11-20T14:30:00.000Z" });
+  assert.equal(capturePhase(rec, closed), "pre_exit");
+
+  // Open trade: exit_time is null -> pre_exit
+  const open = trade("trade-1", { status: "open", entry_time: "2026-11-20T14:00:00.000Z", exit_time: null, exit_price: null });
+  assert.equal(capturePhase(rec, open), "pre_exit");
+
+  // Pre-exit mood vector recognizes calm as dominant
+  const vector = moodVector(closed, [rec], DEFAULT_MOOD_REGISTRY, { phase: "pre_exit" });
+  assert.equal(dominantSpoke(vector), "calm");
+  assert.equal(describeMood(vector), "Calm / patience high · 5 not scored");
+});
+
+test("spokeChipLabel formats concise labels for chips", () => {
+  const calmSpoke = DEFAULT_MOOD_REGISTRY.spokes.find((s) => s.id === "calm")!;
+  const confSpoke = DEFAULT_MOOD_REGISTRY.spokes.find((s) => s.id === "confidence")!;
+  assert.equal(spokeChipLabel(calmSpoke), "Calm");
+  assert.equal(spokeChipLabel(confSpoke), "Confidence");
 });

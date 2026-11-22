@@ -49,6 +49,21 @@ export interface ChecklistItem {
   checked: boolean;
 }
 
+/** One-tap exit reason (docs/15 §3, issue #36 G1). */
+export type TradeExitReason = "target" | "stop" | "trail" | "breakeven" | "manual";
+
+export const EXIT_REASONS: ReadonlyArray<{ value: TradeExitReason; label: string; flag: string }> = [
+  { value: "target", label: "Target", flag: "TP" },
+  { value: "stop", label: "Stop", flag: "SL" },
+  { value: "trail", label: "Trailed", flag: "TRAIL" },
+  { value: "breakeven", label: "Breakeven", flag: "BE" },
+  { value: "manual", label: "Market", flag: "MKT" },
+];
+
+export function isExitReason(value: unknown): value is TradeExitReason {
+  return typeof value === "string" && EXIT_REASONS.some((r) => r.value === value);
+}
+
 export interface TradeRecord {
   id: string;
   user_id: string;
@@ -66,6 +81,11 @@ export interface TradeRecord {
   entry_price: number;
   /** Null while the trade is open (R-03). Never `0` or the entry price. */
   exit_price: number | null;
+  /**
+   * How the trade ended (docs/15 §3, issue #36 G1). One tap: Target · Stop · Trailed · Breakeven · Market.
+   * Null on open trades or when unstated on manual entry (then inferred where exit equals stop/target).
+   */
+  exit_reason: TradeExitReason | null;
   stop_loss_price: number | null;
   /**
    * The first stop this trade ever had, frozen when it was set (R-10). Later edits move
@@ -770,6 +790,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     take_again_at: null,
     is_sample: false,
     sparkline: [],
+    exit_reason: null,
     ...raw,
     status,
   };
@@ -778,6 +799,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;
   if (trade.account_id === undefined) trade.account_id = null;
+  trade.exit_reason = status === "open" ? null : isExitReason(raw.exit_reason) ? raw.exit_reason : null;
   if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
@@ -877,13 +899,20 @@ export function validateClose(
   return errors;
 }
 
-/** The patch that closes an open trade: status, both exit fields, and the style from the real hold (R-03b). */
+/** The patch that closes an open trade: status, both exit fields, optional exit reason, and the style from the real hold (R-03b, G1). */
 export function closeTradePatch(
   trade: Pick<TradeRecord, "entry_time">,
   exitTime: string,
   exitPrice: number,
-): Pick<TradeRecord, "status" | "exit_time" | "exit_price" | "trade_style"> {
-  return { status: "closed", exit_time: exitTime, exit_price: exitPrice, trade_style: classifyTrade(trade.entry_time, exitTime) };
+  exitReason?: TradeExitReason | null,
+): Pick<TradeRecord, "status" | "exit_time" | "exit_price" | "trade_style"> & Partial<Pick<TradeRecord, "exit_reason">> {
+  return {
+    status: "closed",
+    exit_time: exitTime,
+    exit_price: exitPrice,
+    trade_style: classifyTrade(trade.entry_time, exitTime),
+    ...(exitReason !== undefined ? { exit_reason: exitReason } : {}),
+  };
 }
 
 /** Tags that record a broken process, whatever the trade made. */

@@ -14,6 +14,7 @@ import {
   sanitizeRegistry,
   spokeIdFor,
   suggestMoodFromText,
+  userMoodRecord,
   userScoreRecord,
   userSetSpokes,
 } from "./mood.ts";
@@ -123,8 +124,24 @@ export function hydrateMood() {
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `mood-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
 /** The trader sets one spoke by hand. `null` sets it back to unknown. Returns the previous value for Undo. */
-export function setSpokeScore(tradeId: string, spoke: string, value: number | null, now = new Date().toISOString()) {
-  const record = userScoreRecord({ id: newId(), trade_id: tradeId, now }, state.registry, spoke, value);
+export function setSpokeScore(tradeId: string, spoke: string, value: number | null, now = new Date().toISOString(), capturedAt?: string | null) {
+  const record = userScoreRecord({ id: newId(), trade_id: tradeId, now, captured_at: capturedAt }, state.registry, spoke, value);
+  set({ records: [...state.records, record] });
+  persist();
+  return record;
+}
+
+/**
+ * Record user mood scores. Used for one-tap mood capture at entry or pre-exit (docs/19 §4, OD-39 c).
+ * `capturedAt` stamps when the feeling was experienced (e.g. trade entry time).
+ */
+export function recordUserMood(
+  tradeId: string,
+  scores: Record<string, number | null>,
+  now = new Date().toISOString(),
+  capturedAt?: string | null,
+) {
+  const record = userMoodRecord({ id: newId(), trade_id: tradeId, now, captured_at: capturedAt }, state.registry, scores);
   set({ records: [...state.records, record] });
   persist();
   return record;

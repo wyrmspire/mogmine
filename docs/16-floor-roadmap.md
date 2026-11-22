@@ -71,12 +71,12 @@ Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CO
 9. **`UI-2` — Desktop 3-column workstation & toolbar polish, done (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `docs/24 §6`, `#114`):** Refine `>=1024px` workspace with compact levels ribbon and balanced chart frame clamp without hiding `.trade-levels-card`; move mobile edge controls (`1m`, change-target chip, after-the-exit note, mood button) >= 20px off edges to avoid back-swipe conflicts.
 10. **`UI-3` — Mood at Entry (`OD-39` c, `docs/19` §4):** Optional 1-tap pre-exit mood capture in `AddTradeSheet` / open `TradeDetail`.
 11. **`MD-1` (Issue `#90` `AC-07`) — Expected window coverage in `/api/market-data` & `lib/candles.ts`:** Check `expectedInsideBarTimes` instead of `candles.length >= 4`.
-12. **`CD-1a` — Card frame & Trade Card layout, done (`lib/shareCard.ts` + tests, [docs/23](23-card-system.md) §2–3, `OD-46`, #41):** Shared frame, `4:5` / `9:16` / `1:1` layout tables, chart at 55–60%, hero R with rules seal, Shield copy tested for all sizes. Followed by `CD-1b` (sheet controls, size picker, 390×844 check).
-13. **`CD-1b` — Trade Card sheet controls (`components/TradeCardSheet.tsx`):** Size picker, back side, Share opens with Shield on; `390×844` check.
+12. **`CD-1a` — Card frame & Trade Card layout, done (`lib/shareCard.ts` + tests, [docs/23](23-card-system.md) §2–3, `OD-46`, #41):** Shared frame, `4:5` / `9:16` / `1:1` layout tables, chart at 55–60%, hero R with rules seal, Shield copy tested for all sizes.
+13. **`CD-1b` — Trade Card sheet controls, done (`components/TradeCardSheet.tsx`, `components/TradeDetail.tsx`, `lib/shareCard.ts`):** Size picker (`4:5`, `9:16`, `1:1`), front/back flip toggle, canvas back-side journal rendering, default Shield on open, and `390×844` mobile check.
 14. **`CD-2a` — Drill decks, pure (`lib/drills.ts` + tests, docs/23 §4):** Eligibility (closed, not sample, bars cached, older than 7 days), warm-up / playbook / misses decks, chart cut at entry, scoring.
 15. **`CD-2b` — Drill store & backup (`lib/drill-store.ts`, `lib/store.ts`):** `mogmine-drills-v1` + `user_id`, in journal backup/restore, never writes `take_again`.
 16. **`CD-2c` — Drill screen:** Sealed front, *Take it / Smaller / Pass*, reveal (instant under reduced motion), missing-bars skip count.
-17. **`CD-3` — Playbook card (docs/23 §5):** After `R-07b` and `R-08a`.
+17. **`CD-3` — Playbook card (docs/23 §5):** `CD-3a` data done (`lib/playbook-card.ts`). `CD-3b` in-app card and `/playbooks` binder done (`components/PlaybookCard.tsx`, `components/PlaybookBinder.tsx`, `lib/playbook-binder.ts`). `CD-3c`: PNG export on the shared frame, after `CD-1b`.
 
 ---
 

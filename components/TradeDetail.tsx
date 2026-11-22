@@ -8,6 +8,9 @@ import { MoodCard } from "./MoodCard";
 import { AccountSelect } from "./AccountSelect";
 import { MoodEditorSheet } from "./MoodEditorSheet";
 import { MoodShape, useTradeMood } from "./MoodShape";
+import { ONE_TAP_MOOD_SCORE, dominantSpoke, spokeChipLabel } from "@/lib/mood";
+import { recordUserMood, setSpokeScore, undoMoodRecord, useMood } from "@/lib/mood-store";
+import { EXIT_REASONS } from "@/lib/trades";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
 import { TradeCardSheet } from "./TradeCardSheet";
@@ -26,6 +29,7 @@ import { usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { buildShareCard, shouldBuildShareCard } from "@/lib/shareCard";
+import type { CardSide, CardSize } from "@/lib/shareCard";
 import { addTrade, removeTrade, updateTrade, useJournal } from "@/lib/store";
 import { formatDetailTime, formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -97,6 +101,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   const [cardOpen, setCardOpen] = useState(false);
   const [cardPrivacy, setCardPrivacy] = useState(prefs.shield);
+  const [cardSize, setCardSize] = useState<CardSize>("4:5");
+  const [cardSide, setCardSide] = useState<CardSide>("front");
   const [fitted, setFitted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -111,6 +117,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [moodOpen, setMoodOpen] = useState(false);
   const closeMood = useCallback(() => setMoodOpen(false), []);
   const mood = useTradeMood(trade);
+  const moodState = useMood();
   const candles = useCandles(trade.id);
   const chartRef = useRef<TradeChartHandle>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
@@ -148,35 +155,43 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const go = useCallback((target: TradeRecord | undefined) => { if (target) router.push(`/trades/${target.id}`, { scroll: false }); }, [router]);
 
-  const encodeCard = useCallback((reason: "sheet-open" | "share" | "privacy" | "view-change" | "chart-render") => {
+  const encodeCard = useCallback((
+    reason: "sheet-open" | "share" | "privacy" | "view-change" | "chart-render",
+    size: CardSize = cardSize,
+    side: CardSide = cardSide,
+    privacy: boolean = cardPrivacy,
+  ) => {
     if (!shouldBuildShareCard(reason, true)) return;
     const snapshot = chartRef.current?.screenshot();
     if (!snapshot) return;
     const build = ++cardBuild.current;
     setShareBlob(null);
-    void buildShareCard(snapshot, trade, zone, cardPrivacy, mood)
+    void buildShareCard(snapshot, trade, zone, privacy, mood, { size, side })
       .then((blob) => { if (cardBuild.current === build) setShareBlob(blob); })
       .catch(() => { if (cardBuild.current === build) setShareBlob(null); });
-  }, [cardPrivacy, mood, trade, zone]);
+  }, [cardPrivacy, cardSide, cardSize, mood, trade, zone]);
 
   // After pan, pinch, fit, or ‹30/30› the live chart redraws. If the sheet is
   // open, rebuild the card from that current view (AC-10). Notes typing still
   // does not encode: the sheet is a dialog, and shouldBuildShareCard("notes")
   // stays false. A leftover blob is dropped when the sheet is closed.
   const onRendered = useCallback(() => {
-    if (cardOpen && shouldBuildShareCard("view-change", true)) encodeCard("view-change");
+    if (cardOpen && shouldBuildShareCard("view-change", true)) encodeCard("view-change", cardSize, cardSide, cardPrivacy);
     else if (!cardOpen) setShareBlob((prev) => (prev ? null : prev));
-  }, [cardOpen, encodeCard]);
+  }, [cardOpen, cardPrivacy, cardSide, cardSize, encodeCard]);
 
   const openCard = useCallback(() => {
-    setCardPrivacy(prefs.shield);
+    // OD-46 (a): Share opens with Shield on by default
+    setCardPrivacy(true);
+    setCardSize("4:5");
+    setCardSide("front");
     setShareBlob(null);
     setCardOpen(true);
-  }, [prefs.shield]);
+  }, []);
 
   useEffect(() => {
-    if (cardOpen) encodeCard("sheet-open");
-  }, [cardOpen, cardPrivacy, encodeCard]);
+    if (cardOpen) encodeCard("sheet-open", cardSize, cardSide, cardPrivacy);
+  }, [cardOpen, cardPrivacy, cardSize, cardSide, encodeCard]);
 
   const closeCard = useCallback(() => {
     if (cardPrivacy !== prefs.shield) {
@@ -189,6 +204,16 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const changeCardPrivacy = useCallback((privacy: boolean) => {
     setShareBlob(null);
     setCardPrivacy(privacy);
+  }, []);
+
+  const changeCardSize = useCallback((size: CardSize) => {
+    setShareBlob(null);
+    setCardSize(size);
+  }, []);
+
+  const changeCardSide = useCallback((side: CardSide) => {
+    setShareBlob(null);
+    setCardSide(side);
   }, []);
 
   useEffect(() => {
@@ -556,6 +581,36 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
           </div>
+          {!open && (
+            <div className="exit-reason-detail-row">
+              <span className="exit-reason-label">HOW DID IT END?</span>
+              <div className="chip-row" role="group" aria-label="How did it end?">
+                {EXIT_REASONS.map((reason) => {
+                  const selected = trade.exit_reason === reason.value;
+                  return (
+                    <button
+                      key={reason.value}
+                      type="button"
+                      className="chip"
+                      aria-pressed={selected}
+                      aria-label={`Exit reason: ${reason.label}`}
+                      onClick={() => {
+                        const previous = trade.exit_reason;
+                        const next = selected ? null : reason.value;
+                        updateTrade(trade.id, { exit_reason: next });
+                        showToast(next ? `Exit reason: ${reason.label}` : "Exit reason cleared", {
+                          label: "Undo",
+                          run: () => updateTrade(trade.id, { exit_reason: previous }),
+                        });
+                      }}
+                    >
+                      {reason.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
           {/* The frozen first stop, shown as a quiet fact only once the working stop has moved (R-10). */}
           {trade.initial_stop_price != null && trade.initial_stop_set_at != null && trade.stop_loss_price !== trade.initial_stop_price && (
@@ -567,6 +622,62 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="detail-actions">
             <button type="button" className="btn-primary" disabled={!ready} onClick={openCard}>{ready ? "Trade Card" : "Trade Card needs candles"}</button>
           </div>
+        )}
+
+        {open && (
+          <section className="open-mood-section specular-card card-pad" aria-label="Pre-exit feeling">
+            <div className="open-mood-head">
+              <div>
+                <span className="eyebrow">Pre-exit feeling</span>
+                <p className="open-mood-sub">How do you feel in this trade? <i>optional</i></p>
+              </div>
+              <button
+                type="button"
+                className="mood-mini"
+                onClick={() => setMoodOpen(true)}
+                aria-label="Mood Shape. Tap to open editor."
+              >
+                <MoodShape vector={mood} size={40} />
+              </button>
+            </div>
+            <div className="chip-row" role="group" aria-label="Pre-exit feeling">
+              {moodState.registry.spokes.map((spoke) => {
+                const selected = dominantSpoke(mood) === spoke.id;
+                return (
+                  <button
+                    key={spoke.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={selected}
+                    aria-label={`${spoke.label} pre-exit feeling`}
+                    onClick={() => {
+                      if (selected) {
+                        const rec = setSpokeScore(trade.id, spoke.id, null);
+                        showToast(`${spokeChipLabel(spoke)} cleared`, {
+                          label: "Undo",
+                          run: () => undoMoodRecord(rec.id),
+                        });
+                      } else {
+                        const previousDominant = dominantSpoke(mood);
+                        const scores: Record<string, number | null> = { [spoke.id]: ONE_TAP_MOOD_SCORE };
+                        if (previousDominant && previousDominant !== spoke.id) {
+                          scores[previousDominant] = null;
+                        }
+                        const now = new Date().toISOString();
+                        const rec = recordUserMood(trade.id, scores, now, now);
+                        showToast(`Feeling recorded: ${spokeChipLabel(spoke)}`, {
+                          label: "Undo",
+                          run: () => undoMoodRecord(rec.id),
+                        });
+                      }
+                    }}
+                  >
+                    {spokeChipLabel(spoke)}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {open && (
@@ -601,6 +712,18 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     </div>
     {moodOpen && <MoodEditorSheet trade={trade} onClose={closeMood} />}
     {closing && open && <CloseTradeSheet trade={trade} zone={zone} onClose={closeSheet} />}
-    {cardOpen && <TradeCardSheet trade={trade} blob={shareBlob} privacy={cardPrivacy} onPrivacyChange={changeCardPrivacy} onClose={closeCard} />}
+    {cardOpen && (
+      <TradeCardSheet
+        trade={trade}
+        blob={shareBlob}
+        privacy={cardPrivacy}
+        size={cardSize}
+        side={cardSide}
+        onPrivacyChange={changeCardPrivacy}
+        onSizeChange={changeCardSize}
+        onSideChange={changeCardSide}
+        onClose={closeCard}
+      />
+    )}
   </>;
 }

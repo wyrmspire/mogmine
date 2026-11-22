@@ -130,3 +130,12 @@ test("R-10: a backup with a half-written initial stop restores as unknown", () =
   assert.equal(parsed.trades[0].initial_stop_price, null);
   assert.equal(parsed.trades[0].initial_stop_set_at, null);
 });
+
+test("entryMoodSpoke in freshEntryDraft and upgradeDraft (UI-3, docs/19 §4)", () => {
+  const fresh = freshEntryDraft(new Date("2026-11-20T15:00:00.000Z"), CT);
+  assert.equal(fresh.entryMoodSpoke, null);
+  const upgraded = upgradeDraft({ entryMoodSpoke: "calm" }, new Date("2026-11-20T15:00:00.000Z"), CT);
+  assert.equal(upgraded.entryMoodSpoke, "calm");
+  const nullUpgraded = upgradeDraft({ entryMoodSpoke: null }, new Date("2026-11-20T15:00:00.000Z"), CT);
+  assert.equal(nullUpgraded.entryMoodSpoke, null);
+});

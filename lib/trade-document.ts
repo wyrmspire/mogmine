@@ -48,7 +48,7 @@ export interface PlanTarget {
 export type OrderRole = "entry" | "stop" | "target";
 export type OrderKind = "market" | "limit" | "stop" | "trail";
 export type FillRole = "entry" | "exit";
-export type ExitReason = "target" | "stop" | "trail" | "manual" | "unknown";
+export type ExitReason = "target" | "stop" | "trail" | "breakeven" | "manual" | "unknown";
 
 export interface TradeEventBase {
   seq: number;
@@ -1352,6 +1352,9 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
       initialRiskContractTicks != null && absContractTicks * 10 <= initialRiskContractTicks;
     isScratchResult = withinTwoTicks || withinPointOneR;
   }
+  if (resolvedExitReasons.some((r) => r.reason === "breakeven")) {
+    isScratchResult = true;
+  }
 
   // Past-stop fact (docs/15 §2.3 & §3.5 ex-ignored): closed exit ran past the last stop / initial stop on the losing side.
   const referenceStopPrice = lastKnownStopPrice ?? initialStop?.price ?? null;
@@ -1588,7 +1591,10 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
     const activeStop = record.stop_loss_price;
     let reason: ExitReason | undefined;
     let reasonBasis: EventBasis | undefined;
-    if (
+    if (record.exit_reason) {
+      reason = record.exit_reason;
+      reasonBasis = "stated";
+    } else if (
       record.planned_target_price != null &&
       legacyPriceEquals(record.exit_price, record.planned_target_price, record.symbol)
     ) {
@@ -1737,7 +1743,7 @@ function isTradeEvent(value: unknown): value is TradeEvent {
         (value.order === undefined || typeof value.order === "string") &&
         (value.fees === undefined || typeof value.fees === "number") &&
         (value.reason === undefined || value.reason === "target" || value.reason === "stop" ||
-          value.reason === "trail" || value.reason === "manual" || value.reason === "unknown") &&
+          value.reason === "trail" || value.reason === "breakeven" || value.reason === "manual" || value.reason === "unknown") &&
         (value.reason_basis === undefined || isBasis(value.reason_basis));
     case "note":
       return typeof value.text === "string" && (value.anchor === undefined ||

@@ -13,10 +13,12 @@ import { usePrefs } from "@/lib/prefs";
 import { AccountSelect } from "./AccountSelect";
 import { defaultAccountId } from "@/lib/accounts";
 import { useAccounts } from "@/lib/accounts-store";
+import { ONE_TAP_MOOD_SCORE, spokeChipLabel } from "@/lib/mood";
+import { recordUserMood, useMood } from "@/lib/mood-store";
 import { addTrade, useJournal } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { EXIT_REASONS, FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeStatus } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft, useOnline } from "@/lib/ui";
 
@@ -75,6 +77,7 @@ export function AddTradeSheet() {
   const firstField = useRef<HTMLButtonElement>(null);
   const accounts = useAccounts();
   const journal = useJournal();
+  const moodState = useMood();
   // Undefined until the trader picks: the account used last (docs/21).
   const accountId = draft.accountId !== undefined ? draft.accountId : defaultAccountId(accounts.accounts, journal.trades);
 
@@ -230,6 +233,7 @@ export function AddTradeSheet() {
       id: crypto.randomUUID(), symbol: draft.symbol, direction: draft.direction, quantity,
       entry_time: entry.toISOString(), ...exitFields,
       entry_price: entryPrice,
+      exit_reason: !isOpenDraft ? (draft.exitReason ?? null) : null,
       // R-10: a stop typed here is the stop and the frozen initial stop.
       ...stopPatch({ initial_stop_price: null }, stopPrice, new Date().toISOString()),
       planned_target_price: targetPrice,
@@ -238,6 +242,14 @@ export function AddTradeSheet() {
       account_id: accountId,
     });
     addTrade(trade);
+    if (draft.entryMoodSpoke) {
+      recordUserMood(
+        trade.id,
+        { [draft.entryMoodSpoke]: ONE_TAP_MOOD_SCORE },
+        new Date().toISOString(),
+        entry.toISOString(),
+      );
+    }
     keepDraft(DRAFT_KEY, null);
     closeAddTrade();
     showToast(isOpenDraft ? "Open trade saved on this device" : "Trade saved on this device");
@@ -281,6 +293,31 @@ export function AddTradeSheet() {
             <PriceRow id="target-price" label="Target" optional value={draft.targetPrice} placeholder={draft.direction === "LONG" ? "above entry" : "below entry"} step={step} error={showPrice("targetPrice")} onChange={(value) => change({ targetPrice: value })} onStep={(ticks) => stepPrice("targetPrice", ticks)} />
           </fieldset>
 
+          {!isOpenDraft && (
+            <div className="exit-reason-section">
+              <div className="exit-reason-head">
+                <span className="exit-reason-title">How did it end? <i>optional</i></span>
+              </div>
+              <div className="chip-row" role="group" aria-label="How did it end?">
+                {EXIT_REASONS.map((reason) => {
+                  const selected = draft.exitReason === reason.value;
+                  return (
+                    <button
+                      key={reason.value}
+                      type="button"
+                      className="chip"
+                      aria-pressed={selected}
+                      aria-label={`Exit reason: ${reason.label}`}
+                      onClick={() => change({ exitReason: selected ? null : reason.value })}
+                    >
+                      {reason.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="form-preview" aria-live="polite">
             <span>{riskUsd != null || riskPoints != null
               ? <>Risk {prefs.shield ? riskPoints : `${formatUsdAmount(riskUsd)} · ${riskPoints}`}{plan != null && <> · Plan {formatR(plan)}</>}</>
@@ -290,6 +327,29 @@ export function AddTradeSheet() {
               : priced && priced.exit_price != null
                 ? <><b className={pnl == null ? "" : pnl >= 0 ? "positive" : "negative"}>{prefs.shield ? (r != null ? formatR(r) : formatPoints(tradePoints(priced), draft.symbol)) : formatMoney(pnl)}</b>{!prefs.shield && <> · {formatR(r)}</>}</>
                 : "Result appears with the exit"}</span>
+          </div>
+
+          <div className="mood-entry-section">
+            <div className="mood-entry-head">
+              <span className="mood-entry-title">Feeling at entry <i>optional</i></span>
+            </div>
+            <div className="chip-row" role="group" aria-label="Feeling at entry">
+              {moodState.registry.spokes.map((spoke) => {
+                const selected = draft.entryMoodSpoke === spoke.id;
+                return (
+                  <button
+                    key={spoke.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={selected}
+                    aria-label={`${spoke.label} feeling at entry`}
+                    onClick={() => change({ entryMoodSpoke: selected ? null : spoke.id })}
+                  >
+                    {spokeChipLabel(spoke)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {shown.state !== "idle" && (
