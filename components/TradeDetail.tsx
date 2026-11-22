@@ -17,6 +17,8 @@ import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
 import { useTradeLevels } from "./useTradeLevels";
+import { tradeSessionVwap, vwapOnBars } from "@/lib/chart-indicators";
+import type { VwapAnchor, VwapPoint } from "@/lib/chart-indicators";
 import type { TradeLevelsState } from "./useTradeLevels";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
@@ -40,6 +42,8 @@ import { DataNotesChip } from "./DataNotesChip";
 import { collectDataNotes } from "@/lib/data-notes";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
+
+const NO_VWAP: readonly VwapPoint[] = [];
 
 function levelsStatus(levels: TradeLevelsState) {
   if (levels.status === "loading") return "Loading…";
@@ -97,6 +101,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [fullscreen, setFullscreen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [showLevels, setShowLevels] = useState(true);
+  // IND-1: the VWAP anchor is open under OD-18, so the trader picks it; nothing is drawn by default.
+  const [vwapAnchor, setVwapAnchor] = useState<VwapAnchor | "off">("off");
   const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
@@ -313,6 +319,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   // Computed session levels (LV-1 / LV-2, docs/24 §5, OD-15): the prior session and this session up to
   // entry, read from the chart's own series. The trade's candle window alone never holds the prior session.
   const levels = useTradeLevels(trade, showLevels);
+  const sessionVwap = useMemo(() => (ready && vwapAnchor !== "off"
+    ? tradeSessionVwap(trade, candles.candles, candles.baseTimeframe, vwapAnchor) : null), [ready, candles, trade, vwapAnchor]);
+  const vwapLine = useMemo(() => (sessionVwap && displayedBars ? vwapOnBars(sessionVwap, displayedBars, timeframe) : NO_VWAP),
+    [sessionVwap, displayedBars, timeframe]);
 
   const online = useOnline();
   const freshness = getCandleFreshness({
@@ -434,6 +444,19 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                     </button>
                   </div>
                   <div className="view-menu-section">
+                    <span className="view-menu-label">
+                      Session VWAP{vwapAnchor !== "off" && ready && !sessionVwap ? " · unavailable: bars missing in the session" : ""}
+                    </span>
+                    <div className="view-menu-toggle-group three" role="group" aria-label="Session VWAP anchor">
+                      {([["off", "Off", "No VWAP"], ["rth", "RTH", "From 09:30 ET"], ["globex", "Globex", "From 18:00 ET"]] as const).map(([value, label, hint]) => (
+                        <button key={value} type="button" aria-pressed={vwapAnchor === value} onClick={() => setVwapAnchor(value)} title={hint}>
+                          <span>{label}</span>
+                          <small>{hint}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="view-menu-section">
                     <button
                       type="button"
                       className="view-menu-item"
@@ -483,7 +506,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} vwap={vwapLine} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
