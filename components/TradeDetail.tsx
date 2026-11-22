@@ -16,6 +16,8 @@ import { TradeChart } from "./TradeChart";
 import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
+import { useTradeLevels } from "./useTradeLevels";
+import type { TradeLevelsState } from "./useTradeLevels";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
@@ -29,8 +31,6 @@ import { observeTrade, validateTradeAgainstBars } from "@/lib/trade-bar-validati
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
 import { buildMarks } from "@/lib/trade-marks";
 import type { Mark } from "@/lib/trade-marks";
-import { computeLevelsFromInputs, extractSessionInputsFromCandles } from "@/lib/levels";
-import { specFor } from "@/lib/trades";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, aggregateCandles, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
@@ -39,6 +39,14 @@ import { DataNotesChip } from "./DataNotesChip";
 import { collectDataNotes } from "@/lib/data-notes";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
+
+function levelsStatus(levels: TradeLevelsState) {
+  if (levels.status === "loading") return "Loading…";
+  if (levels.status === "none") return "Unavailable";
+  // Withheld levels are counted, never hidden (docs/12 §5).
+  if (levels.status === "ready") return `${levels.lines.length} shown${levels.missing.length ? ` · ${levels.missing.length} missing` : ""}`;
+  return "Off";
+}
 
 export function TradeDetail({ id }: { id: string }) {
   const journal = useJournal();
@@ -301,28 +309,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     symbol: trade.symbol,
     zone,
   });
-  // Computed session levels (LV-1 / LV-2, docs/24 §3, §5, OD-15)
-  const computedLevels = useMemo(() => {
-    if (!ready || !candles?.candles?.length) return [];
-    if (trade.symbol !== "MES" && trade.symbol !== "MNQ") return [];
-    const sDate = sessionDate(trade.entry_time);
-    const spec = specFor(trade.symbol);
-    const providerSymbol = spec?.yahooTicker ?? `${trade.symbol}=F`;
-    try {
-      const extracted = extractSessionInputsFromCandles({
-        symbol: trade.symbol,
-        provider: "yahoo_finance",
-        providerSymbol,
-        sessionDate: sDate,
-        candles: candles.candles,
-        timeframe: base,
-        asOf: Date.parse(trade.entry_time),
-      });
-      return computeLevelsFromInputs(extracted);
-    } catch {
-      return [];
-    }
-  }, [ready, candles, trade, base]);
+  // Computed session levels (LV-1 / LV-2, docs/24 §5, OD-15): the prior session and this session up to
+  // entry, read from the chart's own series. The trade's candle window alone never holds the prior session.
+  const levels = useTradeLevels(trade, showLevels);
 
   const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
   const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
@@ -430,10 +419,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                       role="menuitemcheckbox"
                       aria-checked={showLevels}
                       onClick={() => setShowLevels((prev) => !prev)}
-                      title="Toggle session levels"
+                      title={levels.status === "ready" && levels.missing.length
+                        ? `Prior-day and overnight levels as of the entry. Missing bars withheld: ${levels.missing.join(", ")}`
+                        : "Prior-day and overnight levels as of the entry"}
                     >
-                      <span>Session levels</span>
-                      <span className="shortcut">{showLevels ? "On ✓" : "Off"}</span>
+                      <span>{showLevels ? "Session levels ✓" : "Session levels"}</span>
+                      <span className="shortcut">{levelsStatus(levels)}</span>
                     </button>
                   </div>
                   <div className="view-menu-section">
@@ -483,7 +474,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           <div className="chart-frame">
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={computedLevels} showLevels={showLevels} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>

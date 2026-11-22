@@ -7,12 +7,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 import fixture from "../fixtures/levelsets/MES-2026-11-12.json" with { type: "json" };
 import { computeLevelsFromInputs } from "../lib/levels.ts";
+import { levelLines } from "../lib/chart-levels.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const transpile = (source) => ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
+const labelStack = transpile(read("../lib/label-stack.ts"));
 const levelsPainter = transpile(read("../components/SessionLevelsPrimitive.ts"));
 const lightweightCharts = fileURLToPath(new URL(
   "../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js", import.meta.url,
@@ -26,18 +28,20 @@ const computedLevels = computeLevelsFromInputs({
   sessionDate: fixture.session_date,
   inputs: fixture.inputs,
 });
+const lines = levelLines(computedLevels, 7600, "MES");
 
 const folder = mkdtempSync(join(tmpdir(), "mogmine-session-levels-"));
 try {
   const html = join(folder, "session-levels.html");
   writeFileSync(html, `<!doctype html><meta charset="utf-8"><pre id="result"></pre><div id="chart"></div>
     <script src="${pathToFileURL(lightweightCharts)}"></script>
-    <script>const exports = {}; ${levelsPainter}</script>
+    <script>const stack = (() => { const exports = {}; ${labelStack}; return exports; })();
+      const require = () => stack; const exports = {}; ${levelsPainter}</script>
     <script>
     const result = document.querySelector("#result");
     try {
       const times = ${JSON.stringify(candleTimes)};
-      const levels = ${JSON.stringify(computedLevels)};
+      const levels = ${JSON.stringify(lines)};
       const chart = LightweightCharts.createChart(document.querySelector("#chart"), {
         width: 390, height: 400,
         layout: { background: { color: "#07080c" }, attributionLogo: false },
@@ -87,7 +91,7 @@ try {
         return originalStroke.apply(this, args);
       };
       proto.fillText = function (text, ...args) {
-        renderedText.push({ text, fillStyle: this.fillStyle, x: args[0], y: args[1] });
+        renderedText.push({ text, fillStyle: this.fillStyle, x: args[0], y: args[1], right: args[0] + this.measureText(text).width });
         return originalFillText.call(this, text, ...args);
       };
       proto.fillRect = function (...args) {
@@ -96,19 +100,24 @@ try {
       };
 
       // Test with levels visible
-      levelsPrimitive.update(levels, true, theme);
+      levelsPrimitive.update(levels, theme, 60_000);
       const screenshotVisible = chart.takeScreenshot(true);
       const visibleLabels = renderedText.map(t => t.text);
       const rayCount = renderedLines.filter(l => l.path.length === 2 && l.path[0].args[1] === l.path[1].args[1]).length;
 
       // Check right-edge positioning: labels should sit close to width (pane.width is the chart width excluding price scale)
       const levelLabels = renderedText.filter(t => t.text.includes(" "));
-      const rightEdgeLabels = levelLabels.filter(t => t.x > 180);
+      // Stacked pills never overlap (16 px pills, 17 px pitch).
+      const ys = levelLabels.map(t => t.y).sort((a, b) => a - b);
+      const minGap = ys.slice(1).reduce((gap, y, i) => Math.min(gap, y - ys[i]), Infinity);
+      // Pills are right-aligned: every label ends within 20 px of the pane edge.
+      const paneRight = Math.max(...levelLabels.map(t => t.right));
+      const rightEdgeLabels = levelLabels.filter(t => t.right > paneRight - 20);
 
       // Test toggle off
       renderedText.length = 0;
       renderedLines.length = 0;
-      levelsPrimitive.update(levels, false, theme);
+      levelsPrimitive.update([], theme, 60_000);
       chart.takeScreenshot(true);
       const hiddenLabelsCount = renderedText.filter(t => t.text.includes(" ")).length;
       const hiddenRaysCount = renderedLines.filter(l => l.path.length === 2 && l.path[0].args[1] === l.path[1].args[1]).length;
@@ -118,6 +127,7 @@ try {
         visibleLabels,
         rayCount,
         rightEdgeCount: rightEdgeLabels.length,
+        minGap,
         hiddenLabelsCount,
         hiddenRaysCount,
       });
@@ -135,8 +145,10 @@ try {
   const res = JSON.parse(output.match(/<pre id="result">([^<]+)<\/pre>/)?.[1] ?? "{}");
   assert.ok(!res.error, res.error);
   console.log("Session levels check passed:", res);
-  assert.equal(res.levelsCount, 19);
-  assert.ok(res.visibleLabels.some(l => l.includes("7671.50 PDH")));
+  // 19 levels; PDH/RTH high and ADR inner low/RTH low share ticks, so 17 pills.
+  assert.equal(res.levelsCount, 17);
+  assert.ok(res.minGap >= 16.5, `pills overlap: ${res.minGap}`);
+  assert.ok(res.visibleLabels.some(l => l.includes("7671.50 PDH / RTH high")));
   assert.ok(res.visibleLabels.some(l => l.includes("7640.50 PDC")));
   assert.ok(res.visibleLabels.some(l => l.includes("7547.50 PDL")));
   assert.ok(res.visibleLabels.some(l => l.includes("7619.75 PP")));

@@ -9,10 +9,10 @@ import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
 import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
-import { alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, specFor, visibleLogicalBars } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, specFor, visibleLogicalBars } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
-import type { ComputedLevel } from "@/lib/levels";
+import type { LevelLine } from "@/lib/chart-levels";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
 
@@ -47,8 +47,8 @@ interface Props {
   bars: Candle[];
   timeframe: Timeframe;
   marks: readonly Mark[];
-  levels?: readonly ComputedLevel[];
-  showLevels?: boolean;
+  /** LV-2: computed session levels as drawable lines. Empty hides them. */
+  levels?: readonly LevelLine[];
   zone: string;
   /** Shield / privacy: the on-chart pill shows R and points, never dollars (UX-71). */
   privacy: boolean;
@@ -144,16 +144,18 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
   state.holdTimer = window.setTimeout(apply, 80);
 }
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = [], showLevels = true, zone, privacy, readout, onRendered, onFitChange, onExtensionChange }: Props) {
+const NO_LEVELS: readonly LevelLine[] = [];
+
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, zone, privacy, readout, onRendered, onFitChange, onExtensionChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, showLevels, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, showLevels, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -263,7 +265,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = [], sh
     const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t);
-    l.levelsPrimitive.update(p.levels ?? [], p.showLevels ?? true, t);
+    l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000);
 
     // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
     const fittedWindow = fitWindow(tr.entry_time, end, barTimeframe);
@@ -317,10 +319,11 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = [], sh
         borderVisible: false, priceLineVisible: false, lastValueVisible: false,
         priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
       });
-      const primitive = new PositionBoxPrimitive();
-      series.attachPrimitive(primitive);
+      // Levels attach first so their rays sit under the Position Box.
       const levelsPrimitive = new SessionLevelsPrimitive();
       series.attachPrimitive(levelsPrimitive);
+      const primitive = new PositionBoxPrimitive();
+      series.attachPrimitive(primitive);
       const state: Live = {
         lwc, host, chart, series, primitive, levelsPrimitive,
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
@@ -519,7 +522,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = [], sh
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, levels, showLevels, zone, privacy, theme]);
+  }, [trade, bars, timeframe, marks, levels, zone, privacy, theme]);
 
   return <><div
     ref={hostRef}
