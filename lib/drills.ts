@@ -12,6 +12,8 @@ export const MISS_INTERVALS_DAYS = [1, 3, 7] as const;
 export const DRILL_SCORE_MIN_ANSWERS = 30;
 
 export type DrillKind = "take_it";
+/** What a *Take it?* front hides (§4.1), recorded on every answer (B-63, UX-52). */
+export const DRILL_HIDDEN: readonly string[] = ["bars_after_entry", "entry_bar", "exit", "result", "tags", "notes", "mood"];
 export type DrillAnswer = "take" | "smaller" | "pass";
 
 export interface DrillRecord {

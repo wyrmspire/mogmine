@@ -103,6 +103,8 @@ After 30+ answered *Take it?* drills: average R of trades answered *Take it* aga
 
 **Built (CD-2a, `lib/drills.ts`):** the sealed front keeps only bars that closed by the entry, so the entry bar is hidden too: its high, low and close include prices after the fill. A miss is *Take it* on a losing trade that broke its rules, or *Pass* on a winning trade that followed them. The take-vs-pass averages use each trade's latest answer and `rMultiple`, and trades without a stop are counted apart.
 
+**Built (CD-2c, `/drills`):** decks for warm-up, due misses and one playbook, opened from Review. The front is drawn as an open trade on the cut bars, with no marks. The reveal shows the full chart with marks, R and the rules read. It does not yet play the bars forward or show the Trade Card front. Bars come only from the candle cache.
+
 **Split for PRs:** `CD-2a` pure deck selection, eligibility, cut-off and scoring + tests; `CD-2b` local store + backup; `CD-2c` drill screen with flip and reveal.
 
 ---
