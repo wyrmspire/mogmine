@@ -2,7 +2,7 @@
 
 The pure `computeSessionIndicators` function takes native MES or MNQ candles, their timeframe, an explicit Globex or RTH anchor, and a UTC cutoff. It returns a session VWAP curve, POC and value-area levels, prior Globex high/low, overnight high/low, week-to-date high/low and PDC when the prior daily settlement candle is supplied and available. It reports coverage per window and withholds values when required bars are missing. `vwapDistance`, `vwapSlope` and `pricePosition` provide signed distances, slope and direction, and nearest level above/below. Position calculations accept points and ranges from the existing draft fixture.
 
-The 70% volume profile uses HLC3 tick bins and lower-price ties. Trend slope uses endpoint change in points per minute. These are interim choices in `OD-50`, and there is no default VWAP anchor under `OD-18`. The calendar uses regular New York hours under `OD-35`. The caller supplies same-series data and the daily candle's normalized settlement date and availability time. [Audit and calculation details](codex-indicator-audit.md#core-math-in-this-slice) · [Decision log](../DECISIONS.md#2-open)
+The 70% volume profile uses HLC3 tick bins and lower-price ties. Trend slope uses endpoint change in points per minute. These are interim choices in `OD-53`, and there is no default VWAP anchor under `OD-18`. The calendar uses regular New York hours under `OD-35`. The caller supplies same-series data and the daily candle's normalized settlement date and availability time. [Audit and calculation details](codex-indicator-audit.md#core-math-in-this-slice) · [Decision log](../DECISIONS.md#2-open)
 
 ## Files changed
 
@@ -14,7 +14,7 @@ The 70% volume profile uses HLC3 tick bins and lower-price ties. Trend slope use
 | `lib/__tests__/session-indicators.test.ts` | 13 tests with hand-calculated cases, cutoff and coverage checks, DST and compatibility with the existing draft. |
 | `docs/codex-indicator-audit.md` | Code and fixture audit, calculation contract and chart TODO. |
 | `docs/11-product-workflows-and-api-context.md` | Points the indicator spec to the new pure calculation. |
-| `DECISIONS.md` | Records interim profile, trend and weekly choices as `OD-50`. |
+| `DECISIONS.md` | Records interim profile, trend and weekly choices as `OD-53`. |
 | `NOTES.md` | Handoff and Core math lane release. |
 | `docs/codex-indicator-summary.md` | Scope and verification record. |
 

@@ -18,7 +18,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`), `docs/25` (discretionary calls; proposal under `OD-52`).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-49`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-54`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
@@ -78,6 +78,11 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — decision-number collisions, no lane
+Did:      Two `OD-49` rows existed. The playbook-editor limits became `OD-54`; observer target attribution keeps `OD-49` (docs/15 cites it). The indicator choices that Codex's docs cited as `OD-50` are the `OD-53` row, so those docs now say `OD-53`.
+Files:    `DECISIONS.md`, `NOTES.md`, `docs/16-floor-roadmap.md`, `docs/codex-indicator-summary.md`, `docs/codex-indicator-audit.md`.
+Left:     Check the highest `OD-` number on `origin/main` right before adding one; two agents in parallel caused both collisions.
 
 ### 2026-11-22 — Codex — recurring review and TD-2 bracket labels (#34), Chart lane released
 Did:      Reviewed run `20261122T023021Z`. The worker left no source diff or TD-3 commits. `buildMarks` now pairs excursion labels to the low and high price caps for either direction, so the Canvas painter can use the mark alone.
@@ -141,10 +146,10 @@ Checked: `npm test` 342 passed, 0 failed. Indicator tests under `TZ=Pacific/Auck
 Left: Supply session coverage and freeze the entry snapshot before wiring the chart and card. The audit details candle-only autoscale and off-frame flags. Work is local on `codex/indicator-level-trend-math`.
 
 ### 2026-11-21 — Claude (Opus 5.5 session) — R-07a + R-07b playbook store and editor, Data lane released
-Did:      `lib/playbooks-store.ts` (`mogmine-playbooks-v1`, seeds, `user_id`, archive-only, validation, backup round-trip) and Tune → Playbooks (`components/PlaybookEditor.tsx`: add, rename, default style, add/reorder/remove rules, archive/restore). Pickers, stats labels, rows and Clean Run setup read the store. Samples stay on seed rules. Open choices recorded as `OD-49`.
+Did:      `lib/playbooks-store.ts` (`mogmine-playbooks-v1`, seeds, `user_id`, archive-only, validation, backup round-trip) and Tune → Playbooks (`components/PlaybookEditor.tsx`: add, rename, default style, add/reorder/remove rules, archive/restore). Pickers, stats labels, rows and Clean Run setup read the store. Samples stay on seed rules. Open choices recorded as `OD-54`.
 Files:    `lib/playbooks.ts`, `lib/playbooks-store.ts` (new), `lib/store.ts`, `lib/fixtures.ts`, `lib/__tests__/playbooks-store.test.ts` (new), `components/PlaybookEditor.tsx` (new), `components/{TuneScreen,AppShell,PitStop,ChallengeSetupSheet,TradeRow,RunningStatsCard}.tsx`, `app/globals.css`, `docs/16`, `DECISIONS.md`, `NOTES.md`.
 Checked:  `npm test` 329 passed, 0 failed. Typecheck clean, lint 0 errors and the existing warning, build 8/8. Headless Chrome at 390×844 and 1280×900, 26/26 checks: seeds listed, clash message, add/reorder/save (pending rule kept), `user_id` in storage, archive/restore, `no-setup` locked, rename shown on Feed, 0 overflow, 44px targets, 0 page errors.
-Left:     Phone check still owed (`AC-11`). `CD-3` is unblocked once the worker's TD queue allows. `OD-49` needs the owner.
+Left:     Phone check still owed (`AC-11`). `CD-3` is unblocked once the worker's TD queue allows. `OD-54` needs the owner.
 
 ### 2026-11-21 — agent (Antigravity) — TD-1 observeTrade pure observer (#35), Core math lane released
 Did:      Implemented `observeTrade(derived, candles, barMinutes, options)` in `lib/trade-bar-validation.ts` (docs/15 §3.3, issue #35): checks each stop segment traded through, unfilled targets touched before exit, fills outside bar with `DEFAULT_TICK_TOLERANCE_TICKS = 4` (B-12), honest MFE/MAE excursions, and post-exit hindsight touches. Preserved `validateTradeAgainstBars` compatibility. Added golden unit tests in `lib/__tests__/trade-observer.test.ts`.
