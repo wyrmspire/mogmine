@@ -227,20 +227,24 @@ export function PlanSheet({
   return (
     <div
       className="sheet-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Planning Session"
+      role="presentation"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <section className="sheet plan-sheet" ref={dialogRef}>
+      <section
+        className="sheet plan-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plan-sheet-title"
+        ref={dialogRef}
+      >
         <div className="sheet-head">
           <div>
             <span className="eyebrow">
               {sessionDate} · {isAfterFact ? "After-the-fact plan" : "Pre-session plan"}
             </span>
-            <h2>{existing ? "Edit Plan" : "New Plan"}</h2>
+            <h2 id="plan-sheet-title">{existing ? "Edit Plan" : "New Plan"}</h2>
             <p>
               {isAfterFact
                 ? "This session started already. Edits are tracked after the fact (LV-15)."
@@ -250,6 +254,7 @@ export function PlanSheet({
           <button
             type="button"
             className="icon-button"
+            style={{ minHeight: 44, minWidth: 44 }}
             onClick={onClose}
             aria-label="Close planning sheet"
           >
@@ -268,6 +273,7 @@ export function PlanSheet({
                   ref={p.preset === "pre_market" && !existing ? firstField : undefined}
                   type="button"
                   className="chip"
+                  style={{ minHeight: 44 }}
                   aria-pressed={preset === p.preset}
                   onClick={() => setPreset(p.preset)}
                 >
@@ -277,6 +283,7 @@ export function PlanSheet({
               <button
                 type="button"
                 className="chip"
+                style={{ minHeight: 44 }}
                 aria-pressed={preset === "custom"}
                 onClick={() => setPreset("custom")}
               >
@@ -307,6 +314,7 @@ export function PlanSheet({
                   key={b}
                   type="button"
                   className="chip"
+                  style={{ minHeight: 44, minWidth: 44 }}
                   aria-pressed={bias === b}
                   onClick={() => setBias(bias === b ? null : b)}
                 >
@@ -331,6 +339,7 @@ export function PlanSheet({
                     <button
                       type="button"
                       className="icon-button level-del-btn"
+                      style={{ minHeight: 44, minWidth: 44 }}
                       onClick={() => removeLevel(lvl.id)}
                       aria-label={`Remove level ${lvl.label}`}
                     >
@@ -349,6 +358,7 @@ export function PlanSheet({
                   <button
                     type="button"
                     className="tick-step"
+                    style={{ minHeight: 44, minWidth: 44 }}
                     aria-label="Level price down one tick"
                     onClick={() => stepLevelPrice(-1)}
                   >
@@ -369,6 +379,7 @@ export function PlanSheet({
                   <button
                     type="button"
                     className="tick-step"
+                    style={{ minHeight: 44, minWidth: 44 }}
                     aria-label="Level price up one tick"
                     onClick={() => stepLevelPrice(1)}
                   >
@@ -399,6 +410,7 @@ export function PlanSheet({
                       key={k}
                       type="button"
                       className="chip"
+                      style={{ minHeight: 44 }}
                       aria-pressed={levelKind === k}
                       onClick={() => setLevelKind(k)}
                     >
@@ -409,6 +421,7 @@ export function PlanSheet({
                 <button
                   type="button"
                   className="btn-secondary add-level-btn"
+                  style={{ minHeight: 44, minWidth: 44 }}
                   onClick={addLevel}
                 >
                   ＋ Add Level
@@ -428,6 +441,7 @@ export function PlanSheet({
                     key={p.id}
                     type="button"
                     className="chip"
+                    style={{ minHeight: 44 }}
                     aria-pressed={selectedPlaybookIds.includes(p.id)}
                     onClick={() => togglePlaybook(p.id)}
                   >
@@ -462,7 +476,7 @@ export function PlanSheet({
             type="button"
             className="btn-primary btn-block"
             onClick={save}
-            style={{ marginTop: 14 }}
+            style={{ minHeight: 44, minWidth: 44, marginTop: 14 }}
           >
             {existing ? "Save Plan Changes" : "Save Planning Session"}
           </button>

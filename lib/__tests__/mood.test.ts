@@ -5,11 +5,13 @@ import { test } from "node:test";
 import {
   DEFAULT_MOOD_REGISTRY,
   MIN_MOOD_SAMPLE,
+  ONE_TAP_MOOD_SCORE,
   acceptSuggestion,
   addSpoke,
   capturePhase,
   describeMood,
   dominantSpoke,
+  isRetrospectiveMood,
   moodOutcomeStats,
   moodPath,
   moodSimilarity,
@@ -22,7 +24,9 @@ import {
   sanitizeRegistry,
   scoreAtPoint,
   similarTrades,
+  spokeChipLabel,
   suggestMoodFromText,
+  userMoodRecord,
   userScoreRecord,
 } from "../mood.ts";
 import type { MoodRecord, MoodSpokeRegistry } from "../mood.ts";
@@ -420,4 +424,64 @@ test("backups carry mood data, and an older backup without it restores as before
   }
   const old = parseBackupFile(JSON.stringify(buildBackup([t])));
   assert.equal(old.ok && "mood" in old, false);
+});
+
+test("userMoodRecord and one-tap mood at entry / pre-exit (UI-3, docs/19 §4, OD-39 c)", () => {
+  const meta = { id: "rec-1", trade_id: "trade-1", now: "2026-11-20T14:30:00.000Z", captured_at: "2026-11-20T14:00:00.000Z" };
+  const rec = userMoodRecord(meta, DEFAULT_MOOD_REGISTRY, { calm: ONE_TAP_MOOD_SCORE, fomo: null });
+  assert.equal(rec.id, "rec-1");
+  assert.equal(rec.trade_id, "trade-1");
+  assert.equal(rec.source, "user");
+  assert.equal(rec.captured_at, "2026-11-20T14:00:00.000Z");
+  assert.equal(rec.scores.calm, 0.8);
+  assert.equal(rec.scores.fomo, null);
+
+  // Closed trade: captured_at is before exit_time -> pre_exit
+  const closed = trade("trade-1", { entry_time: "2026-11-20T14:00:00.000Z", exit_time: "2026-11-20T14:30:00.000Z" });
+  assert.equal(capturePhase(rec, closed), "pre_exit");
+
+  // Open trade: exit_time is null -> pre_exit
+  const open = trade("trade-1", { status: "open", entry_time: "2026-11-20T14:00:00.000Z", exit_time: null, exit_price: null });
+  assert.equal(capturePhase(rec, open), "pre_exit");
+
+  // Pre-exit mood vector recognizes calm as dominant
+  const vector = moodVector(closed, [rec], DEFAULT_MOOD_REGISTRY, { phase: "pre_exit" });
+  assert.equal(dominantSpoke(vector), "calm");
+  assert.equal(describeMood(vector), "Calm / patience high · 5 not scored");
+});
+
+test("spokeChipLabel formats concise labels for chips", () => {
+  const calmSpoke = DEFAULT_MOOD_REGISTRY.spokes.find((s) => s.id === "calm")!;
+  const confSpoke = DEFAULT_MOOD_REGISTRY.spokes.find((s) => s.id === "confidence")!;
+  assert.equal(spokeChipLabel(calmSpoke), "Calm");
+  assert.equal(spokeChipLabel(confSpoke), "Confidence");
+});
+
+test("mood recording distinguishes historical captured_at from true wall-clock recorded_at", () => {
+  const wallClockNow = "2026-11-22T14:40:00.000Z";
+  const historicalEntry = "2026-11-20T14:00:00.000Z";
+  const historicalExit = "2026-11-20T14:30:00.000Z";
+  const closed = trade("trade-retro", { entry_time: historicalEntry, exit_time: historicalExit });
+
+  const retroRecord = userMoodRecord(
+    { id: "rec-retro", trade_id: "trade-retro", now: wallClockNow, captured_at: historicalEntry, recorded_at: wallClockNow },
+    DEFAULT_MOOD_REGISTRY,
+    { fomo: ONE_TAP_MOOD_SCORE },
+  );
+
+  assert.equal(retroRecord.captured_at, historicalEntry);
+  assert.equal(retroRecord.recorded_at, wallClockNow);
+  assert.equal(retroRecord.created_at, wallClockNow);
+  // Although the user says the feeling applied to the entry phase:
+  assert.equal(capturePhase(retroRecord, closed), "pre_exit");
+  // isRetrospectiveMood correctly detects that the recording happened post-exit (retrospective hindsight):
+  assert.equal(isRetrospectiveMood(retroRecord, closed), true);
+
+  // Contemporaneous record (entered during an open trade or before exit):
+  const liveRecord = userMoodRecord(
+    { id: "rec-live", trade_id: "trade-retro", now: "2026-11-20T14:15:00.000Z", captured_at: "2026-11-20T14:15:00.000Z", recorded_at: "2026-11-20T14:15:00.000Z" },
+    DEFAULT_MOOD_REGISTRY,
+    { calm: ONE_TAP_MOOD_SCORE },
+  );
+  assert.equal(isRetrospectiveMood(liveRecord, closed), false);
 });

@@ -396,6 +396,13 @@ h1, h2, h3, p { margin: 0; }
 .levels .empty { color: var(--text-faint); font-weight: 500; }
 .detail-actions { display: flex; gap: 8px; padding: 10px 16px 4px; flex-wrap: wrap; }
 .detail-actions .btn-primary { flex: 1; }
+/* UX-b: Pit Stop sits right beneath the chart on mobile viewports so notes are written with chart in view */
+.mobile-pitstop { display: block; margin: 10px 16px 0; }
+.desktop-pitstop { display: none; }
+@media (min-width: 900px) {
+  .mobile-pitstop { display: none; }
+  .desktop-pitstop { display: block; }
+}
 .detail-side { display: grid; gap: 10px; padding: 8px 16px 0; }
 .note-card textarea, .field textarea {
   width: 100%; min-height: 92px; padding: 11px 12px; border: 1px solid var(--border-subtle); border-radius: 12px;
@@ -430,6 +437,9 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .trade-card-preparing { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-muted); font-size: 0.75rem; }
 .trade-card-preparing .skeleton { position: absolute; inset: 12px; opacity: 0.42; }
 .trade-card-preparing b { position: relative; }
+.trade-card-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.trade-card-sizes, .trade-card-sides { margin: 0; }
+.trade-card-sizes button, .trade-card-sides button { min-height: 44px; font-size: 0.75rem; font-weight: 750; }
 .trade-card-privacy {
   width: 100%; min-height: 64px; margin-top: 12px; padding: 8px 12px; display: grid; grid-template-columns: 32px 1fr 42px; gap: 10px; align-items: center;
   border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--bg-elevated); text-align: left;
@@ -459,7 +469,7 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .field .error { font-size: 0.6875rem; color: var(--loss-text); }
 .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--bg-inset); border: 1px solid var(--border-subtle); }
 .segmented button { min-height: 44px; border: 0; border-radius: 9px; background: none; color: var(--text-muted); font-weight: 800; font-size: 0.75rem; }
-.segmented button[aria-pressed="true"] { background: var(--bg-elevated); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.segmented button[aria-pressed="true"], .segmented button[aria-checked="true"] { background: var(--bg-elevated); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border-strong); }
 /* Price-first entry (docs/20 §2): one row per price, − and + nudge by one tick. */
 .price-ladder { margin: 14px 0 0; padding: 0; border: 0; display: grid; gap: 8px; min-width: 0; }
 .price-row { display: grid; grid-template-columns: 4.25rem 44px minmax(0, 1fr) 44px; gap: 6px; align-items: center; }
@@ -746,6 +756,10 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .queue-card { overflow: hidden; }
 .queue-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 14px 14px 12px; border-bottom: 1px solid var(--border-subtle); }
 .queue-head .row-title strong { font-size: 1.1875rem; letter-spacing: -0.02em; }
+/* UX-c: title on its own line, then the meta line, which breaks only between whole units. */
+.queue-head .row-main { display: grid; gap: 4px; min-width: 0; }
+.queue-meta { display: flex; flex-wrap: wrap; column-gap: 0.5ch; font: 500 0.6875rem/1.35 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-muted); white-space: normal; overflow: visible; }
+.queue-meta > span { white-space: nowrap; }
 .queue-progress { height: 3px; background: var(--bg-elevated); }
 .queue-progress i { display: block; height: 100%; background: var(--text-primary); }
 .queue-body { padding: 14px; }
@@ -837,6 +851,22 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .mood-table caption { text-align: left; color: var(--text-muted); font-size: 0.75rem; padding-bottom: 4px; }
 .mood-table th, .mood-table td { text-align: left; padding: 6px 4px; border-top: 1px solid var(--border-subtle); }
 .mood-table td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* One-tap pre-exit feeling at entry and in open trades (docs/19 §4, OD-39 c) */
+.mood-entry-section { padding: 10px 0 4px; display: grid; gap: 8px; }
+.mood-entry-title { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.mood-entry-title i { font-style: normal; font-size: 0.6875rem; color: var(--text-faint); font-weight: 500; }
+.open-mood-section { margin-top: 12px; display: grid; gap: 10px; }
+.open-mood-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.open-mood-sub { margin: 2px 0 0; font-size: 0.8125rem; color: var(--text-muted); }
+.open-mood-sub i { font-style: normal; font-size: 0.6875rem; color: var(--text-faint); }
+
+/* How did it end? one-tap exit reason (docs/15 §3, issue #36 G1) */
+.exit-reason-section { padding: 10px 0 4px; display: grid; gap: 8px; }
+.exit-reason-title { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.exit-reason-title i { font-style: normal; font-size: 0.6875rem; color: var(--text-faint); font-weight: 500; }
+.exit-reason-detail-row { padding: 12px 14px; border-top: 1px solid var(--border-subtle); display: grid; gap: 8px; }
+.exit-reason-label { font-size: 0.6875rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
 
 /* ───────────────────────── Accounts (docs/21) ─────────────────────────
    A journal total, not a result: neutral ink, no gold (#80). Limits are text first, a bar second. */
@@ -1106,3 +1136,39 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .drill-reveal { display: grid; gap: 8px; }
 .drill-reveal p { margin: 0; }
 .drill-miss { color: var(--warn-amber); font-size: 0.8125rem; }
+
+/* CD-3b / CD-3c playbook card, binder and export (docs/23 §2, §5). The card's 1px top edge comes from .specular-card. */
+.binder-page { max-width: 720px; }
+.binder-page .page-head > a, .binder-page .page-head > button { min-height: 44px; }
+.binder-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 10px; }
+.binder-tile { width: 100%; min-height: 120px; display: grid; gap: 4px; align-content: start; text-align: left; padding: 14px; color: var(--text-primary); font: inherit; cursor: pointer; }
+.binder-tile b { font-size: 1rem; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.binder-tile span { font-size: 0.75rem; }
+.binder-tile-stats { overflow-wrap: anywhere; }
+.binder-tile-foot { margin-top: 4px; }
+.binder-archived { margin: 12px 2px 0; font-size: 0.75rem; }
+.playbook-card { overflow: hidden; }
+.playbook-card-head { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; padding: 14px; border-bottom: 1px solid var(--border-subtle); }
+.playbook-card-head .eyebrow { grid-column: 1; }
+.playbook-card-head h2 { grid-column: 1; font-size: 1.125rem; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.playbook-flip { grid-column: 2; grid-row: 1 / span 2; min-height: 44px; }
+.playbook-card-face { animation: playbook-face-in 160ms ease-out; }
+@keyframes playbook-face-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .playbook-card-face { animation: none; } }
+.playbook-card-chart { position: relative; height: min(48vh, 400px); }
+.playbook-card-caption { margin: 0; padding: 8px 14px 0; font-size: 0.75rem; color: var(--text-muted); }
+.playbook-card-stats { margin-top: 8px; border-block: 1px solid var(--border-subtle); }
+.playbook-card-stats .playbook-stat-text { font: 700 0.75rem/1.3 var(--font-sans); }
+.playbook-card-shield { margin: 8px 14px 0; font-size: 0.8125rem; color: var(--text-muted); }
+.playbook-card-back { padding: 14px; display: grid; gap: 8px; }
+.playbook-card-back h3 { font-size: 0.8125rem; font-weight: 800; }
+.playbook-card-rules { margin: 0; padding-left: 1.4em; list-style: decimal; display: grid; gap: 6px; font-size: 0.875rem; }
+.playbook-card-drill { margin: 0; font-size: 0.8125rem; color: var(--text-muted); }
+.playbook-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px 12px; font-size: 0.6875rem; color: var(--text-faint); }
+.playbook-card-foot .playbook-share { min-height: 44px; flex-basis: 100%; font-size: 0.8125rem; }
+.playbook-card-actions { grid-template-columns: repeat(2, 1fr); }
+
+/* RV-1 the chart on the Review queue card. Short enough that the Pit Stop starts on the first screen. */
+.review-chart { position: relative; height: clamp(220px, 34vh, 340px); margin: 0 14px; }
+.review-chart-seal { position: absolute; z-index: 3; top: 8px; left: 8px; padding: 3px 8px; border-radius: 999px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 0.6875rem; font-weight: 750; pointer-events: none; }
+.review-chart-none { margin: 0 14px; font-size: 0.75rem; color: var(--text-muted); }

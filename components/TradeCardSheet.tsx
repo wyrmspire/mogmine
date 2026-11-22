@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
-import { shareCardFileName } from "@/lib/shareCard";
+import { useEffect, useMemo, useRef } from "react";
+import { CARD_SIZES, shareCardFileName } from "@/lib/shareCard";
+import type { CardSide, CardSize } from "@/lib/shareCard";
 import { showToast } from "@/lib/toast";
 import type { TradeRecord } from "@/lib/trades";
 
@@ -10,7 +11,11 @@ interface Props {
   trade: TradeRecord;
   blob: Blob | null;
   privacy: boolean;
+  size?: CardSize;
+  side?: CardSide;
   onPrivacyChange: (privacy: boolean) => void;
+  onSizeChange?: (size: CardSize) => void;
+  onSideChange?: (side: CardSide) => void;
   onClose: () => void;
 }
 
@@ -23,17 +28,38 @@ function downloadBlob(blob: Blob, name: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function TradeCardPreview({ blob, alt }: { blob: Blob; alt: string }) {
-  const [url] = useState(() => URL.createObjectURL(blob));
-  const revokeTimer = useRef<number | undefined>(undefined);
+function TradeCardPreview({ blob, alt, size }: { blob: Blob; alt: string; size: CardSize }) {
+  const url = useMemo(() => URL.createObjectURL(blob), [blob]);
   useEffect(() => {
-    window.clearTimeout(revokeTimer.current);
-    return () => { revokeTimer.current = window.setTimeout(() => URL.revokeObjectURL(url), 0); };
+    return () => {
+      URL.revokeObjectURL(url);
+    };
   }, [url]);
-  return <Image src={url} width={1080} height={1350} unoptimized alt={alt} />;
+
+  const dim = CARD_SIZES[size] ?? CARD_SIZES["4:5"];
+  return (
+    <Image
+      src={url}
+      width={dim.width}
+      height={dim.height}
+      unoptimized
+      alt={alt}
+      style={{ aspectRatio: dim.aspectRatio }}
+    />
+  );
 }
 
-export function TradeCardSheet({ trade, blob, privacy, onPrivacyChange, onClose }: Props) {
+export function TradeCardSheet({
+  trade,
+  blob,
+  privacy,
+  size = "4:5",
+  side = "front",
+  onPrivacyChange,
+  onSizeChange,
+  onSideChange,
+  onClose,
+}: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const ready = blob != null;
 
@@ -64,7 +90,7 @@ export function TradeCardSheet({ trade, blob, privacy, onPrivacyChange, onClose 
     };
   }, [onClose]);
 
-  const file = () => blob ? new File([blob], shareCardFileName(trade), { type: "image/png" }) : null;
+  const file = () => blob ? new File([blob], shareCardFileName(trade, size, side), { type: "image/png" }) : null;
 
   const share = async () => {
     const prepared = file();
@@ -108,7 +134,44 @@ export function TradeCardSheet({ trade, blob, privacy, onPrivacyChange, onClose 
         </div>
 
         <div className="trade-card-preview" aria-busy={!ready}>
-          {blob ? <TradeCardPreview blob={blob} alt={`${trade.symbol} Trade Card preview${privacy ? " in Shield mode" : ""}`} /> : <div className="trade-card-preparing"><span className="skeleton" /><b>Rebuilding private preview…</b></div>}
+          {blob ? (
+            <TradeCardPreview
+              blob={blob}
+              size={size}
+              alt={`${trade.symbol} Trade Card ${side} preview in ${size}${privacy ? " in Shield mode" : ""}`}
+            />
+          ) : (
+            <div className="trade-card-preparing"><span className="skeleton" /><b>Rebuilding card preview…</b></div>
+          )}
+        </div>
+
+        <div className="trade-card-controls" aria-label="Trade Card format and face options">
+          <div className="segmented trade-card-sizes" role="radiogroup" aria-label="Card format">
+            {(["4:5", "9:16", "1:1"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                role="radio"
+                aria-checked={size === s}
+                onClick={() => onSizeChange?.(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <div className="segmented trade-card-sides" role="radiogroup" aria-label="Card face">
+            {(["front", "back"] as const).map((face) => (
+              <button
+                key={face}
+                type="button"
+                role="radio"
+                aria-checked={side === face}
+                onClick={() => onSideChange?.(face)}
+              >
+                {face === "front" ? "Front" : "Back"}
+              </button>
+            ))}
+          </div>
         </div>
 
         <button type="button" className="trade-card-privacy" aria-pressed={privacy} onClick={() => onPrivacyChange(!privacy)}>

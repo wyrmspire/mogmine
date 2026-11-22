@@ -14,6 +14,7 @@ import { hydrateChallenges } from "@/lib/challenge-store";
 import { hydratePlaybooks } from "@/lib/playbooks-store";
 import { hydratePlans } from "@/lib/plans-store";
 import { hydrateDrills } from "@/lib/drills-store";
+import { hydrateCalls } from "@/lib/calls-store";
 import { dismissToast, useToast } from "@/lib/toast";
 import { openAddTrade, useOnline, useUi } from "@/lib/ui";
 
@@ -42,7 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const toast = useToast();
   const online = useOnline();
 
-  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); hydratePlans(); hydrateDrills(); }, []);
+  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); hydratePlans(); hydrateDrills(); hydrateCalls(); }, []);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   const waiting = journal.hydrated ? withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status === "new").length : 0;
@@ -51,33 +52,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="shell">
       <a href="#main-content" className="skip-link">Skip to main content</a>
-      <header className="topbar">
+      <header className="topbar" role="banner">
         <Link href="/" className="brand" aria-label="MogMine, Today"><span className="brand-gem" aria-hidden="true">M</span><span>MOGMINE</span></Link>
-        <nav className="topnav" aria-label="Main">
-          {NAV.map((item) => <Link key={item.href} href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>{item.label}{item.href === "/review" && reviewBadge}</Link>)}
+        <nav className="topnav" aria-label="Desktop navigation">
+          {NAV.map((item) => <Link key={item.href} href={item.href} style={{ minHeight: 44, minWidth: 44 }} aria-current={isActive(item.href) ? "page" : undefined}>{item.label}{item.href === "/review" && reviewBadge}</Link>)}
         </nav>
         <span className="topbar-spacer" />
         <span className="save-status" data-state={journal.saveState} role="status"><i aria-hidden="true" /><span>{SAVE_TEXT[journal.saveState]}</span></span>
-        <button type="button" className="icon-button" aria-pressed={prefs.shield} aria-label={prefs.shield ? "Shield mode on: dollars hidden. Tap to show dollars." : "Shield mode off. Tap to hide dollars."} title="Shield mode: hide dollars and size" onClick={() => setPrefs({ shield: !prefs.shield })}>{icons.shield}</button>
-        <button type="button" className="icon-button" onClick={openAddTrade} aria-label="Add trade">＋</button>
+        <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} aria-pressed={prefs.shield} aria-label={prefs.shield ? "Shield mode on: dollars hidden. Tap to show dollars." : "Shield mode off. Tap to hide dollars."} title="Shield mode: hide dollars and size" onClick={() => setPrefs({ shield: !prefs.shield })}>{icons.shield}</button>
+        <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade} aria-label="Add trade">＋</button>
       </header>
 
       <HomeScreenHint />
       {!online && <div className="banner warn" role="status">You are offline. Trades and notes on this device stay readable; new market data waits.</div>}
 
-      <main id="main-content" tabIndex={-1}>{children}</main>
+      <main id="main-content" tabIndex={-1} role="main">{children}</main>
 
-      <nav className="dock" aria-label="Main">
-        {NAV.slice(0, 2).map((item) => <Link key={item.href} href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>{item.icon}<span>{item.label}</span></Link>)}
-        <button type="button" className="dock-add" onClick={openAddTrade} aria-label="Add trade"><span className="plus" aria-hidden="true">＋</span></button>
-        {NAV.slice(2).map((item) => <Link key={item.href} href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.href === "/review" && reviewBadge}</Link>)}
+      <nav className="dock" aria-label="Bottom dock navigation">
+        {NAV.slice(0, 2).map((item) => <Link key={item.href} href={item.href} style={{ minHeight: 44, minWidth: 44 }} aria-current={isActive(item.href) ? "page" : undefined}>{item.icon}<span>{item.label}</span></Link>)}
+        <button type="button" className="dock-add" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade} aria-label="Add trade"><span className="plus" aria-hidden="true">＋</span></button>
+        {NAV.slice(2).map((item) => <Link key={item.href} href={item.href} style={{ minHeight: 44, minWidth: 44 }} aria-current={isActive(item.href) ? "page" : undefined}>{item.icon}<span>{item.label}</span>{item.href === "/review" && reviewBadge}</Link>)}
       </nav>
 
       {ui.addOpen && <AddTradeSheet />}
       {toast && (
         <div className={`toast ${toast.actionLabel ? "" : "plain"}`} role="status" key={toast.id}>
           {toast.message}
-          {toast.actionLabel && <button onClick={() => { toast.onAction?.(); dismissToast(); }}>{toast.actionLabel}</button>}
+          {toast.actionLabel && <button style={{ minHeight: 44, minWidth: 44 }} onClick={() => { toast.onAction?.(); dismissToast(); }}>{toast.actionLabel}</button>}
         </div>
       )}
     </div>

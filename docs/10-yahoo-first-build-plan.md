@@ -54,6 +54,8 @@ Not settled: whether the newest bars are delayed. The response has no delay fiel
 
 This is the one time-sensitive task. Nothing else in the project loses data by waiting.
 
+> **Still open (2026-11-22).** The archive is not built: it waits for the owner's Supabase project (`R-04`, #70). Until then candles are cached per device in IndexedDB (`lib/candles.ts`) when a chart opens, so Invariant 2 is only half met: a trade nobody opened within about 30 days loses its `1m` bars for good.
+
 **What it does.** Once a day, for each symbol, request the last 8 days of `1m` bars in one call, clean them (§2), split them by session, and upsert one row per session into `market_candles` (schema in [09 §8](09-backend-risk-register.md#8-proposed-schema-changes)).
 
 **Why 8 days every day.** Each run overlaps the previous seven. A week of failed runs loses nothing, and there are 30 days of slack before any `1m` bar is gone for good.

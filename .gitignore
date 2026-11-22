@@ -50,3 +50,8 @@ test-results/
 
 # Per-developer AI tool settings
 .claude/settings.local.json
+
+# printcode / gitrdif output
+dump*.md
+gitrdif*.md
+.last-dump-commit

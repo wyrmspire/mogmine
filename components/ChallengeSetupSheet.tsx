@@ -133,14 +133,15 @@ export function ChallengeSetupSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="challenge-sheet-title"
+        aria-describedby="challenge-sheet-desc"
       >
         <div className="sheet-head">
           <div>
             <span className="eyebrow">Challenge</span>
             <h2 id="challenge-sheet-title">Start a challenge</h2>
-            <p>Scored from your own logged trades. Sets a boundary or process goal.</p>
+            <p id="challenge-sheet-desc">Scored from your own logged trades. Sets a boundary or process goal.</p>
           </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close challenge setup">
             ×
           </button>
         </div>
@@ -148,23 +149,27 @@ export function ChallengeSetupSheet({
         <form onSubmit={submit} noValidate>
           <div className="form-grid">
             <div className="field wide">
-              <span>Choose challenge</span>
-              <div className="challenge-kind-toggle">
+              <span id="challenge-type-label">Choose challenge</span>
+              <div className="challenge-kind-toggle" role="radiogroup" aria-labelledby="challenge-type-label">
                 <button
                   ref={firstField}
                   type="button"
+                  role="radio"
                   className={`btn-toggle ${kind === "drawdown" ? "active" : ""}`}
-                  aria-pressed={kind === "drawdown"}
+                  aria-checked={kind === "drawdown"}
                   onClick={() => setKind("drawdown")}
+                  style={{ minHeight: 52 }}
                 >
                   <b>Drawdown Defender</b>
                   <small>Not giving money back</small>
                 </button>
                 <button
                   type="button"
+                  role="radio"
                   className={`btn-toggle ${kind === "clean_run" ? "active" : ""}`}
-                  aria-pressed={kind === "clean_run"}
+                  aria-checked={kind === "clean_run"}
                   onClick={() => setKind("clean_run")}
+                  style={{ minHeight: 52 }}
                 >
                   <b>Clean Run</b>
                   <small>Trading the plan, win or lose</small>
@@ -173,72 +178,79 @@ export function ChallengeSetupSheet({
             </div>
 
             {activeExisting && (
-              <div className="banner warn field wide" style={{ margin: "4px 0" }}>
+              <div className="banner warn field wide" role="alert" style={{ margin: "4px 0" }}>
                 An active {kind === "drawdown" ? "Drawdown Defender" : "Clean Run"} challenge is already running.
               </div>
             )}
 
             {kind === "drawdown" ? (
               <>
-                <label className="field">
+                <label className="field" htmlFor="setup-sessions">
                   <span>Target sessions (1–60)</span>
                   <input
+                    id="setup-sessions"
                     inputMode="numeric"
                     type="number"
                     min={1}
                     max={60}
                     value={sessionsText}
                     aria-invalid={!validSessions}
+                    aria-describedby={!validSessions ? "setup-sessions-err" : undefined}
                     onChange={(e) => setSessionsText(e.target.value)}
                   />
                   {!validSessions && (
-                    <span className="error">Enter 1 to 60 sessions</span>
+                    <span id="setup-sessions-err" className="error" role="alert">Enter 1 to 60 sessions</span>
                   )}
                 </label>
 
-                <label className="field">
+                <label className="field" htmlFor="setup-limit">
                   <span>Drawdown limit ($)</span>
                   <input
+                    id="setup-limit"
                     inputMode="decimal"
                     placeholder="300.00"
                     value={limitDollarsText}
                     aria-invalid={!validLimit}
+                    aria-describedby={!validLimit ? "setup-limit-err" : undefined}
                     onChange={(e) => setLimitDollarsText(e.target.value)}
                   />
                   {!validLimit && (
-                    <span className="error">Enter a positive dollar limit</span>
+                    <span id="setup-limit-err" className="error" role="alert">Enter a positive dollar limit</span>
                   )}
                 </label>
               </>
             ) : (
               <>
-                <label className="field wide">
+                <label className="field wide" htmlFor="setup-trades">
                   <span>Trades in a row (3–50)</span>
                   <input
+                    id="setup-trades"
                     inputMode="numeric"
                     type="number"
                     min={3}
                     max={50}
                     value={targetTradesText}
                     aria-invalid={!validTargetTrades}
+                    aria-describedby={!validTargetTrades ? "setup-trades-err" : undefined}
                     onChange={(e) => setTargetTradesText(e.target.value)}
                   />
                   {!validTargetTrades && (
-                    <span className="error">Enter 3 to 50 trades</span>
+                    <span id="setup-trades-err" className="error" role="alert">Enter 3 to 50 trades</span>
                   )}
                 </label>
 
-                <div className="field wide">
-                  <span>Eligible playbooks</span>
+                <div className="field wide" role="group" aria-labelledby="eligible-playbooks-label">
+                  <span id="eligible-playbooks-label">Eligible playbooks</span>
                   <div className="challenge-playbooks-grid">
                     {eligiblePlaybooks.map((playbook) => {
                       const checked = selectedPlaybooks.includes(playbook.id);
                       return (
-                        <label key={playbook.id} className="challenge-playbook-item">
+                        <label key={playbook.id} className="challenge-playbook-item" style={{ minHeight: 44, display: "flex", alignItems: "center" }}>
                           <span>{playbook.name}</span>
                           <input
                             type="checkbox"
                             checked={checked}
+                            aria-label={`Include ${playbook.name} in Clean Run`}
                             onChange={() => togglePlaybook(playbook.id)}
                           />
                         </label>
@@ -246,13 +258,13 @@ export function ChallengeSetupSheet({
                     })}
                   </div>
                   {!validPlaybooks && (
-                    <span className="error">Select at least one playbook</span>
+                    <span className="error" role="alert">Select at least one playbook</span>
                   )}
                 </div>
               </>
             )}
 
-            <div className="challenge-rule-sentence field wide">
+            <div className="challenge-rule-sentence field wide" role="status" aria-live="polite" aria-label="Rule summary">
               <p>{ruleSentence}</p>
             </div>
           </div>
@@ -261,7 +273,8 @@ export function ChallengeSetupSheet({
             className="btn-primary btn-block"
             type="submit"
             disabled={!isValid}
-            style={{ marginTop: 14 }}
+            aria-label={isValid ? "Start challenge" : "Start challenge (complete required fields first)"}
+            style={{ marginTop: 14, minHeight: 46 }}
           >
             Start challenge
           </button>

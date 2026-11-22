@@ -51,7 +51,7 @@ export function PlanCard({ sessionDate, trades, zone }: PlanCardProps) {
             <button
               type="button"
               className="btn-secondary"
-              style={{ minHeight: 36, padding: "0 10px", fontSize: "0.75rem" }}
+              style={{ minHeight: 44, minWidth: 44, padding: "0 12px", fontSize: "0.75rem" }}
               onClick={() => openNew("pre_market")}
             >
               ＋ New Plan
@@ -84,6 +84,7 @@ export function PlanCard({ sessionDate, trades, zone }: PlanCardProps) {
                   onClick={() => editPlan(plan.id)}
                   role="button"
                   tabIndex={0}
+                  aria-label={`Open plan ${plan.name}`}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") editPlan(plan.id);
                   }}
@@ -119,6 +120,7 @@ export function PlanCard({ sessionDate, trades, zone }: PlanCardProps) {
                   <button
                     type="button"
                     className="btn-secondary plan-review-button"
+                    style={{ minHeight: 44, minWidth: 44 }}
                     onClick={(e) => { e.stopPropagation(); setReviewId(plan.id); }}
                     onKeyDown={(e) => e.stopPropagation()}
                     aria-label={`Review ${plan.name}`}
@@ -139,6 +141,7 @@ export function PlanCard({ sessionDate, trades, zone }: PlanCardProps) {
               <button
                 type="button"
                 className="chip"
+                style={{ minHeight: 44, minWidth: 44 }}
                 onClick={() => openNew("pre_globex")}
               >
                 Pre-Globex (17:00 CT)
@@ -146,6 +149,7 @@ export function PlanCard({ sessionDate, trades, zone }: PlanCardProps) {
               <button
                 type="button"
                 className="chip"
+                style={{ minHeight: 44, minWidth: 44 }}
                 onClick={() => openNew("pre_market")}
               >
                 Pre-market (08:30 CT)
@@ -153,6 +157,7 @@ export function PlanCard({ sessionDate, trades, zone }: PlanCardProps) {
               <button
                 type="button"
                 className="chip"
+                style={{ minHeight: 44, minWidth: 44 }}
                 onClick={() => openNew("pre_power_hour")}
               >
                 Pre-power hour (14:00 CT)
@@ -160,6 +165,7 @@ export function PlanCard({ sessionDate, trades, zone }: PlanCardProps) {
               <button
                 type="button"
                 className="chip"
+                style={{ minHeight: 44, minWidth: 44 }}
                 onClick={() => openNew("pre_moc")}
               >
                 Pre-MOC (14:50 CT)

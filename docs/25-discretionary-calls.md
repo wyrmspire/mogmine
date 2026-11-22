@@ -3,7 +3,7 @@
 How the trader records judgement: the moments they leave the setup, the signal or the plan on purpose, and why. The owner asked for this on 2026-11-22: "here's my setup, but I'm not taking it because…", "I'm getting a short entry but I'm taking a long, and here's why", "here's why I'm cutting this trade", "here's why my stop is here", "here's why I'm taking profit early".
 
 > [!NOTE]
-> **Status: proposal (`OD-52`).** The owner asked for ideas and a plan, not a settled design. Names, colours and chips below are proposals. The pure model in `lib/calls.ts` is built (`DC-1`, `DC-1b`); nothing is drawn or stored yet. The prompt library, deviation triggers and playbook judgement rules that build on this are in [playbook-design/04](playbook-design/04-discretionary-prompts-integration.md).
+> **Status: proposal (`OD-52`).** The owner asked for ideas and a plan, not a settled design. Names, colours and chips below are proposals. The pure model in `lib/calls.ts` is built (`DC-1`, `DC-1b`), and so is its store (`DC-2`, `lib/calls-store.ts`); nothing is drawn yet. The prompt library, deviation triggers and playbook judgement rules that build on this are in [playbook-design/04](playbook-design/04-discretionary-prompts-integration.md).
 
 It builds on [03 §2](03-trade-cards-and-note-taking.md#2-simple-vs-advanced-note-taking) (Simple and Advanced notes), [11 §3](11-product-workflows-and-api-context.md#3-notes-attach-to-market-objects) (anchored comments), [15](15-trade-document-and-render-grammar.md) (trade document, hindsight), [24](24-planning-sessions-and-after-session-review.md) (planning sessions and review) and the hindsight block (issue #37, `lib/hindsight.ts`).
 
@@ -120,7 +120,7 @@ Local-first in `mogmine-calls-v1` with backup, like playbooks and challenges ([2
 | :--- | :--- | :--- |
 | `DC-1` | **Done.** Pure model: kinds, chips, validation, after-the-fact rule, Cut / Early take grading from `buildHindsight`. `lib/calls.ts`, tests. CSS tokens in `app/globals.css`. | — |
 | `DC-1b` | **Done.** Reasons are chips with stable seed ids and families; calls freeze `{ id, label, family }`; `validateCall(call, offered, previous)` keeps renamed, retired and deleted chips valid on calls that already had them. | `DC-1` |
-| `DC-2` | Store `mogmine-calls-v1`, backup round-trip, `user_id`, plus the call fields and dismissals in playbook-design/04 §1.4. | `DC-1b` |
+| `DC-2` | **Done.** Store `mogmine-calls-v1` (`lib/calls-store.ts`) holding calls and prompt dismissals, `user_id` on every record, journal backup round-trip. `DiscretionCall` gains the playbook-design/04 §1.4 fields (`prompt_id`, `prompt_question`, `origin`, `trigger`, `rule`, `made_at_basis`); `validateCall` checks them. The store checks structure only, so a call keeps a retired or owner-made chip. An edit never changes the id, owner or first `recorded_at`, so after-the-fact still shows. Restore merges by id and this device's copy wins. `removeCall` deletes a mistaken call from this device. | `DC-1b` |
 | `DC-3` | Call sheet (seven tiles, chips, conviction, note) from the open-trade bar and Trade Detail. Flip line on the add-trade form. Skip from the plan screen. | `DC-2`, `PS-2` for Skip |
 | `DC-4` | Calls list under the chart; pins on the chart in `PositionBoxPrimitive`. | `TD-3` |
 | `DC-5` | Skip and Flip grading; calls ledger in the after-session review. | `PS-4` |

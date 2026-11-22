@@ -133,6 +133,56 @@ export interface DiscretionCall {
   reasons: FrozenReason[];
   note: string;
   conviction: 1 | 2 | 3 | null;
+  // DC-2: the fields from playbook-design/04 §1.4.
+  /** Which prompt asked. Null for a call made from the plain call sheet. */
+  prompt_id: string | null;
+  /** The question as it was shown, frozen. */
+  prompt_question: string;
+  origin: CallOrigin;
+  /** The departure that triggered it, when there was one. */
+  trigger: CallTrigger | null;
+  /** Discretionary rule check (playbook-design/04 §2.4). */
+  rule: CallRule | null;
+  /** exact: made_at is a known time. bound: it is the latest possible time. */
+  made_at_basis: "exact" | "bound";
+}
+
+/** How a call was asked for (playbook-design/04 §1.4). */
+export type CallOrigin = "manual" | "close_sheet" | "review" | "session_review" | "plan";
+export const CALL_ORIGINS: readonly CallOrigin[] = ["manual", "close_sheet", "review", "session_review", "plan"];
+
+/** Departures that can trigger a prompt (playbook-design/04 §1.1). */
+export type DeviationKind =
+  | "exit_before_target_loss" | "exit_before_target_profit" | "exit_beyond_target"
+  | "stop_widened" | "stop_tightened" | "stop_set" | "no_stop"
+  | "size_off_normal" | "against_signal" | "setup_not_taken";
+export const DEVIATION_KINDS: readonly DeviationKind[] = [
+  "exit_before_target_loss", "exit_before_target_profit", "exit_beyond_target",
+  "stop_widened", "stop_tightened", "stop_set", "no_stop",
+  "size_off_normal", "against_signal", "setup_not_taken",
+];
+
+export interface CallTrigger {
+  deviation: DeviationKind;
+  basis: "broker" | "recorded" | "inferred";
+}
+
+export interface CallRule {
+  id: string;
+  label: string;
+  verdict: "applied" | "not_applied";
+}
+
+/** "Not a call" or "Later": lets a fired prompt stop asking without inventing an answer (§1.4). */
+export interface PromptDismissal {
+  id: string;
+  user_id: string;
+  trade_id: string;
+  prompt_id: string;
+  deviation: DeviationKind | null;
+  /** later: shown again at the next review pass. */
+  reason: "not_a_call" | "later";
+  recorded_at: string;
 }
 
 /** A call written down more than this long after the decision is "after the fact" (docs/25 §1). */
@@ -175,6 +225,10 @@ export function validateCall(
   if (call.price != null && !Number.isFinite(call.price)) problems.push("The price is not a number.");
   if (call.price_ticks != null && !Number.isInteger(call.price_ticks)) problems.push("The price in ticks must be a whole number.");
   if (call.conviction != null && ![1, 2, 3].includes(call.conviction)) problems.push("Conviction is 1, 2 or 3.");
+  if (!CALL_ORIGINS.includes(call.origin)) problems.push(`Unknown call origin "${call.origin}".`);
+  if (call.made_at_basis !== "exact" && call.made_at_basis !== "bound") problems.push("The decision time basis is exact or bound.");
+  if (call.trigger && !DEVIATION_KINDS.includes(call.trigger.deviation)) problems.push(`Unknown deviation "${call.trigger.deviation}".`);
+  if (call.prompt_id != null && !call.prompt_question.trim()) problems.push("A prompted call keeps the question it was asked.");
   const allowed = new Set((offered ?? reasonChipsFor(spec.kind)).map((chip) => chip.id));
   for (const reason of previous?.reasons ?? []) allowed.add(reason.id);
   for (const reason of call.reasons) {

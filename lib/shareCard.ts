@@ -12,6 +12,7 @@ import { adherence, holdSeconds, rMultiple, tradePnl, tradePoints } from "./trad
 import type { ChecklistItem, TradeRecord } from "./trades.ts";
 
 export type CardSize = "4:5" | "9:16" | "1:1";
+export type CardSide = "front" | "back";
 export type CardType = "TRADE" | "DRILL" | "PLAYBOOK" | "DAY" | "PLAN" | "MISTAKE" | "CHALLENGE";
 
 export interface CardBand {
@@ -100,11 +101,13 @@ export function getCardLayout(size: CardSize = "4:5"): CardLayoutDimensions {
 export function shareCardFileName(
   trade: Pick<TradeRecord, "symbol" | "direction" | "entry_time">,
   size: CardSize = "4:5",
+  side: CardSide = "front",
 ) {
   const symbol = trade.symbol.toLowerCase().replace(/[^a-z0-9]+/g, "");
-  const side = trade.direction === "LONG" ? "long" : "short";
+  const dir = trade.direction === "LONG" ? "long" : "short";
   const sizeSuffix = size === "4:5" ? "" : `-${size.replace(":", "x")}`;
-  return `${symbol}-${side}-${sessionDate(trade.entry_time)}-trade-card${sizeSuffix}.png`;
+  const sideSuffix = side === "back" ? "-back" : "";
+  return `${symbol}-${dir}-${sessionDate(trade.entry_time)}-trade-card${sizeSuffix}${sideSuffix}.png`;
 }
 
 export const shareCardFilename = shareCardFileName;
@@ -163,7 +166,7 @@ export function shareCardContent(
     // An open trade is labelled OPEN and shows no result (OD-38, R-03c).
     outcome: trade.exit_time == null ? "OPEN" : privacy ? formattedR : formatMoney(tradePnl(trade)),
     outcomeDetail: trade.exit_time == null ? "" : privacy ? points : `${formattedR} · ${points}`,
-    playbook: playbookName(trade.playbook_id),
+    playbook: playbookName(trade.playbook_id) ?? (trade.playbook_id ? (playbookName(trade.playbook_id.replace(/^pb-/, "")) ?? trade.playbook_id) : null),
     tags: trade.quick_tags,
     rules: trade.checklist_state,
     ruleSeal: score ? `${score.followed}/${score.total} FOLLOWED` : null,
@@ -321,6 +324,7 @@ export function renderCardCanvas(
   options?: RenderCardCanvasOptions,
 ) {
   const size = options?.size ?? "4:5";
+  const side = options?.side ?? "front";
   const layout = getCardLayout(size);
   const theme = options?.theme ?? (typeof document !== "undefined" ? getTheme() : DEFAULT_CARD_THEME);
   const content = shareCardContent(trade, zone, privacy, {
@@ -348,7 +352,37 @@ export function renderCardCanvas(
   const headerY = layout.header.y;
   ctx.fillStyle = theme.textMuted;
   ctx.font = "700 24px system-ui";
-  ctx.fillText(`${content.typeLabel} · ${content.subject}`, layout.paddingX, headerY + 28);
+  const headerTag = side === "back" ? `${content.typeLabel} · ${content.subject} · BACK` : `${content.typeLabel} · ${content.subject}`;
+  ctx.fillText(headerTag, layout.paddingX, headerY + 28);
+
+  // Playbook tag in header band if present (M3-Card, #42, docs/23 §2)
+  if (content.playbook) {
+    const headerTagWidth = ctx.measureText(headerTag).width;
+    const pbTagText = content.playbook.toUpperCase();
+    ctx.font = "700 18px system-ui";
+    const pbTagWidth = ctx.measureText(pbTagText).width;
+    const pillX = layout.paddingX + headerTagWidth + 18;
+    const maxPillRight = privacy ? layout.width - layout.paddingX - 120 : layout.width - layout.paddingX - 16;
+    if (pillX + pbTagWidth + 24 <= maxPillRight) {
+      const pillW = pbTagWidth + 20;
+      const pillH = 26;
+      const pillY = headerY + 8;
+      ctx.fillStyle = theme.surface;
+      ctx.strokeStyle = theme.goldMid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(pillX, pillY, pillW, pillH, 6);
+      } else {
+        ctx.rect(pillX, pillY, pillW, pillH);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = theme.goldLight;
+      ctx.fillText(pbTagText, pillX + 10, pillY + 19);
+    }
+  }
 
   if (privacy) {
     ctx.textAlign = "right";
@@ -372,7 +406,7 @@ export function renderCardCanvas(
     drawMood(ctx, mood, theme, layout);
   }
 
-  // Main Area: Chart Snapshot (occupies 55% to 60% of card height)
+  // Main Area: Chart Snapshot on front, full thesis/notes/checklist on back (occupies 55% to 60% of card height)
   ctx.fillStyle = theme.surface;
   ctx.beginPath();
   if (typeof ctx.roundRect === "function") {
@@ -382,14 +416,76 @@ export function renderCardCanvas(
   }
   ctx.fill();
 
-  const availW = layout.main.width - layout.main.innerMargin * 2;
-  const availH = layout.main.height - layout.main.innerMargin * 2;
-  const scale = Math.min(availW / snapshot.width, availH / snapshot.height);
-  const dw = snapshot.width * scale;
-  const dh = snapshot.height * scale;
-  const dx = layout.main.x + (layout.main.width - dw) / 2;
-  const dy = layout.main.y + (layout.main.height - dh) / 2;
-  ctx.drawImage(snapshot, dx, dy, dw, dh);
+  if (side === "front") {
+    const availW = layout.main.width - layout.main.innerMargin * 2;
+    const availH = layout.main.height - layout.main.innerMargin * 2;
+    const scale = Math.min(availW / snapshot.width, availH / snapshot.height);
+    const dw = snapshot.width * scale;
+    const dh = snapshot.height * scale;
+    const dx = layout.main.x + (layout.main.width - dw) / 2;
+    const dy = layout.main.y + (layout.main.height - dh) / 2;
+    ctx.drawImage(snapshot, dx, dy, dw, dh);
+  } else {
+    // Back side: full thesis, management and post-exit notes, full rule list (docs/23 §3)
+    let backY = layout.main.y + 36;
+    const backX = layout.main.x + 32;
+    const maxBackW = layout.main.width - 64;
+
+    // Thesis
+    ctx.fillStyle = theme.goldMid;
+    ctx.font = "800 20px system-ui";
+    ctx.fillText("PRE-TRADE THESIS", backX, backY);
+    backY += 28;
+
+    ctx.fillStyle = theme.textPrimary;
+    ctx.font = "550 22px system-ui";
+    const thesisText = trade.pre_trade_thesis || trade.note || "No thesis recorded";
+    backY = fillWrapped(ctx, thesisText, backX, backY, maxBackW, 28);
+    backY += 32;
+
+    // Management Notes
+    if (trade.management_notes) {
+      ctx.fillStyle = theme.goldMid;
+      ctx.font = "800 20px system-ui";
+      ctx.fillText("TRADE MANAGEMENT", backX, backY);
+      backY += 28;
+
+      ctx.fillStyle = theme.textPrimary;
+      ctx.font = "550 22px system-ui";
+      backY = fillWrapped(ctx, trade.management_notes, backX, backY, maxBackW, 28);
+      backY += 32;
+    }
+
+    // Post-Exit Notes
+    if (trade.post_exit_notes) {
+      ctx.fillStyle = theme.goldMid;
+      ctx.font = "800 20px system-ui";
+      ctx.fillText("POST-EXIT NOTES", backX, backY);
+      backY += 28;
+
+      ctx.fillStyle = theme.textPrimary;
+      ctx.font = "550 22px system-ui";
+      backY = fillWrapped(ctx, trade.post_exit_notes, backX, backY, maxBackW, 28);
+      backY += 32;
+    }
+
+    // Checklist
+    if (content.rules.length > 0) {
+      ctx.fillStyle = theme.goldMid;
+      ctx.font = "800 20px system-ui";
+      const sealInfo = content.ruleSeal ? ` · ${content.ruleSeal}` : "";
+      ctx.fillText(`PLAYBOOK CHECKLIST${sealInfo}`, backX, backY);
+      backY += 28;
+
+      const maxBackRules = size === "1:1" ? 4 : size === "4:5" ? 6 : 9;
+      const rulesToShow = content.rules.slice(0, maxBackRules);
+      rulesToShow.forEach((rule, idx) => {
+        ctx.fillStyle = rule.checked ? theme.textPrimary : theme.textMuted;
+        ctx.font = "600 20px system-ui";
+        ctx.fillText(fitText(ctx, `${rule.checked ? "✓" : "○"} ${rule.label}`, maxBackW), backX, backY + idx * 26);
+      });
+    }
+  }
 
   // Stats Row: tabular-nums, 3 cells max
   const statsY = layout.stats.y;
@@ -449,11 +545,12 @@ export function renderCardCanvas(
   // Context Band: why: playbook · thesis · rules
   let ctxY = layout.context.y + 24;
   if (content.playbook) {
-    ctx.fillStyle = theme.textMuted;
-    ctx.font = "700 22px system-ui";
+    ctx.fillStyle = theme.goldMid;
+    ctx.font = "800 22px system-ui";
     ctx.fillText("PLAYBOOK", layout.paddingX + 16, ctxY);
     ctx.fillStyle = theme.textPrimary;
-    ctx.fillText(fitText(ctx, content.playbook, 700), layout.paddingX + 180, ctxY);
+    ctx.font = "650 22px system-ui";
+    ctx.fillText(fitText(ctx, content.playbook, layout.main.width - 200), layout.paddingX + 180, ctxY);
     ctxY += 34;
   }
 

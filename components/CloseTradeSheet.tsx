@@ -5,19 +5,20 @@ import { formatPrice } from "@/lib/format";
 import { updateTrade } from "@/lib/store";
 import { fromZonedInput, toZonedInput, zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { closeTradePatch, specFor, validateClose } from "@/lib/trades";
-import type { TradeRecord } from "@/lib/trades";
+import { closeTradePatch, EXIT_REASONS, specFor, validateClose } from "@/lib/trades";
+import type { TradeExitReason, TradeRecord } from "@/lib/trades";
 
 const toNumber = (text: string) => (text.trim() === "" ? null : Number(text));
 
 /**
- * Close an open trade (R-03b): exit time (default now) and exit price, checked by the same rules as
- * the entry form. Saving sets `status: "closed"`, and the candle signature change reloads the chart.
- * Shows no size or dollars, so Shield (#15) has nothing to hide here.
+ * Close an open trade (R-03b): exit time (default now), exit price, and optional exit reason (G1),
+ * checked by the same rules as the entry form. Saving sets `status: "closed"`, and the candle
+ * signature change reloads the chart. Shows no size or dollars, so Shield (#15) has nothing to hide here.
  */
 export function CloseTradeSheet({ trade, zone, onClose }: { trade: TradeRecord; zone: string; onClose: () => void }) {
   const [exitTime, setExitTime] = useState(() => toZonedInput(new Date(), zone));
   const [exitPrice, setExitPrice] = useState("");
+  const [exitReason, setExitReason] = useState<TradeExitReason | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const firstField = useRef<HTMLInputElement>(null);
 
@@ -51,7 +52,7 @@ export function CloseTradeSheet({ trade, zone, onClose }: { trade: TradeRecord; 
     event.preventDefault();
     setSubmitted(true);
     if (hasErrors || price == null) return;
-    updateTrade(trade.id, closeTradePatch(trade, exit.toISOString(), price));
+    updateTrade(trade.id, closeTradePatch(trade, exit.toISOString(), price, exitReason));
     showToast("Trade closed");
     onClose();
   };
@@ -73,6 +74,28 @@ export function CloseTradeSheet({ trade, zone, onClose }: { trade: TradeRecord; 
               <input inputMode="decimal" type="number" step={specFor(trade.symbol)?.tickSize} value={exitPrice} aria-invalid={!!show("exit_price")} onChange={(event) => setExitPrice(event.target.value)} />
               {show("exit_price") && <span className="error">{show("exit_price")}</span>}
             </label>
+          </div>
+          <div className="exit-reason-section" style={{ marginTop: 12 }}>
+            <div className="exit-reason-head">
+              <span className="exit-reason-title">How did it end? <i>optional</i></span>
+            </div>
+            <div className="chip-row" role="group" aria-label="How did it end?">
+              {EXIT_REASONS.map((reason) => {
+                const selected = exitReason === reason.value;
+                return (
+                  <button
+                    key={reason.value}
+                    type="button"
+                    className="chip"
+                    aria-pressed={selected}
+                    aria-label={`Exit reason: ${reason.label}`}
+                    onClick={() => setExitReason(selected ? null : reason.value)}
+                  >
+                    {reason.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <button className="btn-primary btn-block" type="submit" style={{ marginTop: 14 }}>Save exit</button>
         </form>

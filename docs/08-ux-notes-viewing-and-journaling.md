@@ -48,14 +48,17 @@ How to hit them:
 | Screen | URL | Notes |
 | :--- | :--- | :--- |
 | Today | `/` | Current trading day, including no-trade days; show the previous trading day's summary separately and label its date. |
-| Feed | `/feed?style=scalp&status=unreviewed&playbook=…` | Grouped by trading day with a sticky day header. |
+| Feed | `/feed?status=unreviewed` | Grouped by trading day with a sticky day header. Built filter: `status` = `unreviewed` or `flagged`. The `?style=` filter was removed with the session-length labels (`OD-24`); a `?playbook=` filter is not built. |
 | Trade Detail | `/trades/[id]?tf=5m&companion=NQ` | The deep-link target for toasts, pushes and shared links between your own devices. |
 | Review Queue | `/review` | Card stack of trades that still need tags or review. |
-| Playbooks | `/playbooks` | |
-| Tune | `/tune` | Visual tuning, notifications, time zone, privacy. |
+| Playbooks | `/playbooks` | The binder: one card per active playbook (docs/23 §5). Opened from Tune → Playbooks and not in the dock. Editing stays in Tune. |
+| Drills | `/drills` | *Take it?* drills on older trades (docs/23 §4), opened from Review. |
+| Tune | `/tune` | Visual tuning, time zone, privacy, playbook editor, accounts, backup. |
+
+The dock is Today, Feed, Add (the centre button), Review and Tune.
 
 - **UX-10 — Filters live in the URL.** The back button, a reload and a deep link all restore the same list.
-- **UX-11 — Previous and next follow the list you came from.** Opening a trade from "Scalps, unreviewed" steps through that list, not through all trades.
+- **UX-11 — Previous and next follow the list you came from.** Opening a trade from "Unreviewed" steps through that list, not through all trades.
 - **UX-12 — Back restores scroll position** in the feed.
 - **UX-13 — Day header content:** date, net result, trade count, win rate, and a process score (share of trades that followed their rules). The process score sits next to the result, not below it.
 - **UX-14 — Copied trades are grouped.** One card with "× 3 accounts", expandable. Statistics count the group once ([09 §4](09-backend-risk-register.md#4-money-math-b-30--b-34)).
@@ -192,8 +195,8 @@ Every trade has one status. The queue and the "Needs Review" filter read from it
 
 | Status | Meaning |
 | :--- | :--- |
-| `new` | No playbook, no tags, no note. |
-| `tagged` | A playbook or at least one tag. The Pit Stop is done. |
+| `new` | Nothing captured: no playbook, tags, notes, checked rule or blind answer. |
+| `tagged` | Something captured: a playbook, a tag, any note (thesis, management, post-exit or the quick note), a checked rule or a blind review answer (`deriveReviewStatus` in `lib/trades.ts`). A note alone counts, so a trade the trader wrote about never sits in the queue as untouched. |
 | `reviewed` | The trader marked it reviewed at the end of Advanced Mode or in the queue. An AI review alone does not set this. |
 
 A separate `flagged` boolean marks trades worth revisiting in a weekly review.
@@ -284,7 +287,7 @@ One formatting module. No component formats a number on its own.
 | Time on detail | With seconds and zone | `09:48:12 ET` |
 | Approximate values | Prefix | `≈ −1.25 pts` |
 
-- **UX-86 — Display time zone is a preference.** Exchange time (ET) is the default. A trader in Chicago or London can switch, and the zone label always shows. Until `/tune` exists the app uses the owner's choice, `America/Chicago`, from one constant in `lib/time.ts` ([12 LV-03](12-levels-zones-and-daily-markup.md#2-sessions)).
+- **UX-86 — Display time zone is a preference.** Tune → time zone switches it, and the zone label always shows. The default is the owner's choice, Central (`America/Chicago`, `DEFAULT_TIME_ZONE` in `lib/time.ts`), not exchange time. Storage stays UTC and session math stays `America/New_York` ([12 LV-03](12-levels-zones-and-daily-markup.md#2-sessions)).
 - **UX-87 — Session logic never uses the display zone.** Sessions are computed in `America/New_York` (B-20).
 
 ---

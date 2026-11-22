@@ -35,6 +35,12 @@ function call(patch: Partial<DiscretionCall> = {}): DiscretionCall {
     reasons: [seed("cut", "Stalled at level")],
     note: "",
     conviction: 2,
+    prompt_id: null,
+    prompt_question: "Why out before stop or target?",
+    origin: "manual",
+    trigger: null,
+    rule: null,
+    made_at_basis: "exact",
     ...patch,
   };
 }

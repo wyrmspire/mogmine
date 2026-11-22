@@ -55,13 +55,13 @@ export function SessionReview({ plan, trades, zone, onClose }: Props) {
             <h2 id="review-title">{plan.name}</h2>
             <p className="num">{formatListTime(review.from, zone)} → {formatListTime(review.to, zone)}</p>
           </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close review">✕</button>
+          <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} onClick={onClose} aria-label="Close review">✕</button>
         </div>
 
         <div className="plan-form-body">
           <label className="review-until">
             <span>Until</span>
-            <select value={until ? until.id : "close"} onChange={(event) => setUntilId(event.target.value)}>
+            <select value={until ? until.id : "close"} style={{ minHeight: 44 }} onChange={(event) => setUntilId(event.target.value)}>
               {later.map((other) => <option key={other.id} value={other.id}>{other.name}</option>)}
               <option value="close">Session close</option>
             </select>
@@ -79,7 +79,7 @@ export function SessionReview({ plan, trades, zone, onClose }: Props) {
                 const trade = byId.get(row.trade_id);
                 return (
                   <li key={row.trade_id}>
-                    <Link href={`/trades/${row.trade_id}`} className="review-row">
+                    <Link href={`/trades/${row.trade_id}`} className="review-row" style={{ minHeight: 44 }}>
                       <span className="review-row-head">
                         <b className="num">{formatListTime(row.entry_time, zone)}</b>
                         <span>{playbookName(trade?.playbook_id ?? null) ?? "No playbook"}</span>

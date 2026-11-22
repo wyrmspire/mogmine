@@ -49,6 +49,48 @@ export interface ChecklistItem {
   checked: boolean;
 }
 
+/** A single stated stop-movement event (price + time) (docs/15 §3, issue #36 G2). */
+export interface StopMove {
+  /** The new stop loss price. */
+  price: number;
+  /** When the stop was moved (UTC ISO-8601 string). */
+  time: string;
+}
+
+export function isStopMove(value: unknown): value is StopMove {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as StopMove).price === "number" &&
+    Number.isFinite((value as StopMove).price) &&
+    typeof (value as StopMove).time === "string" &&
+    Number.isFinite(Date.parse((value as StopMove).time))
+  );
+}
+
+export function sanitizeStopMoves(moves: unknown): StopMove[] {
+  if (!Array.isArray(moves)) return [];
+  return moves
+    .filter(isStopMove)
+    .map((m) => ({ price: m.price, time: m.time }))
+    .sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+}
+
+/** One-tap exit reason (docs/15 §3, issue #36 G1). */
+export type TradeExitReason = "target" | "stop" | "trail" | "breakeven" | "manual";
+
+export const EXIT_REASONS: ReadonlyArray<{ value: TradeExitReason; label: string; flag: string }> = [
+  { value: "target", label: "Target", flag: "TP" },
+  { value: "stop", label: "Stop", flag: "SL" },
+  { value: "trail", label: "Trailed", flag: "TRAIL" },
+  { value: "breakeven", label: "Breakeven", flag: "BE" },
+  { value: "manual", label: "Market", flag: "MKT" },
+];
+
+export function isExitReason(value: unknown): value is TradeExitReason {
+  return typeof value === "string" && EXIT_REASONS.some((r) => r.value === value);
+}
+
 export interface TradeRecord {
   id: string;
   user_id: string;
@@ -66,6 +108,11 @@ export interface TradeRecord {
   entry_price: number;
   /** Null while the trade is open (R-03). Never `0` or the entry price. */
   exit_price: number | null;
+  /**
+   * How the trade ended (docs/15 §3, issue #36 G1). One tap: Target · Stop · Trailed · Breakeven · Market.
+   * Null on open trades or when unstated on manual entry (then inferred where exit equals stop/target).
+   */
+  exit_reason?: TradeExitReason | null;
   stop_loss_price: number | null;
   /**
    * The first stop this trade ever had, frozen when it was set (R-10). Later edits move
@@ -75,6 +122,11 @@ export interface TradeRecord {
   initial_stop_price: number | null;
   /** When `initial_stop_price` was captured (ISO). Null with it. */
   initial_stop_set_at: string | null;
+  /**
+   * Stated stop-movement rows (price + time) feeding the stepped stop path (docs/15 §3, issue #36 G2).
+   * Optional; empty or undefined means no stop moves recorded.
+   */
+  stop_moves?: StopMove[];
   planned_target_price: number | null;
   key_level_price: number | null;
   quantity: number;
@@ -279,6 +331,204 @@ export function keepInitialStop(incoming: TradeRecord, existing: Pick<TradeRecor
   if (!existing || existing.id !== incoming.id || existing.initial_stop_price == null) return incoming;
   if (incoming.initial_stop_price === existing.initial_stop_price && incoming.initial_stop_set_at === existing.initial_stop_set_at) return incoming;
   return { ...incoming, initial_stop_price: existing.initial_stop_price, initial_stop_set_at: existing.initial_stop_set_at };
+}
+
+/**
+ * Check if moving a stop from prevPrice to nextPrice widens risk (moves away from entry).
+ * LONG: nextPrice < prevPrice (moving down increases risk).
+ * SHORT: nextPrice > prevPrice (moving up increases risk).
+ */
+export function isStopMoveWidening(
+  prevPrice: number,
+  nextPrice: number,
+  direction: TradeDirection,
+  symbol?: string,
+): boolean {
+  const sign = sideSign(direction);
+  if (sign == null) return false;
+  const spec = symbol ? specFor(symbol) : null;
+  const prevTicks = spec ? toTicks(prevPrice, symbol!) : null;
+  const nextTicks = spec ? toTicks(nextPrice, symbol!) : null;
+  if (prevTicks != null && nextTicks != null) {
+    return (nextTicks - prevTicks) * sign < 0;
+  }
+  return (nextPrice - prevPrice) * sign < 0;
+}
+
+/**
+ * Check if a stop price sits at or beyond entry on the winning side, locking profit.
+ * LONG: stopPrice >= entryPrice.
+ * SHORT: stopPrice <= entryPrice.
+ */
+export function isStopMoveLockingProfit(
+  entryPrice: number,
+  stopPrice: number,
+  direction: TradeDirection,
+  symbol?: string,
+): boolean {
+  const sign = sideSign(direction);
+  if (sign == null) return false;
+  const spec = symbol ? specFor(symbol) : null;
+  const entryTicks = spec ? toTicks(entryPrice, symbol!) : null;
+  const stopTicks = spec ? toTicks(stopPrice, symbol!) : null;
+  if (entryTicks != null && stopTicks != null) {
+    return (stopTicks - entryTicks) * sign >= 0;
+  }
+  return (stopPrice - entryPrice) * sign >= 0;
+}
+
+/**
+ * Check whether any stop movement in the trade widened risk.
+ * Examines stated stop moves if present; otherwise inspects legacy initial-to-current stop difference.
+ */
+export function hasWidenedStop(
+  trade: Pick<TradeRecord, "direction" | "entry_price"> &
+    Partial<Pick<TradeRecord, "symbol" | "initial_stop_price" | "stop_loss_price" | "stop_moves">>,
+): boolean {
+  const moves = trade.stop_moves;
+  if (moves && moves.length > 0) {
+    let current = trade.initial_stop_price ?? trade.entry_price;
+    for (const move of moves) {
+      if (isStopMoveWidening(current, move.price, trade.direction, trade.symbol)) {
+        return true;
+      }
+      current = move.price;
+    }
+    return false;
+  }
+  if (
+    trade.initial_stop_price != null &&
+    trade.stop_loss_price != null &&
+    trade.stop_loss_price !== trade.initial_stop_price
+  ) {
+    return isStopMoveWidening(trade.initial_stop_price, trade.stop_loss_price, trade.direction, trade.symbol);
+  }
+  return false;
+}
+
+export const MOVED_STOP_TAG = "Moved Stop";
+
+/**
+ * Suggest quick tags based on trade execution facts (UX-33: AI suggests, trader decides).
+ * If the stop was widened and "Moved Stop" is not yet in quick_tags, suggests ["Moved Stop"].
+ * Pure selector: NEVER mutates or auto-applies to trade.quick_tags.
+ */
+export function suggestedQuickTags(
+  trade: Pick<TradeRecord, "direction" | "entry_price" | "quick_tags"> &
+    Partial<Pick<TradeRecord, "symbol" | "initial_stop_price" | "stop_loss_price" | "stop_moves">>,
+  derived?: { stop_widened?: boolean },
+): string[] {
+  const widened = derived?.stop_widened ?? hasWidenedStop(trade);
+  const suggestions: string[] = [];
+  if (widened && !trade.quick_tags.includes(MOVED_STOP_TAG)) {
+    suggestions.push(MOVED_STOP_TAG);
+  }
+  return suggestions;
+}
+
+/**
+ * Trader-initiated action to accept a suggested tag into quick_tags (UX-33).
+ */
+export function acceptSuggestedTagPatch(
+  trade: Pick<TradeRecord, "quick_tags">,
+  tag: string,
+): Pick<TradeRecord, "quick_tags"> {
+  if (trade.quick_tags.includes(tag)) {
+    return { quick_tags: [...trade.quick_tags] };
+  }
+  return { quick_tags: [...trade.quick_tags, tag] };
+}
+
+/**
+ * The patch for adding a stated stop move (price + time) to a trade (docs/15 §3, issue #36 G2, R-10).
+ * - If no stop existed before, freezes this stop as initial_stop_price (R-10).
+ * - If an initial stop already exists, keeps initial_stop_price frozen and updates stop_loss_price
+ *   and appends the move to stop_moves.
+ */
+export function addStopMovePatch(
+  trade: Pick<TradeRecord, "initial_stop_price" | "stop_loss_price"> &
+    Partial<Pick<TradeRecord, "stop_moves">>,
+  price: number,
+  moveTime: string,
+): Pick<TradeRecord, "stop_loss_price" | "stop_moves"> &
+  Partial<Pick<TradeRecord, "initial_stop_price" | "initial_stop_set_at">> {
+  const newMove: StopMove = { price, time: moveTime };
+  const moves = sanitizeStopMoves([...(trade.stop_moves ?? []), newMove]);
+
+  if (trade.initial_stop_price == null) {
+    return {
+      stop_loss_price: price,
+      initial_stop_price: price,
+      initial_stop_set_at: moveTime,
+      stop_moves: moves,
+    };
+  }
+
+  return {
+    stop_loss_price: price,
+    stop_moves: moves,
+  };
+}
+
+/**
+ * The patch for removing a stated stop move by index.
+ * Reverts stop_loss_price to the previous stop move or to initial_stop_price.
+ * Keeps initial_stop_price frozen (R-10).
+ */
+export function removeStopMovePatch(
+  trade: Pick<TradeRecord, "initial_stop_price"> &
+    Partial<Pick<TradeRecord, "stop_moves">>,
+  index: number,
+): Pick<TradeRecord, "stop_loss_price" | "stop_moves"> {
+  const currentMoves = trade.stop_moves ?? [];
+  const nextMoves = currentMoves.filter((_, i) => i !== index);
+  const lastMove = nextMoves.at(-1);
+  const nextStop = lastMove ? lastMove.price : trade.initial_stop_price;
+  return {
+    stop_loss_price: nextStop ?? null,
+    stop_moves: nextMoves,
+  };
+}
+
+/**
+ * The patch for updating a stated stop move row by index.
+ * Keeps initial_stop_price frozen (R-10).
+ */
+export function updateStopMovePatch(
+  trade: Pick<TradeRecord, "initial_stop_price"> &
+    Partial<Pick<TradeRecord, "stop_moves">>,
+  index: number,
+  updated: StopMove,
+): Pick<TradeRecord, "stop_loss_price" | "stop_moves"> {
+  const currentMoves = [...(trade.stop_moves ?? [])];
+  if (index >= 0 && index < currentMoves.length) {
+    currentMoves[index] = updated;
+  }
+  const moves = sanitizeStopMoves(currentMoves);
+  const lastMove = moves.at(-1);
+  const nextStop = lastMove ? lastMove.price : trade.initial_stop_price;
+  return {
+    stop_loss_price: nextStop ?? null,
+    stop_moves: moves,
+  };
+}
+
+/**
+ * Replace all stop moves on a trade with a new list of moves.
+ * Updates stop_loss_price to the last move's price (or initial_stop_price if empty).
+ * Keeps initial_stop_price frozen (R-10).
+ */
+export function recordStopMovesPatch(
+  trade: Pick<TradeRecord, "initial_stop_price">,
+  moves: StopMove[],
+): Pick<TradeRecord, "stop_loss_price" | "stop_moves"> {
+  const sanitized = sanitizeStopMoves(moves);
+  const lastMove = sanitized.at(-1);
+  const nextStop = lastMove ? lastMove.price : trade.initial_stop_price;
+  return {
+    stop_loss_price: nextStop ?? null,
+    stop_moves: sanitized,
+  };
 }
 
 /** A trade with both exit fields set. The chart draws only these until R-03c. */
@@ -770,6 +1020,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     take_again_at: null,
     is_sample: false,
     sparkline: [],
+    exit_reason: null,
     ...raw,
     status,
   };
@@ -778,6 +1029,10 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;
   if (trade.account_id === undefined) trade.account_id = null;
+  trade.exit_reason = status === "open" ? null : isExitReason(raw.exit_reason) ? raw.exit_reason : null;
+  if (raw.stop_moves !== undefined) {
+    trade.stop_moves = sanitizeStopMoves(raw.stop_moves);
+  }
   if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   trade.review_status = deriveReviewStatus(trade);
@@ -877,13 +1132,23 @@ export function validateClose(
   return errors;
 }
 
-/** The patch that closes an open trade: status, both exit fields, and the style from the real hold (R-03b). */
+/** The patch that closes an open trade: status, both exit fields, optional exit reason, and the style from the real hold (R-03b, G1). */
 export function closeTradePatch(
   trade: Pick<TradeRecord, "entry_time">,
   exitTime: string,
   exitPrice: number,
-): Pick<TradeRecord, "status" | "exit_time" | "exit_price" | "trade_style"> {
-  return { status: "closed", exit_time: exitTime, exit_price: exitPrice, trade_style: classifyTrade(trade.entry_time, exitTime) };
+  exitReason?: TradeExitReason | null,
+): Pick<TradeRecord, "status" | "exit_time" | "exit_price" | "trade_style"> & Partial<Pick<TradeRecord, "exit_reason">> {
+  const patch: Pick<TradeRecord, "status" | "exit_time" | "exit_price" | "trade_style"> & Partial<Pick<TradeRecord, "exit_reason">> = {
+    status: "closed",
+    exit_time: exitTime,
+    exit_price: exitPrice,
+    trade_style: classifyTrade(trade.entry_time, exitTime),
+  };
+  if (exitReason !== undefined) {
+    patch.exit_reason = exitReason;
+  }
+  return patch;
 }
 
 /** Tags that record a broken process, whatever the trade made. */

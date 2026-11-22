@@ -67,7 +67,7 @@ export function PlaybookEditor() {
   };
 
   return (
-    <section className="specular-card card-pad playbook-editor" aria-label="Playbooks">
+    <section className="specular-card card-pad playbook-editor" aria-label="Playbooks editor">
       <p className="muted" style={{ fontSize: 13, margin: 0 }}>
         A playbook is a setup you trade and the rules you check for it. Trades you already saved keep the checklist they were saved with, so editing a rule here never changes your history.
       </p>
@@ -84,7 +84,7 @@ export function PlaybookEditor() {
                   <b>{playbook.name}</b>
                   <small className="num">{STYLE_LABEL[playbook.default_style]} · {playbook.checklist_rules.length === 0 ? "no rules" : `${playbook.checklist_rules.length} ${playbook.checklist_rules.length === 1 ? "rule" : "rules"}`}</small>
                 </span>
-                <button type="button" className="btn-secondary" disabled={!hydrated} onClick={() => setEditing({ id: playbook.id, draft: toDraft(playbook) })} aria-label={`Edit ${playbook.name}`}>Edit</button>
+                <button type="button" className="btn-secondary" disabled={!hydrated} onClick={() => setEditing({ id: playbook.id, draft: toDraft(playbook) })} aria-label={`Edit playbook ${playbook.name}`} style={{ minHeight: 44 }}>Edit</button>
               </div>
             )}
           </li>
@@ -95,7 +95,7 @@ export function PlaybookEditor() {
       </ul>
 
       {!editing && (
-        <button type="button" className="btn-secondary" style={{ marginTop: 12 }} disabled={!hydrated} onClick={() => setEditing({ id: null, draft: { name: "", default_style: "scalp", checklist_rules: [] } })}>
+        <button type="button" className="btn-secondary" style={{ marginTop: 12, minHeight: 44 }} disabled={!hydrated} onClick={() => setEditing({ id: null, draft: { name: "", default_style: "scalp", checklist_rules: [] } })} aria-label="Create a new playbook">
           + New playbook
         </button>
       )}
@@ -107,7 +107,7 @@ export function PlaybookEditor() {
             {archived.map((playbook) => (
               <li key={playbook.id} className="playbook-row archived">
                 <span><b>{playbook.name}</b><small>Hidden from pickers. Past trades still show it.</small></span>
-                <button type="button" className="btn-secondary" onClick={() => archive(playbook, false)} aria-label={`Restore ${playbook.name}`}>Restore</button>
+                <button type="button" className="btn-secondary" onClick={() => archive(playbook, false)} aria-label={`Restore playbook ${playbook.name}`} style={{ minHeight: 44 }}>Restore</button>
               </li>
             ))}
           </ul>
@@ -158,15 +158,35 @@ function DraftForm({ editing, onChange, error, onSave, onCancel, onArchive }: {
       const pendingRule = newRule.trim();
       onSave(pendingRule && !full ? { ...draft, checklist_rules: [...rules, { id: newPlaybookItemId(pendingRule, rules.map((rule) => rule.id)), label: pendingRule }] } : draft);
     }}>
-      <label className="field">
+      <label className="field" htmlFor={`playbook-name-${id}`}>
         <span>Name</span>
-        <input value={draft.name} maxLength={PLAYBOOK_LIMITS.name} autoFocus={editing.id === null} onChange={(event) => onChange({ ...draft, name: event.target.value })} aria-invalid={nameProblem || undefined} placeholder="e.g. Gap Fill" />
+        <input
+          id={`playbook-name-${id}`}
+          value={draft.name}
+          maxLength={PLAYBOOK_LIMITS.name}
+          autoFocus={editing.id === null}
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          aria-invalid={nameProblem || undefined}
+          aria-label="Playbook name"
+          placeholder="e.g. Gap Fill"
+        />
       </label>
 
       <div className="field">
         <span id={`${id}-style`}>Default style</span>
-        <div className="segmented" role="group" aria-labelledby={`${id}-style`}>
-          {STYLES.map((style) => <button key={style} type="button" aria-pressed={draft.default_style === style} onClick={() => onChange({ ...draft, default_style: style })}>{STYLE_LABEL[style]}</button>)}
+        <div className="segmented" role="radiogroup" aria-labelledby={`${id}-style`}>
+          {STYLES.map((style) => (
+            <button
+              key={style}
+              type="button"
+              role="radio"
+              aria-checked={draft.default_style === style}
+              onClick={() => onChange({ ...draft, default_style: style })}
+              style={{ minHeight: 44 }}
+            >
+              {STYLE_LABEL[style]}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -176,10 +196,16 @@ function DraftForm({ editing, onChange, error, onSave, onCancel, onArchive }: {
         <div className="field">
           <span>Rules <i className="num">{rules.length}/{PLAYBOOK_LIMITS.rules}</i></span>
           {rules.length === 0 && <span className="hint">No rules yet. A rule is one thing you check before you enter.</span>}
-          <ol className="rule-list">
+          <ol className="rule-list" aria-label="Playbook checklist rules">
             {rules.map((rule, index) => (
               <li key={rule.id}>
-                <input value={rule.label} maxLength={PLAYBOOK_LIMITS.ruleLabel} aria-label={`Rule ${index + 1}`} aria-invalid={!rule.label.trim() || undefined} onChange={(event) => setRules(rules.map((item) => (item.id === rule.id ? { ...item, label: event.target.value } : item)))} />
+                <input
+                  value={rule.label}
+                  maxLength={PLAYBOOK_LIMITS.ruleLabel}
+                  aria-label={`Rule ${index + 1} of ${rules.length}`}
+                  aria-invalid={!rule.label.trim() || undefined}
+                  onChange={(event) => setRules(rules.map((item) => (item.id === rule.id ? { ...item, label: event.target.value } : item)))}
+                />
                 <button type="button" className="icon-button small" disabled={index === 0} onClick={() => move(index, -1)} aria-label={`Move rule ${index + 1} up`}>↑</button>
                 <button type="button" className="icon-button small" disabled={index === rules.length - 1} onClick={() => move(index, 1)} aria-label={`Move rule ${index + 1} down`}>↓</button>
                 <button type="button" className="icon-button small" onClick={() => setRules(rules.filter((item) => item.id !== rule.id))} aria-label={`Remove rule ${index + 1}: ${rule.label}`}>✕</button>
@@ -187,8 +213,26 @@ function DraftForm({ editing, onChange, error, onSave, onCancel, onArchive }: {
             ))}
           </ol>
           <div className="rule-add">
-            <input ref={newRuleRef} value={newRule} maxLength={PLAYBOOK_LIMITS.ruleLabel} disabled={full} placeholder={full ? `${PLAYBOOK_LIMITS.rules} rules is the limit` : "Add a rule"} aria-label="New rule" onChange={(event) => setNewRule(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addRule(); } }} />
-            <button type="button" className="btn-secondary" disabled={!newRule.trim() || full} onClick={addRule}>Add</button>
+            <input
+              ref={newRuleRef}
+              value={newRule}
+              maxLength={PLAYBOOK_LIMITS.ruleLabel}
+              disabled={full}
+              placeholder={full ? `${PLAYBOOK_LIMITS.rules} rules is the limit` : "Add a rule"}
+              aria-label="New rule text"
+              onChange={(event) => setNewRule(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addRule(); } }}
+            />
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={!newRule.trim() || full}
+              onClick={addRule}
+              aria-label="Add rule to checklist"
+              style={{ minHeight: 44 }}
+            >
+              Add
+            </button>
           </div>
         </div>
       )}
@@ -197,9 +241,9 @@ function DraftForm({ editing, onChange, error, onSave, onCancel, onArchive }: {
       {editing.id && !noSetup && <p className="hint muted" style={{ fontSize: 12, margin: 0 }}>New trades get these rules. Trades already saved keep theirs.</p>}
 
       <div className="playbook-actions">
-        <button type="submit" className="btn-primary" disabled={!draft.name.trim() || Boolean(problem)}>Save</button>
-        <button type="button" className="btn-secondary" onClick={onCancel}>Cancel</button>
-        {onArchive && <button type="button" className="btn-ghost" onClick={onArchive}>Archive</button>}
+        <button type="submit" className="btn-primary" disabled={!draft.name.trim() || Boolean(problem)} aria-label="Save playbook" style={{ minHeight: 44 }}>Save</button>
+        <button type="button" className="btn-secondary" onClick={onCancel} aria-label="Cancel editing playbook" style={{ minHeight: 44 }}>Cancel</button>
+        {onArchive && <button type="button" className="btn-ghost" onClick={onArchive} aria-label={`Archive playbook ${draft.name || ""}`} style={{ minHeight: 44 }}>Archive</button>}
       </div>
     </form>
   );

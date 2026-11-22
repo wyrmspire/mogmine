@@ -1,13 +1,59 @@
 // Canvas display-list painter. Marks arrive in price and UTC bar-open coordinates.
 import type { CanvasRenderingTarget2D } from "fancy-canvas";
 import type {
-  AutoscaleInfo, IPrimitivePaneView, ISeriesPrimitive, SeriesAttachedParameter, Time, UTCTimestamp,
+  AutoscaleInfo, IPrimitivePaneView, ISeriesPrimitive, PrimitiveHoveredItem, SeriesAttachedParameter, Time, UTCTimestamp,
 } from "lightweight-charts";
-import type { ChartTheme } from "@/lib/theme";
-import type { FlagMark, Mark, SegmentMark } from "@/lib/trade-marks";
+import { separateLabels } from "../lib/label-stack.ts";
+import type { ChartTheme } from "../lib/theme.ts";
+import type { FlagMark, Mark, SegmentMark } from "../lib/trade-marks.ts";
+import type { NeighbourTradeProjection } from "../lib/neighbour-trades.ts";
+
+export interface ArchivedBoxRect {
+  tradeId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Pure hit-testing helper checking pointer coordinates (x, y) against rendered
+ * layer === "archived" box rectangles (#40, K-UI).
+ * Returns the matching tradeId or null.
+ *
+ * When rects overlap, searches in reverse order so the topmost (most recently drawn)
+ * rect takes precedence. Handles boundary touches, zero/negative dimensions, and tolerances.
+ */
+export function hitTestArchivedBoxes(
+  x: number,
+  y: number,
+  rects: readonly ArchivedBoxRect[] | null | undefined,
+  tolerance = 0,
+): string | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !rects || rects.length === 0) {
+    return null;
+  }
+  const tol = Math.max(0, Number.isFinite(tolerance) ? tolerance : 0);
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const rect = rects[i];
+    if (!rect || !rect.tradeId) continue;
+    const minX = Math.min(rect.x, rect.x + rect.width) - tol;
+    const maxX = Math.max(rect.x, rect.x + rect.width) + tol;
+    const minY = Math.min(rect.y, rect.y + rect.height) - tol;
+    const maxY = Math.max(rect.y, rect.y + rect.height) + tol;
+    if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+      return rect.tradeId;
+    }
+  }
+  return null;
+}
+
+export const hitTestArchivedMark = hitTestArchivedBoxes;
 
 const PLAN_FILL_RATIO = 0.28;
 const EDGE_INSET = 4;
+/** Line height for chart labels (10–11 px monospace); labels closer than this are stacked apart. */
+const LABEL_HEIGHT = 12;
 type Area = { x: number; y: number; width: number; height: number };
 
 function markPrices(mark: Mark): number[] {
@@ -58,17 +104,50 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   private marks: readonly Mark[] = [];
   private theme?: ChartTheme;
   private priceRange: AutoscaleInfo | null = null;
+  private archivedRects: ArchivedBoxRect[] = [];
+  private neighbourTrades?: readonly NeighbourTradeProjection[];
   private readonly views: readonly IPrimitivePaneView[] = [
     { zOrder: () => "bottom", renderer: () => ({ draw: (target) => this.draw(target, true) }) },
     { zOrder: () => "normal", renderer: () => ({ draw: (target) => this.draw(target, false) }) },
   ];
 
   attached(param: SeriesAttachedParameter<Time>) { this.attachment = param; }
-  detached() { this.attachment = undefined; }
+  detached() {
+    this.attachment = undefined;
+    this.archivedRects = [];
+  }
   paneViews() { return this.views; }
   autoscaleInfo() { return this.priceRange; }
 
-  update(marks: readonly Mark[], theme: ChartTheme) {
+  setNeighbourTrades(trades?: readonly NeighbourTradeProjection[]) {
+    this.neighbourTrades = trades;
+  }
+
+  getArchivedRects(): readonly ArchivedBoxRect[] {
+    return this.archivedRects;
+  }
+
+  /**
+   * Hit test implementation matching lightweight-charts ISeriesPrimitive interface.
+   * Returns a PrimitiveHoveredItem containing the neighbour tradeId in externalId,
+   * with cursorStyle: 'pointer' so the chart displays a pointer cursor on hover.
+   */
+  hitTest(x: number, y: number): PrimitiveHoveredItem | null {
+    const tradeId = hitTestArchivedBoxes(x, y, this.archivedRects);
+    if (!tradeId) return null;
+    return {
+      externalId: tradeId,
+      zOrder: "normal",
+      cursorStyle: "pointer",
+    };
+  }
+
+  /** Direct helper returning the hit tradeId string or null */
+  hitTestTradeId(x: number, y: number): string | null {
+    return hitTestArchivedBoxes(x, y, this.archivedRects);
+  }
+
+  update(marks: readonly Mark[], theme: ChartTheme, neighbourTrades?: readonly NeighbourTradeProjection[]) {
     if (this.marks !== marks) {
       this.marks = marks;
       const prices = marks.flatMap(markPrices);
@@ -76,7 +155,37 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         ? { priceRange: { minValue: Math.min(...prices), maxValue: Math.max(...prices) } } : null;
     }
     this.theme = theme;
+    if (neighbourTrades !== undefined) {
+      this.neighbourTrades = neighbourTrades;
+    }
     this.attachment?.requestUpdate();
+  }
+
+  private resolveNeighbourTradeId(mark: Mark): string | null {
+    const anyMark = mark as { tradeId?: string; trade_id?: string; id?: string };
+    if (anyMark.tradeId) return anyMark.tradeId;
+    if (anyMark.trade_id) return anyMark.trade_id;
+    if (anyMark.id) return anyMark.id;
+
+    if (!this.neighbourTrades || this.neighbourTrades.length === 0) return null;
+    if (mark.kind !== "zone" && mark.kind !== "segment") return null;
+
+    for (const nb of this.neighbourTrades) {
+      const nbEntryMs = Date.parse(nb.entryTime);
+      const nbExitMs = nb.exitTime ? Date.parse(nb.exitTime) : nbEntryMs;
+      const t0 = Math.min(nbEntryMs, nbExitMs);
+      const t1 = Math.max(nbEntryMs, nbExitMs);
+
+      const priceMatch = (mark.p0 === nb.entryPrice && mark.p1 === nb.exitPrice) ||
+        (mark.p0 === nb.exitPrice && mark.p1 === nb.entryPrice) ||
+        (mark.p0 === nb.entryPrice && (nb.exitPrice == null || mark.p1 === nb.entryPrice));
+      const timeMatch = Math.abs(t0 - mark.t0) < 60_000 && Math.abs(t1 - mark.t1) < 60_000;
+
+      if (priceMatch && timeMatch) {
+        return nb.tradeId;
+      }
+    }
+    return null;
   }
 
   private draw(target: CanvasRenderingTarget2D, fills: boolean) {
@@ -92,13 +201,18 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
           : tone === "entry" ? theme.textPrimary : theme.textMuted;
 
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize: pane }) => {
+      const recordedArchived: ArchivedBoxRect[] = [];
+      // Labels are queued with the style they were asked for and drawn last, after overlapping ones
+      // are stacked apart (UX-a), so a flag's text never prints on top of a bracket's.
+      const queued: { label: string; x: number; y: number; width: number; fill: CanvasRenderingContext2D["fillStyle"]; font: string; alpha: number }[] = [];
       const text = (label: string, atX: number, atY: number) => {
         if (!label) return;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
         const width = ctx.measureText(label).width;
-        ctx.fillText(label, Math.max(2, Math.min(atX, pane.width - width - 2)),
-          Math.min(pane.height - 7, Math.max(7, atY)));
+        queued.push({
+          label, width, fill: ctx.fillStyle, font: ctx.font, alpha: ctx.globalAlpha,
+          x: Math.max(2, Math.min(atX, pane.width - width - 2)),
+          y: Math.min(pane.height - 7, Math.max(7, atY)),
+        });
       };
       const bounds = (xa: number, xb: number, ya: number, yb: number): Area | null => {
         const left = Math.max(0, Math.round(Math.min(xa, xb) - halfBar));
@@ -163,12 +277,36 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
           setDash(ctx, mark.basis === "inferred" ? "dotted" : mark.dash);
           if (x0 === x1 && y0 === y1) strokeLine(ctx, x0 - halfBar, y0, x1 + halfBar, y1);
           else strokeLine(ctx, x0, y0, x1, y1);
+          if (!fills && mark.layer === "archived") {
+            const tradeId = this.resolveNeighbourTradeId(mark);
+            if (tradeId) {
+              const minX = Math.min(x0, x1) - halfBar;
+              const maxX = Math.max(x0, x1) + halfBar;
+              const segLeft = Math.max(0, Math.round(minX));
+              const segRight = Math.min(pane.width, Math.round(maxX));
+              if (segRight > segLeft) {
+                this.archivedRects.push({
+                  tradeId,
+                  x: segLeft,
+                  y: Math.max(0, Math.round(y0 - 4)),
+                  width: segRight - segLeft,
+                  height: 8,
+                });
+              }
+            }
+          }
           return;
         }
 
         const area = bounds(x0, x1, y0, y1);
         if (!area) return;
         const { x: left, y: top, width, height } = area;
+        if (fills && mark.kind === "zone" && mark.layer === "archived") {
+          const tradeId = this.resolveNeighbourTradeId(mark);
+          if (tradeId) {
+            recordedArchived.push({ tradeId, x: left, y: top, width, height });
+          }
+        }
         if (mark.kind === "hatch") {
           ctx.save();
           ctx.beginPath();
@@ -219,6 +357,23 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         paint(mark);
         ctx.restore();
       }
+
+      if (fills) {
+        this.archivedRects = recordedArchived;
+      }
+
+      if (!queued.length) return;
+      const ys = separateLabels(queued, LABEL_HEIGHT, 0, pane.height);
+      queued.forEach((item, index) => {
+        ctx.save();
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.font = item.font;
+        ctx.fillStyle = item.fill;
+        ctx.globalAlpha = item.alpha;
+        ctx.fillText(item.label, item.x, ys[index]);
+        ctx.restore();
+      });
     });
   }
 }

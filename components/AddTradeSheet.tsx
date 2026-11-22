@@ -13,10 +13,12 @@ import { usePrefs } from "@/lib/prefs";
 import { AccountSelect } from "./AccountSelect";
 import { defaultAccountId } from "@/lib/accounts";
 import { useAccounts } from "@/lib/accounts-store";
+import { ONE_TAP_MOOD_SCORE, spokeChipLabel } from "@/lib/mood";
+import { recordUserMood, useMood } from "@/lib/mood-store";
 import { addTrade, useJournal } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { EXIT_REASONS, FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeStatus } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft, useOnline } from "@/lib/ui";
 
@@ -75,6 +77,7 @@ export function AddTradeSheet() {
   const firstField = useRef<HTMLButtonElement>(null);
   const accounts = useAccounts();
   const journal = useJournal();
+  const moodState = useMood();
   // Undefined until the trader picks: the account used last (docs/21).
   const accountId = draft.accountId !== undefined ? draft.accountId : defaultAccountId(accounts.accounts, journal.trades);
 
@@ -120,10 +123,10 @@ export function AddTradeSheet() {
   const stopPrice = priceOrNull(draft.stopPrice);
   const targetPrice = priceOrNull(draft.targetPrice);
   // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50).
-  // Under Shield the Contracts input is hidden, so an invalid draft quantity cannot be seen or
-  // fixed; fall back to 1 there and keep the typed draft untouched for when Shield turns off.
+  // Under Shield, the Contracts input is masked on screen but remains editable (UX-e, #15),
+  // so multi-contract trades preserve their true size and underlying dollar P&L.
   const typedQuantity = Number(draft.quantity);
-  const quantity = prefs.shield ? (isWholeQuantity(typedQuantity) ? typedQuantity : 1) : typedQuantity;
+  const quantity = isWholeQuantity(typedQuantity) ? typedQuantity : typedQuantity;
   const times = entryTimes(draft, zone);
   const { entry, exit } = times;
 
@@ -136,7 +139,7 @@ export function AddTradeSheet() {
   });
   const errors: Partial<Record<ErrorKey, string>> = {
     symbol: executionErrors.symbol,
-    quantity: prefs.shield ? undefined : executionErrors.quantity,
+    quantity: executionErrors.quantity,
     entryPrice: executionErrors.entry_price,
     exitPrice: executionErrors.exit_price,
     stopPrice: executionErrors.stop_loss_price,
@@ -230,6 +233,7 @@ export function AddTradeSheet() {
       id: crypto.randomUUID(), symbol: draft.symbol, direction: draft.direction, quantity,
       entry_time: entry.toISOString(), ...exitFields,
       entry_price: entryPrice,
+      exit_reason: !isOpenDraft ? (draft.exitReason ?? null) : null,
       // R-10: a stop typed here is the stop and the frozen initial stop.
       ...stopPatch({ initial_stop_price: null }, stopPrice, new Date().toISOString()),
       planned_target_price: targetPrice,
@@ -238,6 +242,16 @@ export function AddTradeSheet() {
       account_id: accountId,
     });
     addTrade(trade);
+    if (draft.entryMoodSpoke) {
+      const nowIso = new Date().toISOString();
+      recordUserMood(
+        trade.id,
+        { [draft.entryMoodSpoke]: ONE_TAP_MOOD_SCORE },
+        nowIso,
+        entry.toISOString(),
+        nowIso,
+      );
+    }
     keepDraft(DRAFT_KEY, null);
     closeAddTrade();
     showToast(isOpenDraft ? "Open trade saved on this device" : "Trade saved on this device");
@@ -281,6 +295,31 @@ export function AddTradeSheet() {
             <PriceRow id="target-price" label="Target" optional value={draft.targetPrice} placeholder={draft.direction === "LONG" ? "above entry" : "below entry"} step={step} error={showPrice("targetPrice")} onChange={(value) => change({ targetPrice: value })} onStep={(ticks) => stepPrice("targetPrice", ticks)} />
           </fieldset>
 
+          {!isOpenDraft && (
+            <div className="exit-reason-section">
+              <div className="exit-reason-head">
+                <span className="exit-reason-title">How did it end? <i>optional</i></span>
+              </div>
+              <div className="chip-row" role="group" aria-label="How did it end?">
+                {EXIT_REASONS.map((reason) => {
+                  const selected = draft.exitReason === reason.value;
+                  return (
+                    <button
+                      key={reason.value}
+                      type="button"
+                      className="chip"
+                      aria-pressed={selected}
+                      aria-label={`Exit reason: ${reason.label}`}
+                      onClick={() => change({ exitReason: selected ? null : reason.value })}
+                    >
+                      {reason.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="form-preview" aria-live="polite">
             <span>{riskUsd != null || riskPoints != null
               ? <>Risk {prefs.shield ? riskPoints : `${formatUsdAmount(riskUsd)} · ${riskPoints}`}{plan != null && <> · Plan {formatR(plan)}</>}</>
@@ -290,6 +329,29 @@ export function AddTradeSheet() {
               : priced && priced.exit_price != null
                 ? <><b className={pnl == null ? "" : pnl >= 0 ? "positive" : "negative"}>{prefs.shield ? (r != null ? formatR(r) : formatPoints(tradePoints(priced), draft.symbol)) : formatMoney(pnl)}</b>{!prefs.shield && <> · {formatR(r)}</>}</>
                 : "Result appears with the exit"}</span>
+          </div>
+
+          <div className="mood-entry-section">
+            <div className="mood-entry-head">
+              <span className="mood-entry-title">Feeling at entry <i>optional</i></span>
+            </div>
+            <div className="chip-row" role="group" aria-label="Feeling at entry">
+              {moodState.registry.spokes.map((spoke) => {
+                const selected = draft.entryMoodSpoke === spoke.id;
+                return (
+                  <button
+                    key={spoke.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={selected}
+                    aria-label={`${spoke.label} feeling at entry`}
+                    onClick={() => change({ entryMoodSpoke: selected ? null : spoke.id })}
+                  >
+                    {spokeChipLabel(spoke)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {shown.state !== "idle" && (
@@ -312,14 +374,24 @@ export function AddTradeSheet() {
               </select>
               {show("symbol") && <span className="error">{show("symbol")}</span>}
             </label>
-            {/* Shield hides position size (#15): the input is masked, the draft keeps the
-                quantity and the saved execution preserves it. The preview never shows it. */}
-            {!prefs.shield && (
-              <label className="field"><span>Contracts</span>
-                <input inputMode="numeric" type="number" min={1} step={1} value={draft.quantity} aria-invalid={!!show("quantity")} onChange={(event) => change({ quantity: event.target.value })} />
-                {show("quantity") && <span className="error">{show("quantity")}</span>}
-              </label>
-            )}
+            {/* UX-e (#15): Under Shield, Contracts remains editable and fully bound to state so
+                multi-contract positions retain true economics, but the input digits are masked
+                on screen with password security styling. */}
+            <label className="field">
+              <span>Contracts {prefs.shield && <i className="shield-tag" style={{ opacity: 0.6, fontSize: "0.8em", marginLeft: 4 }}>masked</i>}</span>
+              <input
+                inputMode="numeric"
+                type={prefs.shield ? "password" : "number"}
+                min={1}
+                step={1}
+                value={draft.quantity}
+                placeholder={prefs.shield ? "••" : "1"}
+                aria-label={prefs.shield ? "Contracts (masked under Shield)" : "Contracts"}
+                aria-invalid={!!show("quantity")}
+                onChange={(event) => change({ quantity: event.target.value })}
+              />
+              {show("quantity") && <span className="error">{show("quantity")}</span>}
+            </label>
             <label className="field wide"><span>Date <i>{zoneName}</i></span>
               <input type="date" value={draft.date} aria-invalid={!!show("date")} onChange={(event) => change({ date: event.target.value, dateEdited: true })} />
               {show("date") && <span className="error">{show("date")}</span>}

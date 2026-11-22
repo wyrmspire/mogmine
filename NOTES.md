@@ -50,7 +50,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 16. **`UI-2` — Desktop 3-column workstation & toolbar polish, done** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `docs/24 §6`, `#114`): refine `>=1024px` layout and chart surface hierarchy with balanced chart frame height clamp and single-row 7-column levels ribbon so `.trade-levels-card` sits immediately below `.chart-card` and stays visible without scrolling; move small controls off mobile screen edges (`1m` at 24 px, change-target chip at 22 px, After-the-exit note at 30 px, Mood button at 28 px) to clear the back-swipe gesture zone (<15px).
 17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
 18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check, done** (`lib/market-data/coverage.ts`: the route and the client cache use `coversTradeWindow` / `anchorsTradeWindow`; no `length >= 4` bypass remains).
-19. **`CD-1a` — Card frame & Trade Card layout, done** (`lib/shareCard.ts`, `lib/__tests__/card-system.test.ts`, [docs/23](docs/23-card-system.md) §2–3, `OD-46`, #41): shared frame layout tables for `4:5`, `9:16`, `1:1` with chart main area at 55–60%, hero R + process seal with blind review verdict, specular 1px gold top highlight, Shield copy verified for all sizes. Followed by `CD-1b` (sheet controls, size picker, 390×844 check).
+19. **`CD-1a` / `CD-1b` — Trade Card refresh, done** (`lib/shareCard.ts`, `components/TradeCardSheet.tsx`, `components/TradeDetail.tsx`, `lib/__tests__/card-system.test.ts`, [docs/23](docs/23-card-system.md) §2–3, `OD-46`, #41): shared frame layout tables for `4:5`, `9:16`, `1:1`; sheet controls with size picker, front/back face toggle, canvas back-side journal rendering, and default Shield on open.
 20. **`CD-2a`–`CD-2c` — Drill cards, done** (docs/23 §4, issue #165; **`CD-2a` done**: `lib/drills.ts`; **`CD-2b` done**: `lib/drills-store.ts`, backup `drills`; **`CD-2c` done**: `/drills`, `components/DrillScreen.tsx`): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
 21. **`CD-3` — Playbook card** (docs/23 §5, issue #169): **`CD-3a` data done** (`lib/playbook-card.ts`). `CD-3b` (the card on the CD-1a frame) waits for PR #160.
 
@@ -78,6 +78,24 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Master Agent (Lane 8) — Wave MM-W2 7-Lane Swarm Integration
+
+- Merged all 7 isolated Gemini 3.8 Flash worker branches (`feat/mm-w2-01`..`07`) into `main` with zero conflicts and zero boundary violations:
+  - `#19a` & `#19b`: Full-app accessibility pass (`/drills`, `/challenges`, `/playbooks`, `Today`, `Review`, `Feed`, `Tune`, `Plan`, `AppShell`).
+  - `#38` (`I`): Pure integer-tick partials & multiple targets model + lot-band geometry (`lib/partials.ts`, Fixture 7 `+1.75R` verified).
+  - `DP-1`: Discretionary review prompts engine (`lib/discretionary-prompts.ts`, `detectDeviations`, `pendingAsks`, seed library).
+  - `#36` (`G2-UI`): Interactive `StopMovesEditor` wired into `TradeDetail.tsx` with tick steppers and non-destructive `Moved Stop` suggestion (`UX-33`).
+  - `#40` (`K-UI`): Archived neighbour-trade hit testing (`PositionBoxPrimitive.ts`, `TradeChart.tsx`) wired to `/trades/[id]` navigation in `TradeDetail.tsx`.
+  - `#42` (`M3-Card`) + `CD-4`: Playbook tag on Trade Card (`lib/shareCard.ts`) and shared-frame Day Card builder & canvas renderer (`lib/day-card.ts`).
+- Full verification gate passed: `npm test` (619/619), `npm run typecheck` (0 errors), `npm run lint` (0 errors, 1 pre-existing warning), `npm run build` (11/11 routes).
+
+### 2026-11-22 — Antigravity — CD-1b Trade Card sheet controls & size picker (#41), App shell lane released
+
+- Built Trade Card sheet controls in `components/TradeCardSheet.tsx`: format picker (`4:5`, `9:16`, `1:1`), face toggle (`Front`, `Back`), dynamic preview aspect ratio, and size/side-aware export filename (`shareCardFileName`).
+- Card canvas painter (`lib/shareCard.ts`) renders the back side in `layout.main`: thesis, in-trade management, post-exit notes, and playbook checklist, preserving stats row and Shield privacy.
+- Wired through `components/TradeDetail.tsx`: opens with Shield on by default (`OD-46` a, UX-71), passes size and side to `encodeCard` and `buildShareCard`.
+- Added tests in `lib/__tests__/card-system.test.ts` for back-side filename formatting and canvas rendering. Verified mobile 390×844 layout in `app/globals.css`.
 
 ### 2026-11-22 — Gemini (gemini-3) — CD-1a shared card frame & layout tables (#41), Chart lane released
 

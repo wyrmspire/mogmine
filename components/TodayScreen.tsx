@@ -62,7 +62,7 @@ export function TodayScreen() {
           {onlySamples && (
             <div className="banner" style={{ margin: "0 0 14px" }}>
               <span>These are <b>sample trades</b> to show how a review looks. They never count in your statistics.</span>
-              <button type="button" onClick={openAddTrade}>Add yours</button>
+              <button type="button" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade}>Add yours</button>
             </div>
           )}
 
@@ -78,13 +78,13 @@ export function TodayScreen() {
             <div className="specular-card empty-state">
               <h3>{closed ? "Nothing to log yet" : "No trades yet today"}</h3>
               <p>{closed ? "A good time to finish last week's reviews. New trades can be logged for any day." : "When you close a trade, log it here while it is fresh. It takes about a minute."}</p>
-              <div className="actions"><button type="button" className="btn-primary" onClick={openAddTrade}>＋ Add a trade</button></div>
+              <div className="actions"><button type="button" className="btn-primary" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade}>＋ Add a trade</button></div>
             </div>
           )}
 
           {previous && (
             <section aria-label={`Last trading day, ${formatSessionDate(previous.date)}`}>
-              <div className="section-title"><h2>Last trading day</h2><Link href="/feed">All days →</Link></div>
+              <div className="section-title"><h2>Last trading day</h2><Link href="/feed" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center" }}>All days →</Link></div>
               <div className="card" style={{ overflow: "hidden", marginBottom: 2 }}><DayHeader group={previous} shield={prefs.shield} sticky={false} /></div>
               <div className="trade-list">{previous.trades.map((trade) => <TradeRow key={trade.id} trade={trade} zone={prefs.timeZone} shield={prefs.shield} onOpen={open(previous)} />)}</div>
             </section>
@@ -93,12 +93,12 @@ export function TodayScreen() {
           <RunningStatsCard shield={prefs.shield} trades={journal.trades} now={now} />
         </div>
 
-        <aside>
+        <aside aria-label="Review queue">
           <div className="section-title" style={{ marginTop: previous || today ? 20 : 0 }}><h2>Review queue</h2><span>{unreviewed ? `${unreviewed} open` : ""}</span></div>
           {unreviewed === 0 ? (
             <div className="card card-pad muted" style={{ fontSize: 13 }}>All caught up.</div>
           ) : (
-            <Link href="/review" className="card card-pad" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, minHeight: 64 }}>
+            <Link href="/review" className="card card-pad" aria-label={`Review queue, ${needsTags ? `${needsTags} ${needsTags === 1 ? "trade needs" : "trades need"} tags` : `${unreviewed} open`}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, minHeight: 64 }}>
               <span><b>{needsTags ? `${needsTags} ${needsTags === 1 ? "trade needs" : "trades need"} tags` : `${unreviewed} to mark reviewed`}</b><br /><span className="muted" style={{ fontSize: 12 }}>{needsTags ? "Ten seconds each: playbook, tags, one line." : "Tagged already. Finish the review when you sit down."}</span></span>
               <span className="muted" aria-hidden="true">→</span>
             </Link>
