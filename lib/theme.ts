@@ -22,6 +22,11 @@ export interface ChartTheme {
   surface: string;
   elevated: string;
   boxOpacity: number;
+  levelResistance: string;
+  levelSupport: string;
+  levelAdr: string;
+  levelNeutral: string;
+  levelLabelText: string;
 }
 
 const NEUTRAL = "#888888";
@@ -53,6 +58,11 @@ function read(): ChartTheme {
     surface: value("--bg-surface"),
     elevated: value("--bg-elevated"),
     boxOpacity: Number.isFinite(opacity) ? opacity : 0.28,
+    levelResistance: value("--level-resistance"),
+    levelSupport: value("--level-support"),
+    levelAdr: value("--level-adr"),
+    levelNeutral: value("--level-neutral"),
+    levelLabelText: value("--level-label-text"),
   };
 }
 

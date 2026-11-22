@@ -3,6 +3,7 @@
 import { useEffect, useImperativeHandle, useRef, useSyncExternalStore } from "react";
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
+import { SessionLevelsPrimitive } from "./SessionLevelsPrimitive";
 import { describeTrade } from "@/lib/describe";
 import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
@@ -11,6 +12,7 @@ import { chartCrosshairLabel, chartTickLabel } from "@/lib/time";
 import { alignTradeToBars, defaultVisibleRange, fitWindow, includeInPriceRange, specFor, visibleLogicalBars } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
+import type { ComputedLevel } from "@/lib/levels";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
 
@@ -45,6 +47,8 @@ interface Props {
   bars: Candle[];
   timeframe: Timeframe;
   marks: readonly Mark[];
+  levels?: readonly ComputedLevel[];
+  showLevels?: boolean;
   zone: string;
   /** Shield / privacy: the on-chart pill shows R and points, never dollars (UX-71). */
   privacy: boolean;
@@ -63,6 +67,7 @@ interface Live {
   chart: IChartApi;
   series: CandleSeries;
   primitive: PositionBoxPrimitive;
+  levelsPrimitive: SessionLevelsPrimitive;
   fitRange: { from: number; to: number } | null;
   renderedBars: Candle[];
   renderedTimeframe: Timeframe | null;
@@ -139,16 +144,16 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
   state.holdTimer = window.setTimeout(apply, 80);
 }
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, zone, privacy, readout, onRendered, onFitChange, onExtensionChange }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = [], showLevels = true, zone, privacy, readout, onRendered, onFitChange, onExtensionChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, bars, timeframe, marks, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, showLevels, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, showLevels, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -258,6 +263,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, zone, privacy, 
     const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t);
+    l.levelsPrimitive.update(p.levels ?? [], p.showLevels ?? true, t);
 
     // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
     const fittedWindow = fitWindow(tr.entry_time, end, barTimeframe);
@@ -313,8 +319,10 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, zone, privacy, 
       });
       const primitive = new PositionBoxPrimitive();
       series.attachPrimitive(primitive);
+      const levelsPrimitive = new SessionLevelsPrimitive();
+      series.attachPrimitive(levelsPrimitive);
       const state: Live = {
-        lwc, host, chart, series, primitive,
+        lwc, host, chart, series, primitive, levelsPrimitive,
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
         userPanned: false, programmaticRangeChange: false,
@@ -511,7 +519,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, zone, privacy, 
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, zone, privacy, theme]);
+  }, [trade, bars, timeframe, marks, levels, showLevels, zone, privacy, theme]);
 
   return <><div
     ref={hostRef}

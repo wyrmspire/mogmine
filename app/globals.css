@@ -36,6 +36,14 @@
   --call-paid: var(--profit-text);
   --call-cost: var(--loss-text);
 
+  /* Level styles (docs/12 §5, docs/24 §3, Invariant 5) */
+  --level-resistance: #ef4444;
+  --level-support: #10b981;
+  --level-adr: #f5b544;
+  --level-neutral: #9ca3af;
+  --level-label-text: #ffffff;
+  --level-zone-opacity: 0.14;
+
   --gold-intensity: 0.76;
   --position-box-opacity: 0.28;
   --gold-light: #f7df8e;
@@ -70,6 +78,8 @@
   --candle-down: #f98a3c;
   --box-actual: #60a5fa;
   --call-ink: #e5e7eb; /* blue means profit here, so calls go silver */
+  --level-resistance: #f97316;
+  --level-support: #3b82f6;
 }
 
 /* ───────────────────────── Base ───────────────────────── */
