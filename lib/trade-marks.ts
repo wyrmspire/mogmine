@@ -129,7 +129,10 @@ function targetName(derived: DerivedTrade, fill: PositionPoint): [text: string, 
       && Date.parse(order.from) <= Date.parse(fill.t)
       && (order.to == null || Date.parse(order.to) >= Date.parse(fill.t)),
   );
-  if (linkedOrder?.target) return [linkedOrder.target.toUpperCase(), false];
+  if (linkedOrder) {
+    const key = linkedOrder.target ?? derived.planned_targets.find((target) => target.key === linkedOrder.order)?.key;
+    if (key) return [key.toUpperCase(), false];
+  }
   if (fill.order != null) return ["TP", false];
   const matches = derived.planned_targets.filter((target) => target.price === fill.price);
   return matches.length === 1 ? [matches[0].key.toUpperCase(), true] : ["TP", false];

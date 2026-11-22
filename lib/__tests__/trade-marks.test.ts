@@ -103,6 +103,28 @@ test("each observer finding keeps its exact bar, price, and basis, and a missing
   assert.ok(!without.some((mark) => mark.kind === "flag" && mark.finding?.code === "stop_traded_through"));
 });
 
+test("target exit flags use linked plan keys even when working prices change", () => {
+  const doc = fixture("ex-partials");
+  const [plan, entry, partial, stopMove, exit] = doc.events;
+  assert.ok(partial.type === "fill" && exit.type === "fill");
+  doc.events = [
+    plan, entry,
+    { seq: 3, t: "2026-11-12T15:38:00Z", type: "order", role: "target", kind: "limit", order: "first",
+      target: "t1", qty: 1, price: 7605, basis: "broker" },
+    { seq: 4, t: "2026-11-12T15:38:00Z", type: "order", role: "target", kind: "limit", order: "t2",
+      qty: 1, price: 7612.5, basis: "broker" },
+    { ...partial, seq: 5, order: "first", basis: "broker" },
+    { ...stopMove, seq: 6 },
+    { seq: 7, t: "2026-11-12T15:44:00Z", type: "modify", order: "t2", price: 7605, basis: "broker" },
+    { ...exit, seq: 8, order: "t2", price: 7605, basis: "broker" },
+  ];
+  const { options } = setup("ex-partials");
+  const marks = buildMarks(deriveTrade(doc), null, "1m", "medium", false, options);
+  const flags = marks.flatMap((mark) => mark.kind === "flag" && mark.shape === "triangle_down"
+    ? [[mark.t, mark.text, mark.basis]] : []);
+  assert.deepEqual(flags, [[utc("15:42"), "T1", "broker"], [utc("16:05"), "T2", "broker"]]);
+});
+
 test("UTC anchors disambiguate the two 01:30 times during Central fall-back", () => {
   const doc = fixture("ex-be");
   doc.events = [

@@ -79,6 +79,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Codex — recurring review and TD-2 linked target labels (#34), Chart lane released
+
+- Run `20261122T030021Z` had no source diff or TD-3 commits. The TD-2 regression expected `T2` on a repriced linked exit and got `TP`. The display list now uses the explicit target key or a matching working order ID, preserving basis.
+- `npm test` passed 414 tests. Mark and observer tests passed 63 under `TZ=Pacific/Auckland`. Typecheck, lint, build and diff check passed with one existing PostCSS lint warning. Chrome at 390×844 passed the demo chart timeframe round trip and Trade Card PNG export.
+- TD-3 still needs the Canvas painter, D-010 pixel checks and #35 text paired with the displayed-timeframe findings. `ex-sl` confirmed the pure `≈ TP touch` anchor at 15:36Z on 1m and 15:35Z on 5m. Changing the 15:36Z high from 7611 to 7609 removed the mark on both timeframes.
+
 ### 2026-11-22 — Claude — decision-number collisions, no lane
 Did:      Two `OD-49` rows existed. The playbook-editor limits became `OD-54`; observer target attribution keeps `OD-49` (docs/15 cites it). The indicator choices that Codex's docs cited as `OD-50` are the `OD-53` row, so those docs now say `OD-53`.
 Files:    `DECISIONS.md`, `NOTES.md`, `docs/16-floor-roadmap.md`, `docs/codex-indicator-summary.md`, `docs/codex-indicator-audit.md`.
