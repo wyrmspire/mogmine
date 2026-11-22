@@ -79,6 +79,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Codex — recurring review and TD-2 bracket labels (#34), Chart lane released
+Did:      Reviewed run `20261122T023021Z`. The worker left no source diff or TD-3 commits. `buildMarks` now pairs excursion labels to the low and high price caps for either direction, so the Canvas painter can use the mark alone.
+Files:    `lib/trade-marks.ts`, `lib/__tests__/trade-marks.test.ts`, `fixtures/trades/build-marks.golden.json`, `docs/15`, `NOTES.md`.
+Verified: Short-trade regression failed on the old shape and passes on the repair. `npm test` passed 413, and the Auckland-time mark/observer run passed 62. Typecheck and diff check passed. Lint reported 0 errors and 1 existing PostCSS warning. Build generated 8/8 pages.
+Verified: Chromium at 390×844 passed the existing candle refresh, timeframe switch and Trade Card PNG flow with zero overflow and no page errors.
+Left:     Coordinate TD-3 in `feat/td-render-pipeline`. Paint `labels.low` at `pLow` and `labels.high` at `pHigh`. For #35, use the displayed candles for observer facts and show matching chart flags and text. `ex-sl` has its TP evidence at 15:36Z on 1m and 15:35Z on 5m.
+
 ### 2026-11-22 — Codex — recurring review and R-02 chart refresh repair, Chart lane released
 Did:      Reviewed run `20261122T020021Z`. The worker left no TD-3 commits or chart changes. A same-timestamp candle correction updated OHLC but rebuilt the chart and reset its view. The series now takes refreshed bars in place and preserves the adjusted view.
 Files:    `components/TradeChart.tsx`, `docs/16-floor-roadmap.md`, `NOTES.md`.

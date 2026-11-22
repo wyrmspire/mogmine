@@ -221,7 +221,7 @@ type Mark =
   | { kind: "zone"; layer: "plan" | "actual" | "archived"; t0; t1; p0; p1; tone; style }
   | { kind: "segment"; layer; t0; t1; p0; p1; dash; tone }          // entry line, stop path, continuation
   | { kind: "flag"; t; price; shape; text; basis }                   // entry, exits, stop moves
-  | { kind: "bracket"; t; pLow; pMid; pHigh; labels; basis }         // excursion
+  | { kind: "bracket"; t; pLow; pMid; pHigh; labels: { low; high }; basis } // excursion
   | { kind: "label"; anchor; text; priority }                        // TP 2.0R, PAST STOP, pill
   | { kind: "hatch"; t0; t1; p0; p1; tone };                         // locked profit, past stop
 ```
@@ -234,6 +234,8 @@ Why this shape:
 - **The same facts feed the AI as text** ([04](04-ai-review-engine.md), B-62). The model is told "exit reason: trail, stop moved 2 times, never widened". It does not read that off an image.
 
 Call `buildMarks` with `options.candleTimes` containing the displayed timeframe's sorted UTC candle opens. Pass observer facts computed from those same candles. Unresolved anchors omit their marks. Nearby execution anchors carry `approximate` (OD-28). Observer flags keep the exact original bar, price, finding identity and basis. At Medium detail, `options.viewRightTime` bounds the continuation to the last visible candle. `options.archived` returns the execution geometry in archived style.
+
+Bracket labels are keyed to their price caps (`low` at `pLow`, `high` at `pHigh`). For a short trade, MFE is the lower cap and MAE is the higher cap. The painter can place either label using its cap alone.
 
 ### 3.5 Example documents
 
