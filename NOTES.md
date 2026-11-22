@@ -79,6 +79,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Codex — recurring review 20261122T163003Z, Core math lane released
+
+- The worker went idle. LV-1 (#26, draft PR #152) stays behind TD-3 under D-011. The direct-input path now withholds PDC and floor pivots without a named settlement source. The Nov 12 fixture retains its previously verified close.
+- The new regression failed on the incoming calculation and passed after the fix. `npm test` passed 423, the Auckland-time checks passed 85 on LV-1 and 76 on TD-3, typecheck and diff check passed, lint reported one existing PostCSS warning, and the build generated 8/8 pages.
+- `feat/td-render-pipeline` has no tracked changes beyond `main` at `4f353b7`. Chrome at 390×844 passed 45 → 75 bars, Fit, the timeframe round trip and PNG export with zero overflow or page errors. Its excursion probe found no Canvas labels where `buildMarks` produced `MAE ≈ −5.50 pts` and `MFE ≈ +9.75 pts`. Real phone verification is pending.
+- Finish TD-3 using `buildMarks` and the displayed bars. Test the excursion caps, stop steps and hatches in `ex-trail` and `ex-ignored`, frameless fills in the exported screenshot, and a same-time OHLC correction on the chart and in Data notes. Refresh #152 after TD-3 lands.
+
 ### 2026-11-22 — Codex — recurring review 20261122T160003Z, Core math lane released
 
 - LV-1 (#26) now keeps the native candle provider, ticker, calculation version and coverage together. Yahoo ticker mismatches are rejected. Dated settlement requires matching instrument and known source, and an unverified daily close is labeled `PDC (proxy)`.

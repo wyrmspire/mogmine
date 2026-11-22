@@ -34,6 +34,18 @@ test("LV-1 matches the November 12 markup, using raw PP in the derived pivot for
   assert.equal(byKey(levels).onl.formed_at, fixture.inputs.overnight.onl_at);
 });
 
+test("An unsourced settlement cannot supply PDC or pivots even with complete range inputs", () => {
+  for (const provenance of [undefined, { source: " ", isProxy: false }]) {
+    const levels = byKey(computeLevelsFromInputs({
+      symbol: fixture.symbol, sessionDate: fixture.session_date,
+      inputs: { ...fixture.inputs, prior_session: { ...fixture.inputs.prior_session, settle_provenance: provenance } },
+    }));
+    assert.equal(levels.pdh.price, 7671.5);
+    assert.equal(levels.pdl.price, 7547.5);
+    for (const key of ["pdc", "pp", "r1", "s1", "r2", "s2"]) assert.equal(levels[key], undefined, key);
+  }
+});
+
 test("ADR 7 and 14 select completed sessions by date, with no current-session or future range", () => {
   const dates = [
     "2026-10-23", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-11-02",

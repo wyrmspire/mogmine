@@ -137,7 +137,8 @@ export function calculateAdrValue(history: readonly DailyRange[], sessionDate: s
 /** Turn session inputs into displayable levels. Missing inputs leave the corresponding levels absent. */
 export function computeLevelsFromInputs({ symbol, sessionDate, inputs }: ComputeLevelsOptions): ComputedLevel[] {
   const { prior_session: prior, prior_rth: rth, overnight: on, adr, week } = inputs;
-  const { high, low, settle } = prior;
+  const { high, low } = prior;
+  const settle = prior.settle_provenance?.source.trim() ? prior.settle : undefined;
   const isSettlementProxy = prior.settle_provenance?.isProxy;
   const pivots = high !== undefined && low !== undefined && settle !== undefined
     ? computeFloorPivots(high, low, settle, symbol)
