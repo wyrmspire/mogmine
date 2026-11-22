@@ -1,6 +1,7 @@
 import { laterTouch } from "./hindsight.ts";
 import type { LaterTouch } from "./hindsight.ts";
 import { expectedInsideBarTimes, isRegularTradingBarInterval, sessionCloseUtc } from "./session.ts";
+import { stopAtExit } from "./trade-document.ts";
 import type { DerivedTrade, EventBasis, PositionPoint, WorkingOrderSegment } from "./trade-document.ts";
 import { excursionsFromBars, fillInsideBar, isWholeQuantity } from "./trades.ts";
 import type { Candle, Excursions, TradeDirection, TradeRecord } from "./trades.ts";
@@ -286,9 +287,7 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
     const sessionClose = sessionCloseUtc(exit);
     const sessionBars = bars.filter((bar) => bar.time > exit && bar.time + barMs <= sessionClose
       && isRegularTradingBarInterval(symbol, bar.time, barMs));
-    const exitFill = fills.at(-1);
-    const lastStop = stops.findLast((stop) => stop.to_seq === exitFill?.seq
-      && (stop.end_reason === "filled" || stop.end_reason === "position_closed"));
+    const lastStop = stopAtExit(derived);
     if (lastStop) {
       result.hindsight.last_stop_touch = laterTouch(sessionBars, exit, lastStop.price, "stop", direction, sessionClose);
     }

@@ -34,7 +34,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 1. **`R-08a` — Pure cross-day & playbook/tag running stats, done** (`lib/selectors.ts`, `lib/__tests__/`, `docs/16` §R-08).
 2. **`R-08b` — Running stats screen/card, done** (`components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`).
 3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE and post-exit touches, with golden facts for all seven trade documents.
-4. **`TD-2` (Issue `#34` pure part) — `buildMarks(derived, facts, timeframe, detail, shield)`** (`docs/15` §3.4): deterministic `Mark[]` display list with bar snapping (`B-23`) and **`D-010` fills-only look** (no purple outlines; overrides stale pre-`D-010` text in `#34`) + golden tests for all 7 `ex-*.json` fixtures.
+4. **`TD-2` (Issue `#34` pure part) — `buildMarks`, done** (`docs/15` §3.4): deterministic `Mark[]` display list with real bar anchors (`B-23`), the `D-010` fills-only look and exact 1m/5m goldens for all seven trade fixtures.
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
 7. **`R-07b` — Playbook editor UI** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
@@ -68,6 +68,18 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — reviewed TD-2 (#34), Chart lane released
+Did:      Reviewed run `20261122T010010Z` and repaired TD-2 on `feat/td-2-build-marks`. The mark builder uses real bar opens, retains observer evidence, terminates cancelled plans at cancellation, preserves Shield, and follows D-010 and OD-32.
+Files:    `lib/trade-marks.ts`, `lib/trade-document.ts`, `lib/trade-bar-validation.ts`, `lib/trades.ts`, `lib/__tests__/trade-marks.test.ts`, `fixtures/trades/build-marks.golden.json`, `docs/15`, `docs/16`, `DECISIONS.md`, `NOTES.md`.
+Verified: `npm test` passed 375 tests. `TZ=Pacific/Auckland` mark and observer tests passed 55. Typecheck and diff check passed. Lint reported 0 errors and 1 existing PostCSS warning. The local build generated 8/8 static pages.
+Left:     TD-3 needs a Canvas painter, inferred finding text equivalents (#35) and the D-010 screenshot check at 390×844. The `ex-nottaken` observer still needs separate hypothetical hindsight for entry touch, same-bar ambiguity and the cancellation cutoff.
+
+### 2026-11-22 — agent (Antigravity) — TD-2 buildMarks pure display list (#34), Chart lane released
+Did:      Implemented `buildMarks(derived, facts, timeframe, detail, shield, options)` in `lib/trade-marks.ts` (docs/15 §3.4, issue #34, D-010 fills-only look: no purple, faint red/green plan fills, actual band / scratch line, stepped stop path, excursion bracket, observer findings, entry/exit flags, locked profit/past stop hatches, hindsight continuation). Implemented `snapTime` with B-23 bar snapping and bounded tolerance. Added unit and golden tests across 1m and 5m for all 7 fixtures in `lib/__tests__/trade-marks.test.ts`.
+Files:    `lib/trade-marks.ts` (new), `lib/__tests__/trade-marks.test.ts` (new), `NOTES.md`.
+Verified: `npm test` passed 363 tests; `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning; `NEXT_TELEMETRY_DISABLED=1 npm run build` generated 8/8 routes; `git diff --check origin/main...HEAD` clean.
+Left:     Unblocks `TD-3` (Issue #34 canvas part: `PositionBoxPrimitive` painting `Mark[]` with Canvas flags, text equivalents, and D-010 screenshot check).
 
 ### 2026-11-22 — Codex — TD-2 worker review and TD-1 repair, Core math lane released
 Did:      Reviewed run `20261122T003028Z`. `feat/td-2-build-marks` at `961b2b9` contains the Chart lane claim. Reproduced the TD-1 false finding for a same-price target when an anonymous fill preceded a fill with an explicit order ID. The repair reserves linked fill quantity within each working segment (OD-49).
