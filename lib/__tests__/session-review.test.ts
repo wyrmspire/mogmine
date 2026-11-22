@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reviewWindow, sessionReview } from "../session-review.ts";
+import { recentPlanDays, reviewWindow, sessionReview } from "../session-review.ts";
 import { createPlannedLevel } from "../plans.ts";
 import type { PlanningSession } from "../plans.ts";
 import { resetPlansForTests, sanitizePlanningSession, setPlanLesson, addPlan, getPlan } from "../plans-store.ts";
@@ -79,4 +79,17 @@ test("PS-4: the lesson is saved without a plan revision, trimmed to its limit, a
   assert.equal("lesson" in getPlan("pm")!, false);
   assert.equal(sanitizePlanningSession({ ...plan(), lesson: "Keep it" })?.lesson, "Keep it");
   resetPlansForTests();
+});
+
+test("PS-4c: past reviews list recent days newest first, checkpoints in time order, archived and future plans left out", () => {
+  const days = recentPlanDays([
+    plan({ id: "ph", anchor_time_utc: "2026-11-12T19:00:00Z" }),
+    plan({ id: "pm" }),
+    plan({ id: "old", session_date: "2026-10-01" }),
+    plan({ id: "gone", session_date: "2026-11-13", archived: true }),
+    plan({ id: "next", session_date: "2026-11-23" }),
+    plan({ id: "y", session_date: "2026-11-20", anchor_time_utc: "2026-11-20T14:30:00Z" }),
+  ], "2026-11-20");
+  assert.deepEqual(days.map(({ date, plans }) => [date, plans.map((p) => p.id)]), [["2026-11-20", ["y"]], ["2026-11-12", ["pm", "ph"]]]);
+  assert.deepEqual(recentPlanDays([plan()], "2026-11-26", 14).map(({ date }) => date), []);
 });

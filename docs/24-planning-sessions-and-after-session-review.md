@@ -70,7 +70,7 @@ Built as `sessionReview` in `lib/session-review.ts` (PS-4a). The window runs fro
 | `PS-1` | Pure planning-session model and store | `lib/plans.ts`, `lib/plans-store.ts`, backup round-trip in `lib/store.ts` | Presets, revisions, after-the-fact flag, `user_id`, backup/restore tests (done) |
 | `PS-2` | Plan screen on Today | `components/PlanSheet.tsx`, `components/TodayScreen.tsx` | Done: start a "Pre-…" session in under 10 seconds, add levels with tick steppers, write observations, all states from docs/08 §4 |
 | `PS-3` | Plan levels on charts | `lib/chart-levels.ts`, `components/useTradeLevels.ts` | Done: a trade chart shows the same-instrument planning-session levels for its `session_date`, as they stood at entry |
-| `PS-4` | After-session review | `lib/session-review.ts`, `components/SessionReview.tsx`, `components/PlanCard.tsx` | Done: §4 above, no-trade sessions handled. Opened from a plan on Today; past days need a day picker (follow-up). |
+| `PS-4` | After-session review | `lib/session-review.ts`, `components/SessionReview.tsx`, `components/PlanCard.tsx` | Done: §4 above, no-trade sessions handled. Opened from a plan on Today, or from the last 14 days under "Session reviews" on Review. |
 | `IND-1` | Session VWAP | `lib/chart-indicators.ts` (math in `lib/session-indicators.ts`), chart toggle | Done: matches a hand-checked session. The trader picks the RTH or Globex anchor in View (default Off) while `OD-18` is open; a gap in the anchored window withholds the line. |
 
 Each slice is one branch and one PR (~250–450 lines, [CONTRIBUTING §3](../CONTRIBUTING.md)). Run the four checks in [16 §0](16-floor-roadmap.md#0-rules-for-every-step).

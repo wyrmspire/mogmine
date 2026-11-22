@@ -87,6 +87,11 @@ Claim a lane before starting. Clear the claim when you stop.
 - Pure canvas rendering function `renderCardCanvas` enables headless verification of frame, drawing bounds and Shield copy across all sizes.
 - Tested: 459 tests pass (6 new in `lib/__tests__/card-system.test.ts`), typecheck clean, lint clean (1 pre-existing warning), build 8/8 routes clean.
 
+### 2026-11-22 — Claude — PS-4c past session reviews (#26), App shell lane released
+
+- The Review page lists plans from the last 14 session dates (`recentPlanDays` in `lib/session-review.ts`), newest day first. Each opens the same `SessionReview` sheet, and a ✓ marks a plan with a lesson.
+- `npm test`, typecheck, lint and build pass. Headless Chrome 390×844, with the clock set to Nov 19: the list showed "Thu, Nov 19 · Pre-market" and opened its review with 1 trade. Overflow 0.
+
 ### 2026-11-22 — Claude — CD-3a playbook card data (#169), Core math lane released
 
 - `lib/playbook-card.ts` (pure): rules in order. The example is the latest real, closed, all-rules trade with a blind *Take it* (`take_again: "yes"`), else the latest all-rules trade, else none. Stats come from `runningStats().byPlaybook` (R-08a). Win rate and average R stay null below 10 trades (OD-46 e). The trade count and R skips always print. The drill result covers this playbook's real trades only.
