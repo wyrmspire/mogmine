@@ -1,5 +1,9 @@
-import { expectedInsideBarTimes } from "./session.ts";
-import type { Candle, TradeDirection, TradeRecord } from "./trades.ts";
+import { laterTouch } from "./hindsight.ts";
+import type { LaterTouch } from "./hindsight.ts";
+import { expectedInsideBarTimes, isRegularTradingBarInterval, sessionCloseUtc } from "./session.ts";
+import type { DerivedTrade, EventBasis, PositionPoint, WorkingOrderSegment } from "./trade-document.ts";
+import { excursionsFromBars, fillInsideBar, isWholeQuantity } from "./trades.ts";
+import type { Candle, Excursions, TradeDirection, TradeRecord } from "./trades.ts";
 
 export type TradeBarIssueCode =
   | "stop_crossed_before_exit"
@@ -111,4 +115,187 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
   }
 
   return { coverage, issues, chronology };
+}
+
+export interface TradeBarFinding {
+  code: "stop_traded_through" | "target_traded_through" | "fill_outside_bar";
+  barTime: number;
+  price: number;
+  basis: EventBasis;
+  /** Stop path index, target key or order ID, or fill sequence. */
+  segment: number | string;
+}
+
+export interface ObservedTrade {
+  coverage: BarCoverage;
+  chronology: ChronologyResolution;
+  findings: TradeBarFinding[];
+  excursions: Excursions | null;
+  hindsight: {
+    last_stop_touch: LaterTouch | null;
+    target_touches: Array<LaterTouch & { target: string }>;
+  };
+}
+
+type PositionWindow = { from: number; to: number };
+
+function positionWindows(timeline: PositionPoint[], openThrough: number): PositionWindow[] {
+  const windows: PositionWindow[] = [];
+  let from: number | null = null;
+  for (const fill of timeline) {
+    const time = Date.parse(fill.t);
+    if (fill.position_after > 0) {
+      from ??= time;
+    } else if (from != null) {
+      windows.push({ from, to: time });
+      from = null;
+    }
+  }
+  if (from != null && openThrough > from) windows.push({ from, to: openThrough });
+  return windows;
+}
+
+function unfilledPlannedTargets(
+  derived: DerivedTrade,
+  workedTargets: Set<string>,
+) {
+  const pending = derived.planned_targets
+    .filter(({ key, qty }) => !workedTargets.has(key) && isWholeQuantity(qty))
+    .map((target) => ({ ...target, remaining: target.qty }));
+  const workedQty = new Map(derived.position_timeline.map((fill) => [fill.seq, fill.target_order_qty ?? 0]));
+  for (const lot of derived.closed_lots) {
+    if (lot.exit_reason !== "target") continue;
+    const alreadyMatched = workedQty.get(lot.exit_seq) ?? 0;
+    const appliedQty = Math.min(lot.qty, alreadyMatched);
+    workedQty.set(lot.exit_seq, alreadyMatched - appliedQty);
+    let qty = lot.qty - appliedQty;
+    for (const target of pending) {
+      if (target.price !== lot.exit_price) continue;
+      const matched = Math.min(qty, target.remaining);
+      target.remaining -= matched;
+      qty -= matched;
+      if (!qty) break;
+    }
+  }
+  return pending.filter(({ remaining }) => remaining > 0);
+}
+
+/** Observe OHLC evidence against the active, non-voided events in a derived trade. */
+export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinutes = 1): ObservedTrade {
+  const result: ObservedTrade = {
+    coverage: "missing",
+    chronology: "unresolved",
+    findings: [],
+    excursions: null,
+    hindsight: { last_stop_touch: null, target_touches: [] },
+  };
+  const barMs = barMinutes * 60_000;
+  if (!Number.isSafeInteger(barMinutes) || barMinutes <= 0 || !Number.isSafeInteger(barMs) || !derived.entry_time) return result;
+
+  const { symbol, position_timeline: fills, stop_path: stops } = derived;
+  const direction: TradeDirection = derived.side === "long" ? "LONG" : "SHORT";
+  const entry = Date.parse(derived.entry_time);
+  const exit = Date.parse(derived.exit_time ?? "");
+  const closed = derived.status === "closed" && Number.isFinite(exit) && exit >= entry;
+  const barOpen = (time: number) => Math.floor(time / barMs) * barMs;
+  if (closed && barOpen(entry) !== barOpen(exit)) result.chronology = "resolved";
+
+  const barsByTime = new Map<number, Candle>();
+  for (const bar of candles) {
+    if (bar.time % barMs === 0 && !barsByTime.has(bar.time)) barsByTime.set(bar.time, bar);
+  }
+  const bars = [...barsByTime.values()].sort((a, b) => a.time - b.time);
+  if (!bars.length) return result;
+  // On an open trade the newest bar may still be forming.
+  const newestBarTime = bars[bars.length - 1].time;
+  const windows = positionWindows(fills, closed ? exit : newestBarTime);
+  const expected = closed ? windows.flatMap(({ from, to }) => expectedInsideBarTimes(from, to, barMs, symbol)) : [];
+  const inside = closed
+    ? expected.flatMap((time) => barsByTime.get(time) ?? [])
+    : bars.filter((bar) => windows.some(({ from, to }) => bar.time >= from && bar.time + barMs <= to)
+        && isRegularTradingBarInterval(symbol, bar.time, barMs));
+
+  const required = new Set(expected);
+  for (const fill of fills) {
+    const time = barOpen(Date.parse(fill.t));
+    if (!closed && time + barMs > newestBarTime) continue;
+    required.add(time);
+    const bar = barsByTime.get(time);
+    if (bar && !fillInsideBar(fill.price, bar, symbol)) {
+      result.findings.push({
+        code: "fill_outside_bar", barTime: time, price: fill.price, basis: "inferred", segment: fill.seq,
+      });
+    }
+  }
+  const available = [...required].filter((time) => barsByTime.has(time)).length;
+  if (closed && available > 0 && available === required.size) result.coverage = "complete";
+  else if (available > 0 || inside.length > 0) result.coverage = "partial";
+
+  for (const [index, stop] of stops.entries()) {
+    const from = Date.parse(stop.from);
+    const to = stop.to == null ? Infinity : Date.parse(stop.to);
+    const hit = inside.find((bar) => bar.time >= from && bar.time + barMs <= to
+      && stopTouched(direction, stop.price, bar));
+    if (hit) {
+      result.findings.push({
+        code: "stop_traded_through", barTime: hit.time, price: stop.price, basis: "inferred", segment: index,
+      });
+    }
+  }
+
+  const targetOrders = new Map<string, string | null>();
+  const targetSegments = derived.working_orders.filter(({ role }) => role === "target");
+  const plannedKeys = new Set(derived.planned_targets.map(({ key }) => key));
+  const explicitTarget = (order: WorkingOrderSegment) =>
+    order.target ?? (plannedKeys.has(order.order) ? order.order : undefined);
+  const workedTargets = new Set<string>();
+  for (const order of targetSegments) {
+    const key = explicitTarget(order);
+    if (key != null) workedTargets.add(key);
+  }
+  const observeTarget = (key: string, price: number, from: number, to: number) => {
+    const hit = inside.find((bar) => bar.time >= from && bar.time + barMs <= to && targetTouched(direction, price, bar));
+    if (hit) {
+      result.findings.push({
+        code: "target_traded_through", barTime: hit.time, price, basis: "inferred", segment: key,
+      });
+    }
+  };
+  for (const order of targetSegments) {
+    let key = explicitTarget(order) ?? targetOrders.get(order.order);
+    if (key === undefined) {
+      key = derived.planned_targets.find((target) => target.price === order.price && !workedTargets.has(target.key))?.key ?? null;
+      if (key != null) workedTargets.add(key);
+    }
+    targetOrders.set(order.order, key);
+    if (isWholeQuantity(order.qty) && order.filled_qty < order.qty) {
+      observeTarget(key ?? order.order, order.price, Date.parse(order.from),
+        order.to == null ? Infinity : Date.parse(order.to));
+    }
+  }
+  const planTime = Date.parse(derived.plan?.t ?? "");
+  for (const target of unfilledPlannedTargets(derived, workedTargets)) {
+    observeTarget(target.key, target.price, planTime, Infinity);
+  }
+
+  if (closed) {
+    const fillPrices = fills.filter((fill) => isWholeQuantity(fill.qty)).map((fill) => fill.price);
+    result.excursions = excursionsFromBars(direction, inside, fillPrices,
+      inside.length === expected.length ? "complete" : "partial");
+
+    const sessionClose = sessionCloseUtc(exit);
+    const sessionBars = bars.filter((bar) => bar.time > exit && bar.time + barMs <= sessionClose
+      && isRegularTradingBarInterval(symbol, bar.time, barMs));
+    const exitFill = fills.at(-1);
+    const lastStop = stops.findLast((stop) => stop.to_seq === exitFill?.seq
+      && (stop.end_reason === "filled" || stop.end_reason === "position_closed"));
+    if (lastStop) {
+      result.hindsight.last_stop_touch = laterTouch(sessionBars, exit, lastStop.price, "stop", direction, sessionClose);
+    }
+    for (const target of derived.planned_targets) {
+      const touch = laterTouch(sessionBars, exit, target.price, "target", direction, sessionClose);
+      if (touch) result.hindsight.target_touches.push({ ...touch, target: target.key });
+    }
+  }
+  return result;
 }

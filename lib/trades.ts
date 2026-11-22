@@ -559,21 +559,31 @@ export function excursions(
     const bar = byTime.get(time);
     return bar ? [bar] : [];
   });
-  if (complete.length < 2) return null;
   const coverage: ExcursionCoverage = complete.length === expected.length ? "complete" : "partial";
+  const fillPrices = trade.exit_price == null ? [trade.entry_price] : [trade.entry_price, trade.exit_price];
+  return excursionsFromBars(trade.direction, complete, fillPrices, coverage);
+}
 
-  let high = trade.entry_price;
-  let low = trade.entry_price;
-  if (trade.exit_price != null) {
-    high = Math.max(high, trade.exit_price);
-    low = Math.min(low, trade.exit_price);
+/** Measure excursions from fully inside bars and known execution prices. */
+export function excursionsFromBars(
+  direction: TradeDirection,
+  complete: Candle[],
+  fillPrices: number[],
+  coverage: ExcursionCoverage,
+): Excursions | null {
+  if (complete.length < 2 || !fillPrices.length) return null;
+  let high = fillPrices[0];
+  let low = fillPrices[0];
+  for (const price of fillPrices) {
+    high = Math.max(high, price);
+    low = Math.min(low, price);
   }
   for (const bar of complete) {
     high = Math.max(high, bar.high);
     low = Math.min(low, bar.low);
   }
 
-  return trade.direction === "LONG" ? { maePrice: low, mfePrice: high, coverage } : { maePrice: high, mfePrice: low, coverage };
+  return direction === "LONG" ? { maePrice: low, mfePrice: high, coverage } : { maePrice: high, mfePrice: low, coverage };
 }
 
 /**
@@ -632,12 +642,22 @@ export function buildSparkline(trade: Pick<TradeRecord, "entry_time" | "exit_tim
   return result;
 }
 
+export const DEFAULT_TICK_TOLERANCE_TICKS = 4;
+
 /** Whether a fill price sits inside its bar, with a tolerance in ticks (B-12).
  * A missing bar is not a pass: return false so callers do not treat absence as alignment (issue #60).
  */
-export function fillInsideBar(priceValue: number, bar: Candle | undefined, symbol: string, toleranceTicks = 4) {
+export function fillInsideBar(priceValue: number, bar: Candle | undefined, symbol: string, toleranceTicks = DEFAULT_TICK_TOLERANCE_TICKS) {
   if (!bar) return false;
-  const tolerance = (specFor(symbol)?.tickSize ?? 0) * toleranceTicks;
+  const tickSize = specFor(symbol)?.tickSize ?? 0;
+  const fillTicks = toTicks(priceValue, symbol);
+  if (fillTicks != null && Number.isInteger(toleranceTicks)) {
+    // Keep off-grid bar prices on the conservative side of each tick boundary.
+    const lowTicks = toTicks(bar.low, symbol) ?? Math.ceil(bar.low / tickSize);
+    const highTicks = toTicks(bar.high, symbol) ?? Math.floor(bar.high / tickSize);
+    return fillTicks >= lowTicks - toleranceTicks && fillTicks <= highTicks + toleranceTicks;
+  }
+  const tolerance = tickSize * toleranceTicks;
   return priceValue >= bar.low - tolerance && priceValue <= bar.high + tolerance;
 }
 

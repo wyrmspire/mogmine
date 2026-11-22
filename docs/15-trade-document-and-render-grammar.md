@@ -189,15 +189,15 @@ Every event also has `seq`, `t` (UTC) and `basis`.
 
 `observeTrade(derived, candles, barMinutes)`: pure, needs candles. This is `lib/trade-bar-validation.ts` grown up.
 
-- MFE and MAE, with the entry and exit bars handled honestly.
+- MFE and MAE use actual fill prices and bars entirely inside a positive-position window. Fewer than two such bars means the excursion is unavailable. A gap in the expected bars gives partial excursion coverage. Open trades have no final excursion.
 - `stop_traded_through`: for each stop segment, the first completed bar that trades through that segment's price while the position is open.
-- `target_traded_through`: the same for each unfilled target.
-- `fill_outside_bar`: any fill price outside its bar's range plus a tick tolerance (B-12).
-- After-exit facts: the first later touch of the last stop and of each target (hindsight, §2.5).
+- `target_traded_through`: the same for each unfilled target. Use the working order's price and remaining quantity for each segment. Match target fills by order ID when present. For a fill without an ID, match active targets at its price, taking explicit target keys in plan order and breaking ties by placement order. Apply any remaining executed quantity to unmatched planned targets at that price in plan order (`OD-49`).
+- `fill_outside_bar`: any non-voided fill price outside its own bar's range plus the shared four-tick tolerance for the traded instrument (B-12, `OD-15`).
+- After-exit facts: the first later touch of the stop in force at the exit and of each planned target, up to the assigned New York session close (hindsight, §2.5).
 
 Structural checks need no candles: position never goes negative, a closed trade ends flat, exits do not precede entries, the stop is on the losing side at placement, and target quantities do not exceed the position.
 
-Each finding keeps the shape the current validator uses (`code`, `barTime`, `price`), plus `basis` and `segment`.
+Each finding keeps the shape the current validator uses (`code`, `barTime`, `price`), plus `basis` and `segment`. Bar comparisons are inferred, even when the fill or order itself came from the broker. `segment` identifies the stop path index, target key or order ID, or fill sequence. Coverage includes the bars of all fills and the expected bars while the position was open. On an open trade the latest supplied bar's start is the cutoff for completed bars. Fill-range findings wait for that cutoff too.
 
 ### 3.4 From document to pixels: a display list
 
@@ -289,7 +289,8 @@ Agents propose and the owner decides. Each item is also in [DECISIONS.md](../DEC
 | Archived style | None | §2.6 |
 | Flags | Entry and exit flags at fill prices | §2.4 (adds the reason text) |
 | `deriveTrade`, `fromLegacy` | Built (`lib/trade-document.ts`, issue #33) | §3.2, §3.3, §3.6 |
-| `observeTrade`, `buildMarks` | Not built | Issues #34 and #35 |
+| `observeTrade` | Built (`lib/trade-bar-validation.ts`, pure slice of #35) | Chart flags and text equivalents follow the display list |
+| `buildMarks` | Not built | Issue #34 |
 | Fixtures | `fixtures/sample-bars.json`, `fixtures/levelsets/` | `fixtures/trades/`, §3.5 |
 
 Nothing on the target list is drawn on a phone yet. Each element needs the §4 mobile checks in [AGENTS.md](../AGENTS.md) when it lands.

@@ -17,7 +17,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-48`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-49`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
@@ -33,7 +33,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 
 1. **`R-08a` — Pure cross-day & playbook/tag running stats, done** (`lib/selectors.ts`, `lib/__tests__/`, `docs/16` §R-08).
 2. **`R-08b` — Running stats screen/card, done** (`components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`).
-3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`** (`lib/trade-document.ts` / `lib/trade-bar-validation.ts`, `docs/15` §3.3): stop-segment traded through, unfilled target touched, fill outside bar, MFE/MAE, post-exit hindsight touches, tested against `fixtures/trades/ex-*.json`.
+3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE and post-exit touches, with golden facts for all seven trade documents.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks(derived, facts, timeframe, detail, shield)`** (`docs/15` §3.4): deterministic `Mark[]` display list with bar snapping (`B-23`) and **`D-010` fills-only look** (no purple outlines; overrides stale pre-`D-010` text in `#34`) + golden tests for all 7 `ex-*.json` fixtures.
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
@@ -68,6 +68,18 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — reviewed TD-1, Core math lane released
+Did:      Reproduced and fixed false target findings for orderless exits and shared target prices, the exact four-tick boundary for decimal contracts, and fill findings against a forming bar on open trades. Same-price allocation remains an interim rule under OD-49.
+Files:    `lib/trade-bar-validation.ts`, `lib/trade-document.ts`, `lib/trades.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15-trade-document-and-render-grammar.md`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `npm test` passed 347 tests. `TZ=Pacific/Auckland node --test lib/__tests__/trade-observer.test.ts` passed 27 tests. Typecheck passed, lint reported 0 errors and 1 existing PostCSS warning, the build generated 8/8 pages, and `git diff --check origin/main` passed.
+Left:     TD-2 (#34) needs 1m and 5m mark goldens for all seven fixtures. Carry observer findings into flags with their inferred basis, exact bar and price. TD-3 needs dotted `≈` marks, a matching text equivalent, and a screenshot check of the D-010 fills-only design.
+
+### 2026-11-21 — agent (Antigravity) — TD-1 observeTrade pure observer (#35), Core math lane released
+Did:      Implemented `observeTrade(derived, candles, barMinutes, options)` in `lib/trade-bar-validation.ts` (docs/15 §3.3, issue #35): checks each stop segment traded through, unfilled targets touched before exit, fills outside bar with `DEFAULT_TICK_TOLERANCE_TICKS = 4` (B-12), honest MFE/MAE excursions, and post-exit hindsight touches. Preserved `validateTradeAgainstBars` compatibility. Added golden unit tests in `lib/__tests__/trade-observer.test.ts`.
+Files:    `lib/trade-bar-validation.ts`, `lib/__tests__/trade-observer.test.ts` (new), `NOTES.md`.
+Verified: `npm run typecheck` clean; `npm run lint` 0 errors, 1 pre-existing warning; `npm test` 328 passed, 0 failed; `npm run build` generated 8/8 pages.
+Left:     Unblocks `TD-2` (Issue #34 pure part: `buildMarks` display list with D-010 fills-only look & golden tests).
 
 ### 2026-11-21 — Codex — reviewed R-08b, App shell and notes lane released
 Did:      Finished the Today stats card with accessible windows, all-time breakdowns, priced denominators, missing-R counts and Shield. OD-47 now covers how undated legacy trades affect accounts, challenges and Trade Detail.

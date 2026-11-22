@@ -62,7 +62,7 @@ Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CO
 
 1. **`R-08a` — Pure running stats (`lib/selectors.ts` + tests), done:** Cross-day, per-playbook, per-tag, rolling windows (last 20, week, month). Exclude `is_sample` and `open`; skip `rMultiple === null` and count skipped; gross only.
 2. **`R-08b` — Running stats UI, done:** Summary card on Today, `390×844` + desktop, Shield-safe, gross-labelled.
-3. **`TD-1` (Issue `#35` pure) — `observeTrade` (`docs/15` §3.3):** Bar observer over `DerivedTrade` + golden tests on `fixtures/trades/ex-*.json`.
+3. **`TD-1` (Issue `#35` pure) — `observeTrade` (`docs/15` §3.3), done:** Bar observer over `DerivedTrade` + golden tests on `fixtures/trades/ex-*.json`. The chart flags and text equivalents remain part of the display-list integration.
 4. **`TD-2` (Issue `#34` pure) — `buildMarks` (`docs/15` §3.4):** Display list builder (`D-010` fills-only look; no purple outlines) + golden tests on all 7 `ex-*.json` fixtures.
 5. **`TD-3` (Issue `#34` canvas) — `PositionBoxPrimitive` paints `Mark[]`:** Stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup (`lib/playbooks-store.ts`, `lib/store.ts`):** `mogmine-playbooks-v1` + `user_id` (Invariant 7) + backup/restore.
