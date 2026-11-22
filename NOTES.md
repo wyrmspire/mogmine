@@ -17,7 +17,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Owner priority (`D-011`, 2026-11-22):** a usable trading day: end-of-day logging, "pre-anything" planning sessions, levels and indicators on the chart, after-session review. Slices `LV-1`, `LV-2`, `PS-1`–`PS-4` and `IND-1` come right after `TD-3` ([docs/24](docs/24-planning-sessions-and-after-session-review.md)).
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
-- Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
+- Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`), `docs/25` (discretionary calls; proposal under `OD-52`).
 - Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-49`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
@@ -54,6 +54,8 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 20. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
 21. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
 
+22. **`DC-2`–`DC-7` — Discretionary calls** ([docs/25](docs/25-discretionary-calls.md) §8, proposal `OD-52`): store, call sheet, chart pins, Skip/Flip grading, discretion score. `DC-1` (pure model) is done; wait for the owner's yes on `OD-52` before `DC-3` UI.
+
 ### Supabase-gated / Owner-gated (do not block on or pick up unasked)
 
 - `R-04` (owner creates Supabase project + rebase `feat/m0-candle-archive`, `#70`; never touch PR `#71`), `R-05` (Supabase trade persistence, needs `R-04` + `OD-30`), `R-06` (assistant endpoint, needs `R-05` + `OD-19`).
@@ -76,6 +78,12 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — discretionary calls proposal + DC-1 pure model, no lane
+Did:      Owner asked how to note discretionary decisions (skip a setup, flip a signal, cut, stop placement, early profit). Wrote docs/25 (seven call kinds, reason chips, conviction, after-the-fact rule, `--call-ink` colour family, screens, hindsight grading, slices `DC-1`–`DC-7`) as `OD-52`. Built `DC-1`: `lib/calls.ts` (kinds, chips, `validateCall`, `isAfterTheFact`, `gradeCall` for Cut / Early take via `buildHindsight`, integer ticks, R from the frozen initial stop). CSS tokens only; nothing renders them yet.
+Files:    `docs/25-discretionary-calls.md` (new), `lib/calls.ts` (new), `lib/__tests__/calls.test.ts` (new), `app/globals.css`, `DECISIONS.md`, `AGENTS.md`, `NOTES.md`.
+Checked:  `npm test` 400 passed (9 new). Typecheck clean. Lint 0 errors, the existing warning. Build 8/8 pages. `git diff --check` clean. No UI to check at 390×844 yet.
+Left:     `OD-52` needs the owner. `TD-3` is still next in the queue, then `LV-1`.
 
 ### 2026-11-22 — Claude (Opus 5.5 session) — checklist edge fix, owner direction D-011, no lane
 Did:      Rule checklist (Trade Detail) and challenge playbook list are now full-width tiles with the box on the right, ~35 px from the screen edge; the owner saw a tap on the old left-edge box (23 px) slide the page away (phone back-swipe zone). Recorded the owner's goal as `D-011` (planning sessions "pre-anything", levels/indicators on the chart, after-session review) with slices in docs/24 and the queue above; data shape is `OD-51`.

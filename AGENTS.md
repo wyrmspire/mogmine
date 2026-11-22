@@ -50,6 +50,7 @@ Do not guess requirements or invent schemas. Read the matching spec doc before i
 | Trade document (`mogmine.trade.v1`), plan/actual/excursion box layers, stop paths, hindsight, the deriver and display list (`buildMarks`) | [15 — Trade Document & Render Grammar](docs/15-trade-document-and-render-grammar.md) (open decisions `OD-30`–`OD-34`) |
 | Card family: Trade Card refresh, drill / flash cards, playbook, day, plan and mistake cards, card sizes and the shared frame | [23 — Card System](docs/23-card-system.md) (`CD-1`–`CD-3`, `OD-46`) |
 | Planning sessions ("pre-anything"), levels and indicators on the chart, after-session review, the `D-011` build slices | [24 — Planning Sessions & After-Session Review](docs/24-planning-sessions-and-after-session-review.md) (`D-011`, `OD-51`) |
+| Discretionary calls: skip a setup, flip the signal, cut, early take, stop placement, hold, size; reason chips, call colours, hindsight grades | [25 — Discretionary Calls](docs/25-discretionary-calls.md) (proposal `OD-52`) |
 | A naming conflict between specs, or a choice that looks undecided | [DECISIONS.md](DECISIONS.md) |
 | Branching, lanes, handoffs, fixtures, environments | [CONTRIBUTING.md](CONTRIBUTING.md) |
 

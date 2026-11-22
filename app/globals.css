@@ -29,6 +29,12 @@
   --candle-down: #ef5a67;
   --box-actual: #2dd4bf;   /* teal frame: a trade built from fills (docs/12 LV-18, OD-23) */
   --box-planned: #a78bfa;  /* purple frame: planned / theoretical */
+  /* Discretionary calls (docs/25, OD-52): "me deciding", never gold, profit or loss. */
+  --call-ink: #9ad1ff;
+  --call-ink-soft: color-mix(in srgb, var(--call-ink) 16%, transparent);
+  --call-against: var(--warn-amber);
+  --call-paid: var(--profit-text);
+  --call-cost: var(--loss-text);
 
   --gold-intensity: 0.76;
   --position-box-opacity: 0.28;
@@ -63,6 +69,7 @@
   --candle-up: #4c8dff;
   --candle-down: #f98a3c;
   --box-actual: #60a5fa;
+  --call-ink: #e5e7eb; /* blue means profit here, so calls go silver */
 }
 
 /* ───────────────────────── Base ───────────────────────── */
