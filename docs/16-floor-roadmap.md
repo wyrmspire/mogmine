@@ -141,6 +141,7 @@ Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CO
    - on a timer while the trade is open on screen: one `setInterval` of 60 seconds that calls `ensureCandles(trade)`. Clear it on unmount.
 5. **A Retry control.** When `candles.status === "none"`, show a button labelled `Retry` (min 44px) that calls `ensureCandles(trade, true)`. Next to it, plain text: `Yahoo has not published these bars yet` when the exit was under 60 minutes ago, otherwise the existing no-chart message.
 6. **Cached partial sets.** When a refetch brings fewer bars than the cache already has, keep the cache. Never replace more data with less.
+7. **Refresh the existing chart.** Apply corrected OHLC even when the candle times stay the same. Keep a manually adjusted time range and price scale when refreshed bars arrive.
 
 **Do not:**
 - Poll for sample trades (`trade.is_sample`). They never touch the network (issue #89).
