@@ -34,7 +34,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 
 1. **`R-08a` — Pure cross-day & playbook/tag running stats, done** (`lib/selectors.ts`, `lib/__tests__/`, `docs/16` §R-08).
 2. **`R-08b` — Running stats screen/card, done** (`components/RunningStatsCard.tsx`, `components/TodayScreen.tsx`, `app/globals.css`, `lib/__tests__/running-stats-view.test.ts`).
-3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE, post-exit touches and inferred hindsight for cancelled plans, with golden facts for all seven trade documents.
+3. **`TD-1` (Issue `#35`) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE, post-exit touches and inferred hindsight for cancelled plans, with golden facts for all seven trade documents. Displayed bars supply both the Canvas flags and their Data notes.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks`, done** (`docs/15` §3.4): deterministic `Mark[]` display list with real bar anchors (`B-23`), the `D-010` fills-only look and exact 1m/5m goldens for all seven trade fixtures.
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
 6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
@@ -78,6 +78,14 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Codex — recurring review and displayed-bar findings (#35), Chart lane released
+
+- Run `20261122T040021Z` left the TD-3 worktree's index and tracked files at `9a13989` with its ref at `4127452`. The staged inverse of PR #150 passed 414 unit tests but failed the Chrome ‹30/Fit check. Applied the merged patch to restore agreement and kept the dependency symlink and three stashes.
+- Trade Detail now gives the chart and observer the same displayed bars. `buildFindingMarks` supplies dotted inferred Canvas flags, with one Data note per finding. Fetched-bar coverage still warns about gaps when displayed candles are grouped.
+- `npm test` passed 414, the Auckland-time chart and observer run passed 73, typecheck and diff check passed, and lint reported 0 errors and 1 existing PostCSS warning. Build generated 8/8 pages.
+- Chrome at 390×844 showed the target flag and note at 15:36Z on 1m and 15:35Z on 5m. A same-time OHLC correction removed both. Flag pixels reached the 1080px Trade Card PNG. ‹30 drew three backward rays, Fit cleared them, and the timeframe round trip kept the canvas with zero page errors or overflow.
+- TD-3 (#34) still needs the general `Mark[]` painter, including D-010 plan/actual pixel checks, stop steps and hatches, both directions of the excursion bracket, and continuation as the viewport changes.
 
 ### 2026-11-22 — Codex — recurring review and backward continuation (#34), Chart lane released
 

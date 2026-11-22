@@ -1,6 +1,6 @@
 // The Position Box: a Canvas series primitive, never HTML over the chart (Invariant 1).
 // Drawn like TradingView's long/short position tool: fills only, no outline or frame on any box,
-// and no numbers over the candles (they live in the header and stats grid).
+// with trade numbers in the header and stats grid.
 //   PLAN — faint red fill entry→stop, faint green fill entry→target.
 //   ACTUAL — a stronger fill entry→exit in the result colour: green win, red loss, gray scratch.
 //   PATH — a thin dotted line from the entry fill to the exit fill.
@@ -21,7 +21,10 @@ import type {
   SeriesAttachedParameter,
   SeriesType,
   Time,
+  UTCTimestamp,
 } from "lightweight-charts";
+import type { ChartTheme } from "@/lib/theme";
+import type { FlagMark } from "@/lib/trade-marks";
 import { includeInPriceRange } from "@/lib/trades";
 
 export interface PositionBoxConfig {
@@ -66,6 +69,9 @@ interface Geometry {
   yKey: number | null;
   touches: Array<{ x: number; y: number; kind: "target" | "stop" }>;
 }
+
+type FindingColors = Pick<ChartTheme, "profitText" | "lossText" | "textPrimary">;
+type FindingPoint = { x: number; y: number; mark: FlagMark };
 
 /** Plan fills stay clearly weaker than the actual band so they cannot be read as P&L. */
 const PLAN_FILL_RATIO = 0.28;
@@ -226,12 +232,42 @@ class StrokeRenderer implements IPrimitivePaneRenderer {
   }
 }
 
+class FindingRenderer implements IPrimitivePaneRenderer {
+  constructor(private points: readonly FindingPoint[], private colors: FindingColors) {}
+
+  draw(target: CanvasRenderingTarget2D) {
+    if (!this.points.length) return;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      ctx.save();
+      ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.lineWidth = 1.25;
+      for (const { x, y, mark } of this.points) {
+        if (x < 0 || x > mediaSize.width || y < 0 || y > mediaSize.height) continue;
+        const textWidth = ctx.measureText(mark.text).width;
+        const textToRight = x + textWidth + 8 <= mediaSize.width;
+        ctx.strokeStyle = mark.tone === "profit" ? this.colors.profitText
+          : mark.tone === "risk" ? this.colors.lossText : this.colors.textPrimary;
+        ctx.setLineDash(mark.basis === "inferred" ? [1, 2] : []);
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.textAlign = textToRight ? "left" : "right";
+        ctx.textBaseline = y < 14 ? "top" : "bottom";
+        ctx.fillStyle = this.colors.textPrimary;
+        ctx.fillText(mark.text, x + (textToRight ? 6 : -6), y);
+      }
+      ctx.restore();
+    });
+  }
+}
+
 class PaneView implements IPrimitivePaneView {
-  constructor(private source: PositionBoxPrimitive, private layer: "fill" | "stroke") {}
+  constructor(private source: PositionBoxPrimitive, private layer: "fill" | "stroke" | "findings") {}
 
   zOrder(): PrimitivePaneViewZOrder { return this.layer === "fill" ? "bottom" : "normal"; }
 
   renderer() {
+    if (this.layer === "findings") return this.source.findingRenderer;
     const { geometry, config } = this.source;
     return this.layer === "fill"
       ? new FillRenderer(geometry, config, config.opacity)
@@ -241,11 +277,13 @@ class PaneView implements IPrimitivePaneView {
 
 export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   geometry: Geometry | null = null;
+  findingRenderer: FindingRenderer | null = null;
+  private findings?: { marks: readonly FlagMark[]; colors: FindingColors };
   private hidden = false;
   private chart?: IChartApi;
   private series?: ISeriesApi<SeriesType, Time>;
   private requestUpdate?: () => void;
-  private readonly views = [new PaneView(this, "fill"), new PaneView(this, "stroke")];
+  private readonly views = [new PaneView(this, "fill"), new PaneView(this, "stroke"), new PaneView(this, "findings")];
 
   constructor(public config: PositionBoxConfig) {}
 
@@ -263,8 +301,19 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
 
   updateAllViews() {
     const { chart, series, config } = this;
-    if (!chart || !series || this.hidden) { this.geometry = null; return; }
+    this.geometry = null;
+    this.findingRenderer = null;
+    if (!chart || !series) return;
     const timeScale = chart.timeScale();
+    if (this.findings?.marks.length) {
+      const points = this.findings.marks.flatMap((mark) => {
+        const x = timeScale.timeToCoordinate(Math.floor(mark.t / 1000) as UTCTimestamp);
+        const y = series.priceToCoordinate(mark.price);
+        return x == null || y == null ? [] : [{ x, y, mark }];
+      });
+      this.findingRenderer = new FindingRenderer(points, this.findings.colors);
+    }
+    if (this.hidden) return;
     const x1 = timeScale.timeToCoordinate(config.entryTime);
     const x2 = timeScale.timeToCoordinate(config.exitTime);
     const price = (value: number | null): Coordinate | null => (value == null ? null : series.priceToCoordinate(value));
@@ -300,6 +349,11 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
 
   update(config: PositionBoxConfig) {
     this.config = config;
+    this.requestUpdate?.();
+  }
+
+  setFindingMarks(marks: readonly FlagMark[], colors: FindingColors) {
+    this.findings = { marks, colors };
     this.requestUpdate?.();
   }
 
