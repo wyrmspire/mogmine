@@ -71,7 +71,7 @@ Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CO
 9. **`UI-2` — Desktop 3-column workstation & toolbar polish (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`):** Refine `>=1024px` workspace without hiding `.trade-levels-card` or regressing `390×844`.
 10. **`UI-3` — Mood at Entry (`OD-39` c, `docs/19` §4):** Optional 1-tap pre-exit mood capture in `AddTradeSheet` / open `TradeDetail`.
 11. **`MD-1` (Issue `#90` `AC-07`) — Expected window coverage in `/api/market-data` & `lib/candles.ts`:** Check `expectedInsideBarTimes` instead of `candles.length >= 4`.
-12. **`CD-1a` — Card frame & Trade Card layout (`lib/shareCard.ts` + tests, [docs/23](23-card-system.md) §2–3, `OD-46`):** Shared frame, `4:5` / `9:16` / `1:1` layout tables, chart at 55–60%, hero R with rules seal, Shield copy tested for all sizes.
+12. **`CD-1a` — Card frame & Trade Card layout, done (`lib/shareCard.ts` + tests, [docs/23](23-card-system.md) §2–3, `OD-46`, #41):** Shared frame, `4:5` / `9:16` / `1:1` layout tables, chart at 55–60%, hero R with rules seal, Shield copy tested for all sizes. Followed by `CD-1b` (sheet controls, size picker, 390×844 check).
 13. **`CD-1b` — Trade Card sheet controls (`components/TradeCardSheet.tsx`):** Size picker, back side, Share opens with Shield on; `390×844` check.
 14. **`CD-2a` — Drill decks, pure (`lib/drills.ts` + tests, docs/23 §4):** Eligibility (closed, not sample, bars cached, older than 7 days), warm-up / playbook / misses decks, chart cut at entry, scoring.
 15. **`CD-2b` — Drill store & backup (`lib/drill-store.ts`, `lib/store.ts`):** `mogmine-drills-v1` + `user_id`, in journal backup/restore, never writes `take_again`.
