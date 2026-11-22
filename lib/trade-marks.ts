@@ -51,7 +51,7 @@ export interface BracketMark {
   pLow: number;
   pMid: number;
   pHigh: number;
-  labels: { mfe: string; mae: string };
+  labels: { low: string; high: string };
   basis: EventBasis;
   coverage: NonNullable<ObservedTrade["excursions"]>["coverage"];
   approximate?: true;
@@ -399,10 +399,12 @@ export function buildMarks(
   if (excursion && exit && entryPrice != null) {
     const { maePrice, mfePrice, coverage } = excursion;
     const points = (price: number) => formatPoints((price - entryPrice) * (isLong ? 1 : -1), derived.symbol);
+    const mfe = `MFE ≈ ${points(mfePrice)}`;
+    const mae = `MAE ≈ ${points(maePrice)}`;
     marks.push({
       kind: "bracket", ...exit, pLow: Math.min(maePrice, mfePrice), pMid: entryPrice,
       pHigh: Math.max(maePrice, mfePrice), basis: "inferred", coverage,
-      labels: { mfe: `MFE ≈ ${points(mfePrice)}`, mae: `MAE ≈ ${points(maePrice)}` },
+      labels: isLong ? { low: mae, high: mfe } : { low: mfe, high: mae },
     });
   }
 

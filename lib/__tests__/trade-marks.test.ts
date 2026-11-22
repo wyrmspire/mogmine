@@ -223,4 +223,5 @@ test("same-bar scale fills collapse, retain the right arrow and expose their fil
   assert.equal(bracket.pLow, 7594);
   assert.equal(bracket.pHigh, 7603);
   assert.ok(bracket.pMid > bracket.pLow && bracket.pMid < bracket.pHigh);
+  assert.deepEqual(bracket.labels, { low: "MFE ≈ +6.67 pts", high: "MAE ≈ −2.33 pts" });
 });
