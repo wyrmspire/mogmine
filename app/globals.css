@@ -622,8 +622,11 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .seal { font: 800 0.6875rem/1 var(--font-mono); letter-spacing: 0; text-transform: none; padding: 4px 7px; border-radius: 7px; color: var(--text-muted); border: 1px solid var(--border-subtle); white-space: nowrap; }
 .seal.full { color: var(--on-gold); background: var(--gold-gradient); border-color: transparent; }
 .note-input { width: 100%; padding: 11px 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-inset); color: var(--text-primary); font-size: max(16px, 1rem); resize: vertical; outline: none; }
-.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.checklist label { display: flex; align-items: center; gap: 11px; min-height: 44px; font-size: 0.8125rem; cursor: pointer; }
+/* Rule rows are full-width tiles with the box on the right, inset from the card edge. A box near the
+   screen's left edge sat inside the phone's back-swipe zone, so a slightly sideways tap slid the page away. */
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.checklist label { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 14px; border-radius: 11px; border: 1px solid var(--border-subtle); background: var(--bg-inset); font-size: 0.8125rem; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.checklist label > span { flex: 1; min-width: 0; }
 .checklist input { appearance: none; -webkit-appearance: none; flex: none; width: 22px; height: 22px; border-radius: 7px; border: 1.5px solid var(--border-strong); background: var(--bg-inset); display: grid; place-items: center; margin: 0; }
 .checklist input:checked { background: var(--gold-gradient); border-color: transparent; }
 .checklist input:checked::after { content: "✓"; color: var(--on-gold); font-size: 0.875rem; font-weight: 900; line-height: 1; }
@@ -829,8 +832,9 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .btn-toggle.active b { color: var(--text-primary); }
 
 .challenge-playbooks-grid { display: grid; gap: 8px; margin-top: 4px; }
-.challenge-playbook-item { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-size: 0.8125rem; }
-.challenge-playbook-item input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--text-primary); cursor: pointer; }
+.challenge-playbook-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 14px; border-radius: 11px; border: 1px solid var(--border-subtle); background: var(--bg-inset); cursor: pointer; font-size: 0.8125rem; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.challenge-playbook-item > span { flex: 1; min-width: 0; }
+.field .challenge-playbook-item input[type="checkbox"], .challenge-playbook-item input[type="checkbox"] { flex: none; width: 22px; height: 22px; min-height: 0; padding: 0; margin: 0; accent-color: var(--text-primary); cursor: pointer; }
 
 .challenge-rule-sentence { font-size: 0.75rem; color: var(--text-muted); line-height: 1.45; background: var(--bg-inset); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-top: 4px; }
 .challenge-rule-sentence p { margin: 0; }

@@ -235,12 +235,12 @@ export function ChallengeSetupSheet({
                       const checked = selectedPlaybooks.includes(playbook.id);
                       return (
                         <label key={playbook.id} className="challenge-playbook-item">
+                          <span>{playbook.name}</span>
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => togglePlaybook(playbook.id)}
                           />
-                          <span>{playbook.name}</span>
                         </label>
                       );
                     })}
