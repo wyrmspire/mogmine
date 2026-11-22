@@ -41,7 +41,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
 8. **`LV-1` — Pure computed levels, done** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. PR #152 follows the merged TD-3 painter under `D-011`.
 9. **`LV-2` — Draw computed levels on the trade chart, done** (`SessionLevelsPrimitive`, Canvas only, view-options toggle).
-10. **`PS-1` — Planning-session model and store** (`mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup). Shape is `OD-51`.
+10. **`PS-1` — Planning-session model and store, done** (`lib/plans.ts`, `lib/plans-store.ts`, `mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup round-trip). Shape is `OD-51`.
 11. **`PS-2` — Plan screen on Today** (start a "Pre-…" session fast, levels with tick steppers, observations).
 12. **`PS-3` — Planning-session levels on trade charts.**
 13. **`PS-4` — After-session review** (rules followed, nearest planned level in ticks, watched playbook, one lesson).
@@ -78,6 +78,14 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Gemini — PS-1 (OD-51), Data lane released
+
+- Implemented pure planning-session model (`lib/plans.ts`) and store (`lib/plans-store.ts`) for `mogmine-plans-v1`.
+- Follows `OD-51` data shape: presets (Pre-Globex, Pre-market, Pre-power hour, Pre-MOC, Pre-gap fill, custom), anchor times, levels with integer tick prices, observations, bias, watch playbook IDs, and revisions tracking edits after the fact.
+- Added backup export/restore round-trip support in `lib/store.ts`, `components/AppShell.tsx`, and `components/TuneScreen.tsx`.
+- 100% test coverage for presets, planned level creation, tick snapping, after-the-fact detection, revisions, and backup round-trip (`lib/__tests__/plans.test.ts`).
+- Next is `PS-2` (Plan screen on Today: start a "Pre-…" session fast, levels with tick steppers, observations).
 
 ### 2026-11-22 — Antigravity — LV-2 (#26), Chart lane released
 

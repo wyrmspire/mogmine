@@ -64,7 +64,7 @@ The review ends with one lesson for the next session. A session with no trades i
 | :--- | :--- | :--- | :--- |
 | `LV-1` | Pure computed levels | `lib/levels.ts`, `lib/__tests__/levels.test.ts` | First-slice levels match the docs/12 worked check; America/New_York session math; ticks snapped |
 | `LV-2` | Draw computed levels on the trade chart | `components/SessionLevelsPrimitive.ts`, `components/TradeChart.tsx` | Done: labels legible at `390×844`, toggle in view options, screenshot includes them (`takeScreenshot(true)`) |
-| `PS-1` | Pure planning-session model and store | `lib/plans.ts`, `lib/plans-store.ts`, backup round-trip in `lib/store.ts` | Presets, revisions, after-the-fact flag, `user_id`, backup/restore tests |
+| `PS-1` | Pure planning-session model and store | `lib/plans.ts`, `lib/plans-store.ts`, backup round-trip in `lib/store.ts` | Presets, revisions, after-the-fact flag, `user_id`, backup/restore tests (done) |
 | `PS-2` | Plan screen on Today | `components/PlanSheet.tsx`, `components/TodayScreen.tsx` | Start a "Pre-…" session in under 10 seconds, add levels with tick steppers, write observations, all states from docs/08 §4 |
 | `PS-3` | Plan levels on charts | `components/SessionLevelsPrimitive.ts` | A trade chart shows the planning-session levels for its `session_date` |
 | `PS-4` | After-session review | `components/SessionReview.tsx`, `lib/selectors.ts` | §4 above, no-trade sessions handled |
