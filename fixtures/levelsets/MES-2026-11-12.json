@@ -33,7 +33,11 @@
       "session_date": "2026-11-11",
       "high": 7671.5,
       "low": 7547.5,
-      "settle": 7640.5
+      "settle": 7640.5,
+      "settle_provenance": {
+        "source": "Yahoo MES=F 1d close (matched CME settlement on 2026-11-11)",
+        "isProxy": false
+      }
     },
     "prior_rth": {
       "open": 7612.0,

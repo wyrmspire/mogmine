@@ -1,6 +1,8 @@
 // Session math. Always America/New_York, never a fixed offset and never the display zone
 // (AGENTS §3b-5, B-20, UX-87).
 
+import type { Candle } from "./trades.ts";
+
 const NEW_YORK = "America/New_York";
 
 const nyFormat = new Intl.DateTimeFormat("en-US", {
@@ -101,6 +103,11 @@ export function sessionWeekMonday(date: string): string {
   return offsetSessionDate(date, -((weekday + 6) % 7));
 }
 
+/** Previous regular trading date. Exchange holidays are pending OD-35. */
+export function previousRegularSessionDate(date: string): string {
+  return offsetSessionDate(date, date === sessionWeekMonday(date) ? -3 : -1);
+}
+
 /** Regular MES/MNQ hours for a trading date, in UTC milliseconds (OD-35). */
 export function equityIndexSessionBounds(date: string) {
   return {
@@ -108,6 +115,35 @@ export function equityIndexSessionBounds(date: string) {
     rthOpen: zonedTimeUtc(date, 9, 30),
     rthClose: zonedTimeUtc(date, 16),
     close: zonedTimeUtc(date, 17),
+  };
+}
+
+export function indexSessionCandles(candles: readonly Candle[]) {
+  const index = new Map<number, Candle | null>();
+  for (const bar of candles) index.set(bar.time, index.has(bar.time) ? null : bar);
+  return index;
+}
+
+/** Read whole native bars as of a UTC cutoff and report coverage on their expected grid. */
+export function readSessionWindow(
+  index: ReadonlyMap<number, Candle | null>, from: number, end: number, asOf: number, barMs: number,
+) {
+  const to = Math.max(from, Math.min(end, asOf));
+  const first = Math.ceil(from / barMs) * barMs;
+  const expectedBars = Math.max(0, Math.floor((to - first) / barMs));
+  const bars: Candle[] = [];
+  for (let i = 0; i < expectedBars; i += 1) {
+    const bar = index.get(first + i * barMs);
+    if (bar && [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite)
+      && bar.low <= Math.min(bar.open, bar.close) && bar.high >= Math.max(bar.open, bar.close)) bars.push(bar);
+  }
+  return {
+    bars,
+    coverage: {
+      from, to, expectedBars, presentBars: bars.length,
+      // Completion is relative to the cutoff. A fixed end must also align to the bar grid.
+      complete: bars.length === expectedBars && first === from && (to < end || end % barMs === 0),
+    },
   };
 }
 
