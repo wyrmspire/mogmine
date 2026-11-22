@@ -3,12 +3,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ChallengeRules } from "@/lib/challenges";
 import { startChallenge, useChallenges } from "@/lib/challenge-store";
-import { PLAYBOOKS } from "@/lib/playbooks";
+import { NO_SETUP_ID } from "@/lib/playbooks";
+import { activePlaybooks, usePlaybooks } from "@/lib/playbooks-store";
 import { dollarsToCents } from "@/lib/accounts";
 import { formatBalance } from "@/lib/format";
 
 import { showToast } from "@/lib/toast";
-const eligiblePlaybooks = PLAYBOOKS.filter((playbook) => playbook.id !== "no-setup");
 
 export function ChallengeSetupSheet({
   initialKind, initialRules, onClose,
@@ -17,6 +17,8 @@ export function ChallengeSetupSheet({
   initialRules?: ChallengeRules;
   onClose: () => void;
 }) {
+  // Archived playbooks and the impulse bucket cannot be eligible (docs/17 §4, R-07).
+  const eligiblePlaybooks = activePlaybooks(usePlaybooks().playbooks).filter((playbook) => playbook.id !== NO_SETUP_ID);
   const [kind, setKind] = useState(initialKind);
   const [sessionsText, setSessionsText] = useState(String(initialRules?.kind === "drawdown" ? initialRules.sessions : 20));
   const [limitDollarsText, setLimitDollarsText] = useState(initialRules?.kind === "drawdown" ? (initialRules.max_drawdown_cents / 100).toFixed(2) : "");
@@ -233,12 +235,12 @@ export function ChallengeSetupSheet({
                       const checked = selectedPlaybooks.includes(playbook.id);
                       return (
                         <label key={playbook.id} className="challenge-playbook-item">
+                          <span>{playbook.name}</span>
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => togglePlaybook(playbook.id)}
                           />
-                          <span>{playbook.name}</span>
                         </label>
                       );
                     })}

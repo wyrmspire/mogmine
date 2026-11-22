@@ -9,14 +9,15 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ---
 
-## Current state (2026-11-21)
+## Current state (2026-11-22)
 
 - **`main` holds UI Phases 1–5, Challenges (`R-09a`–`R-09d`), open trades (`R-03a`–`R-03c`), frozen initial stop (`R-10`), price-first entry & price-axis stretch (`docs/20`), accounts & running totals (`docs/21`), Mood Shape (`docs/18`), and `deriveTrade` (`lib/trade-document.ts`, PR #124).**
 - **Backend boundary (`docs/22`, 2026-11-20):** Supabase is **not** a prerequisite for ordinary product, UI, pure-math, stats, playbook, or render-grammar work. Keep building local-first with fixtures and device storage (`mogmine-trades-v3`) until a feature requires cross-device persistence.
 - **First frontend is live at `mogmine.vercel.app`.** Ten demo trades use real Yahoo Finance candles only; without market bars they show no chart.
+- **Owner priority (`D-011`, 2026-11-22):** a usable trading day: end-of-day logging, "pre-anything" planning sessions, levels and indicators on the chart, after-session review. Slices `LV-1`, `LV-2`, `PS-1`–`PS-4` and `IND-1` come right after `TD-3` ([docs/24](docs/24-planning-sessions-and-after-session-review.md)).
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
-- Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`).
+- Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`), `docs/25` (discretionary calls; proposal under `OD-52`).
 - Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-49`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
@@ -36,15 +37,24 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 3. **`TD-1` (Issue `#35` pure part) — `observeTrade(derived, candles, barMinutes)`, done** (`lib/trade-bar-validation.ts`, `docs/15` §3.3): stop, target and fill findings, MFE/MAE, post-exit touches and inferred hindsight for cancelled plans, with golden facts for all seven trade documents.
 4. **`TD-2` (Issue `#34` pure part) — `buildMarks`, done** (`docs/15` §3.4): deterministic `Mark[]` display list with real bar anchors (`B-23`), the `D-010` fills-only look and exact 1m/5m goldens for all seven trade fixtures.
 5. **`TD-3` (Issue `#34` canvas part) — `PositionBoxPrimitive` paints `Mark[]`** (`components/PositionBoxPrimitive.ts`, `TradeChart.tsx`): stepped stop path, MFE/MAE bracket, `PAST STOP` hatch, exit-reason flags, dotted continuation.
-6. **`R-07a` — Local playbook store & backup** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
-7. **`R-07b` — Playbook editor UI** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
-8. **`UI-1` — Chart OHLC HUD & honest freshness** (`components/TradeDetail.tsx`, `app/globals.css`, `OD-40`): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
-9. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`.
-10. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
-11. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check in `/api/market-data` & `lib/candles.ts`:** replace `candles.length >= 4` acceptance with shared `expectedInsideBarTimes` coverage check.
-12. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
-13. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
-14. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
+6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
+7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
+8. **`LV-1` — Pure computed levels** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. Owner priority `D-011`.
+9. **`LV-2` — Draw computed levels on the trade chart** (`SessionLevelsPrimitive`, Canvas only, view-options toggle).
+10. **`PS-1` — Planning-session model and store** (`mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup). Shape is `OD-51`.
+11. **`PS-2` — Plan screen on Today** (start a "Pre-…" session fast, levels with tick steppers, observations).
+12. **`PS-3` — Planning-session levels on trade charts.**
+13. **`PS-4` — After-session review** (rules followed, nearest planned level in ticks, watched playbook, one lesson).
+14. **`IND-1` — Session VWAP.**
+15. **`UI-1` — Chart OHLC HUD & honest freshness** (`components/TradeDetail.tsx`, `app/globals.css`, `OD-40`): pin crosshair OHLC readout inside top-left of `.chart-frame` so `.chart-source` stays visible; add honest `Delayed · Xm` / `Cached` / `Offline` pill (never `"Market Live"`).
+16. **`UI-2` — Desktop 3-column workstation & toolbar polish** (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `#114`): refine `>=1024px` layout and chart surface hierarchy without hiding `.trade-levels-card` or regressing `390×844`. Also move small controls off the screen edges (`1m` at 13 px, change-target chip at 9 px, After-the-exit note at 15 px, Mood button at 9 px; docs/24 §6) — edge taps trigger the phone's back swipe.
+17. **`UI-3` — Mood at Entry** (`components/AddTradeSheet.tsx`, `components/TradeDetail.tsx`, `OD-39` c, `docs/19` §4): optional 1-tap pre-exit mood capture.
+18. **`MD-1` (Issue `#90` `AC-07`) — Window coverage check in `/api/market-data` & `lib/candles.ts`:** replace `candles.length >= 4` acceptance with shared `expectedInsideBarTimes` coverage check.
+19. **`CD-1a` / `CD-1b` — Trade Card refresh** ([docs/23](docs/23-card-system.md) §2–3): shared frame, `4:5`/`9:16`/`1:1`, chart at 55–60%, hero R + rules seal, back side, Share opens with Shield on.
+20. **`CD-2a`–`CD-2c` — Drill cards** (docs/23 §4): pure decks and scoring, `mogmine-drills-v1` store + backup (never writes `take_again`), drill screen with sealed front and reveal.
+21. **`CD-3` — Playbook card** (docs/23 §5): only after `R-07b` and `R-08a`.
+
+22. **`DC-2`–`DC-7` — Discretionary calls** ([docs/25](docs/25-discretionary-calls.md) §8, proposal `OD-52`): store, call sheet, chart pins, Skip/Flip grading, discretion score. `DC-1` (pure model) is done; wait for the owner's yes on `OD-52` before `DC-3` UI.
 
 ### Supabase-gated / Owner-gated (do not block on or pick up unasked)
 
@@ -62,12 +72,24 @@ Claim a lane before starting. Clear the claim when you stop.
 | Core math | — | | |
 | Chart | — | | |
 | App shell and notes | — | | |
-| Data | Claude (Opus 5.5 session) | 2026-11-21 | `R-07a` + `R-07b` playbook store and editor. Worker: skip R-07, take TD-1 → TD-3. |
+| Data | — | | |
 | Market data | — | | |
 | Ingestion | — | | |
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — discretionary calls proposal + DC-1 pure model, no lane
+Did:      Owner asked how to note discretionary decisions (skip a setup, flip a signal, cut, stop placement, early profit). Wrote docs/25 (seven call kinds, reason chips, conviction, after-the-fact rule, `--call-ink` colour family, screens, hindsight grading, slices `DC-1`–`DC-7`) as `OD-52`. Built `DC-1`: `lib/calls.ts` (kinds, chips, `validateCall`, `isAfterTheFact`, `gradeCall` for Cut / Early take via `buildHindsight`, integer ticks, R from the frozen initial stop). CSS tokens only; nothing renders them yet.
+Files:    `docs/25-discretionary-calls.md` (new), `lib/calls.ts` (new), `lib/__tests__/calls.test.ts` (new), `app/globals.css`, `DECISIONS.md`, `AGENTS.md`, `NOTES.md`.
+Checked:  `npm test` 400 passed (9 new). Typecheck clean. Lint 0 errors, the existing warning. Build 8/8 pages. `git diff --check` clean. No UI to check at 390×844 yet.
+Left:     `OD-52` needs the owner. `TD-3` is still next in the queue, then `LV-1`.
+
+### 2026-11-22 — Claude (Opus 5.5 session) — checklist edge fix, owner direction D-011, no lane
+Did:      Rule checklist (Trade Detail) and challenge playbook list are now full-width tiles with the box on the right, ~35 px from the screen edge; the owner saw a tap on the old left-edge box (23 px) slide the page away (phone back-swipe zone). Recorded the owner's goal as `D-011` (planning sessions "pre-anything", levels/indicators on the chart, after-session review) with slices in docs/24 and the queue above; data shape is `OD-51`.
+Files:    `components/PitStop.tsx`, `components/ChallengeSetupSheet.tsx`, `app/globals.css`, `docs/24-planning-sessions-and-after-session-review.md` (new), `DECISIONS.md`, `AGENTS.md`, `NOTES.md`.
+Checked:  Headless Chrome at 390×844 and 1280×900: boxes at 32–38 px from the right edge, row height 48 px, tapping the label toggles the box and updates the `n/4 followed` seal, 0 overflow, 0 page errors. Edge audit of Today, Feed, Review, Tune, Trade Detail: 0 overflow, no target under 40 px; edge controls on Trade Detail logged for `UI-2`. Not verified on a phone.
+Left:     `TD-3` is next, then `LV-1`. Agents' in-flight branches were not touched.
 
 ### 2026-11-22 — Codex — reviewed idle run and repaired TD-1 hindsight (#35), Core math lane released
 Did:      Run `20261122T013000Z` left no changes. Reviewed the TD-2 merge and reproduced the missing `ex-nottaken` bar evidence. `observeTrade` now reports inferred first level touches through cancellation, with gaps and same-bar ambiguity preserved (OD-50).
@@ -98,6 +120,12 @@ Did:      Reproduced and fixed false target findings for orderless exits and sha
 Files:    `lib/trade-bar-validation.ts`, `lib/trade-document.ts`, `lib/trades.ts`, `lib/__tests__/trade-observer.test.ts`, `docs/15-trade-document-and-render-grammar.md`, `DECISIONS.md`, `NOTES.md`.
 Checked:  `npm test` passed 347 tests. `TZ=Pacific/Auckland node --test lib/__tests__/trade-observer.test.ts` passed 27 tests. Typecheck passed, lint reported 0 errors and 1 existing PostCSS warning, the build generated 8/8 pages, and `git diff --check origin/main` passed.
 Left:     TD-2 (#34) needs 1m and 5m mark goldens for all seven fixtures. Carry observer findings into flags with their inferred basis, exact bar and price. TD-3 needs dotted `≈` marks, a matching text equivalent, and a screenshot check of the D-010 fills-only design.
+
+### 2026-11-21 — Claude (Opus 5.5 session) — R-07a + R-07b playbook store and editor, Data lane released
+Did:      `lib/playbooks-store.ts` (`mogmine-playbooks-v1`, seeds, `user_id`, archive-only, validation, backup round-trip) and Tune → Playbooks (`components/PlaybookEditor.tsx`: add, rename, default style, add/reorder/remove rules, archive/restore). Pickers, stats labels, rows and Clean Run setup read the store. Samples stay on seed rules. Open choices recorded as `OD-49`.
+Files:    `lib/playbooks.ts`, `lib/playbooks-store.ts` (new), `lib/store.ts`, `lib/fixtures.ts`, `lib/__tests__/playbooks-store.test.ts` (new), `components/PlaybookEditor.tsx` (new), `components/{TuneScreen,AppShell,PitStop,ChallengeSetupSheet,TradeRow,RunningStatsCard}.tsx`, `app/globals.css`, `docs/16`, `DECISIONS.md`, `NOTES.md`.
+Checked:  `npm test` 329 passed, 0 failed. Typecheck clean, lint 0 errors and the existing warning, build 8/8. Headless Chrome at 390×844 and 1280×900, 26/26 checks: seeds listed, clash message, add/reorder/save (pending rule kept), `user_id` in storage, archive/restore, `no-setup` locked, rename shown on Feed, 0 overflow, 44px targets, 0 page errors.
+Left:     Phone check still owed (`AC-11`). `CD-3` is unblocked once the worker's TD queue allows. `OD-49` needs the owner.
 
 ### 2026-11-21 — agent (Antigravity) — TD-1 observeTrade pure observer (#35), Core math lane released
 Did:      Implemented `observeTrade(derived, candles, barMinutes, options)` in `lib/trade-bar-validation.ts` (docs/15 §3.3, issue #35): checks each stop segment traded through, unfilled targets touched before exit, fills outside bar with `DEFAULT_TICK_TOLERANCE_TICKS = 4` (B-12), honest MFE/MAE excursions, and post-exit hindsight touches. Preserved `validateTradeAgainstBars` compatibility. Added golden unit tests in `lib/__tests__/trade-observer.test.ts`.

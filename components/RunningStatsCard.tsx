@@ -3,6 +3,7 @@
 import { useId, useMemo, useState } from "react";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import { playbookName } from "@/lib/playbooks";
+import { usePlaybooks } from "@/lib/playbooks-store";
 import { runningStats } from "@/lib/selectors";
 import type { SummaryStats } from "@/lib/selectors";
 import type { TradeRecord } from "@/lib/trades";
@@ -154,6 +155,7 @@ export function RunningStatsCard({
   now: number;
 }) {
   const id = useId();
+  const { playbooks } = usePlaybooks();
   const [activeWindow, setActiveWindow] = useState<Window>("last20");
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
   const stats = useMemo(() => runningStats(trades, now), [trades, now]);
@@ -161,7 +163,7 @@ export function RunningStatsCard({
   const rows = breakdown === "playbook"
     ? stats.byPlaybook.map((summary) => ({
         key: summary.playbookId,
-        label: playbookName(summary.playbookId) ?? summary.playbookId ?? "Unassigned",
+        label: playbookName(summary.playbookId, playbooks) ?? summary.playbookId ?? "Unassigned",
         summary,
       }))
     : breakdown === "tag"

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { EXECUTION_TAGS, PLAYBOOKS, SETUP_TAGS, checklistFor, playbookName } from "@/lib/playbooks";
+import { EXECUTION_TAGS, SETUP_TAGS, checklistFor, playbookName } from "@/lib/playbooks";
+import { activePlaybooks, usePlaybooks } from "@/lib/playbooks-store";
 import { getTrade, updateTrade, useJournal } from "@/lib/store";
 import { showToast } from "@/lib/toast";
 import { adherence } from "@/lib/trades";
@@ -24,6 +25,7 @@ interface Props {
  */
 export function PitStop({ trade, compact = false }: Props) {
   const journal = useJournal();
+  const { playbooks: allPlaybooks } = usePlaybooks();
 
   const { playbooks, setupTags, executionTags, last } = useMemo(() => {
     const counts = new Map<string, number>();
@@ -32,19 +34,20 @@ export function PitStop({ trade, compact = false }: Props) {
       if (item.playbook_id) counts.set(item.playbook_id, (counts.get(item.playbook_id) ?? 0) + 1);
       for (const tag of item.quick_tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
-    const ordered = [...PLAYBOOKS].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
+    // Archived playbooks leave the picker, except the one this trade is already filed under.
+    const ordered = activePlaybooks(allPlaybooks, trade.playbook_id).slice().sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
     const previous = journal.trades.find((item) => item.id !== trade.id && item.is_sample === trade.is_sample && Date.parse(item.entry_time) < Date.parse(trade.entry_time) && (item.playbook_id || item.quick_tags.length));
     return { playbooks: ordered, setupTags: byUsage(SETUP_TAGS, counts), executionTags: byUsage(EXECUTION_TAGS, counts), last: previous };
-  }, [journal.trades, trade.id, trade.is_sample, trade.entry_time]);
+  }, [journal.trades, allPlaybooks, trade.id, trade.is_sample, trade.entry_time, trade.playbook_id]);
 
   const setPlaybook = (id: string) => {
     if (trade.playbook_id === id) {
       const before = { playbook_id: trade.playbook_id, checklist_state: trade.checklist_state };
       updateTrade(trade.id, { playbook_id: null, checklist_state: [] });
-      showToast(`Removed ${playbookName(id)}`, { label: "Undo", run: () => updateTrade(trade.id, before) });
+      showToast(`Removed ${playbookName(id, allPlaybooks)}`, { label: "Undo", run: () => updateTrade(trade.id, before) });
     } else {
       // The rules are frozen on the trade now; editing a playbook later never rescores old trades (UX-50).
-      updateTrade(trade.id, { playbook_id: id, checklist_state: checklistFor(id) });
+      updateTrade(trade.id, { playbook_id: id, checklist_state: checklistFor(id, allPlaybooks) });
     }
   };
 
@@ -58,7 +61,7 @@ export function PitStop({ trade, compact = false }: Props) {
   const sameAsLast = () => {
     if (!last) return;
     const before = { playbook_id: trade.playbook_id, checklist_state: trade.checklist_state, quick_tags: trade.quick_tags };
-    updateTrade(trade.id, { playbook_id: last.playbook_id, checklist_state: checklistFor(last.playbook_id), quick_tags: [...last.quick_tags] });
+    updateTrade(trade.id, { playbook_id: last.playbook_id, checklist_state: checklistFor(last.playbook_id, allPlaybooks), quick_tags: [...last.quick_tags] });
     showToast("Copied from the last trade", { label: "Undo", run: () => updateTrade(trade.id, before) });
   };
 
@@ -91,7 +94,7 @@ export function PitStop({ trade, compact = false }: Props) {
           <h4>Rules <span className={`seal ${score.followed === score.total ? "full" : ""}`}>{score.followed}/{score.total} followed</span></h4>
           <ul className="checklist">
             {trade.checklist_state.map((rule) => (
-              <li key={rule.id}><label><input type="checkbox" checked={rule.checked} onChange={() => toggleRule(rule.id)} /><span>{rule.label}</span></label></li>
+              <li key={rule.id}><label><span>{rule.label}</span><input type="checkbox" checked={rule.checked} onChange={() => toggleRule(rule.id)} /></label></li>
             ))}
           </ul>
         </div>

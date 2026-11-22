@@ -8,6 +8,8 @@ import type { ParseBackupResult } from "@/lib/store";
 import { getChallengesBackup, restoreChallenges } from "@/lib/challenge-store";
 import { getMoodBackup, restoreMood } from "@/lib/mood-store";
 import { getAccountsBackup, restoreAccounts } from "@/lib/accounts-store";
+import { getPlaybooksBackup, restorePlaybooks } from "@/lib/playbooks-store";
+import { PlaybookEditor } from "./PlaybookEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 
@@ -79,7 +81,7 @@ export function TuneScreen() {
   const sampleCount = journal.trades.length - realCount;
 
   const downloadBackup = () => {
-    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup());
+    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup());
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -119,6 +121,8 @@ export function TuneScreen() {
     if (pending.mood) restoreMood(pending.mood);
     if (pending.accounts) restoreAccounts(pending.accounts);
     restoreChallenges(pending.challenges);
+    // An older backup has no playbook list: keep this device's playbooks.
+    if (pending.playbooks) restorePlaybooks(pending.playbooks);
     const total = pending.trades.length;
     setPending(null);
     setError(null);
@@ -361,6 +365,12 @@ export function TuneScreen() {
         </div>
       </section>
 
+      <div className="section-title" id="playbooks">
+        <h2>Playbooks</h2>
+        <span>Setups &amp; rules</span>
+      </div>
+      <PlaybookEditor />
+
       <div className="section-title">
         <h2>Journal backup</h2>
         <span>Local file only</span>
@@ -369,7 +379,7 @@ export function TuneScreen() {
         <p className="muted" style={{ fontSize: 13 }}>
           Your journal lives in this browser&apos;s storage ({realCount} {realCount === 1 ? "trade" : "trades"}
           {sampleCount > 0 ? ` + ${sampleCount} ${sampleCount === 1 ? "sample" : "samples"}` : ""}); clearing site data deletes it.
-          Backups save your trades (notes, prices, tags, checklist, playbook) and device settings, including saved challenges, to a local JSON file with no network upload.
+          Backups save your trades (notes, prices, tags, checklist, playbook) and device settings, including saved challenges and your playbooks, to a local JSON file with no network upload.
           Candle caches stay in IndexedDB and are not inside the file—charts for real trades re-fetch candles from Yahoo Finance when opened (and samples keep their offline fixture bars).
         </p>
 
@@ -410,7 +420,7 @@ export function TuneScreen() {
                 {pending.sampleCount > 0 ? ` and ${pending.sampleCount} labelled ${pending.sampleCount === 1 ? "sample" : "samples"}` : ""}
               </b>
               {pending.exportedAt ? ` exported ${formatDateTime(pending.exportedAt, prefs.timeZone)}` : ""}
-              {pending.prefs ? ", plus saved preferences" : ""}. Saved challenges will also be replaced{pending.challenges?.length ? ` with ${pending.challenges.length} from this file` : " with an empty list"}. Charts for real trades will re-fetch Yahoo Finance candles when opened (and samples keep their offline fixture bars).
+              {pending.prefs ? ", plus saved preferences" : ""}. Saved challenges will also be replaced{pending.challenges?.length ? ` with ${pending.challenges.length} from this file` : " with an empty list"}.{pending.playbooks ? ` Playbooks will be replaced with the ${pending.playbooks.length} in this file.` : " This file has no playbooks, so the ones on this device stay."} Charts for real trades will re-fetch Yahoo Finance candles when opened (and samples keep their offline fixture bars).
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
               <button type="button" className="btn-primary" onClick={confirmRestore}>
