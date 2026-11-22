@@ -9,6 +9,7 @@ import { getChallengesBackup, restoreChallenges } from "@/lib/challenge-store";
 import { getMoodBackup, restoreMood } from "@/lib/mood-store";
 import { getAccountsBackup, restoreAccounts } from "@/lib/accounts-store";
 import { getPlaybooksBackup, restorePlaybooks } from "@/lib/playbooks-store";
+import { getPlansBackup, restorePlans } from "@/lib/plans-store";
 import { PlaybookEditor } from "./PlaybookEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -81,7 +82,7 @@ export function TuneScreen() {
   const sampleCount = journal.trades.length - realCount;
 
   const downloadBackup = () => {
-    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup());
+    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup());
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -123,6 +124,8 @@ export function TuneScreen() {
     restoreChallenges(pending.challenges);
     // An older backup has no playbook list: keep this device's playbooks.
     if (pending.playbooks) restorePlaybooks(pending.playbooks);
+    // An older backup has no plans: keep this device's plans.
+    if (pending.plans) restorePlans(pending.plans);
     const total = pending.trades.length;
     setPending(null);
     setError(null);
