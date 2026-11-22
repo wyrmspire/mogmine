@@ -303,6 +303,12 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate?.();
   }
 
+  /** Apply a view-only edit immediately, even if the trade and candles did not change. */
+  setBackwardContinuation(on: boolean) {
+    if (Boolean(this.config.extendBackward) === on) return;
+    this.update({ ...this.config, extendBackward: on });
+  }
+
   /** Hide the box when its fills have no bar to sit on (issue #51). The price scale still keeps the fills. */
   setHidden(on: boolean) {
     if (this.hidden === on) return;

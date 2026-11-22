@@ -79,6 +79,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Codex — recurring review and backward continuation (#34), Chart lane released
+
+- Run `20261122T033021Z` fast-forwarded `feat/td-render-pipeline` to `9a13989` and left no TD-3 source diff. The live Position Box now updates its backward rays immediately on `‹30` and `Fit`.
+- `npm test` passed 414 tests. Mark, validator and observer tests passed 63 under `TZ=Pacific/Auckland`. Typecheck, lint, build and diff check passed with the existing PostCSS warning. Build generated 8/8 pages.
+- Chrome at 390×844 widened 45 → 75 bars and drew three backward rays, then cleared them on Fit. Chart pixels reached the 1080px Trade Card PNG. Candle refresh and the 1m/5m round trip kept the canvas and produced zero page errors or horizontal overflow.
+- TD-3 still needs a `Mark[]` Canvas painter and the D-010 screenshot check. Preserve the `‹30` / Fit round trip. For #35, compute findings from the displayed bars and use one result for chart flags and their text.
+
 ### 2026-11-22 — Codex — recurring review and TD-2 linked target labels (#34), Chart lane released
 
 - Run `20261122T030021Z` had no source diff or TD-3 commits. The TD-2 regression expected `T2` on a repriced linked exit and got `TP`. The display list now uses the explicit target key or a matching working order ID, preserving basis.
