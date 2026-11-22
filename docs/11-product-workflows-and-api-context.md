@@ -87,6 +87,8 @@ Requested candidates: session VWAP, weekly VWAP, 200 EMA and upper/lower bands. 
 - Indicator presets select desired overlays; availability is evaluated for each chart. Show why a selected overlay is unavailable and distinguish provisional from complete values.
 - At any review time, use only inputs available then. Indicator corrections invalidate affected results and mark dependent reviews stale. Do not merge providers or contracts silently to fill gaps.
 
+The pure session calculator now accepts an explicit Globex or RTH anchor. It uses native bars and reports coverage for session VWAP, an OHLCV profile estimate and the requested key levels, with point-in-time trend helpers. `OD-18` and `OD-50` remain open for app defaults and display. [Calculation details and chart follow-up](codex-indicator-audit.md#core-math-in-this-slice)
+
 ## 5. Assistant API without assistant-controlled layout
 
 Proposed flow: an authenticated assistant requests bounded context, receives stable references and coverage, submits a draft plan or annotation, and receives its saved id/revision or a useful validation error. The app renders it using its existing components. No request supplies arbitrary HTML, CSS, JavaScript or screen coordinates.

@@ -1,6 +1,6 @@
 // Pure list logic: grouping, filtering, day statistics, and running statistics across days (R-08a).
 // Lists never see candles (B-42).
-import { sessionDate } from "./session.ts";
+import { sessionDate, sessionWeekMonday } from "./session.ts";
 import { adherence, isOpen, rMultiple, tradePnl } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
 
@@ -240,13 +240,6 @@ function summarizeTrades(trades: TradeRecord[]): SummaryStats {
           }
         : null,
   };
-}
-
-/** Session dates are day labels. UTC here performs calendar arithmetic on the label. */
-function sessionWeekMonday(date: string): string {
-  const day = new Date(`${date}T00:00:00Z`);
-  day.setUTCDate(day.getUTCDate() - (day.getUTCDay() + 6) % 7);
-  return day.toISOString().slice(0, 10);
 }
 
 /**

@@ -69,6 +69,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Codex — session indicators and trend math, Core math lane released
+Did: Added point-in-time VWAP, POC/value area, prior-day, overnight and week-to-date extremes, dated settlement, and trend/level distances. Uses regular New York hours and an explicit anchor. Interim profile and trend choices are in `OD-50`.
+Files: [Indicator summary](docs/codex-indicator-summary.md#files-changed) and [audit](docs/codex-indicator-audit.md).
+Checked: `npm test` 342 passed, 0 failed. Indicator tests under `TZ=Pacific/Auckland` 13 passed. Typecheck exited 0, lint had 0 errors and the existing PostCSS warning, and diff check exited 0.
+Left: Supply session coverage and freeze the entry snapshot before wiring the chart and card. The audit details candle-only autoscale and off-frame flags. Work is local on `codex/indicator-level-trend-math`.
+
 ### 2026-11-21 — Claude (Opus 5.5 session) — R-07a + R-07b playbook store and editor, Data lane released
 Did:      `lib/playbooks-store.ts` (`mogmine-playbooks-v1`, seeds, `user_id`, archive-only, validation, backup round-trip) and Tune → Playbooks (`components/PlaybookEditor.tsx`: add, rename, default style, add/reorder/remove rules, archive/restore). Pickers, stats labels, rows and Clean Run setup read the store. Samples stay on seed rules. Open choices recorded as `OD-49`.
 Files:    `lib/playbooks.ts`, `lib/playbooks-store.ts` (new), `lib/store.ts`, `lib/fixtures.ts`, `lib/__tests__/playbooks-store.test.ts` (new), `components/PlaybookEditor.tsx` (new), `components/{TuneScreen,AppShell,PitStop,ChallengeSetupSheet,TradeRow,RunningStatsCard}.tsx`, `app/globals.css`, `docs/16`, `DECISIONS.md`, `NOTES.md`.
