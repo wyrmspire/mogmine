@@ -94,7 +94,7 @@ export function PitStop({ trade, compact = false }: Props) {
           <h4>Rules <span className={`seal ${score.followed === score.total ? "full" : ""}`}>{score.followed}/{score.total} followed</span></h4>
           <ul className="checklist">
             {trade.checklist_state.map((rule) => (
-              <li key={rule.id}><label><input type="checkbox" checked={rule.checked} onChange={() => toggleRule(rule.id)} /><span>{rule.label}</span></label></li>
+              <li key={rule.id}><label><span>{rule.label}</span><input type="checkbox" checked={rule.checked} onChange={() => toggleRule(rule.id)} /></label></li>
             ))}
           </ul>
         </div>

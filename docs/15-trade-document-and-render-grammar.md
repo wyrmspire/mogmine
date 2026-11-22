@@ -9,7 +9,7 @@ IDs are section numbers. Open choices are `OD-30`–`OD-34` in [DECISIONS.md](..
 - [12 §9](12-levels-zones-and-daily-markup.md#9-position-boxes-sizing-and-the-three-styles) and `OD-23`, for the planned, actual and archived styles.
 - [08 §2 and UX-67, UX-80](08-ux-notes-viewing-and-journaling.md), for colour-blind safety and the wording of facts.
 
-**Status: proposal.** Nothing in this doc is built. The owner decisions in §1 are settled. The schema and the placement of `plan` are not (§4).
+**Status.** The pure derive, observe and display-list stages are implemented. See §5 for the chart rollout. The owner decisions in §1 are settled. The schema and the placement of `plan` are open (§4).
 
 **Source.** The design note on the owner's box, `/workspace/fable-q/trades-on-chart-design-and-plan.md`. The issue that commits this doc (#32) cites it as `position-box-answer.md`, the name the note had before it was renamed. This doc copies its §2 (render grammar) and §5 (trade document) and applies the owner decisions in §1. It summarises the hindsight part of §3 (§2.5 here). The rest of §3, §4, §6 and §7 stay in the note. Once this doc is merged, it is the spec for the render grammar and the document, and the note is history.
 
@@ -99,6 +99,8 @@ The "no plan" row is a deliberate choice. The chart never invents a target or a 
 
 Wording for the not-filled and cancelled rows assumes the faint zones stay on the plan even when no trade happened. That is my reading of the owner's first decision, not something the owner has said. See `OD-33`.
 
+TD-2 uses `PLAN · cancelled` when a recorded working entry order was cancelled. An implicit entry such as `ex-nottaken` uses `PLAN · not filled`. Both use the recorded entry cancellation time to end the plan area (`OD-33`).
+
 ### 2.4 Partials and scale-ins
 
 - The ACTUAL band is built per lot. Each exit fill closes a slice. Fill opacity scales with the share of the position still open, so a runner looks lighter than the full position.
@@ -180,24 +182,27 @@ Every event also has `seq`, `t` (UTC) and `basis`.
 `deriveTrade(doc, spec)`: pure, no I/O, no candles.
 
 - `status`: `planned`, `working`, `open`, `closed`, `not_taken`.
+- `entry_cancelled_at` keeps the end of a never-filled entry attempt, including cancellations of implicit manual entries.
 - Position over time, average entry and exit, maximum size.
 - Result in ticks, points and dollars. Fees. R against the **first stop in force at the first entry fill** (or an attached opening bracket stop). Gross or net R is open (`OD-10`); the examples have no fees, so the question does not arise in them.
   - A stop reported after the first entry fill can supply initial risk when its order explicitly references that fill with `opening_entry_seq` (issue #33, `OD-43`). An unlinked later stop contributes to the stop path from placement and leaves initial risk and R null when no stop was in force at entry (B-32).
-- `stop_path`: `[{from, to, price}]` segments built from `order` and `modify` events.
+- `stop_path`: segments built from `order` and `modify` events. The locked-profit hatch follows the open position's average entry as fills change it.
+- `exit_past_stop` keeps the stop price used for the comparison so the hatch starts at that price after a move.
 - `outcome`: `target` · `stop` · `trail` · `scratch` · `manual` · `partial_targets` · `not_taken`. From exit reasons, and from price equality with the plan when a reason is missing (then `basis: inferred`).
 - Planned R:R per target.
 
 `observeTrade(derived, candles, barMinutes)`: pure, needs candles. This is `lib/trade-bar-validation.ts` grown up.
 
-- MFE and MAE, with the entry and exit bars handled honestly.
+- MFE and MAE use actual fill prices and bars entirely inside a positive-position window. Fewer than two such bars means the excursion is unavailable. A gap in the expected bars gives partial excursion coverage. Open trades have no final excursion.
 - `stop_traded_through`: for each stop segment, the first completed bar that trades through that segment's price while the position is open.
-- `target_traded_through`: the same for each unfilled target.
-- `fill_outside_bar`: any fill price outside its bar's range plus a tick tolerance (B-12).
-- After-exit facts: the first later touch of the last stop and of each target (hindsight, §2.5).
+- `target_traded_through`: the same for each unfilled target. Use the working order's price and remaining quantity for each segment. Reserve quantity for fills linked by order ID within that segment. For a fill without an ID, match the remaining quantity of active targets at its price, taking explicit target keys in plan order and breaking ties by placement order. A modification, cancellation, or flat position ends the current segment. Apply any remaining executed quantity to unmatched planned targets at that price in plan order (`OD-49`).
+- `fill_outside_bar`: any non-voided fill price outside its own bar's range plus the shared four-tick tolerance for the traded instrument (B-12, `OD-15`).
+- After-exit facts: the first later touch of the stop in force at the exit and of each planned target, up to the assigned New York session close (hindsight, §2.5).
+- For a never-filled plan, `hindsight.not_taken_plan` records inferred evidence from regular trading bars fully inside the window from plan placement to entry cancellation (OD-50). It uses the original plan's order type and levels. A limit or stop uses its direction-specific trigger. A market entry starts at the first eligible bar. The fact retains the entry evidence bar and the first bar reaching any exit level, including all targets reached in that bar. A stop and target on the same bar, or any exit touch on the entry bar, leaves their sequence unresolved. Missing bars or a partial boundary before the first exit touch (or up to cancellation when no exit is seen) leave the outcome unset. The observation leaves the fill ledger, actual outcome, excursions, P&L and R as derived from events.
 
 Structural checks need no candles: position never goes negative, a closed trade ends flat, exits do not precede entries, the stop is on the losing side at placement, and target quantities do not exceed the position.
 
-Each finding keeps the shape the current validator uses (`code`, `barTime`, `price`), plus `basis` and `segment`.
+Each finding keeps the shape the current validator uses (`code`, `barTime`, `price`), plus `basis` and `segment`. Bar comparisons are inferred, even when the fill or order itself came from the broker. `segment` identifies the stop path index, target key or order ID, or fill sequence. Coverage includes the bars of all fills and the expected bars while the position was open. On an open trade the latest supplied bar's start is the cutoff for completed bars. Fill-range findings wait for that cutoff too.
 
 ### 3.4 From document to pixels: a display list
 
@@ -228,6 +233,8 @@ Why this shape:
 - **One source for every surface.** The chart, the Trade Card, the AI snapshot and the archived view all call `buildMarks` with different `detail` and `shield` arguments. Shield cannot be forgotten on one of them.
 - **The same facts feed the AI as text** ([04](04-ai-review-engine.md), B-62). The model is told "exit reason: trail, stop moved 2 times, never widened". It does not read that off an image.
 
+Call `buildMarks` with `options.candleTimes` containing the displayed timeframe's sorted UTC candle opens. Pass observer facts computed from those same candles. Unresolved anchors omit their marks. Nearby execution anchors carry `approximate` (OD-28). Observer flags keep the exact original bar, price, finding identity and basis. At Medium detail, `options.viewRightTime` bounds the continuation to the last visible candle. `options.archived` returns the execution geometry in archived style.
+
 ### 3.5 Example documents
 
 Seven example documents are committed under [`fixtures/trades/`](../fixtures/trades/). They share the header `"schema": "mogmine.trade.v1"`, `"instrument": {"symbol": "MES", "contract": null}`, `"side": "long"`, `"is_sample": true`, and a placeholder `user_id` of all zeros. They contain no real account id, name or balance. Times are UTC: 15:30Z is 09:30 CT. Entry 7600.00, stop 7595.00 (5 points, $25 a contract), target 7610.00 (2R), two contracts, unless stated.
@@ -235,7 +242,7 @@ Seven example documents are committed under [`fixtures/trades/`](../fixtures/tra
 | File | Case | Source | Derived result | Marks |
 | :--- | :--- | :--- | :--- | :--- |
 | `ex-tp.json` | TP hit | broker | `outcome: target`, +2.0R, +$100.00 | Dotted working-order line 15:31–15:34, plan zones, solid green band to the TP edge, `▽ TP` |
-| `ex-sl.json` | SL hit | manual | `outcome: stop`, −1.0R, −$50.00 | Plan zones, solid red band to the SL edge, `▽ SL`. No green anywhere. |
+| `ex-sl.json` | SL hit | manual | `outcome: stop`, −1.0R, −$50.00 | Plan zones, solid red actual band to the SL edge, `▽ SL`. The planned target stays faint green. |
 | `ex-be.json` | Breakeven scratch | manual | `outcome: scratch`, +0.0R | Plan zones, stop path stepping up to entry at 15:44, gray line in place of a band, `▽ BE` |
 | `ex-trail.json` | Trailed stop | broker | `outcome: trail`, +1.2R (risk from the first stop, 5 points) | Stepped stop line, faint hatch from 15:47, solid green band to 7606, `▽ TRAIL`. Risk zone only, no reward zone: the chart does not invent a target. |
 | `ex-ignored.json` | Stop ignored | broker | `outcome: manual`, −1.6R; fact `stop_removed_while_open` at 15:39:20 | Stop line ends at 15:39 with a `✕`, solid red band to 7592, the 7595→7592 part hatched `PAST STOP −0.6R`. In the manual version (no `cancel`) the observer reports `stop_traded_through` with `basis: inferred`, and the hatch is dotted with `≈`. |
@@ -289,7 +296,8 @@ Agents propose and the owner decides. Each item is also in [DECISIONS.md](../DEC
 | Archived style | None | §2.6 |
 | Flags | Entry and exit flags at fill prices | §2.4 (adds the reason text) |
 | `deriveTrade`, `fromLegacy` | Built (`lib/trade-document.ts`, issue #33) | §3.2, §3.3, §3.6 |
-| `observeTrade`, `buildMarks` | Not built | Issues #34 and #35 |
+| `observeTrade` | Built (`lib/trade-bar-validation.ts`, pure slice of #35) | Chart flags and text equivalents follow the display list |
+| `buildMarks` | Built as a pure display list (`lib/trade-marks.ts`, issue #34 TD-2) | Canvas integration and pixel verification in TD-3 |
 | Fixtures | `fixtures/sample-bars.json`, `fixtures/levelsets/` | `fixtures/trades/`, §3.5 |
 
 Nothing on the target list is drawn on a phone yet. Each element needs the §4 mobile checks in [AGENTS.md](../AGENTS.md) when it lands.
