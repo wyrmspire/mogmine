@@ -6,7 +6,7 @@ import type { DiscretionCall } from "../calls.ts";
 import type { Candle } from "../trades.ts";
 
 const minute = 60_000;
-const exitIso = "2026-11-10T20:00:00.000Z"; // Tuesday 14:00 ET; session closes 17:00 ET
+const exitIso = "2026-11-10T20:00:00.000Z"; // Tuesday 15:00 ET; session closes 17:00 ET, 120 minutes later
 const exit = Date.parse(exitIso);
 
 function bar(minutes: number, low: number, high: number): Candle {
@@ -106,10 +106,11 @@ test("short trades grade with the sign flipped", () => {
 test("same bar, partial bars, neither by close, no plan, open trade, other kinds", () => {
   assert.equal(gradeCall(call(), longCut, [bar(5, 5989, 6021)]).grade, "unknown");
   assert.equal(gradeCall(call(), longCut, [bar(5, 5994, 5999)]).grade, "unknown"); // bars stop well before close
-  const toClose = Array.from({ length: 181 }, (_, i) => bar(i, 5994, 5999));
+  const toClose = Array.from({ length: 120 }, (_, i) => bar(i, 5994, 5999));
   const even = gradeCall(call(), longCut, toClose);
   assert.equal(even.grade, "even");
-  assert.equal(even.ticks, 0);
+  assert.equal(even.ticks, null);
+  assert.equal(even.r, null);
   assert.equal(gradeCall(call(), { ...longCut, stop_loss_price: null, initial_stop_price: null, planned_target_price: null }, []).grade, "not_graded");
   assert.equal(gradeCall(call(), { ...longCut, exit_time: null, exit_price: null }, []).grade, "not_graded");
   assert.equal(gradeCall(call({ kind: "hold" }), longCut, []).grade, "not_graded");

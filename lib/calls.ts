@@ -130,7 +130,7 @@ export interface CallGradeFact {
   /** Always labelled as hindsight wherever this is shown. */
   hindsight: true;
   grade: CallGrade;
-  /** Ticks per contract the call saved (positive) or cost (negative) against the default. */
+  /** Ticks per contract the call saved (positive) or cost (negative) against the default. Null when there is no amount (even, unknown, not graded). */
   ticks: number | null;
   /** The same in R of the initial risk. Null without a stop (guardrail 4). */
   r: number | null;
@@ -200,5 +200,6 @@ export function gradeCall(
   if (fact.incomplete) {
     return { hindsight: true, grade: "unknown", ticks: null, r: null, sentence: "Hindsight: can't tell yet. Bars after the exit do not reach the session close." };
   }
-  return { hindsight: true, grade: "even", ticks: 0, r: 0, sentence: "Hindsight: even. Neither the stop nor the target was reached by the session close." };
+  // Holding would still have been open at the close, so there is no saved or lost amount to report.
+  return { hindsight: true, grade: "even", ticks: null, r: null, sentence: "Hindsight: even. Neither the stop nor the target was reached by the session close." };
 }
