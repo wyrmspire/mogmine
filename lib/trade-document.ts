@@ -225,6 +225,8 @@ export interface StopSegment {
   widened: boolean;
   /** True when this stop sits at or beyond entry on the winning side. */
   locked_profit: boolean;
+  /** Entry price used to classify this stop when it was placed or moved. */
+  entry_price_at_placement: number | null;
   end_reason: StopSegmentEndReason;
 }
 
@@ -259,6 +261,8 @@ export interface DerivedFact {
   price: number;
   basis: EventBasis;
   order?: string;
+  /** The reference stop used for an exit_past_stop comparison. */
+  stop_price?: number;
   /** Signed R beyond the initial stop for `exit_past_stop` (e.g. -0.6). */
   extra_r?: number | null;
 }
@@ -303,6 +307,8 @@ export interface DerivedTrade {
   entry_time: string | null;
   /** Final exit fill time when closed, or null otherwise. */
   exit_time: string | null;
+  /** End of a never-filled entry attempt, including cancellations of implicit manual orders. */
+  entry_cancelled_at: string | null;
   /** Weighted average entry price across all non-voided entry fills, or null. */
   avg_entry_price: number | null;
   /** Weighted average exit price across all non-voided exit fills, or null. */
@@ -355,6 +361,14 @@ export interface DerivedTrade {
   facts: DerivedFact[];
   /** Structural validation errors. Reported, never thrown. */
   errors: StructuralError[];
+}
+
+/** The last stop still working when the final fill flattened the trade. */
+export function stopAtExit(derived: DerivedTrade): StopSegment | undefined {
+  if (derived.status !== "closed") return undefined;
+  const exitSeq = derived.position_timeline.at(-1)?.seq;
+  return derived.stop_path.findLast((stop) => stop.to_seq === exitSeq
+    && (stop.end_reason === "filled" || stop.end_reason === "position_closed"));
 }
 
 const TICK_TOLERANCE = 1e-6;
@@ -564,7 +578,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
   let totalContractTicks = 0;
   let closedQty = 0;
   let hasEntryFill = false;
-  let entryCancelled = false;
+  let entryCancellation: CancelEvent | null = null;
   let ocoCancelledWhileOpen = false;
   let stopMoveCount = 0;
   let stopWidened = false;
@@ -808,6 +822,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             seg.basis = event.basis;
             seg.from_seq = event.seq;
             seg.locked_profit = refEntry != null ? isStopLockingProfit(refEntry, event.price, sign, resolvedSpec) : false;
+            seg.entry_price_at_placement = refEntry;
             activeStops.delete("stop");
             activeStops.set(event.order, {
               order: event.order,
@@ -837,6 +852,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
               basis: event.basis,
               widened: false,
               locked_profit: refEntry != null ? isStopLockingProfit(refEntry, event.price, sign, resolvedSpec) : false,
+              entry_price_at_placement: refEntry,
               end_reason: null,
             });
             activeStops.set(event.order, {
@@ -889,6 +905,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             basis: event.basis,
             widened,
             locked_profit: lockedProfit,
+            entry_price_at_placement: refEntry,
             end_reason: null,
           });
           activeStop.price = event.price;
@@ -951,7 +968,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
             workingOrders[entryOrder.segmentIndex].end_reason = "cancelled";
             activeEntryOrders.delete(event.order);
           }
-          if (!hasEntryFill) entryCancelled = true;
+          if (!hasEntryFill) entryCancellation = event;
         }
 
         const targetOrder = activeTargetOrders.get(event.order);
@@ -1056,6 +1073,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
               basis: plan.basis,
               widened: false,
               locked_profit: isStopLockingProfit(event.price, plan.stop, sign, resolvedSpec),
+              entry_price_at_placement: event.price,
               end_reason: null,
             });
             activeStops.set("stop", {
@@ -1282,7 +1300,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     status = position > 0 ? "open" : "closed";
   } else if (activeEntryOrders.size > 0) {
     status = "working";
-  } else if (entryCancelled) {
+  } else if (entryCancellation != null) {
     status = "not_taken";
   } else if (plan) {
     status = "planned";
@@ -1363,6 +1381,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
           seq: finalExit.seq,
           t: finalExit.t,
           price: finalExit.price,
+          stop_price: referenceStopPrice,
           basis: finalExit.fillBasis,
           extra_r: extraR,
         });
@@ -1375,8 +1394,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
   let outcomeBasis: EventBasis | null = null;
   if (status === "not_taken") {
     outcome = "not_taken";
-    const cancelEv = [...activeEvents].reverse().find((e) => e.type === "cancel");
-    outcomeBasis = cancelEv?.basis ?? plan?.basis ?? null;
+    outcomeBasis = entryCancellation?.basis ?? plan?.basis ?? null;
   } else if (status === "closed") {
     const combineBasis = (bases: EventBasis[]): EventBasis => {
       if (bases.includes("inferred")) return "inferred";
@@ -1459,6 +1477,7 @@ export function deriveTrade(doc: TradeDocument, spec?: FuturesContractSpec | nul
     outcome_basis: outcomeBasis,
     entry_time: firstEntryTime,
     exit_time: status === "closed" ? lastExitTime : null,
+    entry_cancelled_at: status === "not_taken" ? entryCancellation?.t ?? null : null,
     avg_entry_price: totalEntryQty > 0 ? entryWeightedSum / totalEntryQty : null,
     avg_exit_price: totalExitQty > 0 ? exitWeightedSum / totalExitQty : null,
     first_entry_price: firstEntryPrice,

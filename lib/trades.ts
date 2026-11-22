@@ -358,7 +358,7 @@ export const NEARBY_BAR_TOLERANCE_MS = 30 * 60_000;
  * Align `instant` (UTC ms) to the sorted bar open `times`. Exact containment wins. Otherwise the
  * nearest bar counts only within the tolerance; ties go to the earlier bar.
  */
-export function alignToBar(times: number[], instant: number, timeframe: Timeframe): BarAlignment {
+export function alignToBar(times: readonly number[], instant: number, timeframe: Timeframe): BarAlignment {
   if (!times.length || !Number.isFinite(instant)) return { kind: "unresolved" };
   const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
   const open = Math.floor(instant / barMs) * barMs;
