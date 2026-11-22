@@ -18,7 +18,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`), `docs/25` (discretionary calls; proposal under `OD-52`).
-- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-54`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
+- Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-55`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
 - `mogprompt.md` and `docs/` still disagree on many names. The interim rule is that `docs/` wins. The full list is in the [drift register](DECISIONS.md#3-spec-drift-register).
 
@@ -40,7 +40,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 6. **`R-07a` — Local playbook store & backup, done** (`lib/playbooks-store.ts`, `lib/playbooks.ts`, `lib/store.ts`, `components/AppShell.tsx`, `components/TuneScreen.tsx`): `mogmine-playbooks-v1` seeded from `PLAYBOOKS`, `user_id` set (Invariant 7), round-tripped in journal backup/restore.
 7. **`R-07b` — Playbook editor UI, done** (`components/TuneScreen.tsx`, `docs/16` §R-07): add, rename, reorder rules, archive (no hard delete); saved trades keep their frozen checklists (`UX-50`).
 8. **`LV-1` — Pure computed levels, done** ([docs/24](docs/24-planning-sessions-and-after-session-review.md) §5, formulas in docs/12 §3A): PDH/PDL/PDC, RTH open, Globex open, ONH/ONL, week high/low, tested against the docs/12 Nov 12 worked check. PR #152 follows the merged TD-3 painter under `D-011`.
-9. **`LV-2` — Draw computed levels on the trade chart, done** (`SessionLevelsPrimitive`, Canvas only, view-options toggle).
+9. **`LV-2` — Draw computed levels on the trade chart, done** (`components/SessionLevelsPrimitive.ts`, `lib/chart-levels.ts`, `components/useTradeLevels.ts`): Canvas rays and stacked right-edge pills from prior-session and overnight day-mode bars, View → Session levels toggle, in the Trade Card PNG. Follow-ups under `OD-55`: `5m` fallback for Yahoo `1m` Globex gaps, right offset for labels (`UI-2`).
 10. **`PS-1` — Planning-session model and store, done** (`lib/plans.ts`, `lib/plans-store.ts`, `mogmine-plans-v1`, presets Pre-Globex / Pre-market / Pre-power hour / Pre-MOC / Pre-gap fill / custom, revisions, after-the-fact flag, backup round-trip). Shape is `OD-51`.
 11. **`PS-2` — Plan screen on Today** (start a "Pre-…" session fast, levels with tick steppers, observations).
 12. **`PS-3` — Planning-session levels on trade charts.**
@@ -78,6 +78,13 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-22 — Claude — LV-2 follow-up to PR #154 (#26), Chart lane released
+
+- #154 merged while my claimed LV-2 branch was open. It read levels only from the trade's 15-hour candle window, which never holds the prior session, so PDH/PDL/RTH levels could not appear; its `autoscaleInfo` let S2/R2 compress the chart; pills overlapped; roles ignored the side of price.
+- Fix: `useTradeLevels` loads the prior session and this session up to entry (two cached day-mode requests, no look-ahead). `lib/chart-levels.ts` roles/grouping, `lib/label-stack.ts` stacking with leader ticks, `autoscaleInfo()` → null, proxy PDC still dashed. View shows `N shown · M missing`.
+- `npm test`, typecheck, lint (existing PostCSS warning only), build 8/8 and `node scripts/check-session-levels.mjs` pass; output in PR. Headless Chrome 390×844 on a seeded Nov 19 trade with live Yahoo bars: zero overflow, 5 levels drawn, Trade Card 1080×1350 includes them. Real phone not checked (AC-11).
+- Finding (`OD-55`): Yahoo `1m` misses 10–29 Globex minutes per session, so PDH/PDL/ONH/ONL/week are withheld nearly always. Next: `5m` fallback for that window, then PS-2.
 
 ### 2026-11-22 — Gemini — PS-1 (OD-51), Data lane released
 
