@@ -19,39 +19,47 @@ export interface CallKindSpec {
   against: boolean;
   /** Whether the call must belong to a trade, must not, or may. */
   trade: "required" | "forbidden" | "optional";
-  reasons: readonly string[];
+  reasons: readonly SeedReason[];
 }
 
-export const SHARED_CALL_REASONS = ["Gut", "News soon", "Tired / tilted", "Daily limit close"] as const;
+/** Groups chips across kinds for filters and Mood Shape evidence (docs/18). */
+export type ReasonFamily = "market" | "plan" | "risk" | "state" | "other";
+
+/** A seed reason: label and family. Its stable id comes from `seedReasonId`. */
+export type SeedReason = readonly [label: string, family: ReasonFamily];
+
+export const SHARED_CALL_REASONS: readonly SeedReason[] = [
+  ["Gut", "state"], ["News soon", "market"], ["Tired / tilted", "state"], ["Daily limit close", "risk"],
+];
 
 export const CALL_KINDS: readonly CallKindSpec[] = [
   {
     kind: "skip", label: "Skip", glyph: "⊘", prompt: "Setup's here. Why not?", against: true, trade: "forbidden",
-    reasons: ["Late in move", "No room to level", "Against HTF", "NQ not confirming", "Chop", "Already hit target for the day", "Spread / speed"],
+    reasons: [["Late in move", "market"], ["No room to level", "plan"], ["Against HTF", "market"], ["NQ not confirming", "market"], ["Chop", "market"], ["Already hit target for the day", "risk"], ["Spread / speed", "market"]],
   },
   {
     kind: "flip", label: "Flip", glyph: "⇅", prompt: "Signal says one way. Why the other?", against: true, trade: "optional",
-    reasons: ["Failed breakout", "Trapped traders", "NQ diverging", "Level held", "Absorption", "HTF says other way"],
+    reasons: [["Failed breakout", "market"], ["Trapped traders", "market"], ["NQ diverging", "market"], ["Level held", "plan"], ["Absorption", "market"], ["HTF says other way", "market"]],
   },
   {
     kind: "cut", label: "Cut", glyph: "✂", prompt: "Why out before stop or target?", against: false, trade: "required",
-    reasons: ["Thesis broken", "Stalled at level", "NQ turned", "Time stop", "Volume dried up", "Scared"],
+    reasons: [["Thesis broken", "plan"], ["Stalled at level", "market"], ["NQ turned", "market"], ["Time stop", "plan"], ["Volume dried up", "market"], ["Scared", "state"]],
   },
   {
     kind: "early_take", label: "Early take", glyph: "◎", prompt: "Why bank it before target?", against: false, trade: "required",
-    reasons: ["Into a level", "Momentum fading", "Spike / wick", "Locked the day", "Scared"],
+    reasons: [["Into a level", "plan"], ["Momentum fading", "market"], ["Spike / wick", "market"], ["Locked the day", "risk"], ["Scared", "state"]],
   },
   {
     kind: "stop_here", label: "Stop here", glyph: "⊢", prompt: "Why is the stop at this price?", against: false, trade: "required",
-    reasons: ["Behind level", "Behind swing", "ATR / ADR", "Fixed ticks", "Round number", "Below liquidity"],
+    reasons: [["Behind level", "plan"], ["Behind swing", "market"], ["ATR / ADR", "risk"], ["Fixed ticks", "risk"], ["Round number", "market"], ["Below liquidity", "market"]],
   },
   {
     kind: "hold", label: "Hold", glyph: "→", prompt: "Why still in past target or time?", against: false, trade: "required",
-    reasons: ["Trend day", "No opposing level", "Trailing", "NQ leading"],
+    reasons: [["Trend day", "market"], ["No opposing level", "plan"], ["Trailing", "plan"], ["NQ leading", "market"]],
   },
   {
     kind: "size", label: "Size", glyph: "±", prompt: "Why more or less than normal?", against: false, trade: "required",
-    reasons: ["A+ setup", "Low conviction", "Near loss limit", "After a loss", "Playing with profit"],
+    reasons: [["A+ setup", "plan"], ["Low conviction", "state"], ["Near loss limit", "risk"], ["After a loss", "state"], ["Playing with profit", "state"]],
   },
 ];
 
@@ -59,10 +67,52 @@ export function callKindSpec(kind: string): CallKindSpec | null {
   return CALL_KINDS.find((spec) => spec.kind === kind) ?? null;
 }
 
-/** Reason chips offered for a kind: its own, then the shared ones. */
-export function reasonsFor(kind: CallKind): string[] {
+/** A reason chip with a stable id. Renames keep the id, so stats stay joined (docs/playbook-design/04 §1.3). */
+export interface ReasonChip {
+  id: string;
+  label: string;
+  family: ReasonFamily;
+  /** Hidden from pickers; still labels and validates past calls. */
+  retired: boolean;
+}
+
+/** A chip as it was when the call was saved. Stats group by id; the call shows its own label. */
+export interface FrozenReason {
+  id: string;
+  label: string;
+  family: ReasonFamily;
+}
+
+export const REASON_FAMILIES: readonly ReasonFamily[] = ["market", "plan", "risk", "state", "other"];
+export const REASON_LABEL_MAX = 32;
+
+function slug(label: string) {
+  return label.toLowerCase().replace(/\+/g, " plus ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/** Stable seed id, for example `seed:cut:thesis-broken` or `seed:shared:gut`. Never changes once shipped. */
+export function seedReasonId(scope: CallKind | "shared", label: string) {
+  return `seed:${scope}:${slug(label)}`;
+}
+
+function seedChips(scope: CallKind | "shared", seeds: readonly SeedReason[]): ReasonChip[] {
+  return seeds.map(([label, family]) => ({ id: seedReasonId(scope, label), label, family, retired: false }));
+}
+
+/** The shared seed chips (Gut, News soon, …), offered with every kind. */
+export function sharedReasonChips(): ReasonChip[] {
+  return seedChips("shared", SHARED_CALL_REASONS);
+}
+
+/** Seed chips offered for a kind: its own, then the shared ones. The prompt library (DP-2) is seeded from this. */
+export function reasonChipsFor(kind: CallKind): ReasonChip[] {
   const spec = callKindSpec(kind);
-  return spec ? [...spec.reasons, ...SHARED_CALL_REASONS] : [];
+  return spec ? [...seedChips(kind, spec.reasons), ...sharedReasonChips()] : [];
+}
+
+/** Freeze a chip onto a call. The call keeps this label even if the chip is renamed or retired later. */
+export function freezeReason(chip: Pick<ReasonChip, "id" | "label" | "family">): FrozenReason {
+  return { id: chip.id, label: chip.label, family: chip.family };
 }
 
 export interface DiscretionCall {
@@ -80,7 +130,8 @@ export interface DiscretionCall {
   price_ticks: number | null;
   /** The setup's own direction, for Skip and Flip. */
   signal_direction: TradeDirection | null;
-  reasons: string[];
+  /** Chip ids with the labels they had when saved (DC-1b). */
+  reasons: FrozenReason[];
   note: string;
   conviction: 1 | 2 | 3 | null;
 }
@@ -96,8 +147,17 @@ export function isAfterTheFact(call: Pick<DiscretionCall, "made_at" | "recorded_
   return recorded - made > AFTER_THE_FACT_MS;
 }
 
-/** Problems with a call, as plain sentences. Empty means valid. */
-export function validateCall(call: DiscretionCall): string[] {
+/**
+ * Problems with a call, as plain sentences. Empty means valid.
+ * A reason is valid when its id is among `offered` (the prompt's chips, retired ones included) or was
+ * already on `previous` (the saved version being edited), so a call stays valid after its chip is
+ * renamed or retired. `offered` defaults to the seed chips for the kind.
+ */
+export function validateCall(
+  call: DiscretionCall,
+  offered?: readonly Pick<ReasonChip, "id">[],
+  previous?: Pick<DiscretionCall, "reasons"> | null,
+): string[] {
   const problems: string[] = [];
   const spec = callKindSpec(call.kind);
   if (!spec) return [`Unknown call kind "${call.kind}".`];
@@ -116,11 +176,16 @@ export function validateCall(call: DiscretionCall): string[] {
   if (call.price != null && !Number.isFinite(call.price)) problems.push("The price is not a number.");
   if (call.price_ticks != null && !Number.isInteger(call.price_ticks)) problems.push("The price in ticks must be a whole number.");
   if (call.conviction != null && ![1, 2, 3].includes(call.conviction)) problems.push("Conviction is 1, 2 or 3.");
-  const allowed = new Set(reasonsFor(spec.kind));
+  const allowed = new Set((offered ?? reasonChipsFor(spec.kind)).map((chip) => chip.id));
+  for (const reason of previous?.reasons ?? []) allowed.add(reason.id);
   for (const reason of call.reasons) {
-    if (!allowed.has(reason)) problems.push(`"${reason}" is not a ${spec.label} reason.`);
+    if (!reason.label?.trim() || reason.label.length > REASON_LABEL_MAX) {
+      problems.push(`A reason label must be 1–${REASON_LABEL_MAX} characters.`);
+    }
+    if (!REASON_FAMILIES.includes(reason.family)) problems.push(`"${reason.label}" has an unknown family.`);
+    if (!allowed.has(reason.id)) problems.push(`"${reason.label}" is not a ${spec.label} reason.`);
   }
-  if (new Set(call.reasons).size !== call.reasons.length) problems.push("A reason is listed twice.");
+  if (new Set(call.reasons.map((reason) => reason.id)).size !== call.reasons.length) problems.push("A reason is listed twice.");
   return problems;
 }
 

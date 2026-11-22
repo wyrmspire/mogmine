@@ -516,7 +516,7 @@ Stats over many calls need a grade per call. Grades need candles, and list views
 
 | Slice | What | Needs |
 | --- | --- | --- |
-| `DC-1b` | Calls store chip ids with frozen labels (`FrozenReason`). `validateCall` takes the library. Seeds derived from `CALL_KINDS` with stable ids. Tests. **Must land before `DC-2`.** | `DC-1` |
+| `DC-1b` | **Done.** Calls store chip ids with frozen labels (`FrozenReason`). `validateCall` takes the offered chips and the saved version. Seeds derived from `CALL_KINDS` with stable ids. Tests. No call was ever stored, so `DiscretionCall.reasons` changed in place; `DC-2` adds the other §1.4 fields to the same type rather than a separate `DiscretionCallV2`. | `DC-1` |
 | `DP-1` | Pure `detectDeviations` + `pendingAsks` with golden cases: cut, early take, scratch, hold, trail, widen/tighten, pre-R-10 null stop, tolerance edges, long and short, broker vs inferred basis. | `DC-1b` |
 | `DP-2` | `mogmine-review-prompts-v1` store: hydrate, sanitize, seed merge, backup round-trip. | `DP-1` |
 | `DC-2` (extended) | `mogmine-calls-v1` with `DiscretionCallV2` and dismissals. | `DC-1b` |

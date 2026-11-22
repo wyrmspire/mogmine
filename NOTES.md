@@ -79,6 +79,12 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Claude — DC-1b frozen call reasons, no lane
+Did:      Calls now save reasons as `{ id, label, family }` (`FrozenReason`) instead of bare labels, as playbook-design/04 §1.4 requires before `DC-2`. Seed chips get stable ids (`seed:cut:thesis-broken`, `seed:shared:gut`) and families. `validateCall(call, offered, previous)` keeps a call valid after its chip is renamed, retired or deleted. No call was ever stored, so `DiscretionCall` changed in place.
+Files:    `lib/calls.ts`, `lib/__tests__/calls.test.ts`, `docs/25-discretionary-calls.md`, `docs/playbook-design/04-discretionary-prompts-integration.md`, `NOTES.md`.
+Checked:  `npm test` 416 passed (12 in calls). Typecheck clean. Lint 0 errors, the existing warning. Build 8/8 pages. `git diff --check` clean. No UI.
+Left:     Code PR left open for review (owner's merge rule). Next in this thread: `DP-1` (`detectDeviations`, `pendingAsks`). `OD-52` and the `OD-DP-*` items still need the owner.
+
 ### 2026-11-22 — Antigravity — LV-2 (#26), Chart lane released
 
 - Implemented `SessionLevelsPrimitive` (`components/SessionLevelsPrimitive.ts`) using Canvas 2D API (`ISeriesPrimitive<Time>`), drawing point-in-time session levels as 1px rays and right-edge pill labels (`price label`).
@@ -151,7 +157,6 @@ Left:     Unblocks `LV-2` (`SessionLevelsPrimitive` canvas painter and toggle on
 Did:      Two `OD-49` rows existed. The playbook-editor limits became `OD-54`; observer target attribution keeps `OD-49` (docs/15 cites it). The indicator choices that Codex's docs cited as `OD-50` are the `OD-53` row, so those docs now say `OD-53`.
 Files:    `DECISIONS.md`, `NOTES.md`, `docs/16-floor-roadmap.md`, `docs/codex-indicator-summary.md`, `docs/codex-indicator-audit.md`.
 Left:     Check the highest `OD-` number on `origin/main` right before adding one; two agents in parallel caused both collisions.
-
 ### 2026-11-22 — Codex — recurring review and TD-2 bracket labels (#34), Chart lane released
 Did:      Reviewed run `20261122T023021Z`. The worker left no source diff or TD-3 commits. `buildMarks` now pairs excursion labels to the low and high price caps for either direction, so the Canvas painter can use the mark alone.
 Files:    `lib/trade-marks.ts`, `lib/__tests__/trade-marks.test.ts`, `fixtures/trades/build-marks.golden.json`, `docs/15`, `NOTES.md`.
