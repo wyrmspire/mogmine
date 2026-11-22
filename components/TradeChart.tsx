@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useRef, useSyncExternalStore } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useSyncExternalStore } from "react";
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
 import type { PositionBoxConfig } from "./PositionBoxPrimitive";
@@ -70,7 +70,8 @@ interface Live {
   primitive: PositionBoxPrimitive;
   lines: IPriceLine[];
   fitRange: { from: number; to: number } | null;
-  renderedKey: string;
+  renderedBars: Candle[];
+  renderedTimeframe: Timeframe | null;
   extraBefore: number;
   extraAfter: number;
   baseFitRange: { from: number; to: number } | null;
@@ -81,7 +82,6 @@ interface Live {
   holdTimer: number | undefined;
   viewSettleTimer: number | undefined;
   heldDefaultRange: { from: number; to: number } | null;
-  savedTimeRange: { from: UTCTimestamp; to: UTCTimestamp } | null;
 }
 
 const toTime = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
@@ -150,12 +150,16 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange });
+  const barTimeframe = TIMEFRAME_MINUTES[timeframe] <= TIMEFRAME_MINUTES[baseTimeframe] ? baseTimeframe : timeframe;
+  const bars = useMemo(
+    () => barTimeframe === baseTimeframe ? candles : aggregateCandles(candles, barTimeframe),
+    [candles, barTimeframe, baseTimeframe],
+  );
+  const latest = useRef({ trade, bars, barTimeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange });
   const renderTimer = useRef<number | undefined>(undefined);
-  const diagnosticTimeframe = TIMEFRAME_MINUTES[timeframe] <= TIMEFRAME_MINUTES[baseTimeframe] ? baseTimeframe : timeframe;
-  const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, candles), diagnosticTimeframe);
+  const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), barTimeframe);
 
-  useEffect(() => { latest.current = { trade, candles, baseTimeframe, timeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange }; });
+  useEffect(() => { latest.current = { trade, bars, barTimeframe, zone, privacy, theme, readout, onRendered, onFitChange, detailLevel, onExtensionChange }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -206,16 +210,13 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
 
   // Draws the current props onto the existing chart. Switching timeframe only swaps data: the chart
   // is never rebuilt, so it is fast (UX-02) and the Position Box is re-snapped to the new bars (UX-20).
-  const draw = useRef((refit: boolean) => {
+  const draw = useRef(() => {
     const l = live.current;
     const p = latest.current;
     if (!l || !p.theme) return;
     const t: ChartTheme = p.theme;
-    const { trade: tr } = p;
-    const baseMinutes = TIMEFRAME_MINUTES[p.baseTimeframe];
-    const bars = TIMEFRAME_MINUTES[p.timeframe] <= baseMinutes ? p.candles : aggregateCandles(p.candles, p.timeframe);
+    const { trade: tr, bars, barTimeframe } = p;
     if (!bars.length) return;
-    const barTimeframe = TIMEFRAME_MINUTES[p.timeframe] <= baseMinutes ? p.baseTimeframe : p.timeframe;
 
     l.chart.applyOptions({
       layout: { background: { type: l.lwc.ColorType.Solid, color: t.chartBg }, textColor: t.chartAxis },
@@ -239,11 +240,26 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       }) satisfies AutoscaleInfoProvider,
     });
 
-    const dataKey = `${p.timeframe}|${bars.length}|${bars[0].time}|${bars[bars.length - 1].time}`;
-    const dataChanged = dataKey !== l.renderedKey;
+    const timeScale = l.chart.timeScale();
+    const timeframeChanged = barTimeframe !== l.renderedTimeframe;
+    const dataChanged = bars !== l.renderedBars || timeframeChanged;
+    // An append keeps existing logical indices. A different timeframe or a corrected timestamp
+    // needs time anchors to preserve a manual view across the new indices.
+    const sameIndices = !timeframeChanged && (!dataChanged || l.renderedBars.every((bar, index) => bar.time === bars[index]?.time));
+    const timelineChanged = !sameIndices || bars.length !== l.renderedBars.length;
+    const logicalRange = timelineChanged && l.userPanned && sameIndices ? timeScale.getVisibleLogicalRange() : null;
+    const timeRange = timelineChanged && l.userPanned && !sameIndices ? timeScale.getVisibleRange() : null;
     if (dataChanged) {
-      l.series.setData(bars.map((bar) => ({ time: toTime(bar.time), open: bar.open, high: bar.high, low: bar.low, close: bar.close })));
-      l.renderedKey = dataKey;
+      setProgrammaticRange(l, () => {
+        l.series.setData(bars.map((bar) => ({ time: toTime(bar.time), open: bar.open, high: bar.high, low: bar.low, close: bar.close })));
+      });
+      l.renderedBars = bars;
+      l.renderedTimeframe = barTimeframe;
+    }
+
+    if (timeframeChanged) {
+      l.extraBefore = 0;
+      l.extraAfter = 0;
     }
 
     // Fill times are snapped to their bar before they reach the time scale (B-23).
@@ -289,28 +305,20 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     if (entryIndex >= 0) {
       const fitFrom = entryIndex - fittedWindow.beforeBars;
       l.baseFitRange = { from: fitFrom, to: fitFrom + fittedWindow.visibleBars };
-      if (refit || dataChanged) {
-        l.extraBefore = 0;
-        l.extraAfter = 0;
-        let applied = false;
-        if (l.userPanned && l.savedTimeRange) {
-          try {
-            setProgrammaticRange(l, () => { l.chart.timeScale().setVisibleRange(l.savedTimeRange!); });
-            applied = true;
-          } catch {
-            applied = false;
-          }
-        }
-        if (!applied) {
-          applyHeldDefaultRange(l, defaultVisibleRange(l.baseFitRange, l.barCount));
-        }
-      }
     } else {
       // Nothing to fit around: show the whole candle set rather than a window around a missing bar.
       l.baseFitRange = null;
       l.fitRange = null;
-      if (refit || dataChanged) {
-        setProgrammaticRange(l, () => { l.chart.timeScale().fitContent(); });
+    }
+    if (timelineChanged) {
+      if (logicalRange) {
+        setProgrammaticRange(l, () => timeScale.setVisibleLogicalRange(logicalRange));
+      } else if (timeRange) {
+        setProgrammaticRange(l, () => timeScale.setVisibleRange(timeRange));
+      } else if (l.baseFitRange) {
+        applyHeldDefaultRange(l, defaultVisibleRange(l.baseFitRange, l.barCount));
+      } else {
+        setProgrammaticRange(l, () => timeScale.fitContent());
       }
     }
     reportExtension(l, p.onExtensionChange);
@@ -319,7 +327,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
     renderTimer.current = window.setTimeout(() => latest.current.onRendered?.(), 260);
   });
 
-  // Build the chart once per trade and candle set.
+  // Keep the same chart while new candle sets arrive for this trade.
   useEffect(() => {
     let alive = true;
     let cleanup = () => {};
@@ -351,14 +359,14 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       series.attachPrimitive(primitive);
       const state: Live = {
         lwc, host, chart, series, primitive, lines: [],
-        fitRange: null, renderedKey: "", extraBefore: 0, extraAfter: 0,
+        fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
         userPanned: false, programmaticRangeChange: false,
         programmaticClearTimer: undefined, holdTimer: undefined, viewSettleTimer: undefined,
-        heldDefaultRange: null, savedTimeRange: null,
+        heldDefaultRange: null,
       };
       live.current = state;
-      draw.current(true);
+      draw.current();
 
       chart.subscribeCrosshairMove((param) => {
         const bar = param.time != null && param.point ? param.seriesData.get(series) as { open: number; high: number; low: number; close: number } | undefined : undefined;
@@ -541,31 +549,21 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       };
     })();
     return () => { alive = false; cleanup(); };
-    // The chart is rebuilt only for a different trade or candle set; everything else redraws in place.
+    // The chart is rebuilt only for a different trade or instrument.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trade.id, candles]);
+  }, [trade.id, trade.symbol]);
 
-  // Redraw in place. Only a timeframe change re-fits; edits, theme and zone changes keep the zoom.
-  const previousTimeframe = useRef(timeframe);
+  // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
-    const refit = previousTimeframe.current !== timeframe;
-    if (refit && live.current?.userPanned) {
-      try {
-        live.current.savedTimeRange = live.current.chart.timeScale().getVisibleRange() as { from: UTCTimestamp; to: UTCTimestamp } | null;
-      } catch {
-        live.current.savedTimeRange = null;
-      }
-    }
-    previousTimeframe.current = timeframe;
-    draw.current(refit);
-  }, [trade, timeframe, zone, privacy, theme, baseTimeframe, detailLevel]);
+    draw.current();
+  }, [trade, bars, barTimeframe, zone, privacy, theme, detailLevel]);
 
   return <><div
     ref={hostRef}
     className="chart-host"
     role="img"
     aria-label={`${describeTrade(trade, zone, privacy)} Candlestick chart with the position box.`}
-    data-timeframe={diagnosticTimeframe}
+    data-timeframe={barTimeframe}
     data-visible-bars={diagnosticWindow.visibleBars.toFixed(3)}
     data-trade-share={(diagnosticWindow.holdBars / diagnosticWindow.visibleBars).toFixed(4)}
   />

@@ -79,6 +79,13 @@ Claim a lane before starting. Clear the claim when you stop.
 
 ## Handoff log
 
+### 2026-11-22 — Codex — recurring review and R-02 chart refresh repair, Chart lane released
+Did:      Reviewed run `20261122T020021Z`. The worker left no TD-3 commits or chart changes. A same-timestamp candle correction updated OHLC but rebuilt the chart and reset its view. The series now takes refreshed bars in place and preserves the adjusted view.
+Files:    `components/TradeChart.tsx`, `docs/16-floor-roadmap.md`, `NOTES.md`.
+Verified: `npm test` passed 400, and the Auckland-time mark/observer run passed 62. Typecheck and diff check passed. Lint reported 0 errors and 1 existing PostCSS warning. Build generated 8/8 pages.
+Verified: Headless Chromium at 390×844 retained the extended 75-bar range, manual price scale, and canvas after a same-time OHLC correction and an append. The 1m/5m switch and Trade Card preview worked with zero overflow or page errors.
+Left:     TD-3 (#34/#35) needs a pure Canvas mark painter, displayed-timeframe observer findings and matching text. Follow D-010 for the pixel checks. Coordinate with the existing `feat/td-render-pipeline` worktree.
+
 ### 2026-11-22 — Claude — discretionary calls proposal + DC-1 pure model, no lane
 Did:      Owner asked how to note discretionary decisions (skip a setup, flip a signal, cut, stop placement, early profit). Wrote docs/25 (seven call kinds, reason chips, conviction, after-the-fact rule, `--call-ink` colour family, screens, hindsight grading, slices `DC-1`–`DC-7`) as `OD-52`. Built `DC-1`: `lib/calls.ts` (kinds, chips, `validateCall`, `isAfterTheFact`, `gradeCall` for Cut / Early take via `buildHindsight`, integer ticks, R from the frozen initial stop). CSS tokens only; nothing renders them yet.
 Files:    `docs/25-discretionary-calls.md` (new), `lib/calls.ts` (new), `lib/__tests__/calls.test.ts` (new), `app/globals.css`, `DECISIONS.md`, `AGENTS.md`, `NOTES.md`.
