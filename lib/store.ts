@@ -11,6 +11,8 @@ import type { ChallengeDefinition } from "./challenges.ts";
 import { sanitizeMoodBackup } from "./mood-store.ts";
 import type { MoodBackup } from "./mood-store.ts";
 import { sanitizePlansBackup } from "./plans-store.ts";
+import { sanitizeDrillsBackup } from "./drills-store.ts";
+import type { DrillRecord } from "./drills.ts";
 import type { PlanningSession } from "./plans.ts";
 import { playbooksDifferFromSeeds, sanitizePlaybooksBackup } from "./playbooks-store.ts";
 import type { Playbook } from "./playbooks.ts";
@@ -154,10 +156,12 @@ export interface JournalBackup {
   playbooks?: Playbook[];
   /** Planning sessions and revisions (PS-1, docs/24). Absent in older backups. */
   plans?: PlanningSession[];
+  /** Drill answers (CD-2b). Absent in older backups. */
+  drills?: DrillRecord[];
 }
 
 export type ParseBackupResult =
-  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; mood?: MoodBackup; accounts?: AccountsBackup; challenges?: ChallengeDefinition[]; playbooks?: Playbook[]; plans?: PlanningSession[]; realCount: number; sampleCount: number; exportedAt: string | null }
+  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; mood?: MoodBackup; accounts?: AccountsBackup; challenges?: ChallengeDefinition[]; playbooks?: Playbook[]; plans?: PlanningSession[]; drills?: DrillRecord[]; realCount: number; sampleCount: number; exportedAt: string | null }
   | { ok: false; error: string };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -244,7 +248,7 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
 }
 
 /** Build a local backup payload of the trade journal and device preferences (no candles, no secrets). */
-export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs, mood?: MoodBackup, accounts?: AccountsBackup, challenges?: ChallengeDefinition[], playbooks?: Playbook[], plans?: PlanningSession[]): JournalBackup {
+export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs, mood?: MoodBackup, accounts?: AccountsBackup, challenges?: ChallengeDefinition[], playbooks?: Playbook[], plans?: PlanningSession[], drills?: DrillRecord[]): JournalBackup {
   const cleanTrades = trades.map((trade) => {
     const rest: TradeRecord & { candles?: Candle[] } = { ...trade };
     delete rest.candles;
@@ -262,6 +266,7 @@ export function buildBackup(trades: TradeRecord[] = state.trades, prefs?: Prefs,
     ...(challenges ? { challenges } : {}),
     ...(playbooks ? { playbooks } : {}),
     ...(plans ? { plans } : {}),
+    ...(drills ? { drills } : {}),
   };
 }
 
@@ -284,6 +289,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
   let challenges: ChallengeDefinition[] | undefined;
   let playbooks: Playbook[] | undefined;
   let plans: PlanningSession[] | undefined;
+  let drills: DrillRecord[] | undefined;
   let exportedAt: string | null = null;
 
   if (Array.isArray(parsed)) {
@@ -305,6 +311,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
     challenges = sanitizeChallengesBackup(obj.challenges) ?? undefined;
     playbooks = sanitizePlaybooksBackup(obj.playbooks) ?? undefined;
     plans = sanitizePlansBackup(obj.plans) ?? undefined;
+    drills = sanitizeDrillsBackup(obj.drills) ?? undefined;
     if (typeof obj.exportedAt === "string" && Number.isFinite(Date.parse(obj.exportedAt))) {
       exportedAt = obj.exportedAt;
     }
@@ -312,8 +319,8 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
     return { ok: false, error: "Not a recognized MogMine backup format." };
   }
 
-  // Seeds alone are not worth restoring; a custom or edited playbook list, challenges, or plans are.
-  if (rawTrades.length === 0 && !challenges?.length && !plans?.length && !(playbooks && playbooksDifferFromSeeds(playbooks))) {
+  // Seeds alone are not worth restoring; a custom or edited playbook list, challenges, plans or drill answers are.
+  if (rawTrades.length === 0 && !challenges?.length && !plans?.length && !drills?.length && !(playbooks && playbooksDifferFromSeeds(playbooks))) {
     return { ok: false, error: "This backup file has no trades to restore." };
   }
 
@@ -334,7 +341,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
   const sampleCount = trades.filter((t) => t.is_sample).length;
   const realCount = trades.length - sampleCount;
 
-  return { ok: true, trades, prefs: rawPrefs, ...(mood ? { mood } : {}), ...(accounts ? { accounts } : {}), ...(challenges ? { challenges } : {}), ...(playbooks ? { playbooks } : {}), ...(plans ? { plans } : {}), realCount, sampleCount, exportedAt };
+  return { ok: true, trades, prefs: rawPrefs, ...(mood ? { mood } : {}), ...(accounts ? { accounts } : {}), ...(challenges ? { challenges } : {}), ...(playbooks ? { playbooks } : {}), ...(plans ? { plans } : {}), ...(drills ? { drills } : {}), realCount, sampleCount, exportedAt };
 }
 
 function readStored(): TradeRecord[] | null {

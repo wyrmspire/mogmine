@@ -95,7 +95,7 @@ A drill is BET-03 made repeatable. The Review queue's blind review ([ReviewScree
 
 - Closed trades only, not `is_sample`, with candles available. Drills read the per-trade candle cache (IndexedDB, `candleCacheKey`, `lib/candles.ts`) and never fetch only on the fly for old trades (invariant 2). Yahoo drops `1m` after 30 days, so a trade with no cached bars is skipped with a count (`3 trades skipped: no saved bars`), never drawn empty.
 - Cutting the chart is passing a shorter bar array; the Position Box draws only up to the cut (BET-03 cost note).
-- Drill answers live in a new local store `mogmine-drills-v1` with `user_id` (invariant 7), included in journal backup/restore. They never overwrite `take_again`.
+- Drill answers live in a new local store `mogmine-drills-v1` with `user_id` (invariant 7), included in journal backup/restore. They never overwrite `take_again`. Built in CD-2b (`lib/drills-store.ts`). Answers are append-only, and a restore merges them by id so an older backup never erases newer answers.
 
 ### 4.5 What drills produce
 
