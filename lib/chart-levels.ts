@@ -1,6 +1,7 @@
 // LV-2 (docs/24 §5, docs/12 §5): turn LV-1 levels into the lines the chart paints. Pure, no I/O.
 import { computeLevelsFromInputs, extractSessionInputsFromCandles } from "./levels.ts";
 import type { ComputedLevel, ComputedLevelType } from "./levels.ts";
+import { planStateAsOf } from "./plans.ts";
 import type { PlanningSession } from "./plans.ts";
 import { equityIndexSessionBounds, previousRegularSessionDate, sessionDate } from "./session.ts";
 import { formatPrice } from "./format.ts";
@@ -121,17 +122,9 @@ export function tradeLevels(
   return levels.length ? levels : null;
 }
 
-/**
- * A planning session's levels as they stood at `asOf` (PS-3, B-14). Each revision snapshots the levels
- * an edit replaced, so the first revision saved after `asOf` holds the levels in force at that moment.
- * A plan created after `asOf` did not exist yet.
- */
+/** A planning session's levels as they stood at `asOf` (PS-3, B-14). Empty when the plan did not exist yet. */
 export function planLevelsAsOf(plan: PlanningSession, asOf: number) {
-  if (!(Date.parse(plan.created_at) <= asOf)) return [];
-  const later = [...plan.revisions]
-    .filter((revision) => Date.parse(revision.saved_at) > asOf)
-    .sort((a, b) => Date.parse(a.saved_at) - Date.parse(b.saved_at))[0];
-  return later ? later.levels : plan.levels;
+  return planStateAsOf(plan, asOf)?.levels ?? [];
 }
 
 /** Planned levels for a trade: same instrument (OD-15), same session date, as of the entry. */

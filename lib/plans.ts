@@ -114,6 +114,8 @@ export interface PlanningSession {
   /** Revision history tracking every edit. */
   revisions: readonly PlanRevision[];
   archived?: boolean;
+  /** PS-4: the one lesson the after-session review carries to the next session. Not part of the plan, so no revision. */
+  lesson?: string;
 }
 
 export const PLAN_LIMITS = {
@@ -122,6 +124,7 @@ export const PLAN_LIMITS = {
   label: 40,
   note: 200,
   maxLevels: 30,
+  lesson: 280,
 } as const;
 
 export function isAfterTheFact(savedAtUtc: string, anchorTimeUtc: string | null | undefined): boolean {
@@ -172,4 +175,18 @@ export function newPlanningSession(input: Pick<PlanningSession,
     updated_at: now,
     revisions: [],
   };
+}
+
+/**
+ * The plan's levels, watch list, bias and observations as they stood at `asOf` (PS-3, PS-4, B-14). Each
+ * revision holds what its edit replaced, so the first revision saved after `asOf` is the state at that
+ * moment. Null when the plan was created after `asOf`.
+ */
+export function planStateAsOf(plan: PlanningSession, asOf: number): Pick<PlanRevision, "levels" | "watch_playbook_ids" | "bias" | "observations"> | null {
+  if (!(Date.parse(plan.created_at) <= asOf)) return null;
+  const later = [...plan.revisions]
+    .filter((revision) => Date.parse(revision.saved_at) > asOf)
+    .sort((a, b) => Date.parse(a.saved_at) - Date.parse(b.saved_at))[0];
+  const state = later ?? plan;
+  return { levels: state.levels, watch_playbook_ids: state.watch_playbook_ids, bias: state.bias ?? null, observations: state.observations };
 }
