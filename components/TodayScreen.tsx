@@ -69,7 +69,7 @@ export function TodayScreen() {
           <AccountCards shield={prefs.shield} />
 
           {today && <DaySummary group={today} shield={prefs.shield} />}
-          <PlanCard sessionDate={todayDate} />
+          <PlanCard sessionDate={todayDate} trades={trades} zone={prefs.timeZone} />
           <ChallengeCard shield={prefs.shield} />
 
           {today ? (
