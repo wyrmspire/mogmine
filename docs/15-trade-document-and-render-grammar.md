@@ -121,7 +121,7 @@ Owner decision 2 in §1 sets the default. Detail:
 - **Widening the view.** The `‹30` and `30›` buttons in the chart toolbar (and the View menu, and keys `[` and `]`; never floating over the price axis, [docs/20](20-price-first-entry.md) §3) add 30 bars of the current timeframe on that side, and `Fit` restores the trade's own window. The dotted continuation grows with the view.
 - **The sentence.** The held-to-plan sentence ("Hindsight: the target would have been reached first, 38 min later", or the stop-first / neither equivalents), plus any `TP +38m` / `SL +12m` labels, is one tap away under an "After the exit — hindsight" heading. It is not drawn on the chart.
 - **Hindsight is not result.** It never changes R, outcome or any statistic (B-63, UX-52). A shared Trade Card shows the extension only if it was on when the card was made, and does not add on-chart hindsight text.
-- **Backward is context, not hindsight.** Earlier levels are drawn the same way but computed nothing. Daily levels from [12](12-levels-zones-and-daily-markup.md) are the other lines in that view when they exist.
+- **Earlier chart context.** In Medium detail, `‹30` immediately extends the dotted entry, stop and target levels to the left. `Fit` clears those leftward lines. These lines use the recorded prices and add no observations. Daily levels from [12](12-levels-zones-and-daily-markup.md) are the other lines in that view when they exist.
 - **Not scheduled.** Dragging the dotted stop or target to see the R values (the design's §3.1b) is an idea. Dragging needs hit-testing the chart library does not provide out of the box.
 
 ### 2.6 Archived: the trade on later screens
@@ -295,7 +295,7 @@ Agents propose and the owner decides. Each item is also in [DECISIONS.md](../DEC
 | Path | One dotted diagonal, entry fill to exit fill | §2.4: polyline through the fills |
 | Stop path | None | §2.2 |
 | Excursion | None | §2.1 bracket |
-| Hindsight | None | §2.5 |
+| Hindsight | Dotted extension on the existing Position Box, plus the text below the chart | §2.5, using the display list and observer facts |
 | Archived style | None | §2.6 |
 | Flags | Entry and exit flags at fill prices | §2.4 (adds the reason text) |
 | `deriveTrade`, `fromLegacy` | Built (`lib/trade-document.ts`, issue #33) | §3.2, §3.3, §3.6 |

@@ -169,6 +169,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       l.heldDefaultRange = null;
       l.extraBefore = 0;
       l.extraAfter = 0;
+      l.primitive.setBackwardContinuation(false);
       l.chart.priceScale("right").applyOptions({ autoScale: true });
       l.host.dataset.priceScale = "auto";
       l.fitRange = l.baseFitRange;
@@ -198,6 +199,7 @@ export function TradeChart({ ref, trade, candles, baseTimeframe, timeframe, zone
       const room = Math.max(0, currentFrom - 0);
       const applied = Math.min(bars, room);
       l.extraBefore += applied;
+      l.primitive.setBackwardContinuation(l.extraBefore > 0);
       const nextFrom = Math.max(0, currentFrom - applied);
       const view = { from: nextFrom, to: currentTo };
       l.fitRange = view;
