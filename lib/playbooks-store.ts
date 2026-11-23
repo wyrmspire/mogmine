@@ -13,7 +13,7 @@ import type { Playbook, PlaybookRule } from "./playbooks.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
 import type { TradeStyle } from "./trades.ts";
 import { STYLES, clonePlaybook, trimText, sanitizePlaybooks } from "./playbooks-sanitize.ts";
-import { createCollectionSync } from "./persistence/store-sync.ts";
+import { createCollectionSync, fingerprint } from "./persistence/store-sync.ts";
 import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 export { sanitizePlaybook, sanitizePlaybooks, sanitizePlaybooksBackup } from "./playbooks-sanitize.ts";
 
@@ -55,9 +55,14 @@ function applyRemote(next: Playbook[]) {
   persist();
 }
 
+// A seed nobody edited: a fresh device must not push it over the server's (possibly renamed) copy (#192 review).
+const seedFingerprints = new Map(PLAYBOOK_SEEDS.map((seed) => [seed.id, fingerprint("playbooks", clonePlaybook(seed))]));
+const isUntouchedSeed = (playbook: Playbook) => seedFingerprints.get(playbook.id) === fingerprint("playbooks", playbook);
+
 function createPlaybooksSync(overrides: Partial<CollectionSyncOptions<Playbook>> = {}): CollectionSync {
   return createCollectionSync<Playbook>({
     key: "playbooks",
+    pristine: isUntouchedSeed,
     getLocal: () => state.playbooks,
     apply: applyRemote,
     ...overrides,

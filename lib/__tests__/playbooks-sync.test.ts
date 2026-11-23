@@ -138,3 +138,29 @@ test("restoring a backup pushes the restored list", async () => {
   assert.equal(serverRecord(fake, TABLE, "restored-1")?.name, "Restored Idea");
   assert.ok(PLAYBOOK_SEEDS.every((seed) => serverIds(fake, TABLE).includes(seed.id)));
 });
+
+test("a fresh device's untouched seeds never overwrite the server's edited copy (#192 review)", async () => {
+  installDevice();
+  const fake = createFakeSupabase(UID);
+  const seed = PLAYBOOK_SEEDS[0];
+  await adapterFor(fake).repositories.playbooks.put(UID, { ...seed, name: "Renamed on device A" });
+  const { options } = storeSyncOptions(fake);
+  const sync = configurePlaybooksSyncForTests(options);
+  hydratePlaybooks(); // nothing stored: the device starts from the seeds
+  await sync.pull();
+  assert.equal(getPlaybooksState().playbooks.find((item) => item.id === seed.id)?.name, "Renamed on device A");
+  assert.equal(serverRecord(fake, TABLE, seed.id)?.name, "Renamed on device A");
+});
+
+test("a seed edited on this device before its first sync still wins", async () => {
+  installDevice();
+  const fake = createFakeSupabase(UID);
+  const seed = PLAYBOOK_SEEDS[0];
+  await adapterFor(fake).repositories.playbooks.put(UID, { ...seed });
+  const { options } = storeSyncOptions(fake);
+  const sync = configurePlaybooksSyncForTests(options);
+  hydratePlaybooks();
+  assert.equal(updatePlaybook(seed.id, { name: "Edited here", default_style: seed.default_style, checklist_rules: seed.checklist_rules }).ok, true);
+  await sync.pull();
+  assert.equal(serverRecord(fake, TABLE, seed.id)?.name, "Edited here");
+});

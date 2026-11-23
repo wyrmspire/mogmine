@@ -16,12 +16,10 @@ import type { SyncBase } from "./sync-storage.ts";
 
 export { fingerprint };
 
-export type SyncStatus = "off" | "signed-out" | "syncing" | "synced" | "pending" | "error";
-export interface SyncState {
-  status: SyncStatus;
-  message: string | null;
-  lastSyncedAt: string | null;
-}
+import { notifySyncChanged, registerSyncEntry } from "./sync-status.ts";
+import type { SyncState, SyncStatus } from "./sync-status.ts";
+export { getSyncSummary, notifySyncChanged, registerSyncEntry, resetSyncRegistryForTests, subscribeSync } from "./sync-status.ts";
+export type { SyncState, SyncStatus } from "./sync-status.ts";
 
 export interface CollectionSyncOptions<T extends { id: string }> {
   key: CollectionKey;
@@ -31,6 +29,8 @@ export interface CollectionSyncOptions<T extends { id: string }> {
   apply(next: T[]): void;
   /** Records that sync. Default: all. Trades: `!trade.is_sample`. */
   include?(record: T): boolean;
+  /** An untouched default (e.g. a seed playbook). A never-synced pristine record yields to the server's copy. */
+  pristine?(record: T): boolean;
   adapter?(): PersistenceAdapter;
   /** Device sync metadata. Default: `localStorage`, or memory when storage is blocked. */
   storage?: KeyValueStore;
@@ -60,58 +60,6 @@ export interface CollectionSync {
 /** True when the adapter choice (argument or `NEXT_PUBLIC_PERSISTENCE_ADAPTER`) is `supabase`. */
 export function remoteSyncEnabled(raw?: string | null): boolean {
   return chooseAdapter(raw ?? process.env.NEXT_PUBLIC_PERSISTENCE_ADAPTER) === "supabase";
-}
-
-// ---- Aggregate status for the header. Worst status wins. -----------------------------------------------------------
-
-const RANK: Record<SyncStatus, number> = { off: 0, synced: 1, "signed-out": 2, syncing: 3, pending: 4, error: 5 };
-const OFF: SyncState = { status: "off", message: null, lastSyncedAt: null };
-const registry = new Set<{ getState(): SyncState }>();
-const listeners = new Set<() => void>();
-let summary: SyncState | null = null;
-
-function computeSummary(): SyncState {
-  let worst = OFF;
-  let lastSyncedAt: string | null = null;
-  for (const entry of registry) {
-    const state = entry.getState();
-    if (state.lastSyncedAt && (!lastSyncedAt || state.lastSyncedAt > lastSyncedAt)) lastSyncedAt = state.lastSyncedAt;
-    if (RANK[state.status] > RANK[worst.status]) worst = state;
-  }
-  return { status: worst.status, message: worst.message, lastSyncedAt };
-}
-
-/** Cached so `useSyncExternalStore` sees a stable value until something changes. */
-function refresh() {
-  summary = computeSummary();
-  listeners.forEach((listener) => listener());
-}
-
-export function getSyncSummary(): SyncState {
-  if (!summary) summary = computeSummary();
-  return summary;
-}
-
-export function subscribeSync(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-/** Lets another syncer kind (singleton-sync) join the header summary. Returns the unregister function. */
-export function registerSyncEntry(entry: { getState(): SyncState }): () => void {
-  registry.add(entry);
-  refresh();
-  return () => { registry.delete(entry); refresh(); };
-}
-
-/** Tell the summary that a registered entry changed its state. */
-export const notifySyncChanged = (): void => refresh();
-
-export function resetSyncRegistryForTests(): void {
-  registry.clear();
-  refresh();
 }
 
 /** Records of the same key match when their fingerprints match, in any order. */
@@ -159,7 +107,7 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
 
   function setState(status: SyncStatus, message: string | null = null, lastSyncedAt = state.lastSyncedAt) {
     state = { status, message, lastSyncedAt };
-    refresh();
+    notifySyncChanged();
   }
 
   function arm(timer: Timer, run: () => void, ms: number) {
@@ -247,7 +195,8 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
       const remoteRecord = remoteById.get(id);
       const dirty = fingerprint(key, record) !== baseIds.get(id);
       if (remoteRecord) {
-        merged.set(id, dirty ? record : remoteRecord);
+        const yields = !baseIds.has(id) && options.pristine?.(record) === true; // a fresh device's seed never overwrites
+        merged.set(id, dirty && !yields ? record : remoteRecord);
         track(remoteRecord);
       } else if (baseIds.has(id) && !dirty && !maybeTruncated) {
         // The server had it, no longer does, and this device has no edits: deleted on another device. Drop it.
@@ -439,11 +388,9 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
       document.removeEventListener?.("visibilitychange", onVisibility);
       listening = false;
     }
-    registry.delete(entry);
-    refresh();
+    unregister();
   }
 
-  registry.add(entry);
-  refresh();
+  const unregister = registerSyncEntry(entry);
   return { start, changed, pull, flushNow, getState: () => state, dispose };
 }
