@@ -24,6 +24,9 @@ import type { MoodRecord, MoodSpokeCandidate, MoodSpokeRegistry, MoodSuggestion 
 import type { TradeRecord } from "./trades.ts";
 import { sanitizeCandidates } from "./mood-store-sanitize.ts";
 import type { MoodBackup } from "./mood-store-sanitize.ts";
+import { DEMO_TRADE_IDS } from "./fixtures.ts";
+// Rows about sample trades stay on the device, like the sample trades themselves (#193 review).
+const notOnSampleTrade = (record: { trade_id?: string | null }) => !record.trade_id || !DEMO_TRADE_IDS.has(record.trade_id);
 export { sanitizeCandidates, sanitizeMoodBackup } from "./mood-store-sanitize.ts";
 export type { MoodBackup } from "./mood-store-sanitize.ts";
 
@@ -84,7 +87,7 @@ type MoodSyncOverrides = {
 
 function createMoodSyncs(overrides: MoodSyncOverrides = {}): MoodSyncs {
   return {
-    records: createCollectionSync<MoodRecord>({ key: "mood_records", getLocal: () => state.records, apply: applyRecords, ...overrides.records }),
+    records: createCollectionSync<MoodRecord>({ key: "mood_records", include: notOnSampleTrade, getLocal: () => state.records, apply: applyRecords, ...overrides.records }),
     candidates: createCollectionSync<MoodSpokeCandidate>({ key: "mood_candidates", getLocal: () => state.candidates, apply: applyCandidates, ...overrides.candidates }),
   };
 }

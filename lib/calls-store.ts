@@ -9,6 +9,9 @@ import { sanitizeCall, sanitizeDismissal, cleanList, sanitizeCalls } from "./cal
 import type { CallsBackup } from "./calls-sanitize.ts";
 import { createCollectionSync } from "./persistence/store-sync.ts";
 import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
+import { DEMO_TRADE_IDS } from "./fixtures.ts";
+// Rows about sample trades stay on the device, like the sample trades themselves (#193 review).
+const notOnSampleTrade = (record: { trade_id?: string | null }) => !record.trade_id || !DEMO_TRADE_IDS.has(record.trade_id);
 export { sanitizeCall, sanitizeDismissal, sanitizeCalls, sanitizeCallsBackup } from "./calls-sanitize.ts";
 export type { CallsBackup } from "./calls-sanitize.ts";
 
@@ -63,8 +66,8 @@ type CallsSyncOverrides = {
 
 function createCallsSyncs(overrides: CallsSyncOverrides = {}): CallsSyncs {
   return {
-    calls: createCollectionSync<DiscretionCall>({ key: "calls", getLocal: () => state.calls, apply: applyCalls, ...overrides.calls }),
-    dismissals: createCollectionSync<PromptDismissal>({ key: "prompt_dismissals", getLocal: () => state.dismissals, apply: applyDismissals, ...overrides.dismissals }),
+    calls: createCollectionSync<DiscretionCall>({ key: "calls", include: notOnSampleTrade, getLocal: () => state.calls, apply: applyCalls, ...overrides.calls }),
+    dismissals: createCollectionSync<PromptDismissal>({ key: "prompt_dismissals", include: notOnSampleTrade, getLocal: () => state.dismissals, apply: applyDismissals, ...overrides.dismissals }),
   };
 }
 
