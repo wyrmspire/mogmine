@@ -271,31 +271,32 @@ export function tradePnl(trade: Priced): number | null {
   return (ticks * trade.quantity * cents) / 100;
 }
 
-/**
- * Risk in ticks from entry to the stop. Null when there is no stop, a price is invalid, the stop
- * is on the wrong side (a long's stop at or above the entry, a short's at or below), or the distance is zero.
- * A wrong-side stop never yields a positive risk from its absolute distance (issue #50).
- */
-function stopRiskTicks(trade: Priced & { stop_loss_price?: number | null }): number | null {
-  if (trade.stop_loss_price == null) return null;
-  const sign = sideSign(trade.direction);
-  const entry = toTicks(trade.entry_price, trade.symbol);
-  const stop = toTicks(trade.stop_loss_price, trade.symbol);
-  if (sign == null || entry == null || stop == null) return null;
-  const risk = (entry - stop) * sign;
-  return risk > 0 ? risk : null;
+type Stops = { stop_loss_price?: number | null; initial_stop_price?: number | null };
+/** Ticks from entry to `stop` on the risk side, or null (no stop, invalid price, wrong side, zero; issue #50). */
+function riskTicksTo(trade: Priced, stop: number | null | undefined): number | null {
+  const sign = sideSign(trade.direction), entry = toTicks(trade.entry_price, trade.symbol);
+  const ticks = stop == null ? null : toTicks(stop, trade.symbol);
+  const risk = sign == null || entry == null || ticks == null ? null : (entry - ticks) * sign;
+  return risk != null && risk > 0 ? risk : null;
 }
 
+/** The stop R is measured against (R-10): the initial stop when it is on the risk side, else the current one. */
+export function riskStopPrice(trade: Priced & Stops): number | null {
+  if (riskTicksTo(trade, trade.initial_stop_price) != null) return trade.initial_stop_price!;
+  return riskTicksTo(trade, trade.stop_loss_price) != null ? trade.stop_loss_price! : null;
+}
+const stopRiskTicks = (trade: Priced & Stops) => riskTicksTo(trade, riskStopPrice(trade));
+
 /** Initial risk in dollars, or null without a valid stop. */
-export function initialRiskUsd(trade: Priced & Pick<TradeRecord, "stop_loss_price">): number | null {
+export function initialRiskUsd(trade: Priced & Pick<TradeRecord, "stop_loss_price"> & Stops): number | null {
   const riskTicks = stopRiskTicks(trade);
   const cents = tickValueCents(trade.symbol);
   if (riskTicks == null || cents == null || !isWholeQuantity(trade.quantity)) return null;
   return (riskTicks * trade.quantity * cents) / 100;
 }
 
-/** R = P&L ÷ initial risk. `null` without a valid stop, never 0 (AGENTS §3b-4, OD-10). */
-export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price">): number | null {
+/** R = P&L ÷ initial risk (`riskStopPrice`). `null` without a valid stop, never 0 (AGENTS §3b-4, OD-10). */
+export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price"> & Stops): number | null {
   const riskTicks = stopRiskTicks(trade);
   const ticks = tradeTicks(trade);
   if (riskTicks == null || ticks == null || !isWholeQuantity(trade.quantity)) return null;
@@ -319,8 +320,7 @@ export function stopPatch(
 
 /** R against the frozen initial stop (R-10): the same math as `rMultiple`, on `initial_stop_price`. `null` without one. */
 export function initialRMultiple(trade: Priced & Pick<TradeRecord, "initial_stop_price">): number | null {
-  if (trade.initial_stop_price == null) return null;
-  return rMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
+  return trade.initial_stop_price == null ? null : rMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
 }
 
 /**
@@ -840,8 +840,8 @@ export function excursionsFromBars(
  * Planned reward ÷ initial risk, or null without a stop and target, or when the stop or
  * target is on the wrong side (or at the entry) (issue #50, #63).
  */
-export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "planned_target_price">): number | null {
-  if (trade.stop_loss_price == null || trade.planned_target_price == null || !isWholeQuantity(trade.quantity)) return null;
+export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "planned_target_price"> & Stops): number | null {
+  if (trade.planned_target_price == null || !isWholeQuantity(trade.quantity)) return null;
   const riskTicks = stopRiskTicks(trade);
   const sign = sideSign(trade.direction);
   const entry = toTicks(trade.entry_price, trade.symbol);
@@ -857,7 +857,7 @@ export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "
  * Without a valid stop, the threshold is 2 ticks. A trade that cannot be priced or
  * has invalid quantity is never a scratch (issue #63).
  */
-export function isScratch(trade: Priced & Partial<Pick<TradeRecord, "stop_loss_price">>) {
+export function isScratch(trade: Priced & Stops) {
   const captured = tradeTicks(trade);
   if (captured == null) return false;
   const riskTicks = stopRiskTicks(trade) ?? 0;

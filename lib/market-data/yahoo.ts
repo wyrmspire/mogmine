@@ -1,6 +1,7 @@
 import { FUTURES_SPECS, TIMEFRAME_MINUTES } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 import type { MarketDataProvider, MarketDataQuery } from "./types.ts";
+import { isYahooNoData } from "./outcome.ts";
 
 interface YahooChartResponse {
   chart?: {
@@ -49,13 +50,20 @@ export class YahooFinanceProvider implements MarketDataProvider {
       next: { revalidate: 300 },
     });
     // 422: the range starts beyond what Yahoo serves for this interval. Not available, never retried (docs/10 §2).
-    if (response.status === 422 || response.status === 404) return [];
-    if (!response.ok) throw new Error(`Yahoo Finance returned ${response.status}`);
+    // 400 "Data doesn't exist for startDate …": a future or empty range. Also "nothing", not a failure.
+    if (!response.ok) {
+      const description = await response.text().catch(() => "");
+      if (isYahooNoData(response.status, description)) return [];
+      throw new Error(`Yahoo Finance returned ${response.status}`);
+    }
 
     const payload = await response.json() as YahooChartResponse;
     const result = payload.chart?.result?.[0];
     const quote = result?.indicators?.quote?.[0];
-    if (payload.chart?.error) throw new Error(payload.chart.error.description || "Yahoo Finance error");
+    if (payload.chart?.error) {
+      if (isYahooNoData(200, payload.chart.error.description)) return [];
+      throw new Error(payload.chart.error.description || "Yahoo Finance error");
+    }
     if (!result?.timestamp || !quote) return [];
 
     // Clean before use: drop null-price rows and the stray row outside the window (AGENTS §3b-8).

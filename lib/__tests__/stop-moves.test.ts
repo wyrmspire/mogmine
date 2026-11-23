@@ -121,8 +121,8 @@ test("G2 / R-10: adding stop moves keeps initial_stop_price frozen", () => {
   // initialRMultiple remains measured against frozen 5990 risk (10 pts = $50)
   // Realized gain: 6010 - 6000 = +10 pts = +1.0R against initial stop
   assert.equal(initialRMultiple(trade2), 1);
-  // rMultiple is null because trailing stop 6005 sits above entry 6000 (locked profit / risk <= 0)
-  assert.equal(rMultiple(trade2), null);
+  // A stop trailed above the entry never blanks R: rMultiple measures the initial stop too (riskStopPrice).
+  assert.equal(rMultiple(trade2), 1);
 });
 
 test("G2 / R-10: first stop set on a stop-less trade initializes initial_stop_price", () => {

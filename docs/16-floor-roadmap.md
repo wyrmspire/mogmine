@@ -354,6 +354,8 @@ Fixed constraints:
 
 **Tests:** a saved stop sets all three fields; a later edit moves only `stop_loss_price`; the first stop on a stop-less trade is captured once; `initialRMultiple` is `null` with no initial stop; an old record normalises with both new fields `null`.
 
+> **Follow-up (2026-11-23, branch `fix/r-initial-stop`, approved by Chris, the owner, on 2026-11-23 via the deep-dive brief).** The "separate decision" above is taken: after the API sim, a short at 7405 with its stop trailed to 7350 showed R as "—". `rMultiple`, `initialRiskUsd`, `plannedR` and `isScratch` now measure risk on `riskStopPrice(trade)`: the initial stop when it is on the risk side of the entry, else the current stop when it is, else `null`. Every screen follows (header, feed, review, stats, day and share cards, drills, mood, R strip). Trades with no initial stop behave as before. Trade Detail shows "Initial stop 7444.00 · stop trailed to 7350.00" whenever the two differ (no longer only when `initial_stop_set_at` is known), and says why R is blank when a stop past the entry has no initial stop. Stored fields are unchanged.
+
 **Done when:** a trade can be logged with a stop in one pass, and editing the stop afterwards leaves the initial one visible and unchanged.
 
 **Spec.** [docs/06 §2](06-data-model-and-roadmap.md) `trades`; and the planned Supabase table in `R-05` gains the two columns.

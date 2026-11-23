@@ -23,9 +23,11 @@ import { TradeRow } from "./TradeRow";
 import { useTradeLevels } from "./useTradeLevels";
 import { tradeSessionVwap, vwapOnBars } from "@/lib/chart-indicators";
 import type { VwapAnchor, VwapPoint } from "@/lib/chart-indicators";
-import type { TradeLevelsState } from "./useTradeLevels";
+import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withheld";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { calculateExitEfficiency } from "@/lib/exit-efficiency";
+import { stopHistoryText } from "@/lib/risk-text";
+import { noCandlesMessage } from "@/lib/market-data/outcome";
 import { findNeighbourTrades } from "@/lib/neighbour-trades";
 import { derivePlanVsActual } from "@/lib/plan-vs-actual";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
@@ -52,14 +54,6 @@ import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
 const NO_VWAP: readonly VwapPoint[] = [];
-
-function levelsStatus(levels: TradeLevelsState) {
-  if (levels.status === "loading") return "Loading…";
-  if (levels.status === "none") return "Unavailable";
-  // Withheld levels are counted, never hidden (docs/12 §5).
-  if (levels.status === "ready") return `${levels.lines.length} shown${levels.missing.length ? ` · ${levels.missing.length} missing` : ""}`;
-  return "Off";
-}
 
 export function TradeDetail({ id }: { id: string }) {
   const journal = useJournal();
@@ -270,6 +264,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
+  const stopHistory = stopHistoryText(trade, (iso) => formatListTime(iso, zone));
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const sign = trade.direction === "LONG" ? 1 : -1;
   const points = formatPoints(tradePoints(trade), trade.symbol);
@@ -412,7 +407,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         {!undatedExit && candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
         {!undatedExit && candles?.status === "none" && !trade.is_sample && (
           <div className="chart-note fact candle-retry" role="status">
-            <span>{(open ? candles.lastAttemptAt - Date.parse(trade.entry_time) < FRESH_EXIT_MS : exitIsFresh(trade, candles.lastAttemptAt)) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
+            <span>{noCandlesMessage(candles.reason, open ? candles.lastAttemptAt - Date.parse(trade.entry_time) < FRESH_EXIT_MS : exitIsFresh(trade, candles.lastAttemptAt))}</span>
             <button type="button" disabled={candles.fetching} onClick={() => ensureCandles(trade, true)}>{candles.fetching ? "Checking…" : "Retry"}</button>
           </div>
         )}
@@ -489,11 +484,13 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                       role="menuitemcheckbox"
                       aria-checked={showLevels}
                       onClick={() => setShowLevels((prev) => !prev)}
-                      title={`Prior-day, overnight and planned levels as of the entry.${levels.planned ? ` ${levels.planned} from planning sessions.` : ""}${levels.missing.length ? ` Missing bars withheld: ${levels.missing.join(", ")}` : ""}${levels.summary ? ` Levels: ${levels.summary}` : ""}`}
+                      title={levelsTitle(levels)}
                     >
                       <span>{showLevels ? "Session levels ✓" : "Session levels"}</span>
-                      <span className="shortcut">{levelsStatus(levels)}</span>
+                      <span className="shortcut">{levelsStatusText(levels)}</span>
                     </button>
+                    {/* Withheld levels are named with their reason, never hidden (docs/12 §5, OD-55). Visible: touch has no tooltip. */}
+                    {levels.withheld.length > 0 && <small style={{ display: "block", padding: "2px 4px", fontSize: "0.6875rem", color: "var(--text-muted)" }}>Withheld: {withheldText(levels.withheld)}</small>}
                   </div>
                   <div className="view-menu-section">
                     <span className="view-menu-label">
@@ -615,7 +612,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <TradeLevelEditor trade={trade} field="key_level_price" />
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
-            <div title={exitEff ? exitEff.summary : "Ratio of realized gain to the best gain available during the hold"}><small>EFFICIENCY{ex?.coverage === "partial" ? " · partial" : ""}</small><b className={exitEff == null ? "empty" : ""}>{exitEff ? `${exitEff.efficiencyPercent}%` : "—"}</b></div>
+            <div title={exitEff ? exitEff.summary : "Ratio of realized gain to the best gain available during the hold"}><small>EFFICIENCY{ex?.coverage === "partial" ? " · partial" : ""}</small><b className={exitEff?.efficiencyPercent == null ? "empty" : ""}>{exitEff?.efficiencyPercent != null ? `${exitEff.efficiencyPercent}%` : "—"}</b></div>
           </div>
           {!open && (
             <div className="exit-reason-detail-row">
@@ -648,10 +645,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
           )}
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
-          {/* The frozen first stop, shown as a quiet fact only once the working stop has moved (R-10). */}
-          {trade.initial_stop_price != null && trade.initial_stop_set_at != null && trade.stop_loss_price !== trade.initial_stop_price && (
-            <p className="initial-stop">Initial stop {formatPrice(trade.initial_stop_price, trade.symbol)}, set {formatListTime(trade.initial_stop_set_at, zone)}</p>
-          )}
+          {/* The frozen first stop once the working stop has moved, or why R is blank (R-10). */}
+          {stopHistory && <p className="initial-stop">{stopHistory}</p>}
 
           {/* G2 (#36): Interactive stop-move editor & widening suggestion (UX-33) */}
           <StopMovesEditor

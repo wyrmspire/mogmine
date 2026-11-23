@@ -15,6 +15,9 @@ const LABELS = {
 
 export type ComputedLevelType = keyof typeof LABELS;
 
+/** Display name of a level type (`PDH`, `Wk high`). */
+export const levelLabel = (type: ComputedLevelType) => LABELS[type];
+
 export interface ComputedLevel {
   key: ComputedLevelType;
   type: ComputedLevelType;

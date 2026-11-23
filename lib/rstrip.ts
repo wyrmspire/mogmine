@@ -112,15 +112,28 @@ export function rStripLayout(input: RStripInput): RStripLayout | null {
   };
 }
 
+export type StripTrade = Pick<TradeRecord, "direction" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price">
+  & Partial<Pick<TradeRecord, "initial_stop_price">>;
+
+/**
+ * The strip's 1R stop, by the rule of `riskStopPrice` (R-10): the initial stop when it is on the risk side of the
+ * entry, else the current stop when it is. A stop trailed past the entry is not risk and never sets the axis.
+ */
+export function stripStop(trade: StripTrade): number | null {
+  const riskSide = (stop: number | null | undefined): stop is number =>
+    stop != null && Number.isFinite(stop) && favourable(trade.direction, stop, trade.entry_price) < 0;
+  return riskSide(trade.initial_stop_price) ? trade.initial_stop_price : riskSide(trade.stop_loss_price) ? trade.stop_loss_price : null;
+}
+
 export function rStripInputFromTrade(
-  trade: Pick<TradeRecord, "direction" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price">,
+  trade: StripTrade,
   excursions?: { maePrice?: number | null; mfePrice?: number | null } | null,
 ): RStripInput {
   return {
     direction: trade.direction,
     entry: trade.entry_price,
     exit: trade.exit_price,
-    stop: trade.stop_loss_price,
+    stop: stripStop(trade),
     target: trade.planned_target_price,
     maePrice: excursions?.maePrice,
     mfePrice: excursions?.mfePrice,
@@ -144,12 +157,12 @@ export function rStripLabel(kind: RStripKind, r: number | null, planned: number 
   return bits.join(", ");
 }
 
-export function rStripCaption(trade: Pick<TradeRecord, "direction" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price">, layout: RStripLayout) {
-  const axis = { direction: trade.direction, entry: trade.entry_price, stop: trade.stop_loss_price };
-  const r = trade.exit_price != null && trade.stop_loss_price != null
+export function rStripCaption(trade: StripTrade, layout: RStripLayout) {
+  const axis = { direction: trade.direction, entry: trade.entry_price, stop: stripStop(trade) };
+  const r = trade.exit_price != null && axis.stop != null
     ? stripOffset(trade.exit_price, axis)
     : null;
-  const planned = trade.planned_target_price != null && trade.stop_loss_price != null
+  const planned = trade.planned_target_price != null && axis.stop != null
     ? stripOffset(trade.planned_target_price, axis)
     : null;
   return rStripLabel(layout.kind, r, planned);

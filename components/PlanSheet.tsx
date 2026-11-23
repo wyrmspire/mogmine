@@ -22,6 +22,7 @@ import { NO_SETUP_ID } from "@/lib/playbooks";
 import { specFor, toTicks } from "@/lib/trades";
 import { stepPriceText } from "@/lib/entry-form";
 import { showToast } from "@/lib/toast";
+import { useInlineSaveText } from "./useSaveLabel";
 
 interface PlanSheetProps {
   sessionDate: string;
@@ -43,6 +44,7 @@ export function PlanSheet({
 }: PlanSheetProps) {
   const existing = planId ? getPlan(planId) : null;
   const { saved } = usePlansStore();
+  const saveText = useInlineSaveText(saved ? "saved" : "error");
   const eligiblePlaybooks = activePlaybooks(usePlaybooks().playbooks).filter(
     (p) => p.id !== NO_SETUP_ID,
   );
@@ -468,9 +470,7 @@ export function PlanSheet({
             />
           </div>
 
-          <p className="note-state" role="status">
-            {saved ? "✓ Saved on this device" : "Not saved — storage is blocked on this device"}
-          </p>
+          <p className="note-state" role="status">{saveText}</p>
 
           <button
             type="button"
