@@ -135,15 +135,15 @@ export function LoginScreen({ auth }: { auth?: LoginAuth }) {
     );
   }
 
-  return (
-    <main style={PAGE}>
-      <div style={PANEL}>
-        <div className="brand" style={{ justifyContent: "center" }}><span className="brand-gem" aria-hidden="true">M</span><span>MOGMINE</span></div>
-        {hashError && <p role="alert" style={ALERT}>{hashError}</p>}
-        {body}
-      </div>
-    </main>
+  const content = (
+    <div style={PANEL}>
+      <div className="brand" style={{ justifyContent: "center" }}><span className="brand-gem" aria-hidden="true">M</span><span>MOGMINE</span></div>
+      {hashError && <p role="alert" style={ALERT}>{hashError}</p>}
+      {body}
+    </div>
   );
+  // Gate off: this renders inside AppShell, which already owns <main>.
+  return auth ? <main style={PAGE}>{content}</main> : <div style={PAGE}>{content}</div>;
 }
 
 /** Shown when the user is signed in but not on the allow-list. No app data loads. */

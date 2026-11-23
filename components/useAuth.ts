@@ -55,18 +55,25 @@ export function useAuth(): AuthState & { retry(): void } {
     if (!GATE_ON) return;
     let alive = true;
     let latest = 0; // only the newest allow-list check may write state
+    let checkedUid: string | null = null; // the uid whose allow-list answer is on screen (not "error")
     let unsubscribe: (() => void) | null = null;
 
     const apply = async (client: AuthClientLike, session: SessionLike) => {
       const token = ++latest;
       if (!session) {
+        checkedUid = null;
         if (alive) setState(SIGNED_OUT);
         return;
       }
+      // TOKEN_REFRESHED / INITIAL_SESSION for the same user: keep the answer, so AppShell is not unmounted (and its
+      // unsaved state lost) every time the access token refreshes.
+      if (session.user.id === checkedUid) return;
+      checkedUid = null;
       const email = session.user.email ?? null;
       if (alive) setState({ status: "checking", email, message: null });
       const result = await checkAllowed(client, session.user.id);
       if (!alive || token !== latest) return;
+      checkedUid = result === "error" ? null : session.user.id;
       setState({ status: result, email, message: result === "error" ? CHECK_MESSAGE : null });
     };
 
@@ -79,8 +86,10 @@ export function useAuth(): AuthState & { retry(): void } {
         return;
       }
       if (!alive) return;
+      // supabase-js holds its auth lock while this callback runs; a database call made inside it can deadlock, so the
+      // allow-list check is deferred to the next task (supabase-js docs, onAuthStateChange).
       const { data } = client.auth.onAuthStateChange((_event, session) => {
-        void apply(client, session);
+        setTimeout(() => void apply(client, session), 0);
       });
       unsubscribe = () => data.subscription.unsubscribe();
       try {
