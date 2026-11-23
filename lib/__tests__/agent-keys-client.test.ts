@@ -71,7 +71,13 @@ function fakeDb(opts: { rows?: unknown[]; error?: { message: string } } = {}) {
               return {
                 eq(column2: string, value2: string) {
                   entry.filters.push([column2, value2]);
-                  return Promise.resolve({ error: opts.error ?? null });
+                  return {
+                    select(columns: string) {
+                      entry.columns = columns;
+                      const data = opts.error ? null : (opts.rows ?? [{ id: value }]);
+                      return Promise.resolve({ data, error: opts.error ?? null });
+                    },
+                  };
                 },
               };
             },
@@ -166,6 +172,12 @@ test("revokeAgentKey: sets revoked_at only, filtered by id AND owner", async () 
   assert.equal(log[0].op, "update");
   assert.deepEqual(log[0].payload, { revoked_at: now });
   assert.deepEqual(log[0].filters, [["id", "key-9"], ["user_id", "user-1"]]);
+});
+
+test("revokeAgentKey: zero rows updated (not the owner's key, or already gone) is a failure", async () => {
+  const { db } = fakeDb({ rows: [] });
+  const result = await revokeAgentKey(db, "user-1", "key-9", "2026-11-23T12:00:00.000Z");
+  assert.equal(result.ok, false);
 });
 
 test("revokeAgentKey: a database error is a friendly message", async () => {

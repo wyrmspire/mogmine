@@ -51,8 +51,8 @@ _Added 2026-11-22: Supabase-ready wave (`D-012`). Dependency order: #173 first, 
 | 21 | #176 | Supabase adapter: `mogmine_` migrations, RLS, shared tests on `showmob-dev` | #176, after #173–#175, `D-012` | L | done (`lib/persistence/supabase-adapter.ts`, `supabase/migrations/`, docs/26 §7) |
 | 22 | #177 | Line-count deviation rule in `AGENTS.md` (report/justify files over the target) | #177, may run in parallel | S | done (AGENTS.md §6.12, `npm run check:file-length`) |
 | 23 | #182 | Sign-in: `/login` magic link (implicit flow, no PKCE), allow-list gate only in `supabase` mode, sign-out | #182, docs/26 §6 | M | done (`772ff38`) |
-| 24 | #185 | `185a` Agent API: hashed revocable tokens, owner-session auth (RLS applies), `/api/v1` records + singletons, audit, rate limit | #185, docs/26 §6–7 | L | done (PR #188) |
-| 25 | #185 | `185b` Agent keys settings page, OpenAPI 3.1 `/api/v1/openapi.json`, `/.well-known/mogmine.json` | #185 (discovery comment) | M | claimed (grok-bot planner, Haiku) |
+| 24 | #185 | `185a` Agent API: hashed revocable tokens, owner-session auth (RLS applies), `/api/v1` records + singletons, audit, rate limit | #185, docs/26 §6–7 | L | done (`45a9f7b`) |
+| 25 | #185 | `185b` Agent keys settings page, OpenAPI 3.1 `/api/v1/openapi.json`, `/.well-known/mogmine.json` | #185 (discovery comment) | M | done (PR #189) |
 
 **Open on GitHub but already built here (owner: close them):** #10, #11, #12, #13, #14 (fitted chart window, bar floor, timeframe from duration, style labels gone, tests), #18 (backup), #20 (icons and hint; a real iOS check is still owed), #25 (no price ladder), #27 (`MES=F`), #28 (no synthetic candles), #29 (bar validator), #90 (`MD-1`), #91 (D-010 restatement), #165 (`CD-2a`–`CD-2c`). #26 and #114 are umbrellas: what is left of them is rows 15 and 16 above.
 

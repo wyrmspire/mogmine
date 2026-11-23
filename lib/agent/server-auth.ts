@@ -98,14 +98,23 @@ const AUTH_OPTIONS = { persistSession: false, autoRefreshToken: false, detectSes
 const SESSION_MARGIN_MS = 120_000;
 const UNKNOWN_KEY = "This agent key is not valid.";
 
-/** Real clients from the environment. Null when the API is off (the handler then answers 503). */
-export function defaultAgentDeps(): AgentServerDeps | null {
-  const env: AgentEnv = {
+function readAgentEnv(): AgentEnv {
+  return {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL?.trim(),
     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim(),
     serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
     adapter: process.env.NEXT_PUBLIC_PERSISTENCE_ADAPTER,
   };
+}
+
+/** Whether this deployment serves the agent API (a boolean only; no value leaves this module). */
+export function agentApiEnabled(): boolean {
+  return agentEnabled(readAgentEnv());
+}
+
+/** Real clients from the environment. Null when the API is off (the handler then answers 503). */
+export function defaultAgentDeps(): AgentServerDeps | null {
+  const env = readAgentEnv();
   if (!agentEnabled(env)) return null;
   const url = env.url as string;
   const anonKey = env.anonKey as string;

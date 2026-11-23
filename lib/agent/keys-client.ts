@@ -53,7 +53,7 @@ export interface KeysClientLike {
     };
     update(patch: Record<string, unknown>): {
       eq(column: string, value: string): {
-        eq(column: string, value: string): PromiseLike<{ error: { message: string; code?: string } | null }>;
+        eq(column: string, value: string): { select(columns: string): PromiseLike<DbResult<unknown[]>> };
       };
     };
   };
@@ -126,8 +126,10 @@ export async function listAgentKeys(db: KeysClientLike, userId: string): Promise
 /** Sets `revoked_at` only. The row is filtered by id AND owner. Revoking is one-way (the policy allows nothing else). */
 export async function revokeAgentKey(db: KeysClientLike, userId: string, id: string, nowIso: string): Promise<{ ok: boolean; message?: string }> {
   try {
-    const { error } = await db.from(KEYS_TABLE).update({ revoked_at: nowIso }).eq("id", id).eq("user_id", userId);
-    return error ? { ok: false, message: REVOKE_FAILED } : { ok: true };
+    // Read the id back: an update RLS filtered to zero rows is not an error, but nothing was revoked.
+    const { data, error } = await db.from(KEYS_TABLE).update({ revoked_at: nowIso }).eq("id", id).eq("user_id", userId).select("id");
+    if (error || !Array.isArray(data) || data.length !== 1) return { ok: false, message: REVOKE_FAILED };
+    return { ok: true };
   } catch {
     return { ok: false, message: REVOKE_FAILED };
   }
