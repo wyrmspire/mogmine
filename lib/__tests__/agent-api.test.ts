@@ -1,0 +1,572 @@
+// #185a: the agent API pipeline end to end (lib/agent/handle.ts) on fakes: a service-role admin fake (tokens + audit),
+// an anon auth fake (owner sessions) and one fake user database per owner (RLS-style). The route builder below mirrors
+// the thin files under app/api/v1 (those import the `@/` alias, which node:test cannot resolve).
+import test, { beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { handleAgentRequest } from "../agent/handle.ts";
+import { __resetAgentSessionCache, authenticateAgent } from "../agent/server-auth.ts";
+import type { AdminLike, AgentQuery, AgentServerDeps, AnonAuthLike, AgentEnv } from "../agent/server-auth.ts";
+import { createRateLimiter, decodeRouteParam, isCollectionKey, isSingletonKey, parseListQuery } from "../agent/http.ts";
+import type { RateLimiter } from "../agent/http.ts";
+import type { AgentRoute } from "../agent/dispatch.ts";
+import { generateAgentToken, hashAgentToken } from "../agent/tokens.ts";
+import { createFakeSupabase } from "./fake-supabase.ts";
+import type { FakeSupabase } from "./fake-supabase.ts";
+import { sampleTrade } from "./persistence-contract-suite.ts";
+
+const OWNER_A = "00000000-0000-4000-8000-00000000000a";
+const OWNER_B = "00000000-0000-4000-8000-00000000000b";
+const START = Date.parse("2026-11-23T14:00:00.000Z");
+const HOUR = 3_600_000;
+const GOOD_ENV: AgentEnv = { url: "https://example.supabase.co", anonKey: "anon", serviceKey: "service", adapter: "supabase" };
+
+interface TokenRow { id: string; user_id: string; scopes: string[]; revoked_at: string | null; token_hash: string }
+
+interface World {
+  deps: AgentServerDeps;
+  limiter: RateLimiter;
+  clock: { now: number };
+  tokens: Map<string, TokenRow>;
+  lookups: string[];
+  adminTables: string[];
+  audits: Record<string, unknown>[];
+  auditThrows: boolean;
+  tokenUpdates: { patch: Record<string, unknown>; filters: Record<string, string> }[];
+  getUserCalls: string[];
+  linkCalls: string[];
+  verifyCalls: number;
+  refreshCalls: number;
+  refreshFails: boolean;
+  owners: Map<string, FakeSupabase>;
+  userClientTokens: string[];
+  tokenSeq: number;
+}
+
+/** A chain that is both a builder (`eq`) and an awaitable result, the way the supabase-js builder behaves. */
+function chain(run: (filters: Record<string, string>) => unknown): AgentQuery {
+  const filters: Record<string, string> = {};
+  const query = {
+    eq(column: string, value: string) {
+      filters[column] = value;
+      return query;
+    },
+    maybeSingle() {
+      return Promise.resolve(run(filters));
+    },
+    then(onOk: (value: unknown) => unknown, onErr?: (error: unknown) => unknown) {
+      return Promise.resolve(run(filters)).then(onOk, onErr);
+    },
+  };
+  return query as unknown as AgentQuery;
+}
+
+function makeWorld(options: { env?: AgentEnv; start?: number } = {}): World {
+  const clock = { now: options.start ?? START };
+  const tokens = new Map<string, TokenRow>();
+  const accessOwner = new Map<string, string>();
+  const refreshOwner = new Map<string, string>();
+  const owners = new Map<string, FakeSupabase>();
+  const world = {
+    clock,
+    tokens,
+    lookups: [] as string[],
+    adminTables: [] as string[],
+    audits: [] as Record<string, unknown>[],
+    auditThrows: false,
+    tokenUpdates: [] as { patch: Record<string, unknown>; filters: Record<string, string> }[],
+    getUserCalls: [] as string[],
+    linkCalls: [] as string[],
+    verifyCalls: 0,
+    refreshCalls: 0,
+    refreshFails: false,
+    owners,
+    userClientTokens: [] as string[],
+    tokenSeq: 0,
+  } as unknown as World;
+
+  const session = (uid: string) => {
+    const n = ++world.tokenSeq;
+    const access = `access-${uid}-${n}`;
+    const refresh = `refresh-${uid}-${n}`;
+    accessOwner.set(access, uid);
+    refreshOwner.set(refresh, uid);
+    return { access_token: access, refresh_token: refresh, expires_at: Math.floor((clock.now + HOUR) / 1000) };
+  };
+
+  const admin = {
+    from(table: string) {
+      world.adminTables.push(table);
+      if (table === "mogmine_agent_tokens") {
+        return {
+          select: () => chain((filters) => {
+            world.lookups.push(filters.token_hash);
+            const row = world.tokens.get(filters.token_hash);
+            return { data: row ? { id: row.id, user_id: row.user_id, scopes: row.scopes, revoked_at: row.revoked_at } : null, error: null };
+          }),
+          update: (patch: Record<string, unknown>) => chain((filters) => {
+            world.tokenUpdates.push({ patch, filters: { ...filters } });
+            return { data: null, error: null };
+          }),
+          insert: () => {
+            throw new Error("agent tokens are not inserted by the server");
+          },
+        };
+      }
+      return {
+        select: () => {
+          throw new Error(`service role must not read ${table}`);
+        },
+        update: () => {
+          throw new Error(`service role must not update ${table}`);
+        },
+        insert: (row: Record<string, unknown>) => {
+          if (world.auditThrows) throw new Error("audit table down");
+          world.audits.push(row);
+          return Promise.resolve({ error: null });
+        },
+      };
+    },
+    auth: {
+      admin: {
+        getUserById(id: string) {
+          world.getUserCalls.push(id);
+          return Promise.resolve({ data: { user: { email: `${id}@owner.test` } }, error: null });
+        },
+        generateLink({ email }: { type: "magiclink"; email: string }) {
+          world.linkCalls.push(email);
+          return Promise.resolve({ data: { properties: { hashed_token: `hashed:${email}` } }, error: null });
+        },
+      },
+    },
+  } as unknown as AdminLike;
+
+  const anon = {
+    auth: {
+      verifyOtp({ token_hash }: { token_hash: string; type: "magiclink" }) {
+        world.verifyCalls += 1;
+        const uid = token_hash.slice("hashed:".length).split("@")[0];
+        return Promise.resolve({ data: { session: session(uid) }, error: null });
+      },
+      refreshSession({ refresh_token }: { refresh_token: string }) {
+        world.refreshCalls += 1;
+        const uid = refreshOwner.get(refresh_token);
+        if (world.refreshFails || !uid) return Promise.resolve({ data: null, error: { message: "refresh failed" } });
+        return Promise.resolve({ data: { session: session(uid) }, error: null });
+      },
+    },
+  } as unknown as AnonAuthLike;
+
+  const userDb = (uid: string) => {
+    let db = owners.get(uid);
+    if (!db) {
+      db = createFakeSupabase(uid);
+      owners.set(uid, db);
+    }
+    return db;
+  };
+
+  const deps: AgentServerDeps = {
+    env: options.env ?? GOOD_ENV,
+    admin,
+    anon,
+    userClient(accessToken: string) {
+      world.userClientTokens.push(accessToken);
+      const uid = accessOwner.get(accessToken);
+      if (!uid) throw new Error("unknown access token in test");
+      const db = userDb(uid);
+      return { from: (table) => db.from(table), rpc: (fn, args) => db.rpc(fn, args) };
+    },
+    now: () => clock.now,
+  };
+  // The same object the closures above write to, so tests see every counter and flag they change.
+  world.deps = deps;
+  world.limiter = createRateLimiter({ limit: 120, windowMs: 60_000, now: () => clock.now });
+  return world;
+}
+
+/** A key for `owner`, stored by hash (the plaintext exists only in the test). */
+async function mintKey(world: World, owner: string, scopes: string[] = ["read", "write"], revoked = false): Promise<string> {
+  const { token } = generateAgentToken();
+  const hash = await hashAgentToken(token);
+  const id = `tok-${world.tokens.size + 1}`;
+  world.tokens.set(hash, { id, user_id: owner, scopes, revoked_at: revoked ? "2026-11-20T00:00:00.000Z" : null, token_hash: hash });
+  return token;
+}
+
+/** Mirrors the route files: which AgentRoute a method and path mean. Null is a 404. */
+function build(url: URL, method: string, body: unknown): AgentRoute | null {
+  const [head, first, second, third] = url.pathname.split("/").slice(3);
+  if (head === "me") return method === "GET" && first === undefined ? { kind: "me" } : null;
+  if (head === "singletons") {
+    if (!first || !isSingletonKey(first)) return null;
+    if (method === "GET") return { kind: "readSingleton", key: first };
+    if (method === "PUT") return { kind: "writeSingleton", key: first, body };
+    return null;
+  }
+  if (head !== "records" || !first || !isCollectionKey(first)) return null;
+  const type = first;
+  if (second === undefined) {
+    if (method === "GET") return { kind: "list", type, query: parseListQuery(url.searchParams) };
+    if (method === "POST") return { kind: "create", type, body };
+    return null;
+  }
+  const id = decodeRouteParam(second);
+  if (id === null) return null;
+  if (third === undefined) {
+    if (method === "GET") return { kind: "read", type, id };
+    if (method === "PATCH") return { kind: "update", type, id, body };
+    if (method === "DELETE") return { kind: "remove", type, id };
+    return null;
+  }
+  return third === "archive" && method === "POST" ? { kind: "archive", type, id } : null;
+}
+
+interface Reply {
+  status: number;
+  headers: Headers;
+  text: string;
+  json: { ok?: boolean; data?: unknown; error?: { code: string; message: string } };
+}
+
+async function call(world: World, method: string, path: string, options: { token?: string; body?: unknown; raw?: string; headers?: Record<string, string> } = {}): Promise<Reply> {
+  const headers: Record<string, string> = { ...(options.headers ?? {}) };
+  if (options.token !== undefined) headers.authorization = `Bearer ${options.token}`;
+  const payload = options.raw ?? (options.body !== undefined ? JSON.stringify(options.body) : undefined);
+  if (payload !== undefined) headers["content-type"] = "application/json";
+  const req = new Request(`https://mogmine.test${path}`, { method, headers, body: payload });
+  const res = await handleAgentRequest(req, (url, body) => build(url, method, body), { deps: world.deps, limiter: world.limiter });
+  const text = await res.text();
+  return { status: res.status, headers: res.headers, text, json: text ? JSON.parse(text) : {} };
+}
+
+const recordOf = (data: unknown) => (data as { record: Record<string, unknown> }).record;
+
+beforeEach(() => {
+  __resetAgentSessionCache();
+});
+
+// ---- off switch and authentication ---------------------------------------------------------------------------------
+
+test("off switch: adapter local answers 503 and the service role is never called", async () => {
+  const world = makeWorld({ env: { ...GOOD_ENV, adapter: "local" } });
+  const token = await mintKey(world, OWNER_A);
+  const reply = await call(world, "GET", "/api/v1/me", { token });
+  assert.equal(reply.status, 503);
+  assert.deepEqual(reply.json.error, { code: "unavailable", message: "The agent API is off on this deployment." });
+  assert.equal(world.lookups.length, 0);
+  assert.equal(world.adminTables.length, 0);
+  assert.equal(reply.headers.get("cache-control"), "no-store");
+});
+
+test("off switch: a missing service-role key is off too", async () => {
+  const world = makeWorld({ env: { ...GOOD_ENV, serviceKey: "" } });
+  const reply = await call(world, "GET", "/api/v1/me", { token: (await mintKey(world, OWNER_A)) });
+  assert.equal(reply.status, 503);
+  assert.equal(world.adminTables.length, 0);
+});
+
+test("missing or malformed bearer: 401 with WWW-Authenticate and no service-role call", async () => {
+  const world = makeWorld();
+  const none = await call(world, "GET", "/api/v1/me");
+  assert.equal(none.status, 401);
+  assert.equal(none.json.error?.code, "unauthenticated");
+  assert.equal(none.headers.get("www-authenticate"), 'Bearer realm="mogmine"');
+  const malformed = await call(world, "GET", "/api/v1/me", { headers: { authorization: "Basic abc" } });
+  assert.equal(malformed.status, 401);
+  assert.equal(malformed.headers.get("www-authenticate"), 'Bearer realm="mogmine"');
+  assert.equal(world.adminTables.length, 0);
+  assert.equal(world.audits.length, 0);
+});
+
+test("unknown and revoked keys get the same 401 message", async () => {
+  const world = makeWorld();
+  const unknown = await call(world, "GET", "/api/v1/me", { token: generateAgentToken().token });
+  const revoked = await call(world, "GET", "/api/v1/me", { token: await mintKey(world, OWNER_A, ["read"], true) });
+  for (const reply of [unknown, revoked]) {
+    assert.equal(reply.status, 401);
+    assert.deepEqual(reply.json.error, { code: "unauthenticated", message: "This agent key is not valid." });
+  }
+  assert.equal(world.audits.length, 0, "no owner is known, so nothing is audited");
+});
+
+test("read-only key: POST is 403, GET list is 200, and the refused write is audited", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A, ["read"]);
+  const write = await call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade("t-ro") });
+  assert.equal(write.status, 403);
+  assert.deepEqual(write.json.error, { code: "forbidden", message: "This key is read-only." });
+  assert.equal(world.audits.length, 1);
+  assert.equal(world.audits[0].status, 403);
+  assert.equal(world.audits[0].outcome, "forbidden");
+  const list = await call(world, "GET", "/api/v1/records/trades", { token });
+  assert.equal(list.status, 200);
+  assert.deepEqual(list.json.data, []);
+});
+
+test("write-only key does not read (write does not imply read)", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A, ["write"]);
+  const reply = await call(world, "GET", "/api/v1/records/trades", { token });
+  assert.equal(reply.status, 403);
+});
+
+// ---- records ---------------------------------------------------------------------------------------------------------
+
+test("create then read: 201, GET by id 200 with the same id, list contains it, stamped with the token owner", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  const created = await call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade("t-1") });
+  assert.equal(created.status, 201);
+  assert.equal(recordOf(created.json.data).id, "t-1");
+  assert.equal(recordOf(created.json.data).user_id, OWNER_A);
+
+  const read = await call(world, "GET", "/api/v1/records/trades/t-1", { token });
+  assert.equal(read.status, 200);
+  assert.equal(recordOf(read.json.data).id, "t-1");
+
+  const list = await call(world, "GET", "/api/v1/records/trades", { token });
+  assert.ok((list.json.data as { id: string }[]).some((row) => row.id === "t-1"));
+
+  const db = world.owners.get(OWNER_A);
+  assert.ok(db);
+  const rows = db.tables.get("mogmine_trades") ?? [];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].user_id, OWNER_A, "the row belongs to the key's owner, not the demo owner");
+  assert.equal(world.owners.get(OWNER_B), undefined, "no other owner's database is touched");
+});
+
+test("PATCH: a non-object body is 422, invalid JSON is 400, and an unknown type is 404", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade("t-2") });
+
+  const array = await call(world, "PATCH", "/api/v1/records/trades/t-2", { token, body: [1, 2] });
+  assert.equal(array.status, 422);
+  assert.equal(array.json.error?.code, "invalid");
+
+  const broken = await call(world, "POST", "/api/v1/records/trades", { token, raw: "{not json" });
+  assert.equal(broken.status, 400);
+  assert.deepEqual(broken.json.error, { code: "invalid", message: "Body must be a JSON object." });
+
+  for (const type of ["candles", "showmob_users"]) {
+    const reply = await call(world, "GET", `/api/v1/records/${type}`, { token });
+    assert.equal(reply.status, 404, type);
+    assert.equal(reply.json.error?.code, "not_found", type);
+  }
+});
+
+test("oversized body is 413 before it is parsed", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  const big = `{"id":"x","note":"${"a".repeat(260 * 1024)}"}`;
+  const reply = await call(world, "POST", "/api/v1/records/trades", { token, raw: big });
+  assert.equal(reply.status, 413);
+});
+
+test("delete then read: 404; archive on trades is 403; archive on accounts works", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade("t-3") });
+  const removed = await call(world, "DELETE", "/api/v1/records/trades/t-3", { token });
+  assert.equal(removed.status, 200);
+  assert.equal(removed.json.data, null);
+  const gone = await call(world, "GET", "/api/v1/records/trades/t-3", { token });
+  assert.equal(gone.status, 404);
+
+  await call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade("t-4") });
+  const archiveTrade = await call(world, "POST", "/api/v1/records/trades/t-4/archive", { token });
+  assert.equal(archiveTrade.status, 403);
+
+  const account = { id: "acc-1", name: "Eval 50K", starting_balance_cents: 5_000_000, rules: {}, created_at: "2026-11-20T00:00:00Z", archived: false };
+  const made = await call(world, "POST", "/api/v1/records/accounts", { token, body: account });
+  assert.equal(made.status, 201);
+  const archived = await call(world, "POST", "/api/v1/records/accounts/acc-1/archive", { token });
+  assert.equal(archived.status, 200);
+  assert.equal(recordOf(archived.json.data).archived, true);
+});
+
+test("ids with a colon round-trip through the route (seed:cut)", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  const reply = await call(world, "GET", "/api/v1/records/playbooks/seed%3Acut", { token });
+  assert.equal(reply.status, 404, "not stored, so not found, but the id decoded");
+  assert.equal(world.audits.at(-1)?.record_id, "seed:cut");
+});
+
+// ---- singletons and me -------------------------------------------------------------------------------------------------
+
+test("singletons: PUT prefs then GET returns the same document", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  const before = await call(world, "GET", "/api/v1/singletons/prefs", { token });
+  assert.equal(before.status, 200);
+  assert.equal(before.json.data, null);
+  const put = await call(world, "PUT", "/api/v1/singletons/prefs", { token, body: { riskBudgetUsd: 250 } });
+  assert.equal(put.status, 200);
+  const got = await call(world, "GET", "/api/v1/singletons/prefs", { token });
+  assert.equal((recordOf(got.json.data) as { riskBudgetUsd: number }).riskBudgetUsd, 250);
+  const notExposed = await call(world, "GET", "/api/v1/singletons/prompt_library", { token });
+  assert.equal(notExposed.status, 404);
+});
+
+test("me: returns the owner and the key's scopes, never the token", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  const reply = await call(world, "GET", "/api/v1/me", { token });
+  assert.equal(reply.status, 200);
+  const data = reply.json.data as { user_id: string; token: { id: string; scopes: string[] } };
+  assert.equal(data.user_id, OWNER_A);
+  assert.deepEqual(data.token.scopes, ["read", "write"]);
+  assert.equal(reply.text.includes(token), false);
+});
+
+// ---- audit and bookkeeping ---------------------------------------------------------------------------------------------
+
+test("audit: one row per authenticated request with method, path (no query), status and outcome", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade("t-5") });
+  await call(world, "GET", "/api/v1/records/trades?limit=5&includeArchived=false", { token });
+  await call(world, "GET", "/api/v1/records/trades/nope", { token });
+  assert.equal(world.audits.length, 3);
+  assert.deepEqual(world.audits[0], {
+    user_id: OWNER_A,
+    token_id: "tok-1",
+    method: "POST",
+    path: "/api/v1/records/trades",
+    record_type: "trades",
+    record_id: "t-5",
+    status: 201,
+    outcome: "ok",
+  });
+  assert.equal(world.audits[1].path, "/api/v1/records/trades");
+  assert.equal(world.audits[1].status, 200);
+  assert.equal(world.audits[2].status, 404);
+  assert.equal(world.audits[2].outcome, "not_found");
+});
+
+test("last_used_at is written with a filter on BOTH the token id and the owner", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await call(world, "GET", "/api/v1/me", { token });
+  assert.equal(world.tokenUpdates.length, 1);
+  assert.deepEqual(world.tokenUpdates[0].filters, { id: "tok-1", user_id: OWNER_A });
+  assert.ok(typeof world.tokenUpdates[0].patch.last_used_at === "string");
+});
+
+test("audit failure does not change the response", async () => {
+  const world = makeWorld();
+  world.auditThrows = true;
+  const token = await mintKey(world, OWNER_A);
+  const reply = await call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade("t-6") });
+  assert.equal(reply.status, 201);
+  assert.equal(recordOf(reply.json.data).id, "t-6");
+});
+
+// ---- owner sessions -----------------------------------------------------------------------------------------------------
+
+test("owner session: two requests for one owner mint once; a near-expiry session is refreshed", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await call(world, "GET", "/api/v1/me", { token });
+  await call(world, "GET", "/api/v1/me", { token });
+  assert.equal(world.getUserCalls.length, 1);
+  assert.equal(world.linkCalls.length, 1);
+  assert.equal(world.verifyCalls, 1);
+  assert.equal(world.refreshCalls, 0);
+
+  world.clock.now += HOUR - 100_000; // 100 s left: inside the 120 s margin
+  await call(world, "GET", "/api/v1/me", { token });
+  assert.equal(world.refreshCalls, 1);
+  assert.equal(world.linkCalls.length, 1, "refresh reuses the session, no new link");
+});
+
+test("owner session: a failed refresh mints again", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await call(world, "GET", "/api/v1/me", { token });
+  world.clock.now += HOUR - 100_000;
+  world.refreshFails = true;
+  const reply = await call(world, "GET", "/api/v1/me", { token });
+  assert.equal(reply.status, 200);
+  assert.equal(world.refreshCalls, 1);
+  assert.equal(world.linkCalls.length, 2);
+});
+
+test("owner session: sessions are per owner, never shared", async () => {
+  const world = makeWorld();
+  const a = await mintKey(world, OWNER_A);
+  const b = await mintKey(world, OWNER_B);
+  await call(world, "GET", "/api/v1/me", { token: a });
+  await call(world, "GET", "/api/v1/me", { token: b });
+  assert.deepEqual(world.linkCalls, [`${OWNER_A}@owner.test`, `${OWNER_B}@owner.test`]);
+  const me = await call(world, "GET", "/api/v1/me", { token: b });
+  assert.equal((me.json.data as { user_id: string }).user_id, OWNER_B);
+});
+
+test("the service role only touches the two agent tables", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade("t-7") });
+  await call(world, "GET", "/api/v1/records/trades/t-7", { token });
+  assert.deepEqual([...new Set(world.adminTables)].sort(), ["mogmine_agent_audit", "mogmine_agent_tokens"]);
+});
+
+// ---- response hygiene and rate limit ----------------------------------------------------------------------------------
+
+test("responses never contain the token, its hash, or a cause", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  const hash = await hashAgentToken(token);
+  const replies = [
+    await call(world, "GET", "/api/v1/me", { token }),
+    await call(world, "GET", "/api/v1/records/trades/missing", { token }),
+    await call(world, "POST", "/api/v1/records/trades", { token, raw: "{" }),
+    await call(world, "GET", "/api/v1/me", { token: generateAgentToken().token }),
+  ];
+  for (const reply of replies) {
+    assert.equal(reply.text.includes(token), false);
+    assert.equal(reply.text.includes(hash), false);
+    assert.equal(reply.text.includes("cause"), false);
+    assert.equal(reply.text.includes("stack"), false);
+  }
+});
+
+test("rate limit: the 121st request in a minute is 429 with Retry-After and does no lookup", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  for (let i = 0; i < 120; i += 1) {
+    const ok = await call(world, "GET", "/api/v1/me", { token });
+    assert.equal(ok.status, 200, `request ${i + 1}`);
+  }
+  assert.equal(world.lookups.length, 120);
+  const blocked = await call(world, "GET", "/api/v1/me", { token });
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.json.error?.code, "rate_limited");
+  const retry = Number(blocked.headers.get("retry-after"));
+  assert.ok(retry >= 1 && retry <= 60, `retry-after ${retry}`);
+  assert.equal(world.lookups.length, 120, "no database lookup for the blocked request");
+});
+
+test("authenticateAgent: a valid key returns the owner and a data client, and a scope failure carries the identity", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A, ["read"]);
+  const req = new Request("https://mogmine.test/api/v1/records/trades", { method: "POST", headers: { authorization: `Bearer ${token}` } });
+  const denied = await authenticateAgent(req, world.deps, world.limiter);
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.deepEqual(denied.identity, { userId: OWNER_A, tokenId: "tok-1", scopes: ["read"] });
+
+  const ok = await authenticateAgent(new Request("https://mogmine.test/api/v1/me", { headers: { authorization: `Bearer ${token}` } }), world.deps, world.limiter);
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    const session = await ok.ctx.db.auth.getSession();
+    assert.equal(session.data.session?.user.id, OWNER_A);
+  }
+});
+
+test("a key with no scopes can do nothing", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A, []);
+  const reply = await call(world, "GET", "/api/v1/me", { token });
+  assert.equal(reply.status, 403);
+});
