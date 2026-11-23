@@ -114,6 +114,8 @@ function sameRecords<T extends { id: string }>(key: CollectionKey, a: readonly T
 const SIGNED_OUT_MESSAGE = "Sign in to sync your journal.";
 const FLUSH_BLOCKED = new Set<PersistError["code"]>(["unauthenticated", "unavailable", "unknown"]);
 const PULL_IDLE_REFRESH_MS = 60_000;
+/** Supabase PostgREST default `max-rows`. */
+export const REMOTE_ROW_CAP = 1000;
 
 interface Timer { handle: unknown; armed: boolean }
 
@@ -202,6 +204,9 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
     }
 
     const remote = listed.value;
+    // PostgREST caps a response at `max-rows` (1000 on Supabase by default). A full page may be truncated, so it
+    // must never be read as "the server deleted the rest" (no local record is dropped on such a pull).
+    const maybeTruncated = remote.length >= REMOTE_ROW_CAP;
     const current = options.getLocal();
     const base = scopedBase(readBase(storage, key), owner);
     const deviceOwner = readDeviceOwner(storage, key);
@@ -234,8 +239,9 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
       if (remoteRecord) {
         merged.set(id, dirty ? record : remoteRecord);
         track(remoteRecord);
-      } else if (baseIds.has(id) && !dirty) {
+      } else if (baseIds.has(id) && !dirty && !maybeTruncated) {
         // The server had it, no longer does, and this device has no edits: deleted on another device. Drop it.
+        // Not when the list may be cut short by the server row cap: then a missing row proves nothing.
       } else {
         merged.set(id, record); // never synced, or edited since: keep and push
       }

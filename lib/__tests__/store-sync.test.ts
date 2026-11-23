@@ -2,7 +2,7 @@
 // lib/persistence/store-sync.ts and the trade store wiring in lib/store.ts.
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { createCollectionSync, fingerprint, getSyncSummary, resetSyncRegistryForTests, subscribeSync } from "../persistence/store-sync.ts";
+import { REMOTE_ROW_CAP, createCollectionSync, fingerprint, getSyncSummary, resetSyncRegistryForTests, subscribeSync } from "../persistence/store-sync.ts";
 import type { CollectionSync, SyncStatus } from "../persistence/store-sync.ts";
 import { createMemoryCandleStore, createMemoryKeyValueStore } from "../persistence/local-adapter.ts";
 import type { KeyValueStore } from "../persistence/local-adapter.ts";
@@ -243,6 +243,24 @@ test("a remote delete of a clean record is dropped locally; nothing is sent back
   await h.sync.pull();
   assert.deepEqual(h.local().map((item) => item.id), ["b"]);
   assert.equal(writesOf(fake).length, before);
+});
+
+test("a full page from the server (row cap) is not read as deletions: clean local records are kept", async () => {
+  const fake = createFakeSupabase(UID);
+  const h = harness({ fake, initial: [trade("a"), trade("b")] });
+  await h.sync.pull();
+  await direct(fake).remove(UID, "a");
+  const real = createSupabaseAdapter({ client: fake, candles: createMemoryCandleStore() });
+  const filler = Array.from({ length: REMOTE_ROW_CAP }, (_, index) => trade(`r${index}`));
+  const capped = {
+    ...real,
+    repositories: { ...real.repositories, trades: { ...real.repositories.trades, list: async () => ({ ok: true as const, value: filler }) } },
+  } as PersistenceAdapter;
+  const h2 = harness({ fake, initial: h.local(), storage: h.storage, adapter: capped });
+  await h2.sync.pull();
+  assert.ok(h2.local().some((item) => item.id === "a"), "a clean record missing from a capped page must stay");
+  h.sync.dispose();
+  h2.sync.dispose();
 });
 
 test("a remote delete of a dirty local record keeps the record and sends it again (no data loss)", async () => {
