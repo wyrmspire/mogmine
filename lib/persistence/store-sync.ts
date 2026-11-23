@@ -99,6 +99,16 @@ export function subscribeSync(listener: () => void): () => void {
   };
 }
 
+/** Lets another syncer kind (singleton-sync) join the header summary. Returns the unregister function. */
+export function registerSyncEntry(entry: { getState(): SyncState }): () => void {
+  registry.add(entry);
+  refresh();
+  return () => { registry.delete(entry); refresh(); };
+}
+
+/** Tell the summary that a registered entry changed its state. */
+export const notifySyncChanged = (): void => refresh();
+
 export function resetSyncRegistryForTests(): void {
   registry.clear();
   refresh();

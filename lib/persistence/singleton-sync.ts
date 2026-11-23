@@ -6,7 +6,7 @@
 import { getPersistence } from "./select.ts";
 import type { KeyValueStore } from "./local-adapter.ts";
 import type { PersistError, PersistenceAdapter, SingletonKey, SingletonRepository } from "./contract.ts";
-import { fingerprint, remoteSyncEnabled } from "./store-sync.ts";
+import { fingerprint, notifySyncChanged, registerSyncEntry, remoteSyncEnabled } from "./store-sync.ts";
 import type { SyncState } from "./store-sync.ts";
 import { SYNC_PREFIX, backoffDelay, browserStorage, keepOrphans, readDeviceOwner, writeDeviceOwner } from "./sync-storage.ts";
 
@@ -115,6 +115,7 @@ export function createSingletonSync<T>(options: SingletonSyncOptions<T>): Single
 
   function setState(status: SyncState["status"], message: string | null = null, lastSyncedAt = state.lastSyncedAt) {
     state = { status, message, lastSyncedAt };
+    notifySyncChanged();
   }
 
   function arm(timer: Timer, run: () => void, ms: number) {
@@ -313,6 +314,7 @@ export function createSingletonSync<T>(options: SingletonSyncOptions<T>): Single
 
   function dispose() {
     if (disposed) return;
+    unregister();
     disposed = true;
     disarm(debounce);
     disarm(retryTimer);
@@ -323,5 +325,6 @@ export function createSingletonSync<T>(options: SingletonSyncOptions<T>): Single
     }
   }
 
+  const unregister = registerSyncEntry({ getState: () => state });
   return { start, changed, pull, flushNow, getState: () => state, dispose };
 }
