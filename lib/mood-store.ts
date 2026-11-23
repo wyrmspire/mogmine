@@ -1,10 +1,12 @@
 // Mood records on this device (docs/18). Kept apart from the trade list, the way a separate table would be:
 // the spoke registry, the append-only score records, pending suggestions and candidate spokes.
-// Local-first like the journal (UX-30, UX-31). Records and candidates sync to Supabase when enabled (#193, docs/26 §8).
-// The spoke registry stays device-only until singleton sync lands; suggestions are session-only and never synced.
+// Local-first like the journal (UX-30, UX-31). Records, candidates and the spoke registry sync to Supabase when enabled
+// (#193, #194, docs/26 §8). Suggestions are session-only and never synced (derivedNeverStored).
 import { useSyncExternalStore } from "react";
 import { createCollectionSync } from "./persistence/store-sync.ts";
 import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
+import { createSingletonSync } from "./persistence/singleton-sync.ts";
+import type { SingletonSync, SingletonSyncOptions } from "./persistence/singleton-sync.ts";
 import {
   DEFAULT_CANDIDATE_THRESHOLD,
   DEFAULT_MOOD_REGISTRY,
@@ -63,8 +65,8 @@ function persist() {
   }
 }
 
-// Remote sync (#193). The device cache above is always written first; these copy records and candidates in the
-// background. `apply` leaves `suggestions` and the registry as they are and writes the whole device cache.
+// Remote sync (#193, #194). The device cache above is always written first; these copy records, candidates and the
+// registry in the background. `apply` leaves `suggestions` as they are and writes the whole device cache.
 function applyRecords(next: MoodRecord[]) {
   set({ records: sanitizeMoodRecords(next) });
   persist();
@@ -75,20 +77,30 @@ function applyCandidates(next: MoodSpokeCandidate[]) {
   persist();
 }
 
+function applyRegistry(next: MoodSpokeRegistry) {
+  set({ registry: sanitizeRegistry(next) });
+  persist();
+}
+
 interface MoodSyncs {
   records: CollectionSync;
   candidates: CollectionSync;
+  /** The spoke registry: one document per owner (`mogmine_mood_registries`, docs/26 §3). */
+  registry: SingletonSync;
 }
 
 type MoodSyncOverrides = {
   records?: Partial<CollectionSyncOptions<MoodRecord>>;
   candidates?: Partial<CollectionSyncOptions<MoodSpokeCandidate>>;
+  registry?: Partial<SingletonSyncOptions<MoodSpokeRegistry>>;
 };
 
 function createMoodSyncs(overrides: MoodSyncOverrides = {}): MoodSyncs {
   return {
     records: createCollectionSync<MoodRecord>({ key: "mood_records", include: notOnSampleTrade, getLocal: () => state.records, apply: applyRecords, ...overrides.records }),
     candidates: createCollectionSync<MoodSpokeCandidate>({ key: "mood_candidates", getLocal: () => state.candidates, apply: applyCandidates, ...overrides.candidates }),
+    // A fresh device holds the starting spokes; those never overwrite the server's registry (singleton `unedited` rule).
+    registry: createSingletonSync<MoodSpokeRegistry>({ key: "mood_registry", getLocal: () => state.registry, apply: applyRegistry, unedited: DEFAULT_MOOD_REGISTRY, ...overrides.registry }),
   };
 }
 
@@ -98,6 +110,7 @@ let syncs: MoodSyncs = createMoodSyncs();
 function replaceSyncs(overrides?: MoodSyncOverrides): MoodSyncs {
   syncs.records.dispose();
   syncs.candidates.dispose();
+  syncs.registry.dispose();
   syncs = createMoodSyncs(overrides);
   return syncs;
 }
@@ -141,10 +154,12 @@ export function hydrateMood() {
       set(fromStored(JSON.parse(event.newValue) as StoredMood));
       syncs.records.changed();
       syncs.candidates.changed();
+      syncs.registry.changed();
     } catch { /* keep ours */ }
   });
   syncs.records.start();
   syncs.candidates.start();
+  syncs.registry.start();
 }
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `mood-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -253,6 +268,7 @@ export function addSpokeFromCandidate(candidateId: string, trades: TradeRecord[]
   const rescored = rescoreForNewSpoke(trades.filter((trade) => !trade.is_sample), state.records, registry, candidate.id, { now, makeId: () => newId() });
   set({ registry, records: [...state.records, ...rescored], candidates: state.candidates.filter((item) => item.id !== candidateId) });
   persist();
+  syncs.registry.changed();
   syncs.records.changed();
   syncs.candidates.changed();
   return rescored.length;
@@ -272,6 +288,7 @@ export function getMoodBackup(): MoodBackup {
 export function restoreMood(backup: MoodBackup) {
   set({ registry: backup.registry, records: backup.records, candidates: backup.candidates, suggestions: {} });
   persist();
+  syncs.registry.changed();
   syncs.records.changed();
   syncs.candidates.changed();
 }
@@ -282,7 +299,7 @@ export function resetMoodForTests(next: Partial<MoodState> = {}) {
   state = { ...empty(), hydrated: true, ...next };
 }
 
-/** Test hook: swap the record or candidate syncer's adapter, storage or timers. Returns the syncers under test. */
+/** Test hook: swap the record, candidate or registry syncer's adapter, storage or timers. Returns the syncers under test. */
 export function configureMoodSyncForTests(overrides: MoodSyncOverrides): MoodSyncs {
   return replaceSyncs(overrides);
 }

@@ -71,6 +71,15 @@ export async function sendMagicLink(
   }
 }
 
+/**
+ * True when a session event is for the user whose allow-list answer is already on screen (`checkedUid`). A token refresh
+ * (or the initial session) for that same user keeps the answer, so AppShell is not unmounted and its unsaved state kept.
+ * A signed-out event, or no answer yet, never counts as kept.
+ */
+export function keepsCheckedUser(checkedUid: string | null, session: { user: AuthUserLike } | null): boolean {
+  return checkedUid !== null && session !== null && session.user.id === checkedUid;
+}
+
 /** `allowed` iff the signed-in user's own allow-list row is readable. Any failure is `error`, never `allowed`. */
 export async function checkAllowed(client: AuthClientLike, uid: string): Promise<"allowed" | "not-authorized" | "error"> {
   try {

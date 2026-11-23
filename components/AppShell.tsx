@@ -41,6 +41,12 @@ function saveStatus(saveState: SaveState, sync: SyncState): { state: SaveState; 
   return SYNC_TEXT[sync.status];
 }
 
+/** #194: a sync error says what failed in the header's tooltip (e.g. "2 records couldn't sync"). Nothing else. */
+function saveTitle(saveState: SaveState, sync: SyncState): string | undefined {
+  if (!REMOTE_SYNC || saveState === "error" || sync.status !== "error") return undefined;
+  return sync.message ?? undefined;
+}
+
 const icons = {
   today: <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /></svg>,
   feed: <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h10" /></svg>,
@@ -65,6 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const online = useOnline();
   const sync = useSyncSummary();
   const save = saveStatus(journal.saveState, sync);
+  const saveHint = saveTitle(journal.saveState, sync);
 
   useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); hydratePlans(); hydrateDrills(); hydrateCalls(); }, []);
 
@@ -81,7 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {NAV.map((item) => <Link key={item.href} href={item.href} style={{ minHeight: 44, minWidth: 44 }} aria-current={isActive(item.href) ? "page" : undefined}>{item.label}{item.href === "/review" && reviewBadge}</Link>)}
         </nav>
         <span className="topbar-spacer" />
-        <span className="save-status" data-state={save.state} role="status"><i aria-hidden="true" /><span>{save.text}</span></span>
+        <span className="save-status" data-state={save.state} role="status" title={saveHint}><i aria-hidden="true" /><span>{save.text}</span></span>
         <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} aria-pressed={prefs.shield} aria-label={prefs.shield ? "Shield mode on: dollars hidden. Tap to show dollars." : "Shield mode off. Tap to hide dollars."} title="Shield mode: hide dollars and size" onClick={() => setPrefs({ shield: !prefs.shield })}>{icons.shield}</button>
         <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade} aria-label="Add trade">＋</button>
         <AgentKeysLink />
