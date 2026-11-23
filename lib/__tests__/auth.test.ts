@@ -8,6 +8,7 @@ import {
   ALLOW_LIST_TABLE,
   checkAllowed,
   isAuthGateOn,
+  keepsCheckedUser,
   loginRedirectUrl,
   normalizeEmail,
   parseAuthHashError,
@@ -137,6 +138,17 @@ test("checkAllowed: no row is not-authorized; an error is error, never allowed",
   assert.equal(await checkAllowed(fakeClient({ row: { data: null, error: null } }).client, uid), "not-authorized");
   assert.equal(await checkAllowed(fakeClient({ row: { data: null, error: { message: "boom" } } }).client, uid), "error");
   assert.equal(await checkAllowed(fakeClient({ row: { data: { user_id: uid }, error: { message: "partial" } } }).client, uid), "error");
+});
+
+// ---- session refresh (#194) -----------------------------------------------------------------------------------------
+
+test("keepsCheckedUser: a token refresh for the checked user keeps the answer (no re-check, no unmount)", () => {
+  const uid = "00000000-0000-4000-8000-000000000003";
+  assert.equal(keepsCheckedUser(uid, { user: { id: uid } }), true, "TOKEN_REFRESHED for the same user");
+  assert.equal(keepsCheckedUser(uid, { user: { id: "00000000-0000-4000-8000-000000000004" } }), false, "a different user is checked again");
+  assert.equal(keepsCheckedUser(null, { user: { id: uid } }), false, "no answer on screen yet: check");
+  assert.equal(keepsCheckedUser(uid, null), false, "signed out is never kept");
+  assert.equal(keepsCheckedUser(null, null), false);
 });
 
 // ---- hash errors and sign-out ----------------------------------------------------------------------------------

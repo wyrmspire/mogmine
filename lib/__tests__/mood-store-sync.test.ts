@@ -3,17 +3,18 @@
 // and apply() keeps suggestions and the spoke registry on this device.
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { DEFAULT_MOOD_REGISTRY, userMoodRecord } from "../mood.ts";
-import type { MoodRecord } from "../mood.ts";
+import { DEFAULT_MOOD_REGISTRY, addSpoke, userMoodRecord } from "../mood.ts";
+import type { MoodRecord, MoodSpokeRegistry } from "../mood.ts";
 import {
-  configureMoodSyncForTests, dismissCandidate, getMoodBackup, getMoodState, hydrateMood, recordUserMood, resetMoodForTests,
-  restoreMood, setSpokeScore, undoMoodRecord,
+  addSpokeFromCandidate, configureMoodSyncForTests, dismissCandidate, getMoodBackup, getMoodState, hydrateMood, recordUserMood,
+  resetMoodForTests, restoreMood, setSpokeScore, undoMoodRecord,
 } from "../mood-store.ts";
 import { createMemoryCandleStore, createMemoryKeyValueStore } from "../persistence/local-adapter.ts";
 import { createSupabaseAdapter } from "../persistence/supabase-adapter.ts";
 import type { PersistenceAdapter } from "../persistence/contract.ts";
 import { resetSyncRegistryForTests } from "../persistence/store-sync.ts";
 import type { CollectionSync } from "../persistence/store-sync.ts";
+import type { SingletonSync } from "../persistence/singleton-sync.ts";
 import { createFakeSupabase } from "./fake-supabase.ts";
 import type { FakeSupabase } from "./fake-supabase.ts";
 
@@ -73,6 +74,7 @@ interface Session {
   adapter: PersistenceAdapter;
   records: CollectionSync;
   candidates: CollectionSync;
+  registry: SingletonSync;
   timers: ReturnType<typeof manualTimers>;
 }
 
@@ -91,16 +93,18 @@ async function boot(enabled = true): Promise<Session> {
     clearTimer: timers.clearTimer,
     now: () => Date.parse(NOW),
   };
-  const syncs = configureMoodSyncForTests({ records: common, candidates: common });
+  const syncs = configureMoodSyncForTests({ records: common, candidates: common, registry: common });
   hydrateMood();
   await syncs.records.pull();
   await syncs.candidates.pull();
-  return { fake, adapter, records: syncs.records, candidates: syncs.candidates, timers };
+  await syncs.registry.pull();
+  return { fake, adapter, records: syncs.records, candidates: syncs.candidates, registry: syncs.registry, timers };
 }
 
 const rowsOf = (fake: FakeSupabase, table: string) => (fake.tables.get(table) ?? []).filter((row) => row.user_id === UID);
 const serverMoodIds = (fake: FakeSupabase) => rowsOf(fake, "mogmine_mood_records").map((row) => String(row.id)).sort();
 const serverCandidateIds = (fake: FakeSupabase) => rowsOf(fake, "mogmine_mood_candidates").map((row) => String(row.id)).sort();
+const serverRegistry = (fake: FakeSupabase) => (rowsOf(fake, "mogmine_mood_registries")[0]?.record ?? null) as MoodSpokeRegistry | null;
 /** Every call that changed the server (reads are `select`). */
 const writesOf = (fake: FakeSupabase) => fake.calls.filter((call) => !call.startsWith("select"));
 
@@ -222,4 +226,47 @@ test("a pull that changes records keeps pending suggestions and the spoke regist
   assert.deepEqual(getMoodState().registry, DEFAULT_MOOD_REGISTRY);
   const stored = JSON.parse(device.get(STORAGE_KEY) ?? "{}") as { suggestions?: Record<string, unknown> };
   assert.ok(stored.suggestions?.t1, "the device cache keeps the suggestion too");
+});
+
+test("the spoke registry is a singleton: a spoke added from a candidate reaches the server registry row", async () => {
+  useWindow();
+  seedDevice([], [{ label: "Patience", trade_ids: ["t1"], first_seen: NOW, last_seen: NOW }]);
+  const session = await boot();
+  const [candidate] = getMoodState().candidates;
+  assert.deepEqual(serverRegistry(session.fake), DEFAULT_MOOD_REGISTRY, "first sign-in imports the device's registry");
+
+  addSpokeFromCandidate(candidate.id, []);
+  session.timers.fire();
+  assert.equal(await session.registry.flushNow(), true);
+
+  const registry = serverRegistry(session.fake);
+  assert.equal(registry?.version, 2);
+  assert.ok(registry?.spokes.some((spoke) => spoke.label === "Patience"));
+  assert.deepEqual(getMoodState().registry, addSpoke(DEFAULT_MOOD_REGISTRY, "Patience"));
+});
+
+test("a registry saved on another device is adopted by a clean device (the starting spokes never overwrite it)", async () => {
+  useWindow();
+  const session = await boot();
+  const remote = addSpoke(DEFAULT_MOOD_REGISTRY, "Patience");
+  await session.adapter.repositories.mood_registry.put(UID, remote);
+  await session.registry.pull();
+
+  assert.deepEqual(getMoodState().registry, remote);
+  assert.deepEqual(JSON.parse(device.get(STORAGE_KEY) ?? "{}").registry, remote, "device cache follows the server");
+});
+
+test("restoreMood pushes the backup's registry, so a spoke the backup lacks is removed on the server", async () => {
+  useWindow();
+  seedDevice([]);
+  const session = await boot();
+  await session.adapter.repositories.mood_registry.put(UID, addSpoke(DEFAULT_MOOD_REGISTRY, "Old spoke"));
+  await session.registry.pull();
+  assert.ok(getMoodState().registry.spokes.some((spoke) => spoke.label === "Old spoke"));
+
+  restoreMood({ registry: DEFAULT_MOOD_REGISTRY, records: [], candidates: [] });
+  session.timers.fire();
+  assert.equal(await session.registry.flushNow(), true);
+
+  assert.deepEqual(serverRegistry(session.fake), DEFAULT_MOOD_REGISTRY);
 });

@@ -3,7 +3,7 @@
 // imports the Supabase SDK, so `local` and `mock` render exactly as before. The SDK is loaded with a dynamic import
 // only when the gate is on.
 import { useCallback, useEffect, useState } from "react";
-import { checkAllowed, isAuthGateOn, signOutUser } from "@/lib/auth/auth";
+import { checkAllowed, isAuthGateOn, keepsCheckedUser, signOutUser } from "@/lib/auth/auth";
 import type { AuthClientLike, AuthStatus } from "@/lib/auth/auth";
 
 // NEXT_PUBLIC_* values are inlined at build time, so this is a constant in the browser bundle.
@@ -67,7 +67,7 @@ export function useAuth(): AuthState & { retry(): void } {
       }
       // TOKEN_REFRESHED / INITIAL_SESSION for the same user: keep the answer, so AppShell is not unmounted (and its
       // unsaved state lost) every time the access token refreshes.
-      if (session.user.id === checkedUid) return;
+      if (keepsCheckedUser(checkedUid, session)) return;
       checkedUid = null;
       const email = session.user.email ?? null;
       if (alive) setState({ status: "checking", email, message: null });

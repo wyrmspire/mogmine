@@ -1,7 +1,7 @@
 # 26 — Persistence Contract and Database-Readiness Checklist
 
 **Issue:** #173 · **Decision:** [D-012](../DECISIONS.md) · **Boundary:** [docs/22](22-development-mode-and-backend-boundary.md)  
-**Status:** Contract (#173). Command layer (#174): `lib/commands/journal-commands.ts`. Local/mock adapter (#175): `lib/persistence/local-adapter.ts` and `lib/persistence/select.ts`, selected by `NEXT_PUBLIC_PERSISTENCE_ADAPTER`. Supabase adapter (#176): `lib/persistence/supabase-adapter.ts` over the `mogmine_` tables in `supabase/migrations/` (applied to `showmob-dev`, §7). No UI change: the default stays `local` and the UI stores still read the device keys directly.
+**Status:** Contract (#173). Command layer (#174): `lib/commands/journal-commands.ts`. Local/mock adapter (#175): `lib/persistence/local-adapter.ts` and `lib/persistence/select.ts`, selected by `NEXT_PUBLIC_PERSISTENCE_ADAPTER`. Supabase adapter (#176): `lib/persistence/supabase-adapter.ts` over the `mogmine_` tables in `supabase/migrations/` (applied to `showmob-dev`, §7). Background sync of every journal store (#190 to #193, hardened in #194): §8. With `NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase` the device cache is still written first; the default stays `local`.
 
 Code: [`lib/persistence/contract.ts`](../lib/persistence/contract.ts) (types) and [`lib/persistence/registry.ts`](../lib/persistence/registry.ts) (this checklist as data, pinned by `lib/__tests__/persistence-contract.test.ts`). When this page and the registry disagree, fix both in one PR.
 
@@ -96,7 +96,7 @@ Computed, never stored: session review, challenge results while live, call grade
 - **#182 sign-in (built):** `/login` sends a magic link (`signInWithOtp`, `shouldCreateUser: false`) over the implicit flow, so the link also works when it opens in another browser (iPhone Mail). The gate runs only in `supabase` mode (`components/AuthGate.tsx`). A user gets in only when their own `mogmine_allowed_users` row is readable; otherwise "Not authorized" shows and AppShell never mounts. Sign-out is in the header. Supabase's built-in mailer allows 2 sign-in emails an hour; the screen says so.
 - **#185a agent API (built):** `Authorization: Bearer mmk_…` → `mogmine_agent_tokens` looked up BY SHA-256 HASH with the service role (its only reads and writes, with `last_used_at` and the audit log) → the owner's session minted with admin `generateLink` + anon `verifyOtp` (no email sent), so RLS and the allow-list decide every journal row. Scopes: `read` for GET, `write` for other methods (`write` does not imply `read`). Rate limit 120 requests a minute per key, per server instance (best effort). One `mogmine_agent_audit` row per authenticated request. Routes: `/api/v1/me`; `/api/v1/records/[type]` (GET list, POST); `…/[id]` (GET, PATCH, DELETE); `…/[id]/archive` (POST); `/api/v1/singletons/[key]` (GET, PUT). Off unless `NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase`, the URL and anon key, and `SUPABASE_SERVICE_ROLE_KEY` are all set. Minting a session replaces any magic link the owner requested but has not opened, so the owner signs in on the phone before agent use. The session is cached for its lifetime (about an hour) and refreshed inside the last 2 minutes.
 - **#185b agent keys and discovery (built):** `/settings/agent` (behind the #182 sign-in; a header key icon and an "Agent keys" link on the login screen). A key is created with a label and read-only or read-and-write scope, shown once in a setup block (base URL, spec URL, `Authorization: Bearer` header, key) for an assistant, Custom GPT Action or MCP config, and revoked from the list (revoke only; a revoked key never returns). The page also lists the last 20 agent requests. Public discovery: `GET /api/v1/openapi.json` (OpenAPI 3.1, generated from the route list and the registry enums, bearer auth declared, no data) and `GET /.well-known/mogmine.json` (base URL, spec URL, auth, scopes, version, and whether the API is on). Keys are created in the browser through RLS (`lib/agent/keys-client.ts`); the plaintext never reaches storage. See `lib/agent/openapi.ts`.
-- **#190 shared sync layer and trade journal (built, trades only):** `lib/persistence/store-sync.ts` (§8). With `NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase` the trade journal is copied to `mogmine_trades` in the background. Every other store is still device-only.
+- **#190 shared sync layer and trade journal (built):** `lib/persistence/store-sync.ts` (§8). With `NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase` the trade journal is copied to `mogmine_trades` in the background. #191 to #194 extend this to every store (§8 table).
 
 ## 7. Supabase schema and access (#176)
 
@@ -128,13 +128,64 @@ Computed, never stored: session review, challenge results while live, call grade
 
 **Turning it on** (not done in #176): set `NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase`, `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in a local `.env.local` or a Vercel preview, and sign in (#182). Production stays `local` until the owner decides.
 
-## 8. Background sync of a collection (#190)
+## 8. Background sync of every store (#190 to #194)
 
-Code: [`lib/persistence/store-sync.ts`](../lib/persistence/store-sync.ts) (`createCollectionSync`, `getSyncSummary`), with [`sync-fingerprint.ts`](../lib/persistence/sync-fingerprint.ts) and [`sync-storage.ts`](../lib/persistence/sync-storage.ts). The trade store wires it in `lib/store.ts`; the header reads the summary through `components/useSyncSummary.ts`.
+Code: collections in [`lib/persistence/store-sync.ts`](../lib/persistence/store-sync.ts) (`createCollectionSync`, `getSyncSummary`); singletons in [`lib/persistence/singleton-sync.ts`](../lib/persistence/singleton-sync.ts) (`createSingletonSync`). Shared: [`sync-fingerprint.ts`](../lib/persistence/sync-fingerprint.ts), [`sync-storage.ts`](../lib/persistence/sync-storage.ts), [`sync-status.ts`](../lib/persistence/sync-status.ts). Each store wires its syncer(s) in `lib/<store>.ts`; the header reads the aggregate status through `components/useSyncSummary.ts` and `AppShell.tsx`.
 
-- **Device first.** The store writes its device key before anything else. The syncer runs after, and only when the adapter is `supabase`. Samples (`is_sample`) never sync.
-- **Fingerprint.** Stable JSON of the record without `user_id`, `candles` and the `derivedNeverStored` fields, then cyrb53 plus length. A record is "dirty" when its fingerprint differs from the base.
-- **Base** (`mogmine-sync-v1:base:<key>`): what the server is known to hold for one owner, by id. It changes only after a confirmed read or write. **Owner** (`…:owner:<key>`): the uid whose device data this cache holds. **Orphan** (`…:orphan:<key>:<uid>`): another user's device copy, kept when a different user signs in on the same device; it is never pushed and never shown.
-- **Pull:** clean local takes the server copy; dirty local is kept and pushed; a server delete is applied only to a clean record; a local delete is pushed only when the server had the record; a refused remove (archive policy) is remembered in `gone` and never retried or re-added.
-- **Push:** a diff against the base, last write wins (no `expectedUpdatedAt`), debounced 800 ms. Unreachable server → `pending` with backoff (5 s, 15 s, 30 s, 60 s). Validation failures → `error` with a count, no retry loop.
-- **Still device-only:** prefs, mood, accounts, balance checks, challenges, playbooks, plans, drills, calls and dismissals. Each needs its own `syncer` (a singleton variant reuses `sync-storage.ts`).
+### 8.1 What syncs
+
+| Record type (`key`) | Device storage | Supabase | Reason |
+| :--- | :--- | :--- | :--- |
+| `trades` (real trades) | `mogmine-trades-v3` | **synced** `mogmine_trades` | The journal. |
+| `trades` (samples, `is_sample`) | `mogmine-trades-v3` | **device-only** | Sample trades are fixtures, never the trader's data (`include: !is_sample`). |
+| `mood_records` | `mogmine-mood-v1` `.records` | **synced** `mogmine_mood_records` | Scores are user data. Rows about sample trades stay on the device (`notOnSampleTrade`, #193 review). |
+| `mood_candidates` | `mogmine-mood-v1` `.candidates` | **synced** `mogmine_mood_candidates` | Trader-facing "Add spoke?" state. |
+| `mood_registry` | `mogmine-mood-v1` `.registry` | **synced** `mogmine_mood_registries` (singleton) | The spoke list; a spoke added on one device appears on the others (#194). |
+| `mood` suggestions | `mogmine-mood-v1` `.suggestions` | **device-only, session-only** | Derived from notes (`derivedNeverStored`); kept for the session and the device cache, never sent. |
+| `prefs` | `mogmine-prefs-v1` | **synced** `mogmine_user_prefs` (singleton) | Preferences follow the trader. |
+| `accounts` | `mogmine-accounts-v1` `.accounts` | **synced** `mogmine_accounts` (archive policy) | Removes become archives on the server (`forbidden` remove → `gone`). |
+| `balance_checks` | `mogmine-accounts-v1` `.checks` | **synced** `mogmine_balance_checks` | Removable; no foreign key, so any push order works. |
+| `challenges` | `mogmine-challenges-v1` | **synced** `mogmine_challenges` | Definitions only; live progress is derived (never stored). |
+| `playbooks` | `mogmine-playbooks-v1` | **synced** `mogmine_playbooks` (archive policy) | Untouched seed playbooks yield to the server copy (`pristine`, #192 review). |
+| `plans` | `mogmine-plans-v1` | **synced** `mogmine_plans` | The planning sessions. |
+| `drills` | `mogmine-drills-v1` | **synced** `mogmine_drills` | Answers are append-only; answers about sample trades stay on the device (#192 review). |
+| `calls` | `mogmine-calls-v1` `.calls` | **synced** `mogmine_calls` | Calls about sample trades stay on the device (#193 review). |
+| `prompt_dismissals` | `mogmine-calls-v1` `.dismissals` | **synced** `mogmine_prompt_dismissals` | Same rule as calls. |
+| `prompt_library` | none (seeded in code) | **not synced** (memory-only, deferred) | Nothing customizes it yet (§4). |
+| `candles` | IndexedDB `mogmine` / `candles` | **not synced** (device cache, #70) | Market data is re-fetched; the server archive is owner-gated (§4). |
+| Sync metadata | `mogmine-sync-v1:*` | **device-only** | Per-device bookkeeping (§8.3). |
+
+Derived values (call grades, `after_the_fact`, challenge progress, session review, P&L / R, mood suggestions) are never written (`derivedNeverStored`).
+
+### 8.2 Rules
+
+- **Device first.** The store writes its device key before anything else; the syncer runs after and only when the adapter is `supabase`. A failure of the device write wins the header status.
+- **Fingerprint.** Stable JSON of the record without `user_id`, `candles` and `derivedNeverStored`, cyrb53 plus length. A record is dirty when its fingerprint differs from the base.
+- **Collection merge (pull).** A clean local record takes the server copy. A dirty local record (edited since the server last saw it) is kept and pushed. A server delete is applied only to a clean record; a dirty record the server dropped is kept and sent again (no data loss). A local delete is pushed only when the server had the record. A refused remove (archive policy) is remembered in `gone` and never retried or re-added.
+- **Singleton merge (pull).** The same rule for one value. A clean device copy takes the server copy; a dirty one is pushed. Where the store passes `unedited` (prefs, the mood registry: the starting values), a fresh device with no base adopts the server copy instead of overwriting it with defaults.
+- **Last write wins.** Pushes send whole records with no `expectedUpdatedAt`. The base changes only after a confirmed write or read, so a push never loops.
+- **Debounce and push order.** Changes are debounced 800 ms. Writes go first, then removes. A push stops at the first unreachable or unauthenticated answer.
+- **1000-row cap guard.** PostgREST returns at most `REMOTE_ROW_CAP` (1000) rows. A full page may be cut short, so a missing row proves nothing: a full page never deletes a clean local record.
+- **Orphan key.** When a different user signs in on the same device, that user's device records are copied to `mogmine-sync-v1:orphan:<key>:<uid>` (an existing copy is never overwritten). Orphans are never pushed and never shown.
+- **Backoff.** Unreachable server: `pending`, retried after 5 s, 15 s, 30 s, then 60 s. Refused records (`invalid`): `error` with a count, retried on the next change or pull only, never in a loop.
+- **Restore.** Every restore in the Tune screen (`replaceTrades`, `setPrefs`, `restoreMood`, `restoreAccounts`, `restoreChallenges`, `restorePlaybooks`, `restorePlans`, `restoreDrills`, `restoreCalls`) calls the matching syncer's `changed()`. The restored set is then the server's set (records not in the backup are removed, except archive-policy records and samples). `lib/__tests__/sync-restore-and-refresh.test.ts` pins this across every store.
+- **Idempotence (#194).** Hydrating a store twice, calling `start()` twice, or pulling with nothing changed starts no new listener, makes no new write, and sends nothing. A token refresh for the same user keeps the auth answer (`keepsCheckedUser`), so AppShell is not unmounted.
+- **Session expiry.** An `unauthenticated` answer sets the store to `signed-out`; device data stays. Edits made while signed out are kept, and go out after sign-in and the next pull.
+
+### 8.3 Device sync metadata
+
+Under `mogmine-sync-v1:`: `base:<key>` (what the server is known to hold, by id, plus refused removes), `owner:<key>` (the uid whose device data this cache holds) and `orphan:<key>:<uid>` (see §8.2). Garbage reads as missing.
+
+### 8.4 Known gaps (for the owner)
+
+From the #190 to #193 handoffs. None is fixed in #194; each is a behaviour decision.
+
+1. **First sign-in, same id.** A device record this device has never synced is treated as dirty and overwrites the server copy (collections). For singletons, a device that customized its prefs or spokes before the first sign-in does the same. A newer server edit can be lost on a first upload.
+2. **Orphan copies are never restored.** If A signs out, B signs in on the same device, and A signs in again, A's unsynced device-only edits stay under `orphan:<key>:<A>`.
+3. **Refused removes are per device.** `gone` lives in device metadata; another device that still holds the id re-pushes it.
+4. **Accounts restore.** Dropping an account from a backup leaves the server row active (archive policy). The fix is to push `archived: true`, not a remove.
+5. **Playbook restore.** Dropping a playbook from a restore (or an untouched seed the device deleted) leaves the server row active; other devices keep it.
+6. **Validation failures** stay in `error` until the record is edited.
+7. **Cross-tab.** Trades, accounts, challenges, mood and playbooks take other tabs' device changes (a `storage` listener). Prefs, plans, drills and calls do not, so a second open tab can overwrite them later.
+8. **Two tabs.** The base lives in `localStorage` and is shared by tabs. Pushes are idempotent, but a two-tab race is untested.
+9. **Not browser-verified.** The header text and tooltip, and the offline banner, have not been checked at 390×844 against a real Supabase project (no network in the build agent).
