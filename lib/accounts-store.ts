@@ -3,6 +3,8 @@
 import { useSyncExternalStore } from "react";
 import { makeAccount, sanitizeAccounts, sanitizeBalanceChecks } from "./accounts.ts";
 import type { AccountRules, BalanceCheck, TradingAccount } from "./accounts.ts";
+import { createCollectionSync } from "./persistence/store-sync.ts";
+import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 
 const STORAGE_KEY = "mogmine-accounts-v1";
 
@@ -22,6 +24,30 @@ const empty = (): AccountsState => ({ hydrated: false, accounts: [], checks: [] 
 let state: AccountsState = empty();
 const serverState: AccountsState = empty();
 const listeners = new Set<() => void>();
+
+// Remote sync (#191): with NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase, accounts and balance checks are copied to
+// Supabase in the background. The device copy below is always written first. Accounts are never hard-deleted in the
+// UI (archive policy), so the accounts syncer only ever archives or pushes; balance checks can be removed.
+interface AccountSyncs { accounts: CollectionSync; checks: CollectionSync }
+
+function applyAccounts(next: TradingAccount[]) {
+  set({ accounts: sanitizeAccounts(next) });
+  persist();
+}
+
+function applyChecks(next: BalanceCheck[]) {
+  set({ checks: sanitizeBalanceChecks(next) });
+  persist();
+}
+
+function createAccountSyncs(overrides: { accounts?: Partial<CollectionSyncOptions<TradingAccount>>; checks?: Partial<CollectionSyncOptions<BalanceCheck>> } = {}): AccountSyncs {
+  return {
+    accounts: createCollectionSync<TradingAccount>({ key: "accounts", getLocal: () => state.accounts, apply: applyAccounts, ...overrides.accounts }),
+    checks: createCollectionSync<BalanceCheck>({ key: "balance_checks", getLocal: () => state.checks, apply: applyChecks, ...overrides.checks }),
+  };
+}
+
+let syncs: AccountSyncs = createAccountSyncs();
 
 function set(patch: Partial<AccountsState>) {
   state = { ...state, ...patch };
@@ -54,8 +80,14 @@ export function hydrateAccounts() {
   set({ ...loaded, hydrated: true });
   window.addEventListener("storage", (event) => {
     if (event.key !== STORAGE_KEY || !event.newValue) return;
-    try { set(fromStored(JSON.parse(event.newValue))); } catch { /* keep ours */ }
+    try {
+      set(fromStored(JSON.parse(event.newValue)));
+      syncs.accounts.changed();
+      syncs.checks.changed();
+    } catch { /* keep ours */ }
   });
+  syncs.accounts.start();
+  syncs.checks.start();
 }
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `acct-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -64,6 +96,7 @@ export function addAccount(input: { name: string; starting_balance_cents: number
   const account = makeAccount({ ...input, id: newId(), now });
   set({ accounts: [...state.accounts, account] });
   persist();
+  syncs.accounts.changed();
   return account;
 }
 
@@ -71,18 +104,21 @@ export function addAccount(input: { name: string; starting_balance_cents: number
 export function updateAccount(id: string, patch: Partial<Pick<TradingAccount, "name" | "starting_balance_cents" | "rules" | "archived">>) {
   set({ accounts: state.accounts.map((account) => (account.id === id ? { ...account, ...patch, rules: { ...account.rules, ...patch.rules } } : account)) });
   persist();
+  syncs.accounts.changed();
 }
 
 export function addBalanceCheck(input: { account_id: string; balance_cents: number; note?: string; at?: string }) {
   const check: BalanceCheck = { id: newId(), account_id: input.account_id, at: input.at ?? new Date().toISOString(), balance_cents: Math.round(input.balance_cents), note: input.note ?? "" };
   set({ checks: [...state.checks, check] });
   persist();
+  syncs.checks.changed();
   return check;
 }
 
 export function removeBalanceCheck(id: string) {
   set({ checks: state.checks.filter((check) => check.id !== id) });
   persist();
+  syncs.checks.changed();
 }
 
 export function getAccountsBackup(): AccountsBackup {
@@ -98,11 +134,24 @@ export function sanitizeAccountsBackup(raw: unknown): AccountsBackup | null {
 export function restoreAccounts(backup: AccountsBackup) {
   set({ accounts: backup.accounts, checks: backup.checks });
   persist();
+  syncs.accounts.changed();
+  syncs.checks.changed();
 }
 
-/** Test hook. */
+/** Test hook: restore the given state and disabled-by-default syncers (the previous ones are disposed). */
 export function resetAccountsForTests(next: Partial<AccountsState> = {}) {
+  syncs.accounts.dispose();
+  syncs.checks.dispose();
+  syncs = createAccountSyncs();
   state = { ...empty(), hydrated: true, ...next };
+}
+
+/** Test hook: swap the syncers' adapter, storage or timers. Returns the two syncers under test. */
+export function configureAccountsSyncForTests(overrides: { accounts?: Partial<CollectionSyncOptions<TradingAccount>>; checks?: Partial<CollectionSyncOptions<BalanceCheck>> }): AccountSyncs {
+  syncs.accounts.dispose();
+  syncs.checks.dispose();
+  syncs = createAccountSyncs(overrides);
+  return syncs;
 }
 
 export function getAccountsState() {
