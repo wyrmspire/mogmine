@@ -82,6 +82,8 @@ for (const direction of ["LONG", "SHORT"] as const) {
 test("the trader's exit reason wins over prices", () => {
   assert.equal(stopOutcome(trade("LONG", 7342, { exit_reason: "stop" })), "stop");
   assert.equal(stopOutcome(trade("LONG", 7340, { exit_reason: "manual" })), null);
+  // "Stop" chosen on a stop already trailed past the entry reads as a trailed stop.
+  assert.equal(stopOutcome(trade("SHORT", 7320, { exit_reason: "stop", stop_loss_price: 7320 })), "trail");
 });
 
 test("a widened stop that was hit is still flagged as widened", () => {
