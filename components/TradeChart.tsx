@@ -13,7 +13,7 @@ import { TIMEFRAME_MINUTES, alignTradeToBars, defaultVisibleRange, fitWindow, in
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
 import type { NeighbourTradeProjection } from "@/lib/neighbour-trades";
-import type { LevelLine } from "@/lib/chart-levels";
+import { levelPills, tradeAnchors, type LevelLine } from "@/lib/chart-levels";
 import type { VwapPoint } from "@/lib/chart-indicators";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
@@ -277,7 +277,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t, p.neighbourTrades);
-    l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000);
+    l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000, p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : []);
     l.vwapSeries.applyOptions({ color: t.vwap, visible: p.vwap.length > 0 });
     if (l.renderedVwap !== p.vwap) {
       // Points sit on displayed bar times only, so the time scale gains no new indices.

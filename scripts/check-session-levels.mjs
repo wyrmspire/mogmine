@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 import fixture from "../fixtures/levelsets/MES-2026-11-12.json" with { type: "json" };
 import { computeLevelsFromInputs } from "../lib/levels.ts";
-import { levelLines } from "../lib/chart-levels.ts";
+import { levelLines, levelPills } from "../lib/chart-levels.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const transpile = (source) => ts.transpileModule(source, {
@@ -29,6 +29,8 @@ const computedLevels = computeLevelsFromInputs({
   inputs: fixture.inputs,
 });
 const lines = levelLines(computedLevels, 7600, "MES");
+// Ranked as the trade chart ranks them: nearest the 7600 reference first (no trade anchors here).
+const pills = levelPills(lines, [], "MES", 7600);
 
 const folder = mkdtempSync(join(tmpdir(), "mogmine-session-levels-"));
 try {
@@ -42,6 +44,7 @@ try {
     try {
       const times = ${JSON.stringify(candleTimes)};
       const levels = ${JSON.stringify(lines)};
+      const pills = ${JSON.stringify(pills)};
       const chart = LightweightCharts.createChart(document.querySelector("#chart"), {
         width: 390, height: 400,
         layout: { background: { color: "#07080c" }, attributionLogo: false },
@@ -100,7 +103,7 @@ try {
       };
 
       // Test with levels visible
-      levelsPrimitive.update(levels, theme, 60_000);
+      levelsPrimitive.update(levels, theme, 60_000, pills);
       const screenshotVisible = chart.takeScreenshot(true);
       const visibleLabels = renderedText.map(t => t.text);
       const rayCount = renderedLines.filter(l => l.path.length === 2 && l.path[0].args[1] === l.path[1].args[1]).length;
@@ -145,16 +148,18 @@ try {
   const res = JSON.parse(output.match(/<pre id="result">([^<]+)<\/pre>/)?.[1] ?? "{}");
   assert.ok(!res.error, res.error);
   console.log("Session levels check passed:", res);
-  // 19 levels; PDH/RTH high and ADR inner low/RTH low share ticks, so 17 pills.
+  // 19 levels; PDH/RTH high and ADR inner low/RTH low share ticks, so 17 lines.
   assert.equal(res.levelsCount, 17);
   assert.ok(res.minGap >= 16.5, `pills overlap: ${res.minGap}`);
-  assert.ok(res.visibleLabels.some(l => l.includes("7671.50 PDH / RTH high")));
-  assert.ok(res.visibleLabels.some(l => l.includes("7640.50 PDC")));
-  assert.ok(res.visibleLabels.some(l => l.includes("7547.50 PDL")));
-  assert.ok(res.visibleLabels.some(l => l.includes("7619.75 PP")));
-  assert.ok(res.visibleLabels.some(l => l.includes("7687.25 ADR High")));
+  // UX-21: at most 8 pills, nearest the reference first; the rest keep their rays (faint).
+  const drawn = res.visibleLabels.filter((label) => / [A-Z]/.test(label));
+  assert.ok(drawn.length <= 8, `too many pills: ${drawn.length}`);
+  assert.ok(drawn.some(l => l.includes("7619.75 PP")));
+  assert.ok(drawn.some(l => l.includes("7593.00")));
+  assert.ok(drawn.some(l => l.includes("7628.75 ONH")));
+  assert.ok(!drawn.some(l => l.includes("7743.75 R2")), "the farthest level gave up its pill");
   assert.ok(res.rayCount >= 15);
-  assert.ok(res.rightEdgeCount >= 15);
+  assert.ok(res.rightEdgeCount >= Math.min(8, drawn.length));
   assert.equal(res.hiddenLabelsCount, 0);
   assert.equal(res.hiddenRaysCount, 0);
 } finally {

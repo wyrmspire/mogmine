@@ -5,7 +5,7 @@
 // come from the day's planning sessions for the same instrument, as they stood at entry.
 import { useEffect, useMemo, useState } from "react";
 import { loadDayCandles } from "@/lib/candles";
-import { levelLines, missingCandleLevels, plannedLineSources, tradeLevelWindows, tradeLevels } from "@/lib/chart-levels";
+import { levelLines, levelsSummary, missingCandleLevels, plannedLineSources, tradeLevelWindows, tradeLevels } from "@/lib/chart-levels";
 import type { LevelLine } from "@/lib/chart-levels";
 import type { ComputedLevel } from "@/lib/levels";
 import { usePlansStore } from "@/lib/plans-store";
@@ -18,10 +18,12 @@ export interface TradeLevelsState {
   missing: readonly string[];
   /** How many drawn levels came from planning sessions. */
   planned: number;
+  /** Every level with its exact price, including those whose pill did not fit on the chart. */
+  summary: string;
 }
 
 const EMPTY: readonly LevelLine[] = [];
-const OFF: TradeLevelsState = { status: "off", lines: EMPTY, missing: [], planned: 0 };
+const OFF: TradeLevelsState = { status: "off", lines: EMPTY, missing: [], planned: 0, summary: "" };
 
 export function useTradeLevels(trade: TradeRecord, enabled: boolean): TradeLevelsState {
   const key = `${trade.symbol}|${trade.entry_time}`;
@@ -64,5 +66,6 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean): TradeLevel
     lines,
     missing: current ? missingCandleLevels(current) : [],
     planned: planned.length,
+    summary: levelsSummary(lines),
   };
 }
