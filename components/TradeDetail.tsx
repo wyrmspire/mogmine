@@ -23,7 +23,7 @@ import { TradeRow } from "./TradeRow";
 import { useTradeLevels } from "./useTradeLevels";
 import { tradeSessionVwap, vwapOnBars } from "@/lib/chart-indicators";
 import type { VwapAnchor, VwapPoint } from "@/lib/chart-indicators";
-import type { TradeLevelsState } from "./useTradeLevels";
+import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withheld";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { calculateExitEfficiency } from "@/lib/exit-efficiency";
 import { findNeighbourTrades } from "@/lib/neighbour-trades";
@@ -52,14 +52,6 @@ import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
 const NO_VWAP: readonly VwapPoint[] = [];
-
-function levelsStatus(levels: TradeLevelsState) {
-  if (levels.status === "loading") return "Loading…";
-  if (levels.status === "none") return "Unavailable";
-  // Withheld levels are counted, never hidden (docs/12 §5).
-  if (levels.status === "ready") return `${levels.lines.length} shown${levels.missing.length ? ` · ${levels.missing.length} missing` : ""}`;
-  return "Off";
-}
 
 export function TradeDetail({ id }: { id: string }) {
   const journal = useJournal();
@@ -489,11 +481,13 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                       role="menuitemcheckbox"
                       aria-checked={showLevels}
                       onClick={() => setShowLevels((prev) => !prev)}
-                      title={`Prior-day, overnight and planned levels as of the entry.${levels.planned ? ` ${levels.planned} from planning sessions.` : ""}${levels.missing.length ? ` Missing bars withheld: ${levels.missing.join(", ")}` : ""}${levels.summary ? ` Levels: ${levels.summary}` : ""}`}
+                      title={levelsTitle(levels)}
                     >
                       <span>{showLevels ? "Session levels ✓" : "Session levels"}</span>
-                      <span className="shortcut">{levelsStatus(levels)}</span>
+                      <span className="shortcut">{levelsStatusText(levels)}</span>
                     </button>
+                    {/* Withheld levels are named with their reason, never hidden (docs/12 §5, OD-55). Visible: touch has no tooltip. */}
+                    {levels.withheld.length > 0 && <small style={{ display: "block", padding: "2px 4px", fontSize: "0.6875rem", color: "var(--text-muted)" }}>Withheld: {withheldText(levels.withheld)}</small>}
                   </div>
                   <div className="view-menu-section">
                     <span className="view-menu-label">
