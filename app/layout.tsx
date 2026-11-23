@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
+import { AuthGate } from "@/components/AuthGate";
 import "./globals.css";
 import "./chart-polish.css";
 
@@ -38,7 +39,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" data-gold-preset="bullion" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: applyPrefs }} /></head>
-      <body><AppShell>{children}</AppShell></body>
+      <body><AuthGate><AppShell>{children}</AppShell></AuthGate></body>
     </html>
   );
 }
