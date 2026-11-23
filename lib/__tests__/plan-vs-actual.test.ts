@@ -36,7 +36,7 @@ test("derivePlanVsActual: full plan executed to target", () => {
   assert.equal(targetRow.deltaDisplay, "—");
 
   const resultRow = comparison.rows.find((r) => r.label === "Result (R)")!;
-  assert.equal(resultRow.planned, "+2.0R");
+  assert.equal(resultRow.planned, "+2.0R at target");
   assert.equal(resultRow.actual, "+2.0R");
   assert.equal(resultRow.deltaDisplay, "+0.0R");
 });

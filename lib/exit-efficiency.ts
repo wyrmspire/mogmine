@@ -1,6 +1,6 @@
 // lib/exit-efficiency.ts — Time-in-trade duration & exit efficiency (M1, #42, docs/15 §3.4)
 import { formatPoints, formatR } from "./format.ts";
-import { rMultiple, tradePoints } from "./trades.ts";
+import { isScratch, riskStopPrice, rMultiple, specFor, tradePoints } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
 
 export interface ExitEfficiency {
@@ -12,9 +12,9 @@ export interface ExitEfficiency {
   realizedPoints: number | null;
   /** Maximum favourable excursion points */
   mfePoints: number | null;
-  /** Ratio of realized gain to maximum available gain */
+  /** Share of the best open profit that was kept, 0–1. Null for a loss, a scratch or an MFE under 2 ticks. */
   efficiencyRatio: number | null;
-  /** Efficiency rounded to integer percent (e.g. 57) */
+  /** Efficiency rounded to integer percent (e.g. 57), 0–100. Null when `efficiencyRatio` is. */
   efficiencyPercent: number | null;
   /** Human-readable description, e.g. "captured +0.80R of +1.40R available (57%)" */
   summary: string;
@@ -23,60 +23,49 @@ export interface ExitEfficiency {
 }
 
 /**
- * Calculates exit efficiency comparing realized gain to the best gain available (MFE).
- * Uses R-multiples when a stop loss exists, falling back to points when no stop was set.
+ * Exit efficiency: how much of the best open profit (MFE) a winning exit kept. Uses R on the first risk
+ * (`riskStopPrice`, R-10) when there is one, points otherwise.
+ *
+ * Only a winner has an efficiency. Realised ÷ MFE is unbounded for a loss (a −1R stop-out after +0.18R of MFE
+ * reads −550 %), so a loss or a scratch gets no percentage, only the facts ("closed at −1.0R; best was +0.18R").
+ * An MFE under 2 ticks is noise, not an opportunity. A winner is clamped to 100 % because MFE is estimated from
+ * bars and can sit a tick under the fill.
  */
 export function calculateExitEfficiency(
   trade: TradeRecord,
   mfePoints: number | null,
 ): ExitEfficiency | null {
   if (trade.status === "open" || trade.exit_price == null) return null;
-
   const points = tradePoints(trade);
+  if (points == null || mfePoints == null || !(mfePoints > 0)) return null;
+
   const r = rMultiple(trade);
+  const stop = riskStopPrice(trade);
+  const riskDist = stop != null ? Math.abs(trade.entry_price - stop) : null;
+  const mfeR = r != null && riskDist != null && riskDist > 0 ? Math.round((mfePoints / riskDist) * 100) / 100 : null;
+  const inR = r != null && mfeR != null;
+  const realized = inR ? formatR(r) : formatPoints(points, trade.symbol);
+  const best = inR ? formatR(mfeR) : formatPoints(mfePoints, trade.symbol);
+  const base = { realizedR: inR ? r : null, mfeR: inR ? mfeR : null, realizedPoints: points, mfePoints };
 
-  // Stop distance for R calculation
-  const initialStop = trade.initial_stop_price ?? trade.stop_loss_price;
-  const riskDist = initialStop != null && Number.isFinite(initialStop)
-    ? Math.abs(trade.entry_price - initialStop)
-    : null;
-
-  const mfeR = riskDist != null && riskDist > 0 && mfePoints != null && mfePoints > 0
-    ? Math.round((mfePoints / riskDist) * 100) / 100
-    : null;
-
-  if (r != null && mfeR != null && mfeR > 0) {
-    const ratio = r / mfeR;
+  const tick = specFor(trade.symbol)?.tickSize ?? 0.25;
+  if (points > 0 && mfePoints >= 2 * tick && !isScratch(trade)) {
+    const ratio = Math.min(1, points / mfePoints);
     const percent = Math.round(ratio * 100);
     return {
-      realizedR: r,
-      mfeR,
-      realizedPoints: points,
-      mfePoints,
+      ...base,
       efficiencyRatio: Math.round(ratio * 1000) / 1000,
       efficiencyPercent: percent,
-      summary: `captured ${formatR(r)} of ${formatR(mfeR)} available (${percent}%)`,
-      concise: `${formatR(r)} of ${formatR(mfeR)}`,
+      summary: `captured ${realized} of ${best} available (${percent}%)`,
+      concise: `${realized} of ${best}`,
     };
   }
-
-  // Fallback to points if no stop was set but MFE is available
-  if (points != null && mfePoints != null && mfePoints > 0) {
-    const ratio = points / mfePoints;
-    const percent = Math.round(ratio * 100);
-    const ptsStr = formatPoints(points, trade.symbol);
-    const mfeStr = formatPoints(mfePoints, trade.symbol);
-    return {
-      realizedR: null,
-      mfeR: null,
-      realizedPoints: points,
-      mfePoints,
-      efficiencyRatio: Math.round(ratio * 1000) / 1000,
-      efficiencyPercent: percent,
-      summary: `captured ${ptsStr} of ${mfeStr} available (${percent}%)`,
-      concise: `${ptsStr} of ${mfeStr}`,
-    };
-  }
-
-  return null;
+  const verb = isScratch(trade) ? "scratched at" : "closed at";
+  return {
+    ...base,
+    efficiencyRatio: null,
+    efficiencyPercent: null,
+    summary: `${verb} ${realized}; best was ${best}`,
+    concise: `${realized} · best ${best}`,
+  };
 }
