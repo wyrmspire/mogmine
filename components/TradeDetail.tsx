@@ -611,7 +611,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             <TradeLevelEditor trade={trade} field="key_level_price" />
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Worst price against you during the hold, estimated from bars"}><small>HEAT (MAE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mae == null ? "empty" : ""}>{mae == null ? "—" : approx(formatPoints(Math.min(0, mae), trade.symbol))}</b></div>
             <div title={ex?.coverage === "partial" ? "Partial: some bars in the hold are missing, so this is not a complete measurement." : "Best price in your favour during the hold, estimated from bars"}><small>BEST (MFE){ex?.coverage === "partial" ? " · partial" : ""}</small><b className={mfe == null ? "empty" : ""}>{mfe == null ? "—" : approx(formatPoints(Math.max(0, mfe), trade.symbol))}</b></div>
-            <div title={exitEff ? exitEff.summary : "Ratio of realized gain to the best gain available during the hold"}><small>EFFICIENCY{ex?.coverage === "partial" ? " · partial" : ""}</small><b className={exitEff == null ? "empty" : ""}>{exitEff ? `${exitEff.efficiencyPercent}%` : "—"}</b></div>
+            <div title={exitEff ? exitEff.summary : "Ratio of realized gain to the best gain available during the hold"}><small>EFFICIENCY{ex?.coverage === "partial" ? " · partial" : ""}</small><b className={exitEff?.efficiencyPercent == null ? "empty" : ""}>{exitEff?.efficiencyPercent != null ? `${exitEff.efficiencyPercent}%` : "—"}</b></div>
           </div>
           {!open && (
             <div className="exit-reason-detail-row">

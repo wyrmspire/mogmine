@@ -1,6 +1,6 @@
 // lib/plan-vs-actual.ts — Planned vs. Actual execution comparison (M2, #42, BET-06)
 import { formatPoints, formatPrice, formatR } from "./format.ts";
-import { hasWidenedStop, plannedR, rMultiple } from "./trades.ts";
+import { hasWidenedStop, isScratch, plannedR, riskStopPrice, rMultiple, toTicks } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
 
 export interface PlanVsActualRow {
@@ -18,6 +18,9 @@ export type ExecutionFidelity =
   | "Chased Entry"
   | "Favourable Fill"
   | "Premature Exit"
+  | "Stopped Out"
+  | "Trailed Stop Hit"
+  | "Scratch"
   | "Extended Target"
   | "Widened Stop"
   | "No Plan Recorded";
@@ -48,7 +51,10 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
   const realizedR = rMultiple(trade);
   const planR = plannedR(trade);
 
-  const initialRisk = initialStop != null ? Math.abs(actualEntry - initialStop) : null;
+  // 1R is the first risk (riskStopPrice, R-10), never the distance to a stop trailed past the entry.
+  const riskStop = riskStopPrice(trade);
+  const initialRisk = riskStop != null ? Math.abs(actualEntry - riskStop) : null;
+  const stopOut = stopOutcome(trade);
 
   const rows: PlanVsActualRow[] = [];
 
@@ -79,8 +85,21 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
     });
   }
 
-  // Target vs Actual Exit
-  if (plannedTarget != null && actualExit != null) {
+  // On a stop-out the exit is compared with the stop it hit (slippage), never with the target it never reached.
+  if (stopOut && actualExit != null && trade.stop_loss_price != null) {
+    const slipPts = (actualExit - trade.stop_loss_price) * sign;
+    const slipR = initialRisk && initialRisk > 0 ? slipPts / initialRisk : null;
+    const slipped = Math.abs(slipPts) > 0.0001;
+    rows.push({
+      label: "Exit / Stop",
+      planned: formatPrice(trade.stop_loss_price, symbol),
+      actual: formatPrice(actualExit, symbol),
+      deltaPoints: slipPts,
+      deltaR: slipR,
+      deltaDisplay: slipped ? `${slipPts > 0 ? "+" : ""}${formatPoints(slipPts, symbol)} (${formatR(slipR)})` : "—",
+      tone: !slipped ? "neutral" : slipPts > 0 ? "positive" : "negative",
+    });
+  } else if (plannedTarget != null && actualExit != null) {
     const exitDeltaPts = (actualExit - plannedTarget) * sign;
     const exitDeltaR = initialRisk && initialRisk > 0 ? exitDeltaPts / initialRisk : null;
     let exitTone: PlanVsActualRow["tone"] = "neutral";
@@ -111,7 +130,8 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
     const tone: PlanVsActualRow["tone"] = deltaR >= 0 ? "positive" : "negative";
     rows.push({
       label: "Result (R)",
-      planned: formatR(planR),
+      // The plan's R is the reward at the target over the first risk: always positive.
+      planned: `${formatR(planR)} at target`,
       actual: formatR(realizedR),
       deltaPoints: null,
       deltaR,
@@ -130,6 +150,15 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
   } else if (hasWidenedStop(trade)) {
     fidelity = "Widened Stop";
     fidelityNote = "Stop loss was moved farther from entry during the trade.";
+  } else if (stopOut === "stop") {
+    fidelity = "Stopped Out";
+    fidelityNote = "Exited at the stop: the planned risk, taken as planned.";
+  } else if (stopOut === "trail") {
+    fidelity = "Trailed Stop Hit";
+    fidelityNote = `Exited on the moved stop at ${formatPrice(trade.stop_loss_price!, symbol)}${realizedR != null ? `, ${formatR(realizedR)}` : ""}.`;
+  } else if (isScratch(trade)) {
+    fidelity = "Scratch";
+    fidelityNote = "Closed within a scratch of the entry.";
   } else if (plannedTarget != null && actualExit != null) {
     const exitDeltaPts = (actualExit - plannedTarget) * sign;
     if (exitDeltaPts < -0.5) {
@@ -148,4 +177,20 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
     rows,
     hasPlan,
   };
+}
+
+/**
+ * How a closed trade met its working stop: `stop` when it exited at or through a stop still on the risk side,
+ * `trail` when that stop had been moved to or past the entry, null otherwise. The trader's own exit reason wins.
+ */
+export function stopOutcome(trade: TradeRecord): "stop" | "trail" | null {
+  if (trade.exit_reason === "stop") return "stop";
+  if (trade.exit_reason === "trail") return "trail";
+  if (trade.exit_reason || trade.exit_price == null || trade.stop_loss_price == null) return null;
+  const sign = trade.direction === "LONG" ? 1 : -1;
+  const exit = toTicks(trade.exit_price, trade.symbol);
+  const stop = toTicks(trade.stop_loss_price, trade.symbol);
+  const entry = toTicks(trade.entry_price, trade.symbol);
+  if (exit == null || stop == null || entry == null || (exit - stop) * sign > 0) return null;
+  return (entry - stop) * sign > 0 ? "stop" : "trail";
 }
