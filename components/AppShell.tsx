@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLayoutEffect } from "react";
 import { AddTradeSheet } from "./AddTradeSheet";
+import { AgentKeysLink } from "./AgentKeysLink";
 import { HomeScreenHint } from "./HomeScreenHint";
 import { SignOutButton } from "./SignOutButton";
 import { hydratePrefs, setPrefs, usePrefs } from "@/lib/prefs";
@@ -62,6 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <span className="save-status" data-state={journal.saveState} role="status"><i aria-hidden="true" /><span>{SAVE_TEXT[journal.saveState]}</span></span>
         <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} aria-pressed={prefs.shield} aria-label={prefs.shield ? "Shield mode on: dollars hidden. Tap to show dollars." : "Shield mode off. Tap to hide dollars."} title="Shield mode: hide dollars and size" onClick={() => setPrefs({ shield: !prefs.shield })}>{icons.shield}</button>
         <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade} aria-label="Add trade">＋</button>
+        <AgentKeysLink />
         <SignOutButton />
       </header>
 

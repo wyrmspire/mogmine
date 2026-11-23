@@ -228,3 +228,26 @@ test("guard (#185a): nothing under app/api/v1 or lib/agent writes a journal tabl
   const auth = read("lib/agent/server-auth.ts");
   assert.equal(auth.includes("service") && auth.includes("mogmine_trades"), false);
 });
+
+// ---- #185b guards: the settings page and its helpers ------------------------------------------------------------
+
+test("guard (#185b): no component imports the server-only agent modules", () => {
+  for (const file of sourceFiles("components")) {
+    assert.doesNotMatch(read(file), /lib\/agent\/(server-auth|handle)|\.\.?\/agent\/(server-auth|handle)/, file);
+  }
+});
+
+test("guard (#185b): the agent keys screen never touches localStorage or the console", () => {
+  const source = read("components/AgentKeysScreen.tsx");
+  assert.equal(source.includes("localStorage"), false);
+  assert.equal(/\bconsole\./.test(source), false);
+  assert.ok(isClientModule(source));
+});
+
+test("guard (#185b): the discovery and key helpers are pure: no React, Next, SDK or server modules", () => {
+  for (const file of ["lib/agent/openapi.ts", "lib/agent/keys-client.ts"]) {
+    const source = read(file);
+    assert.doesNotMatch(source, /from\s+["'](react|next\/|@supabase\/)/, file);
+    assert.doesNotMatch(source, /server-auth|handle\.ts|createClient|SUPABASE_SERVICE_ROLE_KEY/, file);
+  }
+});

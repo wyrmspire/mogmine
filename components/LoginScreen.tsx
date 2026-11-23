@@ -93,6 +93,7 @@ export function LoginScreen({ auth }: { auth?: LoginAuth }) {
         <h1 style={{ fontSize: "1.125rem", margin: 0 }}>Signed in</h1>
         <p className="muted" style={{ margin: 0 }}>Signed in as {auth?.email}</p>
         <button type="button" className="btn-primary btn-block" style={TOUCH} onClick={() => router.replace("/")}>Open MogMine</button>
+        <Link href="/settings/agent" className="btn-ghost btn-block" style={TOUCH}>Agent keys</Link>
         <button type="button" className="btn-secondary btn-block" style={TOUCH} onClick={() => void signOutToLogin()}>Sign out</button>
       </section>
     );
