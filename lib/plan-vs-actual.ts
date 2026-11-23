@@ -184,13 +184,14 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
  * `trail` when that stop had been moved to or past the entry, null otherwise. The trader's own exit reason wins.
  */
 export function stopOutcome(trade: TradeRecord): "stop" | "trail" | null {
-  if (trade.exit_reason === "stop") return "stop";
   if (trade.exit_reason === "trail") return "trail";
-  if (trade.exit_reason || trade.exit_price == null || trade.stop_loss_price == null) return null;
   const sign = trade.direction === "LONG" ? 1 : -1;
-  const exit = toTicks(trade.exit_price, trade.symbol);
-  const stop = toTicks(trade.stop_loss_price, trade.symbol);
+  const stop = trade.stop_loss_price == null ? null : toTicks(trade.stop_loss_price, trade.symbol);
   const entry = toTicks(trade.entry_price, trade.symbol);
+  // "Stop" picked on a stop already moved to or past the entry is a trailed stop, not the planned risk.
+  if (trade.exit_reason === "stop") return stop != null && entry != null && (entry - stop) * sign <= 0 ? "trail" : "stop";
+  if (trade.exit_reason || trade.exit_price == null || stop == null) return null;
+  const exit = toTicks(trade.exit_price, trade.symbol);
   if (exit == null || stop == null || entry == null || (exit - stop) * sign > 0) return null;
   return (entry - stop) * sign > 0 ? "stop" : "trail";
 }
