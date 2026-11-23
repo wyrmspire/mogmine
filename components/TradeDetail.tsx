@@ -26,6 +26,7 @@ import type { VwapAnchor, VwapPoint } from "@/lib/chart-indicators";
 import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withheld";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { calculateExitEfficiency } from "@/lib/exit-efficiency";
+import { stopHistoryText } from "@/lib/risk-text";
 import { findNeighbourTrades } from "@/lib/neighbour-trades";
 import { derivePlanVsActual } from "@/lib/plan-vs-actual";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
@@ -262,6 +263,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
   const pnl = tradePnl(trade);
   const r = rMultiple(trade);
+  const stopHistory = stopHistoryText(trade, (iso) => formatListTime(iso, zone));
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const sign = trade.direction === "LONG" ? 1 : -1;
   const points = formatPoints(tradePoints(trade), trade.symbol);
@@ -642,10 +644,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
           )}
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
-          {/* The frozen first stop, shown as a quiet fact only once the working stop has moved (R-10). */}
-          {trade.initial_stop_price != null && trade.initial_stop_set_at != null && trade.stop_loss_price !== trade.initial_stop_price && (
-            <p className="initial-stop">Initial stop {formatPrice(trade.initial_stop_price, trade.symbol)}, set {formatListTime(trade.initial_stop_set_at, zone)}</p>
-          )}
+          {/* The frozen first stop once the working stop has moved, or why R is blank (R-10). */}
+          {stopHistory && <p className="initial-stop">{stopHistory}</p>}
 
           {/* G2 (#36): Interactive stop-move editor & widening suggestion (UX-33) */}
           <StopMovesEditor

@@ -1,8 +1,8 @@
 import { rStripCaption, rStripInputFromTrade, rStripLayout } from "@/lib/rstrip";
-import type { TradeRecord } from "@/lib/trades";
+import type { StripTrade } from "@/lib/rstrip";
 
 interface Props {
-  trade: Pick<TradeRecord, "direction" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price">;
+  trade: StripTrade;
   excursions?: { maePrice?: number | null; mfePrice?: number | null } | null;
   /** Hide the result (exit / MAE / MFE) for blind review. */
   blind?: boolean;

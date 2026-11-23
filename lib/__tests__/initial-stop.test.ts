@@ -65,7 +65,8 @@ test("R-10: initialRMultiple keeps the frozen stop after the working stop moves"
   // +17.5 pts over the frozen 8.75-pt risk is +2R, whatever the working stop later became.
   assert.equal(initialRMultiple(trade), 2);
   const edited = { ...trade, ...stopPatch(trade, 6845, laterAt) };
-  assert.equal(rMultiple(edited), 3.5);
+  // R itself is measured on the first risk too (riskStopPrice): moving the stop never changes R.
+  assert.equal(rMultiple(edited), 2);
   assert.equal(initialRMultiple(edited), 2);
 });
 
