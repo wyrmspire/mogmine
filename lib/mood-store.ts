@@ -1,7 +1,10 @@
 // Mood records on this device (docs/18). Kept apart from the trade list, the way a separate table would be:
 // the spoke registry, the append-only score records, pending suggestions and candidate spokes.
-// Local-first like the journal (UX-30, UX-31). No Supabase table until OD-30 is settled.
+// Local-first like the journal (UX-30, UX-31). Records and candidates sync to Supabase when enabled (#193, docs/26 §8).
+// The spoke registry stays device-only until singleton sync lands; suggestions are session-only and never synced.
 import { useSyncExternalStore } from "react";
+import { createCollectionSync } from "./persistence/store-sync.ts";
+import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 import {
   DEFAULT_CANDIDATE_THRESHOLD,
   DEFAULT_MOOD_REGISTRY,
@@ -57,6 +60,45 @@ function persist() {
   }
 }
 
+// Remote sync (#193). The device cache above is always written first; these copy records and candidates in the
+// background. `apply` leaves `suggestions` and the registry as they are and writes the whole device cache.
+function applyRecords(next: MoodRecord[]) {
+  set({ records: sanitizeMoodRecords(next) });
+  persist();
+}
+
+function applyCandidates(next: MoodSpokeCandidate[]) {
+  set({ candidates: sanitizeCandidates(next) });
+  persist();
+}
+
+interface MoodSyncs {
+  records: CollectionSync;
+  candidates: CollectionSync;
+}
+
+type MoodSyncOverrides = {
+  records?: Partial<CollectionSyncOptions<MoodRecord>>;
+  candidates?: Partial<CollectionSyncOptions<MoodSpokeCandidate>>;
+};
+
+function createMoodSyncs(overrides: MoodSyncOverrides = {}): MoodSyncs {
+  return {
+    records: createCollectionSync<MoodRecord>({ key: "mood_records", getLocal: () => state.records, apply: applyRecords, ...overrides.records }),
+    candidates: createCollectionSync<MoodSpokeCandidate>({ key: "mood_candidates", getLocal: () => state.candidates, apply: applyCandidates, ...overrides.candidates }),
+  };
+}
+
+let syncs: MoodSyncs = createMoodSyncs();
+
+/** Dispose the current syncers (timers, listeners, registry entries) and build new ones. */
+function replaceSyncs(overrides?: MoodSyncOverrides): MoodSyncs {
+  syncs.records.dispose();
+  syncs.candidates.dispose();
+  syncs = createMoodSyncs(overrides);
+  return syncs;
+}
+
 function sanitizeSuggestions(raw: unknown): Record<string, MoodSuggestion> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out: Record<string, MoodSuggestion> = {};
@@ -92,8 +134,14 @@ export function hydrateMood() {
   window.addEventListener("storage", (event) => {
     // Another tab changed mood data: take its copy rather than overwrite it later.
     if (event.key !== STORAGE_KEY || !event.newValue) return;
-    try { set(fromStored(JSON.parse(event.newValue) as StoredMood)); } catch { /* keep ours */ }
+    try {
+      set(fromStored(JSON.parse(event.newValue) as StoredMood));
+      syncs.records.changed();
+      syncs.candidates.changed();
+    } catch { /* keep ours */ }
   });
+  syncs.records.start();
+  syncs.candidates.start();
 }
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `mood-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -103,6 +151,7 @@ export function setSpokeScore(tradeId: string, spoke: string, value: number | nu
   const record = userScoreRecord({ id: newId(), trade_id: tradeId, now, captured_at: capturedAt, recorded_at: recordedAt }, state.registry, spoke, value);
   set({ records: [...state.records, record] });
   persist();
+  syncs.records.changed();
   return record;
 }
 
@@ -121,6 +170,7 @@ export function recordUserMood(
   const record = userMoodRecord({ id: newId(), trade_id: tradeId, now, captured_at: capturedAt, recorded_at: recordedAt }, state.registry, scores);
   set({ records: [...state.records, record] });
   persist();
+  syncs.records.changed();
   return record;
 }
 
@@ -130,6 +180,7 @@ export function undoMoodRecord(id: string) {
   if (!target || target.source !== "user") return;
   set({ records: state.records.filter((record) => record.id !== id) });
   persist();
+  syncs.records.changed();
 }
 
 /**
@@ -153,6 +204,7 @@ export function suggestFromNotes(trade: TradeRecord, now = new Date().toISOStrin
   const candidates = trade.is_sample ? state.candidates : recordCandidates(state.candidates, suggestion.candidates.map((item) => item.label), trade.id, now);
   set({ suggestions, candidates });
   persist();
+  syncs.candidates.changed();
   /** `keptYours`: spokes the notes spoke to that the trader had already set, so nothing was offered. */
   return { suggestion, keptYours: kept };
 }
@@ -169,6 +221,7 @@ export function acceptMoodSuggestion(tradeId: string, spokes?: string[], now = n
   else delete suggestions[tradeId];
   set({ records: record ? [...state.records, record] : state.records, suggestions });
   persist();
+  syncs.records.changed();
   return record;
 }
 
@@ -197,12 +250,15 @@ export function addSpokeFromCandidate(candidateId: string, trades: TradeRecord[]
   const rescored = rescoreForNewSpoke(trades.filter((trade) => !trade.is_sample), state.records, registry, candidate.id, { now, makeId: () => newId() });
   set({ registry, records: [...state.records, ...rescored], candidates: state.candidates.filter((item) => item.id !== candidateId) });
   persist();
+  syncs.records.changed();
+  syncs.candidates.changed();
   return rescored.length;
 }
 
 export function dismissCandidate(candidateId: string) {
   set({ candidates: state.candidates.map((item) => (item.id === candidateId ? { ...item, dismissed: true } : item)) });
   persist();
+  syncs.candidates.changed();
 }
 
 export function getMoodBackup(): MoodBackup {
@@ -213,11 +269,19 @@ export function getMoodBackup(): MoodBackup {
 export function restoreMood(backup: MoodBackup) {
   set({ registry: backup.registry, records: backup.records, candidates: backup.candidates, suggestions: {} });
   persist();
+  syncs.records.changed();
+  syncs.candidates.changed();
 }
 
-/** Test hook. */
+/** Test hook. Disposes the syncers, so no sync timer or listener outlives the test that started it. */
 export function resetMoodForTests(next: Partial<MoodState> = {}) {
+  replaceSyncs();
   state = { ...empty(), hydrated: true, ...next };
+}
+
+/** Test hook: swap the record or candidate syncer's adapter, storage or timers. Returns the syncers under test. */
+export function configureMoodSyncForTests(overrides: MoodSyncOverrides): MoodSyncs {
+  return replaceSyncs(overrides);
 }
 
 export function getMoodState() {

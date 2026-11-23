@@ -7,6 +7,8 @@ import type { DiscretionCall, PromptDismissal } from "./calls.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
 import { sanitizeCall, sanitizeDismissal, cleanList, sanitizeCalls } from "./calls-sanitize.ts";
 import type { CallsBackup } from "./calls-sanitize.ts";
+import { createCollectionSync } from "./persistence/store-sync.ts";
+import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 export { sanitizeCall, sanitizeDismissal, sanitizeCalls, sanitizeCallsBackup } from "./calls-sanitize.ts";
 export type { CallsBackup } from "./calls-sanitize.ts";
 
@@ -38,6 +40,44 @@ function persist() {
   }
 }
 
+// Remote sync (#193): calls and prompt dismissals copy to Supabase in the background. The device cache is written first.
+function applyCalls(next: DiscretionCall[]) {
+  set({ calls: cleanList(next, sanitizeCall, (call) => call.made_at) });
+  persist();
+}
+
+function applyDismissals(next: PromptDismissal[]) {
+  set({ dismissals: cleanList(next, sanitizeDismissal, (item) => item.recorded_at) });
+  persist();
+}
+
+interface CallsSyncs {
+  calls: CollectionSync;
+  dismissals: CollectionSync;
+}
+
+type CallsSyncOverrides = {
+  calls?: Partial<CollectionSyncOptions<DiscretionCall>>;
+  dismissals?: Partial<CollectionSyncOptions<PromptDismissal>>;
+};
+
+function createCallsSyncs(overrides: CallsSyncOverrides = {}): CallsSyncs {
+  return {
+    calls: createCollectionSync<DiscretionCall>({ key: "calls", getLocal: () => state.calls, apply: applyCalls, ...overrides.calls }),
+    dismissals: createCollectionSync<PromptDismissal>({ key: "prompt_dismissals", getLocal: () => state.dismissals, apply: applyDismissals, ...overrides.dismissals }),
+  };
+}
+
+let syncs: CallsSyncs = createCallsSyncs();
+
+/** Dispose the current syncers (timers, listeners, registry entries) and build new ones. */
+function replaceSyncs(overrides?: CallsSyncOverrides): CallsSyncs {
+  syncs.calls.dispose();
+  syncs.dismissals.dispose();
+  syncs = createCallsSyncs(overrides);
+  return syncs;
+}
+
 export function hydrateCalls() {
   if (state.hydrated || typeof window === "undefined") return;
   let stored: CallsBackup = { calls: [], dismissals: [] };
@@ -49,6 +89,8 @@ export function hydrateCalls() {
     saved = false;
   }
   set({ ...stored, hydrated: true, saved });
+  syncs.calls.start();
+  syncs.dismissals.start();
 }
 
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -62,6 +104,7 @@ export function addCall(draft: CallDraft): DiscretionCall | null {
   if (!call) return null;
   set({ calls: cleanList([...state.calls, call], sanitizeCall, (item) => item.made_at) });
   persist();
+  syncs.calls.changed();
   return call;
 }
 
@@ -77,6 +120,7 @@ export function updateCall(id: string, patch: Partial<Omit<DiscretionCall, "id" 
   if (!next) return null;
   set({ calls: state.calls.map((call) => (call.id === id ? next : call)) });
   persist();
+  syncs.calls.changed();
   return next;
 }
 
@@ -86,6 +130,7 @@ export function removeCall(id: string) {
   if (!state.calls.some((call) => call.id === id)) return false;
   set({ calls: state.calls.filter((call) => call.id !== id) });
   persist();
+  syncs.calls.changed();
   return true;
 }
 
@@ -95,6 +140,7 @@ export function addDismissal(input: Omit<PromptDismissal, "id" | "user_id" | "re
   if (!dismissal) return null;
   set({ dismissals: [...state.dismissals, dismissal] });
   persist();
+  syncs.dismissals.changed();
   return dismissal;
 }
 
@@ -112,10 +158,19 @@ export function restoreCalls(backup: CallsBackup | null | undefined) {
     dismissals: cleanList([...state.dismissals, ...backup.dismissals], sanitizeDismissal, (item) => item.recorded_at),
   });
   persist();
+  syncs.calls.changed();
+  syncs.dismissals.changed();
 }
 
+/** Test hook. Disposes the syncers, so no sync timer or listener outlives the test that started it. */
 export function resetCallsForTests() {
+  replaceSyncs();
   state = empty();
+}
+
+/** Test hook: swap the call or dismissal syncer's adapter, storage or timers. Returns the syncers under test. */
+export function configureCallsSyncForTests(overrides: CallsSyncOverrides): CallsSyncs {
+  return replaceSyncs(overrides);
 }
 
 export function getCallsState(): CallsState {
