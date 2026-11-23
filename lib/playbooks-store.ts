@@ -13,6 +13,8 @@ import type { Playbook, PlaybookRule } from "./playbooks.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
 import type { TradeStyle } from "./trades.ts";
 import { STYLES, clonePlaybook, trimText, sanitizePlaybooks } from "./playbooks-sanitize.ts";
+import { createCollectionSync, fingerprint } from "./persistence/store-sync.ts";
+import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 export { sanitizePlaybook, sanitizePlaybooks, sanitizePlaybooksBackup } from "./playbooks-sanitize.ts";
 
 export const PLAYBOOKS_STORAGE_KEY = "mogmine-playbooks-v1";
@@ -46,6 +48,29 @@ function persist() {
   }
 }
 
+// Remote sync (#190 pattern). With NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase the list is copied to Supabase in the
+// background; the device cache above is always written first. Playbooks are archived, never deleted (deletePolicy).
+function applyRemote(next: Playbook[]) {
+  set({ playbooks: sanitizePlaybooks(next) });
+  persist();
+}
+
+// A seed nobody edited: a fresh device must not push it over the server's (possibly renamed) copy (#192 review).
+const seedFingerprints = new Map(PLAYBOOK_SEEDS.map((seed) => [seed.id, fingerprint("playbooks", clonePlaybook(seed))]));
+const isUntouchedSeed = (playbook: Playbook) => seedFingerprints.get(playbook.id) === fingerprint("playbooks", playbook);
+
+function createPlaybooksSync(overrides: Partial<CollectionSyncOptions<Playbook>> = {}): CollectionSync {
+  return createCollectionSync<Playbook>({
+    key: "playbooks",
+    pristine: isUntouchedSeed,
+    getLocal: () => state.playbooks,
+    apply: applyRemote,
+    ...overrides,
+  });
+}
+
+let playbooksSync: CollectionSync = createPlaybooksSync();
+
 export function hydratePlaybooks() {
   if (state.hydrated || typeof window === "undefined") return;
   let playbooks: Playbook[] = seeds();
@@ -61,10 +86,12 @@ export function hydratePlaybooks() {
     if (event.storageArea !== localStorage || (event.key !== PLAYBOOKS_STORAGE_KEY && event.key !== null)) return;
     try {
       set({ playbooks: event.newValue ? sanitizePlaybooks(JSON.parse(event.newValue)) : seeds(), saved: true });
+      playbooksSync.changed();
     } catch {
       /* keep ours */
     }
   });
+  playbooksSync.start();
 }
 
 const randomPart = () =>
@@ -130,6 +157,7 @@ export function createPlaybook(draft: PlaybookDraft): PlaybookResult {
   };
   set({ playbooks: [...state.playbooks, playbook] });
   persist();
+  playbooksSync.changed();
   return { ok: true, playbook };
 }
 
@@ -143,6 +171,7 @@ export function updatePlaybook(id: string, draft: PlaybookDraft): PlaybookResult
   const playbook: Playbook = { ...current, ...cleanDraft(draft) };
   set({ playbooks: state.playbooks.map((item) => (item.id === id ? playbook : item)) });
   persist();
+  playbooksSync.changed();
   return { ok: true, playbook };
 }
 
@@ -159,6 +188,7 @@ export function setPlaybookArchived(id: string, archived: boolean): PlaybookResu
   const playbook = { ...current, archived };
   set({ playbooks: state.playbooks.map((item) => (item.id === id ? playbook : item)) });
   persist();
+  playbooksSync.changed();
   return { ok: true, playbook };
 }
 
@@ -181,12 +211,22 @@ export function restorePlaybooks(playbooks: readonly Playbook[]) {
   hydratePlaybooks();
   set({ playbooks: sanitizePlaybooks(playbooks) });
   persist();
+  playbooksSync.changed();
 }
 
-/** Test hook: back to unhydrated seeds. */
+/** Test hook: back to unhydrated seeds and the default (disabled) syncer. */
 export function resetPlaybooksForTests() {
   state = empty();
   setPlaybookRegistry(state.playbooks);
+  playbooksSync.dispose();
+  playbooksSync = createPlaybooksSync();
+}
+
+/** Test hook: swap the playbook syncer's adapter, storage or timers. Returns the syncer under test. */
+export function configurePlaybooksSyncForTests(overrides: Partial<CollectionSyncOptions<Playbook>>): CollectionSync {
+  playbooksSync.dispose();
+  playbooksSync = createPlaybooksSync(overrides);
+  return playbooksSync;
 }
 
 export function getPlaybooksState(): PlaybooksState {
