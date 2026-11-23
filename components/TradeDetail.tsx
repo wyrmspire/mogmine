@@ -27,6 +27,7 @@ import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withhel
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { calculateExitEfficiency } from "@/lib/exit-efficiency";
 import { stopHistoryText } from "@/lib/risk-text";
+import { noCandlesMessage } from "@/lib/market-data/outcome";
 import { findNeighbourTrades } from "@/lib/neighbour-trades";
 import { derivePlanVsActual } from "@/lib/plan-vs-actual";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
@@ -406,7 +407,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
         {!undatedExit && candles?.status === "none" && <DataNotesChip notes={dataNotes} />}
         {!undatedExit && candles?.status === "none" && !trade.is_sample && (
           <div className="chart-note fact candle-retry" role="status">
-            <span>{(open ? candles.lastAttemptAt - Date.parse(trade.entry_time) < FRESH_EXIT_MS : exitIsFresh(trade, candles.lastAttemptAt)) ? "Yahoo has not published these bars yet" : "No candles loaded for this trade"}</span>
+            <span>{noCandlesMessage(candles.reason, open ? candles.lastAttemptAt - Date.parse(trade.entry_time) < FRESH_EXIT_MS : exitIsFresh(trade, candles.lastAttemptAt))}</span>
             <button type="button" disabled={candles.fetching} onClick={() => ensureCandles(trade, true)}>{candles.fetching ? "Checking…" : "Retry"}</button>
           </div>
         )}
