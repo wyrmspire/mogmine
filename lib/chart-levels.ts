@@ -7,7 +7,11 @@ import { equityIndexSessionBounds, previousRegularSessionDate, sessionDate } fro
 import { formatPrice } from "./format.ts";
 import { specFor } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
+import { withheldReasons } from "./level-withheld.ts";
+import type { WithheldLevel } from "./level-withheld.ts";
 export { stackLabels } from "./label-stack.ts";
+export { withheldText } from "./level-withheld.ts";
+export type { WithheldLevel } from "./level-withheld.ts";
 export { levelPills, levelsSummary, tradeAnchors, MERGE_TICKS } from "./level-pills.ts";
 export type { LevelAnchor, LevelPill } from "./level-pills.ts";
 
@@ -109,6 +113,16 @@ export function tradeLevels(
   prior: LevelCandles,
   today: LevelCandles | null,
 ): ComputedLevel[] | null {
+  const report = tradeLevelReport(trade, prior, today);
+  return report?.levels.length ? report.levels : null;
+}
+
+/** The levels and, for each candle level withheld, why (OD-55). Null for another instrument or mixed timeframes. */
+export function tradeLevelReport(
+  trade: { symbol: string; entry_time: string },
+  prior: LevelCandles,
+  today: LevelCandles | null,
+): { levels: ComputedLevel[]; withheld: WithheldLevel[] } | null {
   const symbol = trade.symbol.toUpperCase();
   if (symbol !== "MES" && symbol !== "MNQ") return null;
   // Both windows must be one native series and timeframe. Mixing 1m and 5m would mis-read coverage.
@@ -124,7 +138,7 @@ export function tradeLevels(
     asOf: windows.asOf,
   });
   const levels = computeLevelsFromInputs({ symbol, sessionDate: windows.sessionDate, inputs: inputs.inputs });
-  return levels.length ? levels : null;
+  return { levels, withheld: withheldReasons(missingCandleLevels(levels), inputs.coverage, prior.baseTimeframe) };
 }
 
 /** A planning session's levels as they stood at `asOf` (PS-3, B-14). Empty when the plan did not exist yet. */
