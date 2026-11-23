@@ -38,6 +38,7 @@ Each was observed directly. Saving a response as-is produces broken charts.
 | Quirk | What to do |
 | :--- | :--- |
 | A request that starts beyond the limit returns **HTTP 422**. | Treat as "not available", never retry. |
+| A range in the future (or with nothing in it) returns **HTTP 400** "Data doesn't exist for startDate …". | Treat as empty, like 422 (`isYahooNoData`). `/api/market-data` does not ask Yahoo for a future window at all: it answers `200 { candles: [], reason: "future" }`; an empty range is `404 { reason: "no-data" }`; `502 { reason: "unavailable" }` only when an attempt failed upstream. One failing timeframe no longer aborts the others (2026-11-23). |
 | A closed-market window (a weekend) returns **HTTP 200 with no bars**. | Not an error and not missing data. Coverage checks need the session calendar (B-21). |
 | About **3% of rows have null open/high/low/close** (38 of 1,394 in one session). | Drop any row with a null price. |
 | Every response for a past window ends with **one extra row outside the requested window** (the latest quote). | Drop rows outside the requested window, or the chart draws a line to a phantom bar. |

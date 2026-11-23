@@ -11,6 +11,8 @@ import { candleCacheKey, candleSignature, getTrade, updateTrade } from "./store.
 import { TIMEFRAMES, TIMEFRAME_MINUTES, buildSparkline } from "./trades.ts";
 import type { Candle, CandleSource, Timeframe, TradeRecord } from "./trades.ts";
 import { anchorsTradeWindow, coversTradeWindow } from "./market-data/coverage.ts";
+import { reasonFromResponse } from "./market-data/outcome.ts";
+import type { NoCandlesReason } from "./market-data/outcome.ts";
 
 export interface CandleEntry {
   status: "loading" | "ready" | "none";
@@ -23,6 +25,8 @@ export interface CandleEntry {
   signature: string;
   /** When the last load for this signature started (ms). Drives `nextCandleRetryAt` (R-02). */
   lastAttemptAt: number;
+  /** Why the last load found no candles, when it said (a future trade, nothing served, a failure). */
+  reason?: NoCandlesReason | null;
 }
 
 export interface StoredCandles {
@@ -167,10 +171,15 @@ export function exitIsFresh(trade: Pick<TradeRecord, "exit_time">, now: number) 
 /** When a trade's candles should be requested again, or null for never. Pure, for tests. (R-02, docs/16) */
 export function nextCandleRetryAt(
   trade: Pick<TradeRecord, "exit_time"> & Partial<Pick<TradeRecord, "entry_time">>,
-  entry: Pick<CandleEntry, "status" | "candles" | "baseTimeframe">,
+  entry: Pick<CandleEntry, "status" | "candles" | "baseTimeframe"> & Partial<Pick<CandleEntry, "reason">>,
   lastAttemptAt: number,
   now: number,
 ): number | null {
+  // A trade dated in the future has no bars until its entry: ask again then, not every minute.
+  const entryAt = trade.entry_time == null ? NaN : Date.parse(trade.entry_time);
+  if (entry.status === "none" && entry.reason === "future" && Number.isFinite(entryAt) && entryAt > lastAttemptAt) {
+    return Math.max(entryAt, lastAttemptAt + MINUTE_MS);
+  }
   // An open trade is never final (R-03c): refresh every five minutes once loaded, and retry a
   // missing set each minute for the first hour after entry (Yahoo publishes late), then every 15.
   if (trade.exit_time == null) {
@@ -240,9 +249,11 @@ export async function loadCachedCandles(
     };
     await dependencies.write(key, stored);
     return stored;
-  } catch {
+  } catch (error) {
     if (usableCache) return usableCache;
-    throw new Error("unavailable");
+    // Keep the route's reason (future, no-data) so the page can say it calmly; anything else is "unavailable".
+    const reason = error instanceof Error ? error.message : "";
+    throw new Error(reason === "future" || reason === "no-data" ? reason : "unavailable");
   }
 }
 
@@ -259,8 +270,10 @@ async function load(trade: TradeRecord, signature: string, refresh: boolean) {
         const params = new URLSearchParams({ symbol: requestedTrade.symbol, entry: requestedTrade.entry_time });
         if (requestedTrade.exit_time != null) params.set("exit", requestedTrade.exit_time);
         const response = await fetch(`/api/market-data?${params}`);
-        if (!response.ok) throw new Error("unavailable");
-        return response.json() as Promise<CandleResponse>;
+        const body = await response.json().catch(() => null) as CandleResponse | null;
+        const reason = reasonFromResponse(response, body);
+        if (reason || !body) throw new Error(reason ?? "unavailable");
+        return body;
       },
       now: Date.now,
       isCurrent: () => entries.get(trade.id)?.signature === signature,
@@ -268,10 +281,11 @@ async function load(trade: TradeRecord, signature: string, refresh: boolean) {
       refresh,
     });
     if (stored) adopt(trade, stored, !askedNetwork);
-  } catch {
+  } catch (error) {
     const current = entries.get(trade.id);
     if (!current || current.signature !== signature) return;
-    put(trade.id, current.status === "ready" ? { ...current, fetching: false } : { ...current, status: "none", fetching: false });
+    const reason = error instanceof Error && (error.message === "future" || error.message === "no-data") ? error.message : "unavailable";
+    put(trade.id, current.status === "ready" ? { ...current, fetching: false } : { ...current, status: "none", fetching: false, reason });
   }
 }
 
