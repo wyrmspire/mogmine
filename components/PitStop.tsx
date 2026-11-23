@@ -5,6 +5,7 @@ import { EXECUTION_TAGS, SETUP_TAGS, checklistFor, playbookName } from "@/lib/pl
 import { activePlaybooks, usePlaybooks } from "@/lib/playbooks-store";
 import { getTrade, updateTrade, useJournal } from "@/lib/store";
 import { showToast } from "@/lib/toast";
+import { useInlineSaveText } from "./useSaveLabel";
 import { adherence } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
 
@@ -69,7 +70,8 @@ export function PitStop({ trade, compact = false }: Props) {
 
   const score = adherence(trade);
   const untouched = !trade.playbook_id && trade.quick_tags.length === 0;
-  const saveText = journal.saveState === "saving" ? "Saving…" : journal.saveState === "error" ? "Not saved — storage is blocked on this device" : "✓ Saved on this device";
+  // Sample trades never leave the device, so they keep the device copy with sync on.
+  const saveText = useInlineSaveText(journal.saveState, { deviceOnly: trade.is_sample });
 
   return (
     <div className="pitstop">

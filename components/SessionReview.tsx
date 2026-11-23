@@ -12,6 +12,7 @@ import { setPlanLesson, usePlansStore } from "@/lib/plans-store";
 import { reviewWindow, sessionReview } from "@/lib/session-review";
 import { formatSessionDate } from "@/lib/session";
 import { formatListTime } from "@/lib/time";
+import { useInlineSaveText } from "./useSaveLabel";
 import type { TradeRecord } from "@/lib/trades";
 
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
 
 export function SessionReview({ plan, trades, zone, onClose }: Props) {
   const { plans, saved } = usePlansStore();
+  const saveText = useInlineSaveText(saved ? "saved" : "error", { blocked: "Storage is blocked: this lesson will not be kept", check: false });
   const dialogRef = useRef<HTMLElement>(null);
   const start = reviewWindow(plan).from;
   // Later checkpoints of the same day end the window: "Pre-market → Pre-power hour".
@@ -109,7 +111,7 @@ export function SessionReview({ plan, trades, zone, onClose }: Props) {
               onChange={(event) => { setLesson(event.target.value); setPlanLesson(plan.id, event.target.value); }}
               placeholder="Wait for the reclaim before sizing up."
             />
-            <small className="num">{saved ? "Saved on this device" : "Storage is blocked: this lesson will not be kept"} · {lesson.length}/{PLAN_LIMITS.lesson}</small>
+            <small className="num">{saveText} · {lesson.length}/{PLAN_LIMITS.lesson}</small>
           </label>
         </div>
       </section>
