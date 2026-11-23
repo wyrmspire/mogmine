@@ -187,16 +187,44 @@ test("guard: no code exchange and no sign-up from the login flow", () => {
   }
 });
 
+// The directive is the first statement of a file. A comment that merely mentions it does not count.
+const isClientModule = (source: string) => /^\s*["']use client["']/m.test(source);
+
 test("guard: the service-role key never appears in client code", () => {
   for (const file of PRODUCTION) {
     const source = read(file);
-    if (source.includes('"use client"')) assert.equal(source.includes("SUPABASE_SERVICE_ROLE_KEY"), false, file);
+    if (isClientModule(source)) assert.equal(source.includes("SUPABASE_SERVICE_ROLE_KEY"), false, file);
   }
 });
 
-test("guard: exactly one createClient( call in production source", () => {
-  const calls = PRODUCTION.filter((file) => /\bcreateClient\(/.test(read(file)));
-  assert.deepEqual(calls, ["lib/persistence/supabase-client.ts"]);
-  const count = PRODUCTION.reduce((total, file) => total + (read(file).match(/\bcreateClient\(/g)?.length ?? 0), 0);
-  assert.equal(count, 1);
+test("guard (#185a): the service-role key is read only by the server-only agent auth module", () => {
+  const readers = PRODUCTION.filter((file) => read(file).includes("SUPABASE_SERVICE_ROLE_KEY"));
+  assert.deepEqual(readers, ["lib/agent/server-auth.ts"]);
+});
+
+test("guard (#185a): no 'use client' file imports the server-only agent modules", () => {
+  for (const file of PRODUCTION) {
+    const source = read(file);
+    if (!isClientModule(source)) continue;
+    assert.doesNotMatch(source, /lib\/agent\/(server-auth|handle)|\.\.?\/agent\/(server-auth|handle)/, file);
+  }
+  assert.match(read("lib/agent/server-auth.ts").split("\n")[0], /^\/\/ Server only\./);
+});
+
+test("guard: exactly one createClient( call in browser code; every other one is in the agent server-auth module", () => {
+  const browser = PRODUCTION.filter((file) => /\bcreateClient\(/.test(read(file)) && !file.startsWith("lib/agent/"));
+  assert.deepEqual(browser, ["lib/persistence/supabase-client.ts"]);
+  assert.equal((read("lib/persistence/supabase-client.ts").match(/\bcreateClient\(/g) ?? []).length, 1);
+  const elsewhere = PRODUCTION.filter((file) => /\bcreateClient\(/.test(read(file)) && file.startsWith("lib/agent/"));
+  assert.deepEqual(elsewhere, ["lib/agent/server-auth.ts"]);
+});
+
+test("guard (#185a): nothing under app/api/v1 or lib/agent writes a journal table with the service role", () => {
+  const server = [...sourceFiles("app/api/v1"), ...sourceFiles("lib/agent")];
+  for (const file of server) {
+    const source = read(file);
+    assert.doesNotMatch(source, /\.from\(\s*["'`]mogmine_(?!agent_)/, `${file} queries a journal table directly`);
+  }
+  const auth = read("lib/agent/server-auth.ts");
+  assert.equal(auth.includes("service") && auth.includes("mogmine_trades"), false);
 });

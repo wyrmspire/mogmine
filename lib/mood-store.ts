@@ -12,7 +12,6 @@ import {
   rescoreForNewSpoke,
   sanitizeMoodRecords,
   sanitizeRegistry,
-  spokeIdFor,
   suggestMoodFromText,
   userMoodRecord,
   userScoreRecord,
@@ -20,6 +19,10 @@ import {
 } from "./mood.ts";
 import type { MoodRecord, MoodSpokeCandidate, MoodSpokeRegistry, MoodSuggestion } from "./mood.ts";
 import type { TradeRecord } from "./trades.ts";
+import { sanitizeCandidates } from "./mood-store-sanitize.ts";
+import type { MoodBackup } from "./mood-store-sanitize.ts";
+export { sanitizeCandidates, sanitizeMoodBackup } from "./mood-store-sanitize.ts";
+export type { MoodBackup } from "./mood-store-sanitize.ts";
 
 const STORAGE_KEY = "mogmine-mood-v1";
 
@@ -32,13 +35,6 @@ export interface MoodState {
   candidates: MoodSpokeCandidate[];
   /** Trades that must name a new emotion before "Add spoke?" is offered (OD-39). */
   threshold: number;
-}
-
-/** What a backup file carries for mood. Suggestions are not kept: they can be made again from the notes. */
-export interface MoodBackup {
-  registry: MoodSpokeRegistry;
-  records: MoodRecord[];
-  candidates: MoodSpokeCandidate[];
 }
 
 const empty = (): MoodState => ({ hydrated: false, registry: DEFAULT_MOOD_REGISTRY, records: [], suggestions: {}, candidates: [], threshold: DEFAULT_CANDIDATE_THRESHOLD });
@@ -59,27 +55,6 @@ function persist() {
   } catch {
     // Storage blocked: the session keeps working in memory, as the journal does.
   }
-}
-
-export function sanitizeCandidates(raw: unknown): MoodSpokeCandidate[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const candidate = item as Partial<MoodSpokeCandidate>;
-    if (typeof candidate.label !== "string" || !Array.isArray(candidate.trade_ids)) return [];
-    const tradeIds = candidate.trade_ids.filter((id): id is string => typeof id === "string");
-    const id = spokeIdFor(candidate.label);
-    if (!id) return [];
-    return [{
-      id,
-      label: candidate.label,
-      count: tradeIds.length,
-      trade_ids: tradeIds,
-      first_seen: typeof candidate.first_seen === "string" ? candidate.first_seen : "",
-      last_seen: typeof candidate.last_seen === "string" ? candidate.last_seen : "",
-      dismissed: candidate.dismissed === true,
-    }];
-  });
 }
 
 function sanitizeSuggestions(raw: unknown): Record<string, MoodSuggestion> {
@@ -232,12 +207,6 @@ export function dismissCandidate(candidateId: string) {
 
 export function getMoodBackup(): MoodBackup {
   return { registry: state.registry, records: state.records, candidates: state.candidates };
-}
-
-export function sanitizeMoodBackup(raw: unknown): MoodBackup | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const input = raw as Partial<Record<keyof MoodBackup, unknown>>;
-  return { registry: sanitizeRegistry(input.registry), records: sanitizeMoodRecords(input.records), candidates: sanitizeCandidates(input.candidates) };
 }
 
 /** Replace mood data from a backup file, alongside `replaceTrades`. */
