@@ -10,6 +10,10 @@ import { SignOutButton } from "./SignOutButton";
 import { hydratePrefs, setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { hydrateJournal, useJournal } from "@/lib/store";
+import type { SaveState } from "@/lib/store";
+import { remoteSyncEnabled } from "@/lib/persistence/store-sync";
+import type { SyncState } from "@/lib/persistence/store-sync";
+import { useSyncSummary } from "./useSyncSummary";
 import { hydrateMood } from "@/lib/mood-store";
 import { hydrateAccounts } from "@/lib/accounts-store";
 import { hydrateChallenges } from "@/lib/challenge-store";
@@ -21,6 +25,21 @@ import { dismissToast, useToast } from "@/lib/toast";
 import { openAddTrade, useOnline, useUi } from "@/lib/ui";
 
 const SAVE_TEXT = { idle: "On this device", saving: "Saving…", saved: "Saved on this device", error: "Not saved — storage is blocked" } as const;
+// NEXT_PUBLIC_* values are inlined at build time, so this is a constant in the browser bundle (#190).
+const REMOTE_SYNC = remoteSyncEnabled();
+const SYNC_TEXT: Record<"syncing" | "synced" | "pending" | "signed-out" | "error", { state: SaveState; text: string }> = {
+  syncing: { state: "saving", text: "Syncing…" },
+  synced: { state: "saved", text: "Synced" },
+  pending: { state: "idle", text: "Offline — will sync" },
+  "signed-out": { state: "idle", text: "Not signed in — saved on this device" },
+  error: { state: "error", text: "Sync problem — saved on this device" },
+};
+
+/** Header save text. With remote sync on, the sync status shows; a device-cache failure always wins. */
+function saveStatus(saveState: SaveState, sync: SyncState): { state: SaveState; text: string } {
+  if (!REMOTE_SYNC || saveState === "error" || sync.status === "off") return { state: saveState, text: SAVE_TEXT[saveState] };
+  return SYNC_TEXT[sync.status];
+}
 
 const icons = {
   today: <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /></svg>,
@@ -44,6 +63,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const ui = useUi();
   const toast = useToast();
   const online = useOnline();
+  const sync = useSyncSummary();
+  const save = saveStatus(journal.saveState, sync);
 
   useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); hydratePlans(); hydrateDrills(); hydrateCalls(); }, []);
 
@@ -60,7 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {NAV.map((item) => <Link key={item.href} href={item.href} style={{ minHeight: 44, minWidth: 44 }} aria-current={isActive(item.href) ? "page" : undefined}>{item.label}{item.href === "/review" && reviewBadge}</Link>)}
         </nav>
         <span className="topbar-spacer" />
-        <span className="save-status" data-state={journal.saveState} role="status"><i aria-hidden="true" /><span>{SAVE_TEXT[journal.saveState]}</span></span>
+        <span className="save-status" data-state={save.state} role="status"><i aria-hidden="true" /><span>{save.text}</span></span>
         <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} aria-pressed={prefs.shield} aria-label={prefs.shield ? "Shield mode on: dollars hidden. Tap to show dollars." : "Shield mode off. Tap to hide dollars."} title="Shield mode: hide dollars and size" onClick={() => setPrefs({ shield: !prefs.shield })}>{icons.shield}</button>
         <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade} aria-label="Add trade">＋</button>
         <AgentKeysLink />
@@ -68,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <HomeScreenHint />
-      {!online && <div className="banner warn" role="status">You are offline. Trades and notes on this device stay readable; new market data waits.</div>}
+      {!online && <div className="banner warn" role="status">{REMOTE_SYNC ? "You are offline. Changes are saved on this device and sync when you're back." : "You are offline. Trades and notes on this device stay readable; new market data waits."}</div>}
 
       <main id="main-content" tabIndex={-1} role="main">{children}</main>
 
