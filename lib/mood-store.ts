@@ -61,7 +61,7 @@ function persist() {
   }
 }
 
-function sanitizeCandidates(raw: unknown): MoodSpokeCandidate[] {
+export function sanitizeCandidates(raw: unknown): MoodSpokeCandidate[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {
     if (!item || typeof item !== "object") return [];

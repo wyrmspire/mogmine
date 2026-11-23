@@ -126,3 +126,6 @@ export function getTuneRiskBudgetDisplay(shield: boolean, riskBudgetUsd: number)
     hint: "Used by manual entry to suggest stop distance and by Trade Detail risk chips (default $250).",
   };
 }
+
+/** Validation boundary for the command layer (#174): the same clean-up `getPrefs` applies to stored prefs. */
+export { sanitize as sanitizePrefs };

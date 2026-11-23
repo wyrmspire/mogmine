@@ -1,0 +1,222 @@
+// #174: AI-operable command layer over the persistence contract (docs/26 §6).
+// Typed create / read / list / update / archive / remove for every collection type, and read / write for the
+// singletons. No React, no DOM, no route: a script or agent can call it directly, and so can the UI.
+// Every write is validated here through the existing lib sanitizers first. An invalid record fails closed with
+// `invalid` and nothing is written. Money is never rounded or coerced here (Guardrail 4).
+import type {
+  CollectionKey, CollectionRecordTypes, CollectionRepository, JournalRepositories, ListQuery, PersistErrorCode,
+  PersistResult, RecordId, RecordTypeKey, SingletonKey, SingletonRecordTypes, SingletonRepository, Stored, UserId,
+} from "../persistence/contract.ts";
+import { RECORD_CONTRACTS, contractFor } from "../persistence/registry.ts";
+import { DEFAULT_OWNER_USER_ID, isStopMove, normalizeTrade, validateTradeInput } from "../trades.ts";
+import type { TradeRecord } from "../trades.ts";
+import { sanitizeAccounts, sanitizeBalanceChecks } from "../accounts.ts";
+import type { BalanceCheck, TradingAccount } from "../accounts.ts";
+import { sanitizeMoodRecords, sanitizeRegistry } from "../mood.ts";
+import { sanitizeCandidates } from "../mood-store.ts";
+import { sanitizePlaybook } from "../playbooks-store.ts";
+import { sanitizePlanningSession } from "../plans-store.ts";
+import { sanitizeDrillRecord } from "../drills-store.ts";
+import { sanitizeCall, sanitizeDismissal } from "../calls-store.ts";
+import { sanitizeChallenge } from "../challenge-store.ts";
+import { sanitizePrefs } from "../prefs.ts";
+import { PROMPT_LIBRARY_SCHEMA } from "../discretionary-prompts.ts";
+import type { PromptLibraryV1 } from "../discretionary-prompts.ts";
+
+type Parsed<T> = { ok: true; value: T } | { ok: false; message: string };
+type Parser<T> = (raw: unknown) => Parsed<T>;
+
+const bad = (message: string) => ({ ok: false as const, message });
+const good = <T>(value: T) => ({ ok: true as const, value });
+
+/** One object through a sanitizer that returns null for a bad record. */
+const one = <T>(sanitize: (raw: unknown) => T | null, message: string): Parser<T> => (raw) => {
+  const value = sanitize(raw);
+  return value ? good(value) : bad(message);
+};
+
+/** A list sanitizer, given a single record: a record it drops is invalid. */
+const oneOfList = <T>(sanitize: (raw: unknown) => T[], message: string): Parser<T> => (raw) => {
+  const [value] = sanitize([raw]);
+  return value ? good(value) : bad(message);
+};
+
+const isObject = (raw: unknown): raw is Record<string, unknown> => !!raw && typeof raw === "object" && !Array.isArray(raw);
+
+function parseTrade(raw: unknown): Parsed<TradeRecord> {
+  if (!isObject(raw) || typeof raw.id !== "string" || !raw.id.trim()) return bad("A trade needs an id.");
+  // The sanitizer drops a bad stop move silently. Here a bad one rejects the whole trade, so nothing is lost unnoticed.
+  if (raw.stop_moves !== undefined && (!Array.isArray(raw.stop_moves) || !raw.stop_moves.every(isStopMove))) {
+    return bad("Every stop move needs a numeric price and a valid time.");
+  }
+  let trade: TradeRecord;
+  try {
+    trade = normalizeTrade(raw as Parameters<typeof normalizeTrade>[0]);
+  } catch (error) {
+    return bad(error instanceof Error ? error.message : "This trade is not valid.");
+  }
+  if (!Number.isFinite(Date.parse(trade.entry_time))) return bad("Entry time must be a valid date and time.");
+  if (trade.status === "closed" && !Number.isFinite(Date.parse(trade.exit_time ?? ""))) return bad("Exit time must be a valid date and time.");
+  // Price, tick, quantity and stop-side rules are the same ones the entry form enforces.
+  const errors = validateTradeInput({
+    symbol: trade.symbol,
+    direction: trade.direction,
+    quantity: trade.quantity,
+    entry_price: trade.entry_price,
+    exit_price: trade.status === "open" ? null : trade.exit_price,
+    stop_loss_price: trade.stop_loss_price,
+    planned_target_price: trade.planned_target_price,
+    key_level_price: trade.key_level_price,
+  });
+  const firstError = Object.values(errors)[0];
+  return firstError ? bad(firstError) : good(trade);
+}
+
+/** Money is integer cents. The sanitizer rounds a fractional amount silently, so the command layer refuses it first. */
+const accountParser = (raw: unknown): Parsed<TradingAccount> => {
+  const rules = isObject(raw) && isObject(raw.rules) ? raw.rules : {};
+  const wholeOrAbsent = (value: unknown) => value === undefined || value === null || Number.isInteger(value);
+  if (!isObject(raw) || !Number.isInteger(raw.starting_balance_cents)) return bad("An account needs a whole-cent starting balance.");
+  if (!["max_loss_cents", "daily_loss_cents", "profit_target_cents"].every((field) => wholeOrAbsent(rules[field]))) {
+    return bad("Account limits are whole cents only.");
+  }
+  return oneOfList(sanitizeAccounts, "An account needs a name and a whole-cent starting balance.")(raw);
+};
+
+const balanceCheckParser = (raw: unknown): Parsed<BalanceCheck> => {
+  if (!isObject(raw) || !Number.isInteger(raw.balance_cents)) return bad("A balance check needs a whole-cent balance.");
+  return oneOfList(sanitizeBalanceChecks, "A balance check needs an account, a time and a balance.")(raw);
+};
+
+/** Validation for every collection type. Each entry is the existing sanitizer for that record. */
+const COLLECTION_PARSERS: { [K in CollectionKey]: Parser<CollectionRecordTypes[K]> } = {
+  trades: parseTrade,
+  mood_records: oneOfList(sanitizeMoodRecords, "This mood record is missing its trade, source or scores."),
+  mood_candidates: oneOfList(sanitizeCandidates, "This spoke candidate needs a label and trade ids."),
+  accounts: accountParser,
+  balance_checks: balanceCheckParser,
+  challenges: one(sanitizeChallenge, "This challenge definition is not valid."),
+  playbooks: one(sanitizePlaybook, "A playbook needs an id, a name and a list of rules."),
+  plans: one(sanitizePlanningSession, "A plan needs an id, a session date and a name."),
+  drills: one(sanitizeDrillRecord, "A drill record needs a trade, a kind, an answer and a time."),
+  calls: one(sanitizeCall, "This call does not match its kind (for example, a flip needs a signal direction)."),
+  prompt_dismissals: one(sanitizeDismissal, "A dismissal needs a trade, a prompt, a reason and a time."),
+};
+
+/** Singletons: one document per owner. Prompt library has no sanitizer yet, so only its shape is checked. */
+const SINGLETON_PARSERS: { [K in SingletonKey]: Parser<SingletonRecordTypes[K]> } = {
+  prefs: (raw) => (isObject(raw) ? good(sanitizePrefs(raw)) : bad("Preferences must be an object.")),
+  mood_registry: (raw) => (isObject(raw) ? good(sanitizeRegistry(raw)) : bad("The mood spoke registry must be an object.")),
+  prompt_library: (raw) => (
+    isObject(raw) && raw.schema === PROMPT_LIBRARY_SCHEMA && Array.isArray(raw.prompts) && typeof raw.seeds_version === "number"
+      ? good(raw as unknown as PromptLibraryV1)
+      : bad("The prompt library has an unknown schema.")
+  ),
+};
+
+export interface JournalCommands {
+  create<K extends CollectionKey>(key: K, raw: unknown): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
+  read<K extends CollectionKey>(key: K, id: RecordId): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
+  list<K extends CollectionKey>(key: K, query?: ListQuery): Promise<PersistResult<CollectionRecordTypes[K][]>>;
+  /** Shallow patch over the stored record, re-validated as a whole. Fails with `conflict` if the row changed since it was read. */
+  update<K extends CollectionKey>(key: K, id: RecordId, patch: Record<string, unknown>): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
+  /** Sets `archived` on types whose delete policy is `archive` (accounts, playbooks). */
+  archive<K extends CollectionKey>(key: K, id: RecordId): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
+  /** Hard delete. Archive-policy types return `forbidden`. Children with `cascade_parent` (e.g. a trade's drills) go first. */
+  remove<K extends CollectionKey>(key: K, id: RecordId): Promise<PersistResult<void>>;
+  readSingleton<K extends SingletonKey>(key: K): Promise<PersistResult<Stored<SingletonRecordTypes[K]> | null>>;
+  writeSingleton<K extends SingletonKey>(key: K, raw: unknown): Promise<PersistResult<Stored<SingletonRecordTypes[K]>>>;
+}
+
+/**
+ * Build the command set over one owner's repositories. `owner` is `DEFAULT_OWNER_USER_ID` on this device and the
+ * signed-in `auth.uid()` on Supabase. Records may carry that same owner or the device default, never a foreign one.
+ */
+export function createJournalCommands(repos: JournalRepositories, owner: UserId = DEFAULT_OWNER_USER_ID): JournalCommands {
+  const fail = <T>(code: PersistErrorCode, message: string, recordType?: RecordTypeKey, id?: RecordId): PersistResult<T> => ({
+    ok: false,
+    error: { code, message, recordType, id },
+  });
+  const repoFor = <K extends CollectionKey>(key: K) => repos[key] as CollectionRepository<CollectionRecordTypes[K]>;
+  const idOf = (record: unknown): RecordId => (isObject(record) && typeof record.id === "string" ? record.id : "");
+
+  /** Records of owned types must carry the caller's owner (or the device default), and are stamped with it. */
+  function ownedBy<T>(key: RecordTypeKey, record: T): Parsed<T> {
+    if (contractFor(key).ownership !== "user_id") return good(record);
+    const carried = (record as { user_id?: unknown }).user_id;
+    if (carried !== undefined && carried !== owner && carried !== DEFAULT_OWNER_USER_ID) {
+      return bad("This record belongs to another owner.");
+    }
+    return good({ ...record, user_id: owner } as T);
+  }
+
+  async function write<K extends CollectionKey>(key: K, parsed: CollectionRecordTypes[K], expectedUpdatedAt?: string) {
+    const stamped = ownedBy<CollectionRecordTypes[K]>(key, parsed);
+    if (!stamped.ok) return fail<Stored<CollectionRecordTypes[K]>>("forbidden", stamped.message, key, idOf(parsed));
+    return repoFor(key).put(owner, stamped.value, expectedUpdatedAt ? { expectedUpdatedAt } : undefined);
+  }
+
+  const commands: JournalCommands = {
+    async create(key, raw) {
+      const parsed = COLLECTION_PARSERS[key](raw);
+      if (!parsed.ok) return fail("invalid", parsed.message, key, idOf(raw));
+      const existing = await repoFor(key).get(owner, idOf(parsed.value));
+      if (existing.ok) return fail("conflict", `A ${key} record with this id already exists.`, key, idOf(parsed.value));
+      if (existing.error.code !== "not_found") return existing;
+      return write(key, parsed.value);
+    },
+
+    read(key, id) {
+      return repoFor(key).get(owner, id);
+    },
+
+    list(key, query) {
+      return repoFor(key).list(owner, query);
+    },
+
+    async update(key, id, patch) {
+      const current = await repoFor(key).get(owner, id);
+      if (!current.ok) return current;
+      const parsed = COLLECTION_PARSERS[key]({ ...current.value.record, ...patch, id });
+      if (!parsed.ok) return fail("invalid", parsed.message, key, id);
+      return write(key, parsed.value, current.value.meta.updated_at);
+    },
+
+    async archive(key, id) {
+      if (contractFor(key).deletePolicy !== "archive") return fail("forbidden", `${key} records are removed, not archived.`, key, id);
+      const result = await commands.update(key, id, { archived: true });
+      if (!result.ok) return result;
+      // A record whose sanitizer refuses to archive it (the impulse playbook) comes back unarchived.
+      if ((result.value.record as { archived?: unknown }).archived !== true) return fail("invalid", "This record cannot be archived.", key, id);
+      return result;
+    },
+
+    async remove(key, id) {
+      if (contractFor(key).deletePolicy === "archive") return fail("forbidden", "This record is archived, not deleted. Archive it instead.", key, id);
+      // Children go first, so a failed cascade can be retried while the parent still exists.
+      for (const child of RECORD_CONTRACTS.filter((entry) => entry.parent === key && entry.deletePolicy === "cascade_parent")) {
+        const childRepo = repos[child.key as CollectionKey] as unknown as CollectionRepository<{ id: RecordId }>;
+        const children = await childRepo.list(owner, { parentId: id, includeSamples: true, includeArchived: true });
+        if (!children.ok) return fail(children.error.code, children.error.message, child.key, id);
+        for (const row of children.value) {
+          const removed = await childRepo.remove(owner, row.id);
+          if (!removed.ok) return removed;
+        }
+      }
+      return repoFor(key).remove(owner, id);
+    },
+
+    readSingleton(key) {
+      return repos[key].get(owner) as Promise<PersistResult<Stored<SingletonRecordTypes[typeof key]> | null>>;
+    },
+
+    async writeSingleton(key, raw) {
+      const parsed = SINGLETON_PARSERS[key](raw);
+      if (!parsed.ok) return fail("invalid", parsed.message, key);
+      const stamped = ownedBy(key, parsed.value);
+      if (!stamped.ok) return fail("forbidden", stamped.message, key);
+      return (repos[key] as SingletonRepository<SingletonRecordTypes[typeof key]>).put(owner, stamped.value);
+    },
+  };
+  return commands;
+}

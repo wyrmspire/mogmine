@@ -90,6 +90,6 @@ Computed, never stored: session review, challenge results while live, call grade
 
 ## 6. For the next issues
 
-- **#174 command layer:** call `JournalRepositories` only; validate with the existing sanitizers before `put`; surface `PersistError.message` to the trader.
+- **#174 command layer (built):** [`lib/commands/journal-commands.ts`](../lib/commands/journal-commands.ts) `createJournalCommands(repos, owner)` exposes `create` / `read` / `list` / `update` / `archive` / `remove` for every collection key and `readSingleton` / `writeSingleton` for the three singletons. It calls `JournalRepositories` only, validates every write with the existing sanitizers (money must be whole cents or a tick-valid price; a bad stop move rejects the whole trade), returns `PersistError`s and never throws for expected failures. Archive-policy types (`accounts`, `playbooks`) are archived, not removed; `remove` deletes `cascade_parent` children first. `candles` is not part of the command set. Tests: `lib/__tests__/journal-commands.test.ts`.
 - **#175 local/mock adapter:** wrap the existing stores and keys in §3 without changing them; synthesize `RowMeta`; an env flag picks `local` / `mock` / `supabase`.
 - **#176 Supabase adapter:** one migration per table in §3 marked v1, all `mogmine_`, RLS on every table before data, shared contract tests run against both adapters.
