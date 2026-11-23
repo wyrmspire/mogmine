@@ -164,6 +164,40 @@ const ERRORS = {
   forbidden: (key: RecordTypeKey, message: string): PersistError => ({ code: "forbidden", message, recordType: key }),
 };
 
+/** #176: the device sanitizers for one record, so a row-per-record adapter (Supabase) validates exactly like this one. */
+export function sanitizeCollectionRecord(key: CollectionKey, raw: unknown): { id: string } | null {
+  const slot = SLOTS[key] as unknown as CollectionSlot<{ id: string }>;
+  const [clean] = slot.read(slot.write({}, [raw as { id: string }]));
+  return clean ?? null;
+}
+
+export function sanitizeSingletonRecord(key: "prefs" | "mood_registry", raw: unknown): unknown | null {
+  const slot = SINGLETON_SLOTS[key] as unknown as SingletonSlot<unknown>;
+  return slot.read(slot.write({}, raw));
+}
+
+/** Device candle cache (IndexedDB in the app). Shared by the local and Supabase adapters (server archive is #70). */
+export function createCandleRepository(store: CandleStore): CandleCacheRepository {
+  return {
+    async get(key) {
+      try {
+        const value = await store.get(key);
+        if (Array.isArray(value)) return { ok: true, value: value as Candle[] };
+        if (isObject(value) && Array.isArray(value.candles)) return { ok: true, value: value.candles as Candle[] };
+        return { ok: true, value: null };
+      } catch (error) {
+        return { ok: false, error: { ...ERRORS.unavailable("candles"), cause: String(error) } };
+      }
+    },
+    async put(key, list) {
+      if (!Array.isArray(list)) return { ok: false, error: ERRORS.invalid("candles", "Candles must be a list.") };
+      // Written without `signature`, so the candle loader treats it as a miss and refetches rather than trusting it.
+      const stored = await store.set(key, { candles: list, fetchedAt: Date.now() }).catch(() => false);
+      return stored ? { ok: true, value: undefined } : { ok: false, error: ERRORS.unavailable("candles") };
+    },
+  };
+}
+
 export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAdapter {
   const owner = options.owner ?? DEFAULT_OWNER_USER_ID;
   const now = options.now ?? (() => new Date().toISOString());
@@ -321,24 +355,7 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
     };
   }
 
-  const candles: CandleCacheRepository = {
-    async get(key) {
-      try {
-        const value = await options.candles.get(key);
-        if (Array.isArray(value)) return { ok: true, value: value as Candle[] };
-        if (isObject(value) && Array.isArray(value.candles)) return { ok: true, value: value.candles as Candle[] };
-        return { ok: true, value: null };
-      } catch (error) {
-        return { ok: false, error: { ...ERRORS.unavailable("candles"), cause: String(error) } };
-      }
-    },
-    async put(key, list) {
-      if (!Array.isArray(list)) return { ok: false, error: ERRORS.invalid("candles", "Candles must be a list.") };
-      // Written without `signature`, so the candle loader treats it as a miss and refetches rather than trusting it.
-      const stored = await options.candles.set(key, { candles: list, fetchedAt: Date.now() }).catch(() => false);
-      return stored ? { ok: true, value: undefined } : { ok: false, error: ERRORS.unavailable("candles") };
-    },
-  };
+  const candles = createCandleRepository(options.candles);
 
   // prompt_library: no device key (docs/26 §4). Kept in memory until a prompt editor ships.
   const promptRepo: SingletonRepository<PromptLibraryV1> = {
