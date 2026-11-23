@@ -44,6 +44,11 @@ const listeners = new Set<() => void>();
 const clamp = (value: unknown, min: number, max: number, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 
+/** Validate a stored or imported prefs object. Used by the persistence adapter (#175) as well as hydration. */
+export function sanitizePrefs(raw: unknown): Prefs {
+  return sanitize(raw && typeof raw === "object" ? raw as Partial<Prefs> : {});
+}
+
 function sanitize(raw: Partial<Prefs>): Prefs {
   return {
     shield: raw.shield === true,
@@ -126,6 +131,3 @@ export function getTuneRiskBudgetDisplay(shield: boolean, riskBudgetUsd: number)
     hint: "Used by manual entry to suggest stop distance and by Trade Detail risk chips (default $250).",
   };
 }
-
-/** Validation boundary for the command layer (#174): the same clean-up `getPrefs` applies to stored prefs. */
-export { sanitize as sanitizePrefs };
