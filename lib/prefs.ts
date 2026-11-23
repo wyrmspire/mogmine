@@ -4,6 +4,8 @@ import { useSyncExternalStore } from "react";
 import { refreshTheme } from "./theme.ts";
 import { DEFAULT_PREFS, sanitize } from "./prefs-sanitize.ts";
 import type { Prefs } from "./prefs-sanitize.ts";
+import { createSingletonSync } from "./persistence/singleton-sync.ts";
+import type { SingletonSync, SingletonSyncOptions } from "./persistence/singleton-sync.ts";
 export { DEFAULT_PREFS, GOLD_PRESETS, sanitizePrefs } from "./prefs-sanitize.ts";
 export type { GoldPreset, Palette, Prefs } from "./prefs-sanitize.ts";
 
@@ -12,6 +14,25 @@ export const PREFS_KEY = "mogmine-prefs-v1";
 let prefs: Prefs = DEFAULT_PREFS;
 let hydrated = false;
 const listeners = new Set<() => void>();
+
+// Remote sync (#191): with NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase the preferences follow the trader across devices.
+// The device copy (PREFS_KEY) is always written first; the syncer is background only.
+function writeCache() {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* still applies for this session */ }
+}
+
+function applyRemote(next: Prefs) {
+  prefs = sanitize(next);
+  writeCache();
+  apply();
+  listeners.forEach((listener) => listener());
+}
+
+function createPrefsSync(overrides: Partial<SingletonSyncOptions<Prefs>> = {}): SingletonSync {
+  return createSingletonSync<Prefs>({ key: "prefs", getLocal: () => prefs, apply: applyRemote, unedited: DEFAULT_PREFS, ...overrides });
+}
+
+let prefsSync: SingletonSync = createPrefsSync();
 
 function apply() {
   if (typeof document === "undefined") return;
@@ -33,6 +54,7 @@ export function hydratePrefs() {
   } catch { /* defaults */ }
   apply();
   listeners.forEach((listener) => listener());
+  prefsSync.start();
 }
 
 export function getPrefs(): Prefs {
@@ -41,9 +63,25 @@ export function getPrefs(): Prefs {
 
 export function setPrefs(patch: Partial<Prefs>) {
   prefs = sanitize({ ...prefs, ...patch });
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* still applies for this session */ }
+  writeCache();
   apply();
   listeners.forEach((listener) => listener());
+  prefsSync.changed();
+}
+
+/** Test hook: restore the unhydrated defaults and a fresh (disabled by default) syncer. */
+export function resetPrefsForTests() {
+  prefsSync.dispose();
+  prefsSync = createPrefsSync();
+  prefs = DEFAULT_PREFS;
+  hydrated = false;
+}
+
+/** Test hook: swap the syncer's adapter, storage or timers. Returns the syncer under test. */
+export function configurePrefsSyncForTests(overrides: Partial<SingletonSyncOptions<Prefs>>): SingletonSync {
+  prefsSync.dispose();
+  prefsSync = createPrefsSync(overrides);
+  return prefsSync;
 }
 
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
