@@ -6,6 +6,8 @@ import { useSyncExternalStore } from "react";
 import type { DrillAnswer, DrillKind, DrillRecord } from "./drills.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
 import { sanitizeDrillRecord, sanitizeDrills } from "./drills-sanitize.ts";
+import { createCollectionSync } from "./persistence/store-sync.ts";
+import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 export { sanitizeDrillRecord, sanitizeDrills, sanitizeDrillsBackup } from "./drills-sanitize.ts";
 
 export const DRILLS_STORAGE_KEY = "mogmine-drills-v1";
@@ -36,6 +38,24 @@ function persist() {
   }
 }
 
+// Remote sync (#190 pattern): the device cache above is written first; answers are copied to Supabase in the
+// background when NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase. Answers are append-only, so nothing is removed.
+function applyRemote(next: DrillRecord[]) {
+  set({ records: sanitizeDrills(next) });
+  persist();
+}
+
+function createDrillsSync(overrides: Partial<CollectionSyncOptions<DrillRecord>> = {}): CollectionSync {
+  return createCollectionSync<DrillRecord>({
+    key: "drills",
+    getLocal: () => state.records,
+    apply: applyRemote,
+    ...overrides,
+  });
+}
+
+let drillsSync: CollectionSync = createDrillsSync();
+
 export function hydrateDrills() {
   if (state.hydrated || typeof window === "undefined") return;
   let records: DrillRecord[] = [];
@@ -47,6 +67,7 @@ export function hydrateDrills() {
     saved = false;
   }
   set({ records, hydrated: true, saved });
+  drillsSync.start();
 }
 
 /** Record one answer. Returns the saved record, or null when the input is not a valid answer. */
@@ -61,6 +82,7 @@ export function addDrillAnswer(input: { trade_id: string; kind: DrillKind; answe
   if (!record) return null;
   set({ records: [...state.records, record] });
   persist();
+  drillsSync.changed();
   return record;
 }
 
@@ -75,10 +97,21 @@ export function restoreDrills(records: readonly DrillRecord[] | null | undefined
   hydrateDrills();
   set({ records: sanitizeDrills([...state.records, ...records]) });
   persist();
+  drillsSync.changed();
 }
 
+/** Test hook: back to unhydrated and empty, and the default (disabled) syncer. */
 export function resetDrillsForTests() {
   state = empty();
+  drillsSync.dispose();
+  drillsSync = createDrillsSync();
+}
+
+/** Test hook: swap the drill syncer's adapter, storage or timers. Returns the syncer under test. */
+export function configureDrillsSyncForTests(overrides: Partial<CollectionSyncOptions<DrillRecord>>): CollectionSync {
+  drillsSync.dispose();
+  drillsSync = createDrillsSync(overrides);
+  return drillsSync;
 }
 
 export function getDrillsState(): DrillsState {

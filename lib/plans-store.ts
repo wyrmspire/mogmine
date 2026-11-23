@@ -13,6 +13,8 @@ import {
   type PlanRevision,
 } from "./plans.ts";
 import { trimText, sanitizePlanningSession, sanitizePlans } from "./plans-sanitize.ts";
+import { createCollectionSync } from "./persistence/store-sync.ts";
+import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 export { sanitizePlannedLevel, sanitizePlanRevision, sanitizePlanningSession, sanitizePlans, sanitizePlansBackup } from "./plans-sanitize.ts";
 
 export const PLANS_STORAGE_KEY = "mogmine-plans-v1";
@@ -43,6 +45,24 @@ function persist() {
   }
 }
 
+// Remote sync (#190 pattern): the device cache above is written first; the list is copied to Supabase in the
+// background when NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase. Plans are hard-deleted (deletePolicy "hard").
+function applyRemote(next: PlanningSession[]) {
+  set({ plans: sanitizePlans(next) });
+  persist();
+}
+
+function createPlansSync(overrides: Partial<CollectionSyncOptions<PlanningSession>> = {}): CollectionSync {
+  return createCollectionSync<PlanningSession>({
+    key: "plans",
+    getLocal: () => state.plans,
+    apply: applyRemote,
+    ...overrides,
+  });
+}
+
+let plansSync: CollectionSync = createPlansSync();
+
 export function getPlansBackup(): PlanningSession[] {
   hydratePlans();
   return sanitizePlans(state.plans);
@@ -67,6 +87,7 @@ export function hydratePlans() {
     saved = false;
   }
   set({ plans, hydrated: true, saved });
+  plansSync.start();
 }
 
 export function getPlansState(): PlansState {
@@ -87,6 +108,7 @@ export function addPlan(plan: PlanningSession) {
   const existing = state.plans.filter((p) => p.id !== sanitized.id);
   set({ plans: [...existing, sanitized] });
   persist();
+  plansSync.changed();
 }
 
 export interface PlanUpdatePayload {
@@ -131,6 +153,7 @@ export function updatePlan(id: string, patch: PlanUpdatePayload) {
   const plans = state.plans.map((p) => (p.id === id ? updated : p));
   set({ plans });
   persist();
+  plansSync.changed();
 }
 
 /** PS-4: save the review's lesson. It is not a plan edit, so it adds no revision. Empty text clears it. */
@@ -143,21 +166,34 @@ export function setPlanLesson(id: string, lesson: string) {
   const updated: PlanningSession = text.trim() ? { ...rest, lesson: text } : rest;
   set({ plans: state.plans.map((p) => (p.id === id ? updated : p)) });
   persist();
+  plansSync.changed();
 }
 
 export function removePlan(id: string) {
   const plans = state.plans.filter((p) => p.id !== id);
   set({ plans });
   persist();
+  plansSync.changed();
 }
 
 export function replacePlans(plans: readonly PlanningSession[]) {
   set({ plans: sanitizePlans(plans) });
   persist();
+  plansSync.changed();
 }
 
+/** Test hook: back to unhydrated and empty, and the default (disabled) syncer. */
 export function resetPlansForTests() {
   state = empty();
+  plansSync.dispose();
+  plansSync = createPlansSync();
+}
+
+/** Test hook: swap the plan syncer's adapter, storage or timers. Returns the syncer under test. */
+export function configurePlansSyncForTests(overrides: Partial<CollectionSyncOptions<PlanningSession>>): CollectionSync {
+  plansSync.dispose();
+  plansSync = createPlansSync(overrides);
+  return plansSync;
 }
 
 export function usePlansStore(): PlansState {
