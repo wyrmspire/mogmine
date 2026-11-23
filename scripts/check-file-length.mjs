@@ -18,8 +18,15 @@ const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8" })
   .split("\n")
   .filter((path) => SOURCE_PATTERN.test(path) && !EXCLUDED_PATTERN.test(path));
 
+const countLines = (path) => {
+  const source = readFileSync(path, "utf8");
+  if (!source) return 0;
+  const count = source.split(/\r\n|\r|\n/).length;
+  return count - (/(?:\r\n|\r|\n)$/.test(source) ? 1 : 0);
+};
+
 const over = tracked
-  .map((path) => ({ path, lines: readFileSync(path, "utf8").split("\n").length - 1 }))
+  .map((path) => ({ path, lines: countLines(path) }))
   .filter((file) => file.lines > target)
   .sort((a, b) => b.lines - a.lines);
 
