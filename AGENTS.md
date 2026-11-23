@@ -156,6 +156,7 @@ Several agents may work on this repo at once. [BOARD.md](BOARD.md) is the work o
 9. **Hand off with proof.** Write handoffs in new files under `notes/handoffs/` (never append to `NOTES.md` in a worker lane). Completion requires real test/typecheck/lint/build output, not a claim.
 10. **Target slice size:** Keep individual diffs reviewable (~300–450 lines target). If a complete fix is 170 lines, do not pad it; the boundary applies to the whole diff including tests.
 11. **Duplicates lose & release on finish.** Close duplicate PRs, delete claim branches, and unassign on merge.
+12. **File-length target (450 lines, `#177`).** A production file (`app/`, `components/`, `lib/`, `scripts/`; tests excluded) should stay at or under **450 lines**, the top of the slice guidance in item 10. `npm run check:file-length` lists the files over it. Existing over-target files are grandfathered until a dedicated split: `components/StopMovesEditor.tsx` (~841 lines), `lib/partials.ts` (~596 lines), and the other files the script lists. A PR that touches or grows an over-target file must state in its body the file's line count before and after, and either justify why it was not split or split it. Growth without a justification is not done. Drive-by refactors of grandfathered files do not belong in unrelated PRs.
 
 ## 7. Repo Dumps for Chat (printcode / gitrdif)
 
