@@ -12,6 +12,7 @@
     "check:file-length": "node scripts/check-file-length.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.2",
     "@tailwindcss/postcss": "^4.1.17",
     "fancy-canvas": "^2.1.0",
     "lightweight-charts": "^5.0.9",

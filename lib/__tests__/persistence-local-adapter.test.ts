@@ -74,7 +74,7 @@ test("select: missing, empty, local/mock and unknown values keep the device adap
   assert.equal(chooseAdapter("supabase"), "supabase");
 });
 
-test("select: the supabase stub answers unavailable until #176", async () => {
+test("select: supabase without env vars answers unavailable and never falls back to the device", async () => {
   const adapter = createAdapter("supabase");
   assert.equal(adapter.kind, "supabase");
   assert.equal(await adapter.currentOwner(), null);

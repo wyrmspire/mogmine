@@ -1,7 +1,11 @@
 // #175: picks the persistence adapter from `NEXT_PUBLIC_PERSISTENCE_ADAPTER` (`local`, `mock`, `supabase`).
-// Missing, empty or `local/mock` keeps today's device behaviour. `supabase` is a stub until #176: every call
-// returns `unavailable`, so nothing silently falls back to the device while a Supabase choice is configured.
+// Missing, empty or `local/mock` keeps today's device behaviour. `supabase` (#176) uses the `mogmine_` tables on
+// `showmob-dev` with the signed-in session; it never silently falls back to the device. Without
+// NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (or a session) its calls return `unavailable` /
+// `unauthenticated`.
 import { createLocalAdapter, createMemoryCandleStore, createMemoryKeyValueStore } from "./local-adapter.ts";
+import { createSupabaseAdapter } from "./supabase-adapter.ts";
+import type { SupabaseLike } from "./supabase-adapter.ts";
 import type { CandleStore, KeyValueStore } from "./local-adapter.ts";
 import type { AdapterKind, PersistError, PersistenceAdapter } from "./contract.ts";
 import { idbGet, idbSet } from "../idb.ts";
@@ -17,11 +21,11 @@ export function chooseAdapter(raw: string | undefined | null): AdapterChoice {
 
 const UNAVAILABLE: PersistError = {
   code: "unavailable",
-  message: "Supabase persistence is not built yet (#176). Switch NEXT_PUBLIC_PERSISTENCE_ADAPTER to local or mock.",
-  cause: "supabase-adapter-not-built",
+  message: "Journal storage is unavailable. Switch NEXT_PUBLIC_PERSISTENCE_ADAPTER to local or mock.",
+  cause: "adapter-unavailable",
 };
 
-/** Every repository answers `unavailable`. Used only while the Supabase adapter (#176) is not built. */
+/** Every repository answers `unavailable`. Kept for callers and tests that need a closed adapter. */
 export function createUnavailableAdapter(): PersistenceAdapter {
   const fail = async () => ({ ok: false as const, error: UNAVAILABLE });
   const collection = { list: fail, get: fail, put: fail, remove: fail, replaceAll: fail };
@@ -44,6 +48,8 @@ export interface AdapterDeps {
   store?: KeyValueStore;
   /** Device candle cache. Defaults to the IndexedDB helper in `lib/idb.ts`. */
   candles?: CandleStore;
+  /** Supabase client for the `supabase` choice. Defaults to the lazily loaded browser client (anon key + session). */
+  supabase?: SupabaseLike | (() => Promise<SupabaseLike>);
 }
 
 const deviceStore: KeyValueStore = {
@@ -57,7 +63,10 @@ const deviceCandles: CandleStore = {
 };
 
 export function createAdapter(choice: AdapterChoice, deps: AdapterDeps = {}): PersistenceAdapter {
-  if (choice === "supabase") return createUnavailableAdapter();
+  if (choice === "supabase") {
+    const client = deps.supabase ?? (() => import("./supabase-client.ts").then((module) => module.getBrowserSupabase()));
+    return createSupabaseAdapter({ client, candles: deps.candles ?? deviceCandles });
+  }
   if (choice === "mock") {
     return createLocalAdapter({ kind: "mock", store: createMemoryKeyValueStore(), candles: createMemoryCandleStore() });
   }

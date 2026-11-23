@@ -1,7 +1,7 @@
 # 26 — Persistence Contract and Database-Readiness Checklist
 
 **Issue:** #173 · **Decision:** [D-012](../DECISIONS.md) · **Boundary:** [docs/22](22-development-mode-and-backend-boundary.md)  
-**Status:** Contract (#173). Command layer (#174): `lib/commands/journal-commands.ts`. Local/mock adapter (#175): `lib/persistence/local-adapter.ts` and `lib/persistence/select.ts`, selected by `NEXT_PUBLIC_PERSISTENCE_ADAPTER`. No migration, no UI change. The UI stores still read the device keys directly.
+**Status:** Contract (#173). Command layer (#174): `lib/commands/journal-commands.ts`. Local/mock adapter (#175): `lib/persistence/local-adapter.ts` and `lib/persistence/select.ts`, selected by `NEXT_PUBLIC_PERSISTENCE_ADAPTER`. Supabase adapter (#176): `lib/persistence/supabase-adapter.ts` over the `mogmine_` tables in `supabase/migrations/` (applied to `showmob-dev`, §7). No UI change: the default stays `local` and the UI stores still read the device keys directly.
 
 Code: [`lib/persistence/contract.ts`](../lib/persistence/contract.ts) (types) and [`lib/persistence/registry.ts`](../lib/persistence/registry.ts) (this checklist as data, pinned by `lib/__tests__/persistence-contract.test.ts`). When this page and the registry disagree, fix both in one PR.
 
@@ -85,11 +85,42 @@ Computed, never stored: session review, challenge results while live, call grade
 
 - **Conflict policy across devices.** v1 is last-write-wins; `expectedUpdatedAt` exists for when two devices edit the same trade.
 - **Sample trades on the server.** Store them per user (current plan) or seed them client-side only? Affects backup size and statistics filters.
-- **OD-2 enforcement** with shared auth users: an allow-list table (`mogmine_allowed_users`) or a claim on the user. Needed before #176 exposes data.
+- ~~**OD-2 enforcement** with shared auth users~~: resolved in #176 by `mogmine_allowed_users` (§7).
 - Owner-gated and untouched: OD-52 (call-sheet UI), OD-55 (Yahoo `1m` coverage fallback), `#65` / OD-35 (session calendars), OD-5 (fills).
 
 ## 6. For the next issues
 
 - **#174 command layer (built):** [`lib/commands/journal-commands.ts`](../lib/commands/journal-commands.ts) `createJournalCommands(repos, owner)` exposes `create` / `read` / `list` / `update` / `archive` / `remove` for every collection key and `readSingleton` / `writeSingleton` for the three singletons. It calls `JournalRepositories` only, validates every write with the existing sanitizers (money must be whole cents or a tick-valid price; a bad stop move rejects the whole trade), returns `PersistError`s and never throws for expected failures. Archive-policy types (`accounts`, `playbooks`) are archived, not removed; `remove` deletes `cascade_parent` children first. `candles` is not part of the command set. Tests: `lib/__tests__/journal-commands.test.ts`.
 - **#175 local/mock adapter (done):** the adapter reads and writes the §3 device keys with the existing sanitizers and synthesizes `RowMeta` (see the adapter header). `NEXT_PUBLIC_PERSISTENCE_ADAPTER` picks `local` (default) / `mock` / `supabase` (stub, `unavailable`). The shared suite is `lib/__tests__/persistence-contract-suite.ts`.
-- **#176 Supabase adapter:** one migration per table in §3 marked v1, all `mogmine_`, RLS on every table before data, shared contract tests run against both adapters.
+- **#176 Supabase adapter (done):** see §7. The shared contract suite runs against it on a fake client (`lib/__tests__/fake-supabase.ts`).
+- **#182 sign-in (next):** typed email code on `/login` (`signInWithOtp` with `shouldCreateUser: false`, then `verifyOtp`). The adapter already reads the session from the same browser client (`getBrowserSupabase()`), so #182 only has to create the session.
+- **#185 agent key + API (after #182):** server routes that call the command layer; see §7 for what the database already enforces.
+
+## 7. Supabase schema and access (#176)
+
+**Migrations** (`supabase/migrations/`, applied to `showmob-dev` on 2026-11-23; file names are the applied versions):
+
+| File | What |
+| :--- | :--- |
+| `20261123004734_mogmine_journal_v1.sql` | Allow-list, 13 journal tables, RLS, triggers, cascade backstop, `mogmine_replace_rows` |
+| `20261123004804_mogmine_allowed_invoker.sql` | `mogmine_is_allowed()` runs as the caller (clears security advisor 0029) |
+| `20261123004848_mogmine_journal_grants.sql` | Table grants for `authenticated` / `service_role` (this project gives new tables no DML by default) |
+
+**Tables.** `mogmine_allowed_users` plus one table per v1 row in §3: `mogmine_trades`, `mogmine_mood_records`, `mogmine_mood_candidates`, `mogmine_accounts`, `mogmine_balance_checks`, `mogmine_challenges`, `mogmine_playbooks`, `mogmine_plans`, `mogmine_drills`, `mogmine_calls`, `mogmine_prompt_dismissals` (collections: primary key `(user_id, id)`, `id text`), and the singletons `mogmine_user_prefs`, `mogmine_mood_registries` (primary key `user_id`). Every row has `user_id uuid references auth.users`, `record jsonb`, `created_at`, `updated_at`.
+
+**Row shape.** `record` is the sanitized domain record (nested arrays stay inside it; fields a sanitizer passes through, e.g. via `normalizeTrade`, ride along as the jsonb catch-all). Query columns are `GENERATED ALWAYS ... STORED` from `record`, so they cannot drift: trades `symbol`, `status`, `entry_time`, `account_id`, `playbook_id`, `is_sample`; `trade_id` on mood records, drills, dismissals and calls; `account_id` on balance checks; `archived` on accounts and playbooks. `created_at` / `updated_at` are set by a trigger (millisecond precision, `created_at` cannot be rewritten).
+
+**Access (OD-2).** RLS is on for every table. One policy per journal table, for `authenticated` only: `user_id = auth.uid() AND mogmine_is_allowed()`, on both `using` and `with check`. `mogmine_allowed_users` holds the owner's auth uid (seeded with SQL, not in a migration; signed-in users can read only their own row; only `service_role` / SQL can write it). `anon` has no privileges on any `mogmine_` table or function. A Showmob sign-up is a valid `auth.users` row, but it is not on the allow-list, so it sees and writes nothing.
+
+**Adapter rules** (`lib/persistence/supabase-adapter.ts`):
+
+- Owner: the session's `auth.uid()`. `demo-owner` is rewritten to it; any other owner lists nothing, `get` is `not_found`, writes are `forbidden`. A record claiming another `user_id` is `forbidden`.
+- Every write and read goes through the device sanitizers (`sanitizeCollectionRecord` / `sanitizeSingletonRecord`); `derivedNeverStored` fields (and `candles`) are stripped before a write and recomputed on read.
+- `expectedUpdatedAt` is a guarded `UPDATE ... WHERE updated_at = expected`; no row back is `conflict`. Omitted means last write wins (upsert).
+- Cascades: the command layer deletes children by `parentId` first; an `after delete` trigger on trades and accounts is the backstop. Foreign keys between journal tables stay unenforced (restores may insert children first). `replaceAll` calls `mogmine_replace_rows` (one transaction, security invoker, `mogmine_` collection tables only, cascade backstop off for the restore).
+- `prompt_library` is memory-only; `candles` stay in the device cache (#70 is owner-gated).
+- Browser client: anon key + session only (`lib/persistence/supabase-client.ts`, loaded lazily). The service-role key is never used by the adapter.
+
+**Applying a new MogMine migration.** This repo does not hold Showmob's 8 migrations, so `supabase db push` refuses ("remote migration versions not found locally") and suggests `migration repair`. **Never repair or squash Showmob's history.** Apply MogMine migrations with the Supabase MCP `apply_migration` (or the SQL editor), then save the file under the version it was recorded as (`supabase migration list --remote` on the VM shows it). Review first that the SQL touches only `mogmine_` objects (`lib/__tests__/persistence-supabase-adapter.test.ts` checks the files), and run the security advisor after. The VM CLI is linked to `vsasmtsifuylhfrrsrso`; its token lives in `~/.config/supabase/agent.env`, never in the repo.
+
+**Turning it on** (not done in #176): set `NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase`, `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in a local `.env.local` or a Vercel preview, and sign in (#182). Production stays `local` until the owner decides.
