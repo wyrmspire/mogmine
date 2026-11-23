@@ -25,11 +25,11 @@ test("create, update and list a trade through the local adapter, stored under th
   const created = await commands.create("trades", trade());
   assert.ok(created.ok, created.ok ? "" : created.error.message);
   assert.equal(created.value.record.user_id, DEFAULT_OWNER_USER_ID);
-  const updated = await commands.update("trades", "t-1", { notes: "held the shelf" });
+  const updated = await commands.update("trades", "t-1", { note: "held the shelf" });
   assert.ok(updated.ok, updated.ok ? "" : updated.error.message);
-  assert.equal(updated.value.record.notes, "held the shelf");
-  const raw = JSON.parse(store.getItem("mogmine-trades-v3") ?? "[]") as { id: string; notes?: string }[];
-  assert.deepEqual(raw.map((row) => [row.id, row.notes]), [["t-1", "held the shelf"]]);
+  assert.equal(updated.value.record.note, "held the shelf");
+  const raw = JSON.parse(store.getItem("mogmine-trades-v3") ?? "[]") as { id: string; note?: string }[];
+  assert.deepEqual(raw.map((row) => [row.id, row.note]), [["t-1", "held the shelf"]]);
   const listed = await commands.list("trades");
   assert.equal(listed.ok && listed.value.length, 1);
 });
@@ -38,7 +38,7 @@ test("a row the UI wrote directly can still be updated (epoch meta matches the e
   const { commands: seedCommands, store: seedStore } = setup();
   await seedCommands.create("trades", trade());
   const { commands } = setup({ "mogmine-trades-v3": seedStore.getItem("mogmine-trades-v3") ?? "[]" });
-  const updated = await commands.update("trades", "t-1", { notes: "from the UI" });
+  const updated = await commands.update("trades", "t-1", { note: "from the UI" });
   assert.ok(updated.ok, updated.ok ? "" : updated.error.message);
 });
 
