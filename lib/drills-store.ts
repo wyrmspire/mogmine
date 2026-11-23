@@ -8,6 +8,9 @@ import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
 import { sanitizeDrillRecord, sanitizeDrills } from "./drills-sanitize.ts";
 import { createCollectionSync } from "./persistence/store-sync.ts";
 import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
+import { DEMO_TRADE_IDS } from "./fixtures.ts";
+// Drills about sample trades stay on the device, like the sample trades themselves (#192 review).
+const notOnSampleTrade = (record: { trade_id?: string | null }) => !record.trade_id || !DEMO_TRADE_IDS.has(record.trade_id);
 export { sanitizeDrillRecord, sanitizeDrills, sanitizeDrillsBackup } from "./drills-sanitize.ts";
 
 export const DRILLS_STORAGE_KEY = "mogmine-drills-v1";
@@ -48,6 +51,7 @@ function applyRemote(next: DrillRecord[]) {
 function createDrillsSync(overrides: Partial<CollectionSyncOptions<DrillRecord>> = {}): CollectionSync {
   return createCollectionSync<DrillRecord>({
     key: "drills",
+    include: notOnSampleTrade,
     getLocal: () => state.records,
     apply: applyRemote,
     ...overrides,
