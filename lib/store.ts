@@ -116,6 +116,9 @@ const serverState: JournalState = emptyJournal();
 let state: JournalState = emptyJournal();
 const listeners = new Set<() => void>();
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+// Fields changed since the last successful write. A storage event may bring newer fields from another
+// tab, but it must not erase work that is still waiting to be written in this one.
+const pending = new Map<string, Partial<TradeRecord> | null>();
 
 function set(next: Partial<JournalState>) {
   state = { ...state, ...next };
@@ -128,14 +131,45 @@ function persist() {
   saveTimer = setTimeout(flush, 180);
 }
 
-function flush() {
+/** Write the current journal now. False means the in-memory session is still usable but not durable. */
+export function flushJournal(): boolean {
   clearTimeout(saveTimer);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.trades));
+    pending.clear();
     set({ saveState: "saved" });
+    return true;
   } catch {
     set({ saveState: "error" });
+    return false;
   }
+}
+
+function flush() { flushJournal(); }
+
+function remember(id: string, patch: Partial<TradeRecord> | null) {
+  if (patch === null) pending.set(id, null);
+  else pending.set(id, { ...(pending.get(id) ?? {}), ...patch });
+}
+
+/**
+ * Merge another tab's durable copy with this tab's unflushed work.
+ *
+ * Conflict rule: a pending local value wins for the same field. Unedited fields come from the incoming
+ * record. A locally added or edited record survives an incoming deletion; a pending local deletion wins.
+ */
+function mergeIncoming(incoming: TradeRecord[]): TradeRecord[] {
+  const merged = new Map(incoming.map((trade) => [trade.id, trade]));
+  const local = new Map(state.trades.map((trade) => [trade.id, trade]));
+  for (const [id, patch] of pending) {
+    if (patch === null) {
+      merged.delete(id);
+      continue;
+    }
+    const base = merged.get(id) ?? local.get(id);
+    if (base) merged.set(id, { ...base, ...patch });
+  }
+  return [...merged.values()].sort(byNewest);
 }
 
 type LegacyTrade = Partial<TradeRecord> & { candles?: Candle[] };
@@ -399,15 +433,25 @@ export function hydrateJournal() {
   set({ trades, hydrated: true, saveState });
   window.addEventListener("pagehide", flush);
   window.addEventListener("storage", (event) => {
-    // Another tab changed the journal: take its copy rather than overwrite it later.
+    // Another tab changed the journal: accept it, overlaid with fields still pending in this tab.
     if (event.key !== STORAGE_KEY || !event.newValue) return;
-    try { set({ trades: (JSON.parse(event.newValue) as TradeRecord[]).map((trade) => normalizeTrade(trade)).sort(byNewest) }); } catch { /* keep ours */ }
+    try {
+      const incoming = (JSON.parse(event.newValue) as TradeRecord[]).map((trade) => normalizeTrade(trade));
+      set({ trades: mergeIncoming(incoming) });
+    } catch { /* keep ours */ }
   });
 }
 
 export function addTrade(trade: TradeRecord) {
-  set({ trades: [trade, ...state.trades].sort(byNewest) });
+  remember(trade.id, trade);
+  set({ trades: [trade, ...state.trades.filter((item) => item.id !== trade.id)].sort(byNewest) });
   persist();
+}
+
+/** Add a trade and confirm the device write before the caller reports success or clears its draft. */
+export function addTradeAndFlush(trade: TradeRecord): boolean {
+  addTrade(trade);
+  return flushJournal();
 }
 
 /** Column-scoped update: only the named fields change (B-47). */
@@ -420,6 +464,11 @@ export function updateTrade(id: string, patch: Partial<TradeRecord>) {
     // A trader's change to an annotation is theirs, so a later fixture refresh keeps it (issue #62).
     if (annotationKey(next) !== annotationKey(trade)) next.annotations_modified = true;
     next.review_status = deriveReviewStatus(next);
+    remember(id, Object.fromEntries(
+      Object.keys(next)
+        .filter((key) => next[key as keyof TradeRecord] !== trade[key as keyof TradeRecord])
+        .map((key) => [key, next[key as keyof TradeRecord]]),
+    ) as Partial<TradeRecord>);
     return next;
   });
   if (!changed) return;
@@ -430,6 +479,7 @@ export function updateTrade(id: string, patch: Partial<TradeRecord>) {
 export function removeTrade(id: string) {
   const removed = state.trades.find((trade) => trade.id === id);
   if (!removed) return null;
+  remember(id, null);
   set({ trades: state.trades.filter((trade) => trade.id !== id) });
   persist();
   return removed;
@@ -447,7 +497,11 @@ export function getJournal() {
 export function replaceTrades(trades: TradeRecord[]) {
   // A restore never overwrites an initial stop this device already froze for the same trade (R-10).
   const current = new Map(state.trades.map((trade) => [trade.id, trade]));
-  set({ trades: trades.map((trade) => keepInitialStop(trade, current.get(trade.id))).sort(byNewest) });
+  const replacements = trades.map((trade) => keepInitialStop(trade, current.get(trade.id))).sort(byNewest);
+  const replacementIds = new Set(replacements.map((trade) => trade.id));
+  for (const id of current.keys()) if (!replacementIds.has(id)) remember(id, null);
+  for (const trade of replacements) remember(trade.id, trade);
+  set({ trades: replacements });
   persist();
 }
 
@@ -455,6 +509,8 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 
 /** Test hook: restore the unhydrated demo journal. */
 export function resetJournalForTests() {
+  clearTimeout(saveTimer);
+  pending.clear();
   state = emptyJournal();
 }
 
