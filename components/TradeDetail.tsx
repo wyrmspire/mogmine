@@ -489,7 +489,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                       role="menuitemcheckbox"
                       aria-checked={showLevels}
                       onClick={() => setShowLevels((prev) => !prev)}
-                      title={`Prior-day, overnight and planned levels as of the entry.${levels.planned ? ` ${levels.planned} from planning sessions.` : ""}${levels.missing.length ? ` Missing bars withheld: ${levels.missing.join(", ")}` : ""}`}
+                      title={`Prior-day, overnight and planned levels as of the entry.${levels.planned ? ` ${levels.planned} from planning sessions.` : ""}${levels.missing.length ? ` Missing bars withheld: ${levels.missing.join(", ")}` : ""}${levels.summary ? ` Levels: ${levels.summary}` : ""}`}
                     >
                       <span>{showLevels ? "Session levels ✓" : "Session levels"}</span>
                       <span className="shortcut">{levelsStatus(levels)}</span>

@@ -8,6 +8,8 @@ import { formatPrice } from "./format.ts";
 import { specFor } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
 export { stackLabels } from "./label-stack.ts";
+export { levelPills, levelsSummary, tradeAnchors, MERGE_TICKS } from "./level-pills.ts";
+export type { LevelAnchor, LevelPill } from "./level-pills.ts";
 
 export type LevelRole = "resistance" | "support" | "adr" | "neutral";
 
@@ -17,6 +19,8 @@ export interface LevelLine {
   role: LevelRole;
   /** `7547.50 PDL / ADR Low`: one pill for every level at this price (LV-09). */
   label: string;
+  /** The label without its price: `PDL / ADR Low`. */
+  names: string;
   keys: string[];
   /** A member is a settlement proxy (LV-1): the ray is dashed. */
   proxy: boolean;
@@ -58,6 +62,7 @@ export function levelLines(levels: readonly LineSource[], referencePrice: number
       price_ticks: group[0].price_ticks,
       role,
       label: `${formatPrice(group[0].price, symbol)} ${group.map((level) => level.label).join(" / ")}`,
+      names: group.map((level) => level.label).join(" / "),
       keys: group.map((level) => level.key),
       proxy: group.some((level) => level.label === "PDC (proxy)"),
       startAt,

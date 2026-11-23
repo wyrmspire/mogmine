@@ -55,3 +55,40 @@ export function separateLabels(labels: readonly PlacedLabel[], height: number, t
   }
   return result;
 }
+
+/** A right-edge pill to lay out: its price's y in pixels and its rank (lower keeps its pill first). */
+export interface PillSlot {
+  y: number;
+  rank: number;
+}
+
+/**
+ * Lay out right-edge level pills (docs/08 UX-21, docs/12 LV-09). Pills never shrink and never overlap; to stay
+ * readable, at most `max` pills draw (and never more than half the pane's rows), and none may sit more than
+ * `maxShift` px from its price. While a stacked pill drifts too far, the least important pill that had to move
+ * is dropped and the rest are stacked again. Output keeps input order: a centre y, or null for a dropped pill.
+ */
+export function layoutPills(
+  slots: readonly PillSlot[], height: number, top: number, bottom: number,
+  options: { max?: number; maxShift?: number } = {},
+): (number | null)[] {
+  const rows = Math.max(1, Math.floor((bottom - top) / (height * 2)));
+  const max = Math.min(options.max ?? 8, rows);
+  const maxShift = options.maxShift ?? height * 2.5;
+  let kept = slots
+    .map((slot, index) => ({ ...slot, index }))
+    .filter((slot) => Number.isFinite(slot.y) && slot.y >= top && slot.y <= bottom)
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .slice(0, max);
+  for (;;) {
+    const placed = stackLabels(kept.map((slot) => slot.y), height, top, bottom);
+    const moved = kept.filter((slot, k) => Math.abs(placed[k] - slot.y) > 0.5);
+    if (!kept.some((slot, k) => Math.abs(placed[k] - slot.y) > maxShift) || kept.length <= 1) {
+      const result = new Array<number | null>(slots.length).fill(null);
+      kept.forEach((slot, k) => { result[slot.index] = placed[k]; });
+      return result;
+    }
+    const drop = moved.reduce((worst, slot) => (slot.rank > worst.rank || (slot.rank === worst.rank && slot.index > worst.index) ? slot : worst));
+    kept = kept.filter((slot) => slot !== drop);
+  }
+}
