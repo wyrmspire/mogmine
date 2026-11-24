@@ -22,7 +22,7 @@ import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
 import { useTradeLevels } from "./useTradeLevels";
 import { tradeSessionVwap, vwapOnBars } from "@/lib/chart-indicators";
-import type { VwapAnchor, VwapPoint } from "@/lib/chart-indicators";
+import type { VwapPoint } from "@/lib/chart-indicators";
 import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withheld";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { calculateExitEfficiency } from "@/lib/exit-efficiency";
@@ -31,7 +31,7 @@ import { noCandlesMessage } from "@/lib/market-data/outcome";
 import { findNeighbourTrades } from "@/lib/neighbour-trades";
 import { derivePlanVsActual } from "@/lib/plan-vs-actual";
 import { approx, formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
-import { usePrefs } from "@/lib/prefs";
+import { setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { buildShareCard, shouldBuildShareCard } from "@/lib/shareCard";
@@ -105,8 +105,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [fullscreen, setFullscreen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [showLevels, setShowLevels] = useState(true);
-  // IND-1: the VWAP anchor is open under OD-18, so the trader picks it; nothing is drawn by default.
-  const [vwapAnchor, setVwapAnchor] = useState<VwapAnchor | "off">("off");
+  // IND-1: the VWAP anchor is remembered in prefs (default "off"); drill, review and playbook charts do not read it.
+  const vwapAnchor = prefs.vwapAnchor;
   const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
@@ -498,7 +498,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                     </span>
                     <div className="view-menu-toggle-group three" role="group" aria-label="Session VWAP anchor">
                       {([["off", "Off", "No VWAP"], ["rth", "RTH", "From 09:30 ET"], ["globex", "Globex", "From 18:00 ET"]] as const).map(([value, label, hint]) => (
-                        <button key={value} type="button" aria-pressed={vwapAnchor === value} onClick={() => setVwapAnchor(value)} title={hint}>
+                        <button key={value} type="button" aria-pressed={vwapAnchor === value} onClick={() => setPrefs({ vwapAnchor: value })} title={hint}>
                           <span>{label}</span>
                           <small>{hint}</small>
                         </button>

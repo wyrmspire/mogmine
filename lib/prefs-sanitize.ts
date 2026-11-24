@@ -3,6 +3,12 @@ import { DEFAULT_TIME_ZONE, TIME_ZONE_OPTIONS } from "./time.ts";
 
 export type GoldPreset = "bullion" | "champagne" | "amber" | "platinum";
 export type Palette = "classic" | "blue-orange";
+/** Session VWAP anchor on the trade chart (IND-1, OD-18). "off" draws nothing. */
+export type VwapAnchorPref = "off" | "rth" | "globex";
+/** Level labels: "tap" reveals them on tap, "always" keeps the right-edge pills (D-D, LV-09). */
+export type LevelLabelsMode = "tap" | "always";
+/** Review card orientation for share exports (Q-5, DR-3). */
+export type ReviewCardOrientation = "portrait" | "landscape";
 
 export interface Prefs {
   /** Hide dollars and size everywhere; show R and points (UX-64). */
@@ -17,6 +23,14 @@ export interface Prefs {
   blindReview: boolean;
   /** Dollars risked per trade, used to suggest a stop distance (docs/12 LV-17). */
   riskBudgetUsd: number;
+  /** Session VWAP anchor the trader last chose on the trade chart (IND-1). */
+  vwapAnchor: VwapAnchorPref;
+  /** Level label mode on the trade chart (D-D). */
+  levelLabels: LevelLabelsMode;
+  /** Draw the 200 EMA on the trade chart (IN-3, D-G). */
+  ema200: boolean;
+  /** Orientation of exported review cards (Q-5). */
+  reviewCardOrientation: ReviewCardOrientation;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -29,6 +43,10 @@ export const DEFAULT_PREFS: Prefs = {
   showSamples: true,
   blindReview: false,
   riskBudgetUsd: 250,
+  vwapAnchor: "off",
+  levelLabels: "tap",
+  ema200: false,
+  reviewCardOrientation: "portrait",
 };
 
 export const GOLD_PRESETS: GoldPreset[] = ["bullion", "champagne", "amber", "platinum"];
@@ -52,5 +70,9 @@ export function sanitize(raw: Partial<Prefs>): Prefs {
     showSamples: raw.showSamples !== false,
     blindReview: raw.blindReview === true,
     riskBudgetUsd: clamp(raw.riskBudgetUsd, 10, 100_000, DEFAULT_PREFS.riskBudgetUsd),
+    vwapAnchor: raw.vwapAnchor === "rth" || raw.vwapAnchor === "globex" ? raw.vwapAnchor : DEFAULT_PREFS.vwapAnchor,
+    levelLabels: raw.levelLabels === "always" ? "always" : DEFAULT_PREFS.levelLabels,
+    ema200: raw.ema200 === true,
+    reviewCardOrientation: raw.reviewCardOrientation === "landscape" ? "landscape" : DEFAULT_PREFS.reviewCardOrientation,
   };
 }
