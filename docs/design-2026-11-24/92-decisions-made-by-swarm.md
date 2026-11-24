@@ -34,3 +34,9 @@ Per Chris's direction on 2026-11-24 (4:46 PM CT — *"I don't really think anyth
 | **Q-12** | When a trade has `account_id: null` (or its account has `r_size_cents: null`), use default R size or show `"R size not set"`? | **Use the default R size (`prefs.riskBudgetUsd`, default `$250`) and label its source** (`source: "prefs"`, e.g., `"default $250"`). | Explicitly confirmed by Chris in Amendment 1 and recommended in [`04-r-size.md`](04-r-size.md) §3.2, §7. | `RS-1`, `RS-2` | Yes — set an R size on each account or change `"Default R size"` in Tune. |
 | **Q-13** | Add `stated_risk_r` to planning sessions too, or trades only for now? | **Trades only for now** (`TradeRecord.stated_risk_r`). | Recommended in [`04-r-size.md`](04-r-size.md) §7; keeps planning sessions lightweight while solving per-trade stated vs actual R. | `RS-1`, `RS-4` | Yes — add optional session risk target to `PlanningSession` later. |
 | **Q-14** | Build a faster `"moved my stop"` chip inside `CloseTradeSheet` now? | **Defer (not packaged in this wave plan)**; ship pre-filled `StopMovesEditor` from Data notes (`FB-2`) first. | Marked `"Not packaged"` in [`00-overview.md`](00-overview.md) §5 and [`90-work-packages.md`](90-work-packages.md) §5. | None (deferred) | Yes — schedule as a follow-up slice if closing trades on mobile needs a shortcut. |
+
+## Addendum (2026-11-24 5:40 PM CT)
+
+| ID | Question | Default Chosen | Why | Packages Affected | Chris Can Override |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **D-VOL** | How should volume appear on the trade chart, and what if bars have no real volume? | Volume histogram pane under the candles, on by default (View toggle, persisted), up/down candle colors at ~0.35 alpha from the 08 tokens, behind candles and zones. Sample/fixture bars without real volume: hide the pane and withhold VWAP rather than equal-weighting. | Chris: "we have been ignoring volume everywhere"; VWAP is meaningless without real volume. | `VOL-1` | Yes |
