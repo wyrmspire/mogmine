@@ -102,11 +102,13 @@ const findingAppearance: Record<TradeBarFinding["code"], [text: string, tone: Ma
   stop_traded_through: ["SL touch", "risk"],
   target_traded_through: ["TP touch", "profit"],
   fill_outside_bar: ["fill outside bar", "muted"],
+  // Never drawn as a flag: the fill's own flag is already anchored on the matched bar, approximate (05 §4.3).
+  fill_time_shifted: ["", "muted"],
 };
 
 /** Keep observer flags on the exact bars that supplied the evidence. */
 export function buildFindingMarks(findings: readonly TradeBarFinding[], exactBarTimes: ReadonlySet<number>): FlagMark[] {
-  return findings.filter((finding) => exactBarTimes.has(finding.barTime)).map((finding) => {
+  return findings.filter((finding) => finding.code !== "fill_time_shifted" && exactBarTimes.has(finding.barTime)).map((finding) => {
     const [text, tone] = findingAppearance[finding.code];
     return {
       kind: "flag", t: finding.barTime, price: finding.price, shape: "dot", tone, basis: finding.basis,
@@ -173,9 +175,20 @@ export function buildMarks(
   const marks: Mark[] = [];
   const isLong = derived.side === "long";
   const entryPrice = derived.avg_entry_price;
+  const fills = derived.position_timeline;
   const snap = (time: string | number | null | undefined) => anchor(candleTimes, time, timeframe);
-  const entry = snap(derived.entry_time);
-  const exit = snap(derived.exit_time);
+  // FB-1: a fill that traded in a different minute is drawn on its matched bar, approximate (05 §4.3).
+  // Its stored time is untouched; `fallback` is only used when there is no shifted match.
+  const fillAt = (fill: PositionPoint | undefined, fallback: string | number | null | undefined) => {
+    const match = fill && facts?.fillMatches?.get(fill.seq);
+    if (match?.shifted) {
+      const bar = anchor(candleTimes, match.barTime, timeframe);
+      if (bar) return { t: bar.t, approximate: true as const };
+    }
+    return snap(fallback);
+  };
+  const entry = fillAt(fills.find((fill) => fill.role === "entry"), derived.entry_time);
+  const exit = fillAt(fills.findLast((fill) => fill.role === "exit"), derived.exit_time);
   const lastVisibleBar = viewRightTime == null ? candleTimes.at(-1) : candleTimes.findLast((time) => time <= viewRightTime);
   const right = lastVisibleBar == null ? null : { t: lastVisibleBar };
   const end = derived.status === "closed" ? exit : right;
@@ -286,7 +299,6 @@ export function buildMarks(
     }
   }
 
-  const fills = derived.position_timeline;
   const fillBasis = fills.reduce<EventBasis>((basis, fill) => combineBasis(basis, fill.basis), "broker");
   const fillsBySeq = new Map(fills.map((fill) => [fill.seq, fill]));
   const actualLayer = archived ? "archived" : "actual";
@@ -300,7 +312,10 @@ export function buildMarks(
     }
   } else {
     for (const lot of derived.closed_lots) {
-      const execution = span(snap(lot.entry_t), snap(lot.exit_t));
+      const execution = span(
+        fillAt(fillsBySeq.get(lot.entry_seq), lot.entry_t),
+        fillAt(fillsBySeq.get(lot.exit_seq), lot.exit_t),
+      );
       if (!execution) continue;
       const basis = combineBasis(
         fillsBySeq.get(lot.entry_seq)?.basis ?? "inferred",
@@ -317,7 +332,7 @@ export function buildMarks(
 
   for (const [index, fill] of fills.entries()) {
     const next = fills[index + 1];
-    const line = span(snap(fill.t), next ? snap(next.t) : end);
+    const line = span(fillAt(fill, fill.t), next ? fillAt(next, next.t) : end);
     if (!line) continue;
 
     if (next && fills.length > 2) {
@@ -366,7 +381,7 @@ export function buildMarks(
     for (const fill of fills) {
       if (fill.seq <= stop.from_seq || (stop.to_seq != null && fill.seq >= stop.to_seq)
         || fill.avg_entry_price === openFill?.avg_entry_price) continue;
-      const at = snap(fill.t);
+      const at = fillAt(fill, fill.t);
       if (at && at.t > stopSpan.t1) break;
       hatchTo(at);
       openFill = fill;
@@ -418,7 +433,7 @@ export function buildMarks(
   }
   const fillFlags = new Map<string, { mark: FlagMark; count: number; labels: Set<string> }>();
   for (const fill of fills) {
-    const at = snap(fill.t);
+    const at = fillAt(fill, fill.t);
     if (!at) continue;
     const opening = fill.role === "entry";
     const lots = lotsByExit.get(fill.seq) ?? [];

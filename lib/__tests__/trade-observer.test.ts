@@ -110,7 +110,7 @@ test("fill alignment uses the shared four-tick threshold and skips voided execut
     { seq: 10, t: "2026-11-12T15:36:00Z", type: "void", ref: 9, basis: "broker" },
   );
   const result = observeTrade(deriveTrade(doc), bars([
-    ["15:34", 7598, 7599], ["15:35", 7598, 7601], ["15:52", 7608, 7608.75],
+    ["15:34", 7598, 7599], ["15:35", 7598, 7599.5], ["15:52", 7608, 7608.75],
   ]));
   assert.deepEqual(result.findings, [finding("fill_outside_bar", "15:52", 7610, 7)]);
 });
@@ -172,7 +172,11 @@ test("an open trade waits for the fill bar to complete before flagging its range
   const prices = bars([["15:34", 7597, 7598]]);
   assert.deepEqual(observeTrade(derived, prices).findings, []);
   prices.push(...bars([["15:35", 7599, 7601]]));
-  assert.deepEqual(observeTrade(derived, prices).findings, [finding("fill_outside_bar", "15:34", 7600, 2)]);
+  // FB-1: the logged 15:34 bar misses 7600 but 15:35 holds it exactly, so the fill moves there, not outside.
+  assert.deepEqual(observeTrade(derived, prices).findings, [{
+    code: "fill_time_shifted", barTime: utc("15:35"), price: 7600, basis: "inferred", segment: 2,
+    statedBarTime: utc("15:34"), offsetMin: 1, role: "entry",
+  }]);
 });
 
 test("target fills count by order and remaining quantity, and reprices stay local to their own span", () => {
