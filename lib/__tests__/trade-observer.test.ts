@@ -172,11 +172,7 @@ test("an open trade waits for the fill bar to complete before flagging its range
   const prices = bars([["15:34", 7597, 7598]]);
   assert.deepEqual(observeTrade(derived, prices).findings, []);
   prices.push(...bars([["15:35", 7599, 7601]]));
-  // FB-1: the logged 15:34 bar misses 7600 but 15:35 holds it exactly, so the fill moves there, not outside.
-  assert.deepEqual(observeTrade(derived, prices).findings, [{
-    code: "fill_time_shifted", barTime: utc("15:35"), price: 7600, basis: "inferred", segment: 2,
-    statedBarTime: utc("15:34"), offsetMin: 1, role: "entry",
-  }]);
+  assert.deepEqual(observeTrade(derived, prices).findings, [finding("fill_outside_bar", "15:34", 7600, 2)]);
 });
 
 test("target fills count by order and remaining quantity, and reprices stay local to their own span", () => {
@@ -196,7 +192,7 @@ test("target fills count by order and remaining quantity, and reprices stay loca
   ];
   const derived = deriveTrade(doc);
   const prices = bars([
-    ["15:37", 7602, 7612], ["15:42", 7601, 7606], ["15:45", 7601, 7612], ["15:47", 7601, 7611],
+    ["15:37", 7600, 7612], ["15:42", 7601, 7606], ["15:45", 7601, 7612], ["15:47", 7601, 7611],
   ]);
   assert.deepEqual(observeTrade(derived, prices).findings, [
     finding("target_traded_through", "15:42", 7605, "t1"),

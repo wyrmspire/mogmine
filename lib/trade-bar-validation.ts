@@ -306,6 +306,7 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
   if (!bars.length) return result;
   // On an open trade the newest bar may still be forming.
   const newestBarTime = bars[bars.length - 1].time;
+  const matchBars = closed ? bars : bars.filter((bar) => bar.time < newestBarTime);
   // FB-1: match each checkable fill to the bar its price traded in, in time order. A shifted fill
   // takes its matched bar as its effective time for position windows. Stored times are never changed.
   const timeline: PositionPoint[] = [];
@@ -319,7 +320,7 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
       continue;
     }
     checkedBars.push(time);
-    const match = matchFill(bars, fill.t, fill.price, symbol, { role: fill.role, notBefore, barMinutes });
+    const match = matchFill(matchBars, fill.t, fill.price, symbol, { role: fill.role, notBefore, barMinutes });
     if (match.kind === "shifted") {
       notBefore = match.barTime;
       fillMatches.set(fill.seq, { barTime: match.barTime, shifted: true });
@@ -334,9 +335,9 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
     if (match.kind === "stated") {
       notBefore = match.barTime;
       fillMatches.set(fill.seq, { barTime: match.barTime, shifted: false });
-    } else if (match.kind === "outside" && barsByTime.has(time)) {
-      // Only a logged minute whose own bar exists can be judged outside. A missing bar is not evidence
-      // (the nearby bar from alignToBar is for placement, not for a false warning).
+    } else if (match.kind === "outside") {
+      // OD-28 resolves a missing logged minute to a nearby base bar first; that resolved bar is the evidence
+      // used by the exact-range search and the existing four-tick fallback.
       result.findings.push({
         code: "fill_outside_bar", barTime: match.barTime, price: fill.price, basis: "inferred", segment: fill.seq,
       });

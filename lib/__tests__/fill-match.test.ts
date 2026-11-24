@@ -90,6 +90,20 @@ test("matching never changes the stored entry time or the logged fill", () => {
   assert.equal(JSON.stringify(derived.position_timeline), storedFill);
 });
 
+test("an open trade never shifts a fill onto the newest potentially forming bar", () => {
+  const derived = deriveTrade(openLongEntry("15:34", 7600));
+  const forming = bars([["15:34", 7597, 7598], ["15:35", 7599, 7601]]);
+  assert.deepEqual(observeTrade(derived, forming).findings, [{
+    code: "fill_outside_bar", barTime: at("15:34"), price: 7600, basis: "inferred", segment: 1,
+  }]);
+
+  const completed = [...forming, ...bars([["15:36", 7600, 7602]])];
+  assert.deepEqual(observeTrade(derived, completed).findings, [{
+    code: "fill_time_shifted", barTime: at("15:35"), price: 7600, basis: "inferred", segment: 1,
+    statedBarTime: at("15:34"), offsetMin: 1, role: "entry",
+  }]);
+});
+
 test("tie at -2 and +2 minutes: an entry takes the earlier bar, an exit takes the later one", () => {
   const candles = bars([
     ["09:58", 7305, 7310], ["10:00", 7300, 7301], ["10:02", 7304, 7305.5],
@@ -119,11 +133,13 @@ test("a price outside every bar within 5 minutes and beyond 4 ticks is outside, 
   }]);
 });
 
-test("a missing stated bar is not judged outside: no false fill_outside_bar on a bar three minutes away", () => {
-  // 10:00 has no bar. The nearby 10:03 bar is for placement only, and it does not hold 7300.
+test("a missing stated bar is aligned first, then an unmatched fill is judged against that nearby base bar", () => {
+  // 10:00 has no bar. OD-28 aligns to 10:03 before the exact-window and four-tick checks run.
   const candles = bars([["10:03", 7320, 7330], ["10:04", 7320, 7330]]);
   const facts = observeTrade(deriveTrade(openLongEntry("10:00", 7300)), candles);
-  assert.deepEqual(facts.findings, []);
+  assert.deepEqual(facts.findings, [{
+    code: "fill_outside_bar", barTime: at("10:03"), price: 7300, basis: "inferred", segment: 1,
+  }]);
 });
 
 test("an entry shifted past the exit's stated bar is constrained, so entry never sits after exit", () => {
