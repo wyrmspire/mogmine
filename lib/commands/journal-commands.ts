@@ -12,6 +12,7 @@ import { DEFAULT_OWNER_USER_ID, isStopMove, normalizeTrade, toTicks, validateTra
 import type { TradeRecord } from "../trades.ts";
 import { sanitizeAccounts, sanitizeBalanceChecks } from "../accounts.ts";
 import type { BalanceCheck, TradingAccount } from "../accounts.ts";
+import { isValidRSizeCents, isValidStatedRiskR, resolveRSize, riskCents } from "../r-size.ts";
 import { sanitizeMoodRecords, sanitizeRegistry } from "../mood.ts";
 import { sanitizeCandidates } from "../mood-store-sanitize.ts";
 import { sanitizePlaybook } from "../playbooks-sanitize.ts";
@@ -63,6 +64,8 @@ function parseTrade(raw: unknown): Parsed<TradeRecord> {
   if (raw.stop_moves !== undefined && (!Array.isArray(raw.stop_moves) || !raw.stop_moves.every(isStopMove))) {
     return bad("Every stop move needs a numeric price and a valid time.");
   }
+  if (raw.r_size_cents != null && !isValidRSizeCents(raw.r_size_cents)) return bad("Trade R size must be whole cents between $1 and $100,000.");
+  if (raw.stated_risk_r != null && !isValidStatedRiskR(raw.stated_risk_r)) return bad("Stated risk R must be between 0.01 and 10 (up to 2 decimal places).");
   let trade: TradeRecord;
   try {
     trade = normalizeTrade(raw as Parameters<typeof normalizeTrade>[0]);
@@ -101,6 +104,10 @@ function parseTrade(raw: unknown): Parsed<TradeRecord> {
   if (trade.stop_moves?.some((move) => toTicks(move.price, trade.symbol) == null)) {
     return bad("Every stop move price must sit on the contract's tick grid.");
   }
+  // risk_cents is computed, never accepted as given. A client value must match the computed one (null matches null).
+  if (raw.risk_cents !== undefined && raw.risk_cents !== riskCents(trade)) {
+    return bad("risk_cents is computed from entry, initial stop and quantity and did not match.");
+  }
   return good(trade);
 }
 
@@ -109,6 +116,7 @@ const accountParser = (raw: unknown): Parsed<TradingAccount> => {
   const rules = isObject(raw) && isObject(raw.rules) ? raw.rules : {};
   const wholeOrAbsent = (value: unknown) => value === undefined || value === null || Number.isInteger(value);
   if (!isObject(raw) || !Number.isInteger(raw.starting_balance_cents)) return bad("An account needs a whole-cent starting balance.");
+  if (raw.r_size_cents != null && !isValidRSizeCents(raw.r_size_cents)) return bad("Account R size must be whole cents between $1 and $100,000.");
   if (!["max_loss_cents", "daily_loss_cents", "profit_target_cents"].every((field) => wholeOrAbsent(rules[field]))) {
     return bad("Account limits are whole cents only.");
   }
@@ -183,6 +191,19 @@ const SINGLETON_PARSERS: { [K in SingletonKey]: Parser<SingletonRecordTypes[K]> 
   ),
 };
 
+/**
+ * Freeze a trade's R size (04 §3.3, D-B) from its account, else the default, when it has none yet or when `force`
+ * is set (its account changed). Trades that already carry a size keep it.
+ */
+function withFrozenRSize(
+  trade: TradeRecord,
+  inputs: { accounts: TradingAccount[]; prefs: Parameters<typeof resolveRSize>[2] },
+  force = false,
+): TradeRecord {
+  if (!force && trade.r_size_cents != null) return trade;
+  return { ...trade, r_size_cents: resolveRSize({ ...trade, r_size_cents: null }, inputs.accounts, inputs.prefs).cents };
+}
+
 export interface JournalCommands {
   create<K extends CollectionKey>(key: K, raw: unknown): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
   read<K extends CollectionKey>(key: K, id: RecordId): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
@@ -209,6 +230,15 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
   const repoFor = <K extends CollectionKey>(key: K) => repos[key] as CollectionRepository<CollectionRecordTypes[K]>;
   const idOf = (record: unknown): RecordId => (isObject(record) && typeof record.id === "string" ? record.id : "");
 
+  /** The accounts and default prefs an R size is resolved against. Either read failing fails the write. */
+  async function rSizeInputs(): Promise<PersistResult<{ accounts: TradingAccount[]; prefs: Parameters<typeof resolveRSize>[2] }>> {
+    const accounts = await repos.accounts.list(owner);
+    if (!accounts.ok) return accounts;
+    const prefs = await repos.prefs.get(owner);
+    if (!prefs.ok) return prefs;
+    return { ok: true, value: { accounts: accounts.value, prefs: prefs.value?.record ?? null } };
+  }
+
   /** Records of owned types must carry the caller's owner (or the device default), and are stamped with it. */
   function ownedBy<T>(key: RecordTypeKey, record: T): Parsed<T> {
     if (contractFor(key).ownership !== "user_id") return good(record);
@@ -234,7 +264,11 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
       const existing = await repoFor(key).get(owner, idOf(parsed.value));
       if (existing.ok) return fail("conflict", `A ${key} record with this id already exists.`, key, idOf(parsed.value));
       if (existing.error.code !== "not_found") return existing;
-      return write(key, parsed.value);
+      if (key !== "trades") return write(key, parsed.value);
+      const inputs = await rSizeInputs();
+      if (!inputs.ok) return inputs;
+      const frozen = withFrozenRSize(parsed.value as TradeRecord, inputs.value);
+      return write(key, frozen as CollectionRecordTypes[typeof key]);
     },
 
     read(key, id) {
@@ -250,10 +284,19 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
       if (derived) return fail("forbidden", `${derived} is derived and cannot be stored.`, key, id);
       const current = await repoFor(key).get(owner, id);
       if (!current.ok) return current;
-      const candidate = withoutDerived(key, { ...current.value.record, ...patch, id });
+      // A stored risk_cents may be stale once entry, stop or quantity change. Unless the patch sets it, drop it so
+      // the recomputed value is checked instead of the old one.
+      const base = key === "trades" && !("risk_cents" in patch) ? { ...current.value.record, risk_cents: undefined } : current.value.record;
+      const candidate = withoutDerived(key, { ...base, ...patch, id });
       const parsed = COLLECTION_PARSERS[key](candidate);
       if (!parsed.ok) return fail("invalid", parsed.message, key, id);
-      return write(key, parsed.value, current.value.meta.updated_at);
+      if (key !== "trades") return write(key, parsed.value, current.value.meta.updated_at);
+      const trade = parsed.value as TradeRecord;
+      const accountChanged = "account_id" in patch && patch.account_id !== (current.value.record as TradeRecord).account_id;
+      const inputs = await rSizeInputs();
+      if (!inputs.ok) return inputs;
+      const frozen = withFrozenRSize(trade, inputs.value, accountChanged);
+      return write(key, frozen as CollectionRecordTypes[typeof key], current.value.meta.updated_at);
     },
 
     async archive(key, id) {

@@ -14,6 +14,7 @@
 import { sessionCloseUtc, sessionDate } from "./session.ts";
 import { DEFAULT_OWNER_USER_ID, tradePnl } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
+import { isValidRSizeCents } from "./r-size.ts";
 
 /**
  * How the loss limit moves.
@@ -43,6 +44,8 @@ export interface TradingAccount {
   created_at: string;
   /** Hidden from pickers; its trades and history stay. */
   archived: boolean;
+  /** Dollars that make 1R in this account, whole cents (04 §3.3). Null: use the default R size from prefs. */
+  r_size_cents: number | null;
 }
 
 /**
@@ -59,7 +62,7 @@ export interface BalanceCheck {
 
 export const NO_RULES: AccountRules = { max_loss_cents: null, drawdown: "trailing", daily_loss_cents: null, profit_target_cents: null };
 
-export function makeAccount(input: { id: string; name: string; starting_balance_cents: number; now: string; rules?: Partial<AccountRules> }): TradingAccount {
+export function makeAccount(input: { id: string; name: string; starting_balance_cents: number; now: string; rules?: Partial<AccountRules>; r_size_cents?: number | null }): TradingAccount {
   return {
     id: input.id,
     user_id: DEFAULT_OWNER_USER_ID,
@@ -68,6 +71,7 @@ export function makeAccount(input: { id: string; name: string; starting_balance_
     rules: { ...NO_RULES, ...input.rules },
     created_at: input.now,
     archived: false,
+    r_size_cents: isValidRSizeCents(input.r_size_cents) ? input.r_size_cents : null,
   };
 }
 
@@ -255,6 +259,7 @@ export function sanitizeAccounts(raw: unknown): TradingAccount[] {
       rules: { max_loss_cents: centsOrNull(rules.max_loss_cents), drawdown, daily_loss_cents: centsOrNull(rules.daily_loss_cents), profit_target_cents: centsOrNull(rules.profit_target_cents) },
       created_at: typeof account.created_at === "string" ? account.created_at : "",
       archived: account.archived === true,
+      r_size_cents: isValidRSizeCents(account.r_size_cents) ? account.r_size_cents : null,
     }];
   });
 }
