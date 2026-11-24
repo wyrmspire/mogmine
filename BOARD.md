@@ -139,13 +139,59 @@ Status values: `ready` · `claimed` · `review` · `blocked (reason)` · `done`.
   - Unit tests in `lib/__tests__/day-card.test.ts` verifying all 3 sizes, Shield privacy, and zero-trade / no-stop edge cases.
 
 #### `MM-W2-08` · Final Pass: Merge, Integration & Full Release Gate
-- **Owner:** Master Agent (Lane 8) | **Status:** `ready (after 01–07)`
+- **Owner:** Master Agent (Lane 8) | **Status:** `done`
 - **Protocol:**
   1. Read all 7 worker handoffs in `notes/handoffs/` and inspect each worker's diff.
   2. Merge `feat/mm-w2-01` through `feat/mm-w2-07` into `main` in dependency order.
   3. Wire `<StopMovesEditor />` (Lane 5) and `onSelectNeighbour` navigation (Lane 6) into `components/TradeDetail.tsx`.
   4. Run the authoritative verification gate: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
   5. Fold handoffs into `NOTES.md`, update `BOARD.md`, clean up worktrees, and publish the final pass report.
+
+---
+
+## 1c. 2026-11-24 Five-Agent Swarm Plan (`docs/design-2026-11-24/91-swarm-plan.md`)
+
+> **Baseline:** `origin/main` (`22da636`, PR #207).
+> **Full wave schedule, file ownership & acceptance tests:** [`docs/design-2026-11-24/91-swarm-plan.md`](docs/design-2026-11-24/91-swarm-plan.md) · **Machine manifest:** [`docs/design-2026-11-24/swarm-plan.json`](docs/design-2026-11-24/swarm-plan.json) · **Swarm defaults (Chris can override):** [`docs/design-2026-11-24/92-decisions-made-by-swarm.md`](docs/design-2026-11-24/92-decisions-made-by-swarm.md).
+> **All 35 packages are runnable (`ready`, 0 blocked on owner):** 5 agents (`swarm-1`..`swarm-5`) × 7 waves, canonical locks `refs/heads/claim/<PKG-ID>`, branches `swarm/<PKG-ID>`, Codex reviews and merges each wave.
+
+| Wave | Package | Agent (`Lane`) | Summary | Prompt | Status |
+| :---: | :--- | :--- | :--- | :--- | :--- |
+| 1 | `RS-1` | `swarm-1` (`L1`) | Per-account R size: pure model and stored fields | [RS-1.md](docs/design-2026-11-24/prompts/RS-1.md) | `ready` |
+| 1 | `FB-1` | `swarm-2` (`L2`) | ±5-minute fill-to-bar matching | [FB-1.md](docs/design-2026-11-24/prompts/FB-1.md) | `ready` |
+| 1 | `IN-1` | `swarm-3` (`L3`) | Remember chart choices (`vwapAnchor`, `levelLabels`, `ema200`, `reviewCardOrientation`) | [IN-1.md](docs/design-2026-11-24/prompts/IN-1.md) | `ready` |
+| 1 | `DR-1a` | `swarm-4` (`L4`) | Daily review model, local store, and backup | [DR-1a.md](docs/design-2026-11-24/prompts/DR-1a.md) | `ready` |
+| 1 | `API-1` | `swarm-5` (`L5`) | House rules at discovery, `/guide`, and list defaults fixed | [API-1.md](docs/design-2026-11-24/prompts/API-1.md) | `ready` |
+| 2 | `RS-2` | `swarm-1` (`L1`) | R size in `AccountSheet`, Tune, `RiskChips`, and `TradeDetail` (`RiskLine`) | [RS-2.md](docs/design-2026-11-24/prompts/RS-2.md) | `ready` |
+| 2 | `SM-1` | `swarm-2` (`L2`) | Stop touches and MAE strictly after the entry bar (`D-H`, `D-I`) | [SM-1.md](docs/design-2026-11-24/prompts/SM-1.md) | `ready` |
+| 2 | `UX-E` | `swarm-3` (`L3`) | Modern position zones and chart palette from `08-visual-quality.md` (`D-J`) | [UX-E.md](docs/design-2026-11-24/prompts/UX-E.md) | `ready` |
+| 2 | `NAV-1` | `swarm-4` (`L4`) | Move between trading days on Today/Review; Feed URL filters | [NAV-1.md](docs/design-2026-11-24/prompts/NAV-1.md) | `ready` |
+| 2 | `API-2a` | `swarm-5` (`L5`) | `/api/v1/vocabulary`, `?include=derived`, and list filters | [API-2a.md](docs/design-2026-11-24/prompts/API-2a.md) | `ready` |
+| 3 | `RS-3a` | `swarm-1` (`L1`) | Switch library consumers to account R (`D-A`, `D-C`) | [RS-3a.md](docs/design-2026-11-24/prompts/RS-3a.md) | `ready` |
+| 3 | `SM-2` | `swarm-2` (`L2`) | Untimed stop moves (`"untimed"` basis at exit, dashed step, no false SL touch) | [SM-2.md](docs/design-2026-11-24/prompts/SM-2.md) | `ready` |
+| 3 | `IN-2` | `swarm-3` (`L3`) | Full-session VWAP window and Globex small-gap tolerance (`D-F`) | [IN-2.md](docs/design-2026-11-24/prompts/IN-2.md) | `ready` |
+| 3 | `DR-1b` | `swarm-4` (`L4`) | Daily reviews in Supabase (`mogmine_daily_reviews` migration), sync, and `/api/v1` | [DR-1b.md](docs/design-2026-11-24/prompts/DR-1b.md) | `ready` |
+| 3 | `PL-1` | `swarm-5` (`L5`) | Playbook Lab pure model (`lib/playbook-lab.ts`) | [PL-1.md](docs/design-2026-11-24/prompts/PL-1.md) | `ready` |
+| 4 | `RS-3b` | `swarm-1` (`L1`) | Switch screens, R ruler, and R strip to account R; remove `rMultiple` aliases | [RS-3b.md](docs/design-2026-11-24/prompts/RS-3b.md) | `ready` |
+| 4 | `UX-B` | `swarm-2` (`L2`) | Challenges per account and Drawdown Defender room label | [UX-B.md](docs/design-2026-11-24/prompts/UX-B.md) | `ready` |
+| 4 | `LB-A` | `swarm-3` (`L3`) | Level labels behind candles, `0.95` alpha token, `rightOffset`, quiet right edge (`Q-7`) | [LB-A.md](docs/design-2026-11-24/prompts/LB-A.md) | `ready` |
+| 4 | `PL-2a` | `swarm-4` (`L4`) | Playbook Lab UI: Home, `Binder \| Lab` tabs, Playbooks, and Tags (`Q-1`, `Q-2`) | [PL-2a.md](docs/design-2026-11-24/prompts/PL-2a.md) | `ready` |
+| 4 | `API-2b` | `swarm-5` (`L5`) | Agent API write-time refusals and warnings (`Q-9`, `Q-10`, `Q-11`) | [API-2b.md](docs/design-2026-11-24/prompts/API-2b.md) | `ready` |
+| 5 | `RS-4` | `swarm-1` (`L1`) | Stated risk chips in `AddTradeSheet` and dry-run R-size backfill script | [RS-4.md](docs/design-2026-11-24/prompts/RS-4.md) | `ready` |
+| 5 | `SM-3` | `swarm-2` (`L2`) | Timed stop-move validation, `widestRisk`, `lockedR`, and slippage note | [SM-3.md](docs/design-2026-11-24/prompts/SM-3.md) | `ready` |
+| 5 | `LB-B1` | `swarm-3` (`L3`) | Tap mode: no pills, `≤ 3` price-only axis tags, and `hitLevel` (`D-D`) | [LB-B1.md](docs/design-2026-11-24/prompts/LB-B1.md) | `ready` |
+| 5 | `DR-2` | `swarm-4` (`L4`) | `/review/day/[date]` screen, 14-day Days strip, and 11/23 review dry-run helper (`Q-3`, `Q-4`) | [DR-2.md](docs/design-2026-11-24/prompts/DR-2.md) | `ready` |
+| 5 | `API-3` | `swarm-5` (`L5`) | `/api/v1/candles` and `/api/v1/checks/trade` endpoints | [API-3.md](docs/design-2026-11-24/prompts/API-3.md) | `ready` |
+| 6 | `UX-C` | `swarm-1` (`L1`) | Refuse future trade timestamps and warn on far-off prices (`Q-10`, `Q-11`) | [UX-C.md](docs/design-2026-11-24/prompts/UX-C.md) | `ready` |
+| 6 | `UX-D` | `swarm-2` (`L2`) | `"No setup picked"` chip and commentary-focused notes placeholders | [UX-D.md](docs/design-2026-11-24/prompts/UX-D.md) | `ready` |
+| 6 | `LB-B2` | `swarm-3` (`L3`) | `LevelCard` tap popover, accessible level disclosure, and `≤ 4` export pills (`D-E`) | [LB-B2.md](docs/design-2026-11-24/prompts/LB-B2.md) | `ready` |
+| 6 | `DR-3` | `swarm-4` (`L4`) | Portrait/Landscape `ReviewCard` grid, `16:9` card layout, and `"Share day"` PNG (`Q-5`) | [DR-3.md](docs/design-2026-11-24/prompts/DR-3.md) | `ready` |
+| 6 | `API-4` | `swarm-5` (`L5`) | Point-in-time `/api/v1/levels` endpoint (`Q-8`) | [API-4.md](docs/design-2026-11-24/prompts/API-4.md) | `ready` |
+| 7 | `PL-2b` | `swarm-1` (`L1`) | Playbook Lab UI: Map grid/pairs and Gaps views | [PL-2b.md](docs/design-2026-11-24/prompts/PL-2b.md) | `ready` |
+| 7 | `FB-2` | `swarm-2` (`L2`) | `"Use HH:MM"` matched fill action with Undo and pre-filled `StopMovesEditor` | [FB-2.md](docs/design-2026-11-24/prompts/FB-2.md) | `ready` |
+| 7 | `IN-3` | `swarm-3` (`L3`) | 200 EMA on displayed timeframe across chart, HUD, prefs, and `/levels` (`D-G`, `OD-18`) | [IN-3.md](docs/design-2026-11-24/prompts/IN-3.md) | `ready` |
+| 7 | `UX-A` | `swarm-4` (`L4`) | Session trade-count clarity, Review queue wording, and after-close plan window | [UX-A.md](docs/design-2026-11-24/prompts/UX-A.md) | `ready` |
+| 7 | `PL-3` | `swarm-5` (`L5`) | Editable synced `tag_registry` singleton (`mogmine_tag_registries`), Tune editor, and live vocabulary (`Q-6`) | [PL-3.md](docs/design-2026-11-24/prompts/PL-3.md) | `ready` |
 
 ---
 
