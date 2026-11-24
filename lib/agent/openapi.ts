@@ -2,6 +2,7 @@
 // spec describes the routes in app/api/v1 and the discovery document says where they are. The route files import this.
 import { COLLECTION_KEYS, SINGLETON_KEYS } from "./http.ts";
 import type { AgentErrorCode } from "./http.ts";
+import { HOUSE_RULES, HOUSE_RULES_VERSION, formatHouseRulesMarkdown } from "./house-rules.ts";
 
 export const AGENT_API_VERSION = "1.0.0";
 
@@ -40,6 +41,23 @@ export function apiBaseUrl(origin: string): string {
 export function specUrl(origin: string): string {
   return `${apiBaseUrl(origin)}/openapi.json`;
 }
+
+/** GET /api/v1/guide: the house rules with examples, and the workflows. Read before writing anything. */
+export function guideUrl(origin: string): string {
+  return `${apiBaseUrl(origin)}/guide`;
+}
+
+/** GET /api/v1/vocabulary: the names agents may use (playbooks, tags, accounts). Advertised here; built in API-2a. */
+export function vocabularyUrl(origin: string): string {
+  return `${apiBaseUrl(origin)}/vocabulary`;
+}
+
+/** Rule reminders repeated on record writes, so an agent meets the rules that matter where it writes (07 §2.1 item 2). */
+const writeRuleReminder = (origin: string) =>
+  "House rules to follow on this write: HR-1 notes are commentary only; HR-2 verify fill times against 1-minute candles; " +
+  "HR-3 vocabulary names only; HR-4 stop moves carry times; HR-5 exit_reason must match the exit price; " +
+  "HR-7 keep stated_risk_r as the trader said it; HR-9 daily reviews go in daily_reviews; HR-10 never write derived values. " +
+  `Read the full rules at ${guideUrl(origin)}.`;
 
 const ERROR_ENUM = Object.keys(ERROR_CODES);
 
@@ -99,6 +117,7 @@ interface OpInput {
   operationId: string;
   summary: string;
   scope: "read" | "write";
+  description?: string;
   success: { status: 200 | 201; description: string };
   errors: number[];
   parameters?: unknown[];
@@ -109,6 +128,7 @@ function operation(input: OpInput): Record<string, unknown> {
   const op: Record<string, unknown> = {
     operationId: input.operationId,
     summary: input.summary,
+    ...(input.description ? { description: input.description } : {}),
     "x-mogmine-scope": input.scope,
     responses: {
       [String(input.success.status)]: ok(input.success.description),
@@ -129,7 +149,13 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
       description:
         "Each request acts as the owner of the agent key. A key has read scope, write scope, or both: GET needs read, " +
         "every other method needs write. Records are the journal types listed in the `type` parameter. Record ids are " +
-        "strings the client generates. Never send derived fields (such as PnL, R or ticks): the server computes them.",
+        "strings the client generates. Never send derived fields (such as PnL, R or ticks): the server computes them." +
+        formatHouseRulesMarkdown(),
+    },
+    "x-mogmine-house-rules": {
+      version: HOUSE_RULES_VERSION,
+      guide_url: guideUrl(origin),
+      rules: HOUSE_RULES.map(({ id, title, summary }) => ({ id, title, summary })),
     },
     servers: [{ url: apiBaseUrl(origin) }],
     components: {
@@ -171,6 +197,13 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           success: { status: 200, description: "The owner id and the key's scopes." }, errors: ERROR_STATUSES_READ,
         }),
       },
+      "/guide": {
+        get: operation({
+          operationId: "getGuide", summary: "The house rules and workflows (read before writing)", scope: "read",
+          success: { status: 200, description: "The house rules with examples, the workflows and the vocabulary URL." },
+          errors: ERROR_STATUSES_READ,
+        }),
+      },
       "/records/{type}": {
         parameters: [typeParam],
         get: operation({
@@ -179,7 +212,7 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           parameters: listParams,
         }),
         post: operation({
-          operationId: "createRecord", summary: "Create a record", scope: "write",
+          operationId: "createRecord", summary: "Create a record", scope: "write", description: writeRuleReminder(origin),
           success: { status: 201, description: "The stored record." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
           requestBody: jsonBody("The full record, with a client-generated `id`. Derived fields are refused."),
         }),
@@ -191,7 +224,7 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           success: { status: 200, description: "The record." }, errors: [...ERROR_STATUSES_READ, 404],
         }),
         patch: operation({
-          operationId: "updateRecord", summary: "Change some fields of a record", scope: "write",
+          operationId: "updateRecord", summary: "Change some fields of a record", scope: "write", description: writeRuleReminder(origin),
           success: { status: 200, description: "The stored record." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
           requestBody: jsonBody("The fields to change. Other fields keep their values."),
         }),
@@ -232,6 +265,10 @@ export function buildDiscovery(origin: string, enabled: boolean): Record<string,
     base_url: apiBaseUrl(origin),
     openapi_url: specUrl(origin),
     auth: { type: "bearer", header: "Authorization", format: "Bearer mmk_<43 chars>" },
+    house_rules_version: HOUSE_RULES_VERSION,
+    guide_url: guideUrl(origin),
+    vocabulary_url: vocabularyUrl(origin),
+    house_rules: HOUSE_RULES.map((rule) => ({ id: rule.id, summary: rule.summary })),
     scopes: {
       read: "Read records, singletons and /me (GET requests).",
       write: "Create, change, archive and delete records, and replace singletons. Write does not include read.",
@@ -246,6 +283,7 @@ export function setupBlock(origin: string, token: string): string {
     "MogMine agent API",
     `Base URL: ${apiBaseUrl(origin)}`,
     `OpenAPI spec: ${specUrl(origin)}`,
+    `Before writing anything, read ${guideUrl(origin)}`,
     `Auth header: Authorization: Bearer ${token}`,
     `Agent key: ${token}`,
   ].join("\n");

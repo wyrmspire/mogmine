@@ -6,6 +6,10 @@ import {
   parseListQuery, statusFor,
 } from "../agent/http.ts";
 import type { AgentErrorCode } from "../agent/http.ts";
+import { dispatchAgentRoute } from "../agent/dispatch.ts";
+import type { AgentRoute, AgentWho } from "../agent/dispatch.ts";
+import type { JournalCommands } from "../commands/journal-commands.ts";
+import type { ListQuery } from "../persistence/contract.ts";
 
 test("statusFor: every code maps to its HTTP status", () => {
   const expected: Record<AgentErrorCode, number> = {
@@ -53,15 +57,44 @@ test("parseListQuery: limit clamps to 1..500 and junk falls back to 100", () => 
   assert.equal(limit(""), 100);
 });
 
-test("parseListQuery: booleans parse only for true and false; parentId passes through", () => {
+// Regression (11/23): a missing includeArchived / includeSamples used to pass `undefined`, which skipped the archived
+// and sample filters, so archived accounts and sample trades leaked into default API lists. Defaults are `false` now.
+test("parseListQuery: no query string gives the defaults: samples and archived hidden, no parent, limit 100", () => {
+  assert.deepEqual(parseListQuery(new URLSearchParams()), { includeSamples: false, includeArchived: false, parentId: undefined, limit: 100 });
+});
+
+test("parseListQuery: booleans parse only for true; anything else is false; parentId passes through", () => {
   const query = parseListQuery(new URLSearchParams("includeSamples=false&includeArchived=yes&parentId=seed:cut"));
   assert.equal(query.includeSamples, false);
-  assert.equal(query.includeArchived, undefined);
+  assert.equal(query.includeArchived, false);
   assert.equal(query.parentId, "seed:cut");
   const truthy = parseListQuery(new URLSearchParams("includeSamples=true&includeArchived=true"));
   assert.equal(truthy.includeSamples, true);
   assert.equal(truthy.includeArchived, true);
   assert.equal(parseListQuery(new URLSearchParams("")).parentId, undefined);
+});
+
+// The default list must not return archived accounts. The fake applies the same rule the Supabase adapter uses
+// (`includeArchived === false` filters archived rows), so this fails if the default ever becomes `undefined` again.
+test("list accounts with a default query omits archived accounts and sample rows", async () => {
+  const rows = [
+    { id: "a1", archived: false, sample: false },
+    { id: "a2", archived: true, sample: false },
+    { id: "a3", archived: false, sample: true },
+  ];
+  let seen: ListQuery | undefined;
+  const commands = {
+    list: async (_type: string, query: ListQuery) => {
+      seen = query;
+      return { ok: true, value: rows.filter((row) => !(query.includeArchived === false && row.archived) && !(query.includeSamples === false && row.sample)) };
+    },
+  } as unknown as JournalCommands;
+  const who: AgentWho = { userId: "owner", tokenId: "tok", scopes: ["read"] };
+  const route: AgentRoute = { kind: "list", type: "accounts", query: parseListQuery(new URLSearchParams()) };
+  const result = await dispatchAgentRoute(route, commands, who);
+  assert.equal(seen?.includeArchived, false);
+  assert.equal(seen?.includeSamples, false);
+  assert.deepEqual(result.body, { ok: true, data: [{ id: "a1", archived: false, sample: false }] });
 });
 
 test("route keys: collections come from the v1 registry; candles and prompt_library are not exposed", () => {
