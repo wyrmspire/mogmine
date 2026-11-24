@@ -2,6 +2,7 @@
 // Names follow docs/06 (interim canonical under OD-1).
 
 import { expectedInsideBarTimes } from "./session.ts";
+import { isValidRSizeCents, isValidStatedRiskR, riskCents } from "./r-size.ts";
 export { expectedInsideBarTimes } from "./session.ts";
 
 export type TradeDirection = "LONG" | "SHORT";
@@ -160,6 +161,12 @@ export interface TradeRecord {
    * stored before this field existed.
    */
   annotations_modified?: boolean;
+  /** R size in whole cents, frozen when the trade was saved (04 §3.3, D-B). Null on older records: resolved at read time. */
+  r_size_cents?: number | null;
+  /** The risk the trader said, as a share of R (e.g. 0.25). Typed input, never computed. Null when not stated. */
+  stated_risk_r?: number | null;
+  /** Actual initial-stop dollars risked in integer cents. Recomputed on every normalize; a client value that differs is refused. */
+  risk_cents?: number | null;
 }
 
 export const DEFAULT_OWNER_USER_ID = "demo-owner";
@@ -228,7 +235,7 @@ export function tickDecimals(tickSize: number) {
 }
 
 /** Dollars per tick per contract, in integer cents, or null for an unknown symbol. */
-function tickValueCents(symbol: string): number | null {
+export function tickValueCents(symbol: string): number | null {
   const spec = specFor(symbol);
   return spec ? Math.round(spec.tickSize * spec.pointValueUsd * 100) : null;
 }
@@ -331,6 +338,15 @@ export function keepInitialStop(incoming: TradeRecord, existing: Pick<TradeRecor
   if (!existing || existing.id !== incoming.id || existing.initial_stop_price == null) return incoming;
   if (incoming.initial_stop_price === existing.initial_stop_price && incoming.initial_stop_set_at === existing.initial_stop_set_at) return incoming;
   return { ...incoming, initial_stop_price: existing.initial_stop_price, initial_stop_set_at: existing.initial_stop_set_at };
+}
+
+/**
+ * A backup restore never overwrites the R size a trade already froze on this device (04 §5.6). An incoming
+ * record with no `r_size_cents` takes the device's frozen value; the same id is required.
+ */
+export function keepFrozenRSize(incoming: TradeRecord, existing: Pick<TradeRecord, "id" | "r_size_cents"> | undefined): TradeRecord {
+  if (!existing || existing.id !== incoming.id || existing.r_size_cents == null || incoming.r_size_cents != null) return incoming;
+  return { ...incoming, r_size_cents: existing.r_size_cents };
 }
 
 /**
@@ -1035,6 +1051,10 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   }
   if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
+  // R size (04 §3.3): a stored value survives only when it is a valid whole-cent amount. risk_cents is always recomputed.
+  trade.r_size_cents = isValidRSizeCents(raw.r_size_cents) ? raw.r_size_cents : null;
+  trade.stated_risk_r = isValidStatedRiskR(raw.stated_risk_r) ? Number(raw.stated_risk_r.toFixed(2)) : null;
+  trade.risk_cents = riskCents(trade);
   trade.review_status = deriveReviewStatus(trade);
   return trade;
 }

@@ -4,8 +4,11 @@
 import { useSyncExternalStore } from "react";
 import { DEMO_TRADE_IDS, demoTrades } from "./fixtures.ts";
 import { idbSet } from "./idb.ts";
-import { annotationKey, candleCacheKey, candleSignature, deriveReviewStatus, keepInitialStop, normalizeTrade } from "./trades.ts";
+import { annotationKey, candleCacheKey, candleSignature, deriveReviewStatus, keepFrozenRSize, keepInitialStop, normalizeTrade } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
+import { resolveRSize } from "./r-size.ts";
+import { getAccountsState } from "./accounts-store.ts";
+import { getPrefs } from "./prefs.ts";
 import { byNewest } from "./journal-backup.ts";
 import type { LegacyTrade } from "./journal-backup.ts";
 import { createCollectionSync } from "./persistence/store-sync.ts";
@@ -240,7 +243,13 @@ export function hydrateJournal() {
   tradeSync.start();
 }
 
-export function addTrade(trade: TradeRecord) {
+/** The R size a trade freezes now: its account's, else the default (D-B). */
+function freshRSize(trade: TradeRecord): number {
+  return resolveRSize({ ...trade, r_size_cents: null }, getAccountsState().accounts, getPrefs()).cents;
+}
+
+export function addTrade(incoming: TradeRecord) {
+  const trade = incoming.r_size_cents == null ? { ...incoming, r_size_cents: freshRSize(incoming) } : incoming;
   remember(trade.id, trade);
   set({ trades: [trade, ...state.trades.filter((item) => item.id !== trade.id)].sort(byNewest) });
   persist();
@@ -260,6 +269,8 @@ export function updateTrade(id: string, patch: Partial<TradeRecord>) {
     if (trade.id !== id) return trade;
     changed = true;
     const next = { ...trade, ...patch };
+    // Changing the account re-freezes the R size from the new account (D-B). A trade with none yet takes one now.
+    if (("account_id" in patch && patch.account_id !== trade.account_id) || next.r_size_cents == null) next.r_size_cents = freshRSize(next);
     // A trader's change to an annotation is theirs, so a later fixture refresh keeps it (issue #62).
     if (annotationKey(next) !== annotationKey(trade)) next.annotations_modified = true;
     next.review_status = deriveReviewStatus(next);
@@ -296,9 +307,11 @@ export function getJournal() {
 
 /** Replace the whole journal from a backup file. */
 export function replaceTrades(trades: TradeRecord[]) {
-  // A restore never overwrites an initial stop this device already froze for the same trade (R-10).
+  // A restore never overwrites an initial stop or R size this device already froze for the same trade (R-10, 04 §5.6).
   const current = new Map(state.trades.map((trade) => [trade.id, trade]));
-  const replacements = trades.map((trade) => keepInitialStop(trade, current.get(trade.id))).sort(byNewest);
+  const replacements = trades
+    .map((trade) => keepFrozenRSize(keepInitialStop(trade, current.get(trade.id)), current.get(trade.id)))
+    .sort(byNewest);
   const replacementIds = new Set(replacements.map((trade) => trade.id));
   for (const id of current.keys()) if (!replacementIds.has(id)) remember(id, null);
   for (const trade of replacements) remember(trade.id, trade);
