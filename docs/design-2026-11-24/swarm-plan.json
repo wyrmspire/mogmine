@@ -1,0 +1,756 @@
+{
+  "waves": [
+    {
+      "wave": 1,
+      "packages": [
+        {
+          "id": "RS-1",
+          "lane": "L1",
+          "agent": "swarm-1",
+          "prompt": "docs/design-2026-11-24/prompts/RS-1.md",
+          "depends": [],
+          "writes": [
+            "lib/r-size.ts",
+            "lib/accounts.ts",
+            "lib/trades.ts",
+            "lib/store.ts",
+            "lib/commands/journal-commands.ts",
+            "lib/__tests__/r-size.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "FB-1",
+          "lane": "L2",
+          "agent": "swarm-2",
+          "prompt": "docs/design-2026-11-24/prompts/FB-1.md",
+          "depends": [],
+          "writes": [
+            "lib/fill-match.ts",
+            "lib/trade-bar-validation.ts",
+            "lib/trade-marks.ts",
+            "lib/data-notes.ts",
+            "lib/__tests__/fill-match.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "IN-1",
+          "lane": "L3",
+          "agent": "swarm-3",
+          "prompt": "docs/design-2026-11-24/prompts/IN-1.md",
+          "depends": [],
+          "writes": [
+            "lib/prefs-sanitize.ts",
+            "components/TradeDetail.tsx",
+            "lib/__tests__/prefs-chart-choices.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "DR-1a",
+          "lane": "L4",
+          "agent": "swarm-4",
+          "prompt": "docs/design-2026-11-24/prompts/DR-1a.md",
+          "depends": [],
+          "writes": [
+            "lib/daily-review.ts",
+            "lib/daily-review-store.ts",
+            "lib/daily-review-sanitize.ts",
+            "lib/journal-backup.ts",
+            "components/AppShell.tsx",
+            "components/TuneScreen.tsx",
+            "lib/__tests__/daily-review.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "API-1",
+          "lane": "L5",
+          "agent": "swarm-5",
+          "prompt": "docs/design-2026-11-24/prompts/API-1.md",
+          "depends": [],
+          "writes": [
+            "lib/agent/house-rules.ts",
+            "lib/agent/openapi.ts",
+            "app/.well-known/mogmine.json/route.ts",
+            "app/api/v1/guide/route.ts",
+            "lib/agent/http.ts",
+            "lib/__tests__/agent-house-rules.test.ts",
+            "lib/__tests__/agent-http.test.ts",
+            "lib/__tests__/agent-openapi.test.ts"
+          ],
+          "needs_migration": false
+        }
+      ]
+    },
+    {
+      "wave": 2,
+      "packages": [
+        {
+          "id": "RS-2",
+          "lane": "L1",
+          "agent": "swarm-1",
+          "prompt": "docs/design-2026-11-24/prompts/RS-2.md",
+          "depends": [
+            "RS-1"
+          ],
+          "writes": [
+            "components/AccountSheet.tsx",
+            "lib/accounts-store.ts",
+            "lib/prefs.ts",
+            "components/RiskChips.tsx",
+            "components/RiskLine.tsx",
+            "components/TradeDetail.tsx",
+            "lib/__tests__/risk-line.test.ts",
+            "lib/__tests__/tune-prefs.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "SM-1",
+          "lane": "L2",
+          "agent": "swarm-2",
+          "prompt": "docs/design-2026-11-24/prompts/SM-1.md",
+          "depends": [
+            "FB-1"
+          ],
+          "writes": [
+            "lib/session.ts",
+            "lib/trades.ts",
+            "lib/trade-bar-validation.ts",
+            "lib/data-notes.ts",
+            "lib/__tests__/post-entry.test.ts",
+            "lib/__tests__/trade-observer.test.ts",
+            "lib/__tests__/data-notes.test.ts",
+            "lib/__tests__/trade-document.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "UX-E",
+          "lane": "L3",
+          "agent": "swarm-3",
+          "prompt": "docs/design-2026-11-24/prompts/UX-E.md",
+          "depends": [
+            "IN-1"
+          ],
+          "writes": [
+            "components/PositionBoxPrimitive.ts",
+            "lib/chart-paint.ts",
+            "lib/theme.ts",
+            "app/globals.css",
+            "components/TradeChart.tsx",
+            "lib/shareCard.ts",
+            "lib/__tests__/chart-paint.test.ts",
+            "scripts/check-position-box.mjs"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "NAV-1",
+          "lane": "L4",
+          "agent": "swarm-4",
+          "prompt": "docs/design-2026-11-24/prompts/NAV-1.md",
+          "depends": [],
+          "writes": [
+            "lib/selectors.ts",
+            "components/FeedScreen.tsx",
+            "components/TodayScreen.tsx",
+            "components/DayHeader.tsx",
+            "components/ReviewScreen.tsx",
+            "lib/__tests__/nav-filters.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "API-2a",
+          "lane": "L5",
+          "agent": "swarm-5",
+          "prompt": "docs/design-2026-11-24/prompts/API-2a.md",
+          "depends": [
+            "API-1",
+            "RS-1"
+          ],
+          "writes": [
+            "app/api/v1/vocabulary/route.ts",
+            "lib/agent/vocabulary.ts",
+            "lib/agent/dispatch.ts",
+            "lib/agent/http.ts",
+            "lib/commands/journal-commands.ts",
+            "lib/agent/openapi.ts",
+            "lib/__tests__/agent-vocabulary.test.ts",
+            "lib/__tests__/agent-api.test.ts",
+            "lib/__tests__/agent-openapi.test.ts"
+          ],
+          "needs_migration": false
+        }
+      ]
+    },
+    {
+      "wave": 3,
+      "packages": [
+        {
+          "id": "RS-3a",
+          "lane": "L1",
+          "agent": "swarm-1",
+          "prompt": "docs/design-2026-11-24/prompts/RS-3a.md",
+          "depends": [
+            "RS-1",
+            "NAV-1",
+            "UX-E"
+          ],
+          "writes": [
+            "lib/trades.ts",
+            "lib/selectors.ts",
+            "lib/day-card.ts",
+            "lib/shareCard.ts",
+            "lib/drills.ts",
+            "lib/mood.ts",
+            "lib/describe.ts",
+            "lib/exit-efficiency.ts",
+            "lib/plan-vs-actual.ts",
+            "lib/__tests__/account-r-consumers.test.ts",
+            "lib/__tests__/running-stats.test.ts",
+            "lib/__tests__/day-card.test.ts",
+            "lib/__tests__/card-system.test.ts",
+            "lib/__tests__/drills.test.ts",
+            "lib/__tests__/mood.test.ts",
+            "lib/__tests__/exit-efficiency.test.ts",
+            "lib/__tests__/plan-vs-actual.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "SM-2",
+          "lane": "L2",
+          "agent": "swarm-2",
+          "prompt": "docs/design-2026-11-24/prompts/SM-2.md",
+          "depends": [
+            "SM-1",
+            "UX-E"
+          ],
+          "writes": [
+            "lib/trade-document.ts",
+            "lib/trade-bar-validation.ts",
+            "lib/trade-marks.ts",
+            "components/PositionBoxPrimitive.ts",
+            "lib/data-notes.ts",
+            "lib/__tests__/untimed-stop-moves.test.ts",
+            "lib/__tests__/trade-document.test.ts",
+            "lib/__tests__/trade-marks.test.ts",
+            "lib/__tests__/trade-observer.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "IN-2",
+          "lane": "L3",
+          "agent": "swarm-3",
+          "prompt": "docs/design-2026-11-24/prompts/IN-2.md",
+          "depends": [
+            "IN-1",
+            "RS-2"
+          ],
+          "writes": [
+            "lib/session-indicators.ts",
+            "lib/chart-indicators.ts",
+            "components/useTradeLevels.ts",
+            "components/TradeDetail.tsx",
+            "lib/__tests__/session-indicators.test.ts",
+            "lib/__tests__/chart-indicators.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "DR-1b",
+          "lane": "L4",
+          "agent": "swarm-4",
+          "prompt": "docs/design-2026-11-24/prompts/DR-1b.md",
+          "depends": [
+            "DR-1a",
+            "API-2a"
+          ],
+          "writes": [
+            "supabase/migrations/20261124120000_mogmine_daily_reviews.sql",
+            "lib/persistence/contract.ts",
+            "lib/persistence/registry.ts",
+            "lib/persistence/local-adapter.ts",
+            "lib/persistence/supabase-adapter.ts",
+            "lib/persistence/select.ts",
+            "lib/daily-review-store.ts",
+            "lib/commands/journal-commands.ts",
+            "lib/__tests__/daily-review-persistence.test.ts",
+            "lib/__tests__/fake-supabase.ts",
+            "lib/__tests__/journal-commands.test.ts",
+            "lib/__tests__/persistence-contract.test.ts",
+            "lib/__tests__/persistence-local-adapter.test.ts",
+            "lib/__tests__/persistence-supabase-adapter.test.ts"
+          ],
+          "needs_migration": true
+        },
+        {
+          "id": "PL-1",
+          "lane": "L5",
+          "agent": "swarm-5",
+          "prompt": "docs/design-2026-11-24/prompts/PL-1.md",
+          "depends": [
+            "NAV-1"
+          ],
+          "writes": [
+            "lib/playbook-lab.ts",
+            "lib/__tests__/playbook-lab.test.ts"
+          ],
+          "needs_migration": false
+        }
+      ]
+    },
+    {
+      "wave": 4,
+      "packages": [
+        {
+          "id": "RS-3b",
+          "lane": "L1",
+          "agent": "swarm-1",
+          "prompt": "docs/design-2026-11-24/prompts/RS-3b.md",
+          "depends": [
+            "RS-3a",
+            "SM-2",
+            "IN-2"
+          ],
+          "writes": [
+            "lib/trades.ts",
+            "lib/trade-marks.ts",
+            "lib/rstrip.ts",
+            "components/TradeDetail.tsx",
+            "components/TradeRow.tsx",
+            "components/ReviewScreen.tsx",
+            "components/DrillScreen.tsx",
+            "components/AddTradeSheet.tsx",
+            "lib/__tests__/r-ruler.test.ts",
+            "lib/__tests__/rstrip.test.ts",
+            "lib/__tests__/core.test.ts",
+            "lib/__tests__/open-trade.test.ts",
+            "lib/__tests__/validation.test.ts",
+            "lib/__tests__/honest-box.test.ts",
+            "lib/__tests__/r-trailed-stop.test.ts",
+            "lib/__tests__/initial-stop.test.ts",
+            "lib/__tests__/trade-document.test.ts",
+            "lib/__tests__/hindsight.test.ts",
+            "lib/__tests__/stop-moves.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "UX-B",
+          "lane": "L2",
+          "agent": "swarm-2",
+          "prompt": "docs/design-2026-11-24/prompts/UX-B.md",
+          "depends": [
+            "DR-1b"
+          ],
+          "writes": [
+            "lib/challenges.ts",
+            "lib/challenge-sanitize.ts",
+            "lib/challenge-store.ts",
+            "components/ChallengeSetupSheet.tsx",
+            "components/ChallengeCard.tsx",
+            "components/ChallengeDetail.tsx",
+            "lib/commands/journal-commands.ts",
+            "lib/__tests__/challenges.test.ts",
+            "lib/__tests__/challenge-store.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "LB-A",
+          "lane": "L3",
+          "agent": "swarm-3",
+          "prompt": "docs/design-2026-11-24/prompts/LB-A.md",
+          "depends": [
+            "UX-E"
+          ],
+          "writes": [
+            "components/SessionLevelsPrimitive.ts",
+            "components/TradeChart.tsx",
+            "lib/chart-levels.ts",
+            "lib/theme.ts",
+            "app/globals.css",
+            "scripts/check-session-levels.mjs",
+            "lib/__tests__/session-levels.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "PL-2a",
+          "lane": "L4",
+          "agent": "swarm-4",
+          "prompt": "docs/design-2026-11-24/prompts/PL-2a.md",
+          "depends": [
+            "PL-1",
+            "NAV-1",
+            "DR-1a"
+          ],
+          "writes": [
+            "app/playbooks/lab/page.tsx",
+            "components/PlaybookLab.tsx",
+            "components/PlaybookBinder.tsx",
+            "components/TuneScreen.tsx",
+            "app/lab.css",
+            "app/layout.tsx",
+            "lib/__tests__/playbook-lab-ui.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "API-2b",
+          "lane": "L5",
+          "agent": "swarm-5",
+          "prompt": "docs/design-2026-11-24/prompts/API-2b.md",
+          "depends": [
+            "API-2a"
+          ],
+          "writes": [
+            "lib/agent/write-checks.ts",
+            "lib/agent/dispatch.ts",
+            "lib/agent/openapi.ts",
+            "lib/__tests__/agent-write-checks.test.ts",
+            "lib/__tests__/agent-openapi.test.ts"
+          ],
+          "needs_migration": false
+        }
+      ]
+    },
+    {
+      "wave": 5,
+      "packages": [
+        {
+          "id": "RS-4",
+          "lane": "L1",
+          "agent": "swarm-1",
+          "prompt": "docs/design-2026-11-24/prompts/RS-4.md",
+          "depends": [
+            "RS-1",
+            "RS-2",
+            "RS-3b"
+          ],
+          "writes": [
+            "components/AddTradeSheet.tsx",
+            "components/RiskRow.tsx",
+            "lib/entry-form.ts",
+            "scripts/r-size-backfill.mjs",
+            "lib/__tests__/r-size-entry-and-backfill.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "SM-3",
+          "lane": "L2",
+          "agent": "swarm-2",
+          "prompt": "docs/design-2026-11-24/prompts/SM-3.md",
+          "depends": [
+            "SM-2",
+            "RS-1",
+            "RS-3b",
+            "UX-B"
+          ],
+          "writes": [
+            "lib/commands/journal-commands.ts",
+            "lib/stop-facts.ts",
+            "lib/data-notes.ts",
+            "components/StopFacts.tsx",
+            "components/TradeDetail.tsx",
+            "lib/__tests__/stop-facts.test.ts",
+            "lib/__tests__/journal-commands.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "LB-B1",
+          "lane": "L3",
+          "agent": "swarm-3",
+          "prompt": "docs/design-2026-11-24/prompts/LB-B1.md",
+          "depends": [
+            "LB-A",
+            "IN-1"
+          ],
+          "writes": [
+            "lib/level-hit-test.ts",
+            "components/SessionLevelsPrimitive.ts",
+            "components/TradeChart.tsx",
+            "scripts/check-session-levels.mjs",
+            "lib/__tests__/level-hit-test.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "DR-2",
+          "lane": "L4",
+          "agent": "swarm-4",
+          "prompt": "docs/design-2026-11-24/prompts/DR-2.md",
+          "depends": [
+            "DR-1a",
+            "DR-1b",
+            "RS-3b",
+            "PL-2a"
+          ],
+          "writes": [
+            "app/review/day/[date]/page.tsx",
+            "components/DayReviewScreen.tsx",
+            "components/ReviewScreen.tsx",
+            "app/review-day.css",
+            "app/layout.tsx",
+            "scripts/migrate-1123-daily-review.mjs",
+            "lib/__tests__/day-review-screen.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "API-3",
+          "lane": "L5",
+          "agent": "swarm-5",
+          "prompt": "docs/design-2026-11-24/prompts/API-3.md",
+          "depends": [
+            "FB-1",
+            "SM-1",
+            "SM-2",
+            "API-2b"
+          ],
+          "writes": [
+            "app/api/v1/candles/route.ts",
+            "app/api/v1/checks/trade/route.ts",
+            "lib/agent/candles.ts",
+            "lib/agent/trade-check.ts",
+            "lib/agent/openapi.ts",
+            "lib/__tests__/agent-candles-and-check.test.ts",
+            "lib/__tests__/agent-openapi.test.ts"
+          ],
+          "needs_migration": false
+        }
+      ]
+    },
+    {
+      "wave": 6,
+      "packages": [
+        {
+          "id": "UX-C",
+          "lane": "L1",
+          "agent": "swarm-1",
+          "prompt": "docs/design-2026-11-24/prompts/UX-C.md",
+          "depends": [
+            "RS-4",
+            "SM-3"
+          ],
+          "writes": [
+            "lib/trades.ts",
+            "lib/entry-form.ts",
+            "components/AddTradeSheet.tsx",
+            "lib/commands/journal-commands.ts",
+            "lib/__tests__/future-and-range-validation.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "UX-D",
+          "lane": "L2",
+          "agent": "swarm-2",
+          "prompt": "docs/design-2026-11-24/prompts/UX-D.md",
+          "depends": [
+            "DR-2",
+            "RS-3b"
+          ],
+          "writes": [
+            "components/PitStop.tsx",
+            "components/ReviewScreen.tsx",
+            "lib/__tests__/ux-setup-and-notes.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "LB-B2",
+          "lane": "L3",
+          "agent": "swarm-3",
+          "prompt": "docs/design-2026-11-24/prompts/LB-B2.md",
+          "depends": [
+            "LB-B1",
+            "SM-3",
+            "DR-2"
+          ],
+          "writes": [
+            "components/LevelCard.tsx",
+            "components/TradeChart.tsx",
+            "components/TradeCardSheet.tsx",
+            "components/TradeDetail.tsx",
+            "app/levels.css",
+            "app/layout.tsx",
+            "lib/__tests__/level-card.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "DR-3",
+          "lane": "L4",
+          "agent": "swarm-4",
+          "prompt": "docs/design-2026-11-24/prompts/DR-3.md",
+          "depends": [
+            "DR-2",
+            "IN-1",
+            "RS-3a"
+          ],
+          "writes": [
+            "components/ReviewCard.tsx",
+            "lib/shareCard.ts",
+            "lib/day-sheet.ts",
+            "components/DayReviewScreen.tsx",
+            "lib/__tests__/review-cards-and-sheet.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "API-4",
+          "lane": "L5",
+          "agent": "swarm-5",
+          "prompt": "docs/design-2026-11-24/prompts/API-4.md",
+          "depends": [
+            "API-3",
+            "IN-2"
+          ],
+          "writes": [
+            "app/api/v1/levels/route.ts",
+            "lib/agent/levels.ts",
+            "lib/agent/openapi.ts",
+            "lib/__tests__/agent-levels.test.ts",
+            "lib/__tests__/agent-openapi.test.ts"
+          ],
+          "needs_migration": false
+        }
+      ]
+    },
+    {
+      "wave": 7,
+      "packages": [
+        {
+          "id": "PL-2b",
+          "lane": "L1",
+          "agent": "swarm-1",
+          "prompt": "docs/design-2026-11-24/prompts/PL-2b.md",
+          "depends": [
+            "PL-2a"
+          ],
+          "writes": [
+            "components/PlaybookLabMap.tsx",
+            "components/PlaybookLabGaps.tsx",
+            "components/PlaybookLab.tsx",
+            "app/lab.css",
+            "lib/__tests__/playbook-lab-map-gaps.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "FB-2",
+          "lane": "L2",
+          "agent": "swarm-2",
+          "prompt": "docs/design-2026-11-24/prompts/FB-2.md",
+          "depends": [
+            "FB-1",
+            "SM-2"
+          ],
+          "writes": [
+            "components/DataNotesChip.tsx",
+            "components/StopMovesEditor.tsx",
+            "lib/fill-match.ts",
+            "lib/__tests__/data-notes-actions.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "IN-3",
+          "lane": "L3",
+          "agent": "swarm-3",
+          "prompt": "docs/design-2026-11-24/prompts/IN-3.md",
+          "depends": [
+            "IN-1",
+            "IN-2",
+            "LB-B2",
+            "API-4"
+          ],
+          "writes": [
+            "lib/ema.ts",
+            "lib/session-indicators.ts",
+            "lib/chart-indicators.ts",
+            "components/useTradeLevels.ts",
+            "components/TradeChart.tsx",
+            "components/TradeDetail.tsx",
+            "lib/agent/levels.ts",
+            "lib/theme.ts",
+            "app/globals.css",
+            "lib/__tests__/ema.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "UX-A",
+          "lane": "L4",
+          "agent": "swarm-4",
+          "prompt": "docs/design-2026-11-24/prompts/UX-A.md",
+          "depends": [
+            "UX-D",
+            "NAV-1"
+          ],
+          "writes": [
+            "lib/day-counts.ts",
+            "components/TodayScreen.tsx",
+            "components/ReviewScreen.tsx",
+            "lib/session-review.ts",
+            "components/SessionReview.tsx",
+            "lib/__tests__/day-counts.test.ts",
+            "lib/__tests__/session-review.test.ts"
+          ],
+          "needs_migration": false
+        },
+        {
+          "id": "PL-3",
+          "lane": "L5",
+          "agent": "swarm-5",
+          "prompt": "docs/design-2026-11-24/prompts/PL-3.md",
+          "depends": [
+            "PL-1",
+            "PL-2a",
+            "API-2a",
+            "API-2b",
+            "DR-1b",
+            "UX-C"
+          ],
+          "writes": [
+            "supabase/migrations/20261124120500_mogmine_tag_registries.sql",
+            "lib/tag-registry.ts",
+            "lib/tag-registry-store.ts",
+            "components/TagRegistryEditor.tsx",
+            "components/AppShell.tsx",
+            "components/TuneScreen.tsx",
+            "lib/playbooks.ts",
+            "lib/journal-backup.ts",
+            "lib/persistence/contract.ts",
+            "lib/persistence/registry.ts",
+            "lib/persistence/local-adapter.ts",
+            "lib/persistence/supabase-adapter.ts",
+            "lib/persistence/select.ts",
+            "lib/commands/journal-commands.ts",
+            "lib/agent/http.ts",
+            "lib/agent/vocabulary.ts",
+            "lib/agent/write-checks.ts",
+            "lib/__tests__/tag-registry.test.ts",
+            "lib/__tests__/agent-http.test.ts",
+            "lib/__tests__/fake-supabase.ts",
+            "lib/__tests__/journal-commands.test.ts",
+            "lib/__tests__/persistence-contract.test.ts",
+            "lib/__tests__/persistence-local-adapter.test.ts",
+            "lib/__tests__/persistence-supabase-adapter.test.ts"
+          ],
+          "needs_migration": true
+        }
+      ]
+    }
+  ],
+  "waiting_on_chris": []
+}
