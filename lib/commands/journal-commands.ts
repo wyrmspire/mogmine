@@ -293,6 +293,9 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
       if (key !== "trades") return write(key, parsed.value, current.value.meta.updated_at);
       const trade = parsed.value as TradeRecord;
       const accountChanged = "account_id" in patch && patch.account_id !== (current.value.record as TradeRecord).account_id;
+      if (!accountChanged && trade.r_size_cents != null) {
+        return write(key, trade as CollectionRecordTypes[typeof key], current.value.meta.updated_at);
+      }
       const inputs = await rSizeInputs();
       if (!inputs.ok) return inputs;
       const frozen = withFrozenRSize(trade, inputs.value, accountChanged);

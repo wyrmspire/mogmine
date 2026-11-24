@@ -226,7 +226,8 @@ test("create refuses an out-of-range stated risk R and a fractional or out-of-ra
 });
 
 test("create freezes the R size from the trade's account, and an update re-freezes only when the account changes", async () => {
-  const commands = createJournalCommands(memoryRepos());
+  const repos = memoryRepos();
+  const commands = createJournalCommands(repos);
   await commands.create("accounts", account("acct-a", 30_000));
   await commands.create("accounts", account("acct-b", 50_000));
 
@@ -235,12 +236,20 @@ test("create freezes the R size from the trade's account, and an update re-freez
 
   // The account's R size changes later: the trade keeps its frozen $300 (D-B).
   await commands.update("accounts", "acct-a", { r_size_cents: 40_000 });
+  let accountReads = 0;
+  const listAccounts = repos.accounts.list.bind(repos.accounts);
+  repos.accounts.list = async (...args) => {
+    accountReads += 1;
+    return listAccounts(...args);
+  };
   const note = await commands.update("trades", "t-1", { note: "still $300" });
   assert.equal(note.ok && note.value.record.r_size_cents, 30_000);
+  assert.equal(accountReads, 0, "an unrelated edit does not depend on account or prefs reads");
 
   // Moving the trade to another account re-freezes from that account.
   const moved = await commands.update("trades", "t-1", { account_id: "acct-b" });
   assert.equal(moved.ok && moved.value.record.r_size_cents, 50_000);
+  assert.equal(accountReads, 1);
 });
 
 test("an unassigned trade freezes the default R size from prefs", async () => {
