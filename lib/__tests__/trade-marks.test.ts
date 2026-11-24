@@ -91,8 +91,10 @@ test("B-23 and OD-28 anchor a fill inside its bar, mark a nearby fallback, and o
 
 test("each observer finding keeps its exact bar, price, and basis, and a missing bar cannot be substituted", () => {
   const { derived, options } = setup("ex-sl");
+  // 15:45 also moves off 7595, or the exit would shift four minutes to it (FB-1 ±5-minute match).
   const bars = examples["ex-sl"].map((bar) => bar.time === utc("15:41")
-    ? { ...bar, open: 7592, low: 7592, close: 7593, high: 7593 } : bar);
+    ? { ...bar, open: 7592, low: 7592, close: 7593, high: 7593 }
+    : bar.time === utc("15:45") ? { ...bar, open: 7600, low: 7600, close: 7611, high: 7611 } : bar);
   const facts = observeTrade(derived, bars);
   const findings = buildMarks(derived, facts, "1m", "medium", false, options)
     .flatMap((mark) => mark.kind === "flag" && mark.finding

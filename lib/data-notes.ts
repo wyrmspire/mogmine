@@ -6,7 +6,7 @@
 // the bar check cannot be fully trusted. Every other note is "quiet" (muted, like `.chart-note.fact`).
 
 import { formatPrice } from "./format.ts";
-import { formatDetailTime } from "./time.ts";
+import { formatDetailTime, formatListTime } from "./time.ts";
 import type { BarCoverage, TradeBarFinding } from "./trade-bar-validation.ts";
 
 export type DataNoteId =
@@ -19,10 +19,19 @@ export type DataNoteId =
 
 export type DataNoteTone = "untrusted" | "quiet";
 
+/** A one-tap fix the UI may offer (FB-2 renders "Use HH:MM"). Nothing changes until the trader taps it. */
+export interface DataNoteAction {
+  kind: "use_matched_fill";
+  role: "entry" | "exit";
+  matchedBarTime: number;
+  label: string;
+}
+
 export interface DataNote {
   id: DataNoteId;
   text: string;
   tone: DataNoteTone;
+  action?: DataNoteAction;
 }
 
 export interface DataNoteInput {
@@ -42,7 +51,7 @@ export interface DataNoteInput {
   zone?: string;
 }
 
-const findingSentence: Record<TradeBarFinding["code"], (price: string, time: string) => string> = {
+const findingSentence: Record<Exclude<TradeBarFinding["code"], "fill_time_shifted">, (price: string, time: string) => string> = {
   stop_traded_through: (price, time) => `The ${time} bar reached or passed the recorded stop at ${price} while the position was open.`,
   target_traded_through: (price, time) => `The ${time} bar reached or passed the unfilled target at ${price} while the position was open.`,
   fill_outside_bar: (price, time) => `The recorded fill at ${price} is outside the ${time} bar by more than the price tolerance.`,
@@ -66,15 +75,31 @@ export function collectDataNotes(input: DataNoteInput): DataNote[] {
   if (input.coverage === "complete" && input.chronologyUnresolved) {
     notes.push({ id: "same_bar_unresolved", text: "Entry and exit sit in the same bar, so this check cannot establish order between them.", tone: "quiet" });
   }
-  for (const { code, segment, barTime, price, basis } of input.findings) {
+  for (const finding of input.findings) {
+    const { code, segment, barTime, price, basis } = finding;
+    const id: DataNoteId = `${code}:${barTime}:${price}:${segment}`;
+    if (code === "fill_time_shifted") {
+      notes.push(shiftedFillNote(finding, id, input.zone));
+      continue;
+    }
     const sentence = findingSentence[code](formatPrice(price, input.symbol), formatDetailTime(barTime, input.zone));
-    notes.push({
-      id: `${code}:${barTime}:${price}:${segment}`,
-      text: basis === "inferred" ? `≈ ${sentence}` : sentence,
-      tone: "quiet",
-    });
+    notes.push({ id, text: basis === "inferred" ? `≈ ${sentence}` : sentence, tone: "quiet" });
   }
   return notes;
+}
+
+// FB-1: the trader's logged minute stays as recorded. This note says where the fill traded and offers the matched minute.
+function shiftedFillNote(finding: TradeBarFinding, id: DataNoteId, zone?: string): DataNote {
+  const role = finding.role ?? "entry";
+  const matched = formatListTime(finding.barTime, zone);
+  const logged = formatListTime(finding.statedBarTime ?? finding.barTime, zone);
+  const label = role === "exit" ? "Exit" : "Entry";
+  return {
+    id,
+    text: `${label} drawn on the ${matched} bar; you logged ${logged}.`,
+    tone: "quiet",
+    action: { kind: "use_matched_fill", role, matchedBarTime: finding.barTime, label: `Use ${matched}` },
+  };
 }
 
 const COVERAGE_MISSING: DataNote = {

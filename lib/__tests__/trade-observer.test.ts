@@ -110,7 +110,7 @@ test("fill alignment uses the shared four-tick threshold and skips voided execut
     { seq: 10, t: "2026-11-12T15:36:00Z", type: "void", ref: 9, basis: "broker" },
   );
   const result = observeTrade(deriveTrade(doc), bars([
-    ["15:34", 7598, 7599], ["15:35", 7598, 7601], ["15:52", 7608, 7608.75],
+    ["15:34", 7598, 7599], ["15:35", 7598, 7599.5], ["15:52", 7608, 7608.75],
   ]));
   assert.deepEqual(result.findings, [finding("fill_outside_bar", "15:52", 7610, 7)]);
 });
@@ -192,7 +192,7 @@ test("target fills count by order and remaining quantity, and reprices stay loca
   ];
   const derived = deriveTrade(doc);
   const prices = bars([
-    ["15:37", 7602, 7612], ["15:42", 7601, 7606], ["15:45", 7601, 7612], ["15:47", 7601, 7611],
+    ["15:37", 7600, 7612], ["15:42", 7601, 7606], ["15:45", 7601, 7612], ["15:47", 7601, 7611],
   ]);
   assert.deepEqual(observeTrade(derived, prices).findings, [
     finding("target_traded_through", "15:42", 7605, "t1"),

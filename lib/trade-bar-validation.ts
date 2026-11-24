@@ -1,9 +1,10 @@
 import { laterTouch } from "./hindsight.ts";
 import type { HindsightOutcome, LaterTouch } from "./hindsight.ts";
+import { matchFill } from "./fill-match.ts";
 import { expectedInsideBarTimes, isRegularTradingBarInterval, sessionCloseUtc } from "./session.ts";
 import { stopAtExit } from "./trade-document.ts";
 import type { DerivedTrade, EventBasis, PositionPoint, WorkingOrderSegment } from "./trade-document.ts";
-import { excursionsFromBars, fillInsideBar, isWholeQuantity } from "./trades.ts";
+import { excursionsFromBars, isWholeQuantity } from "./trades.ts";
 import type { Candle, Excursions, TradeDirection, TradeRecord } from "./trades.ts";
 
 export type TradeBarIssueCode =
@@ -119,12 +120,24 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
 }
 
 export interface TradeBarFinding {
-  code: "stop_traded_through" | "target_traded_through" | "fill_outside_bar";
+  code: "stop_traded_through" | "target_traded_through" | "fill_outside_bar" | "fill_time_shifted";
   barTime: number;
   price: number;
   basis: EventBasis;
   /** Stop path index, target key or order ID, or fill sequence. */
   segment: number | string;
+  /** `fill_time_shifted` only: the stated minute's bar that the trader's logged time points at. */
+  statedBarTime?: number;
+  /** `fill_time_shifted` only: matched bar minus stated bar, in minutes. */
+  offsetMin?: number;
+  /** `fill_time_shifted` only: which fill moved. */
+  role?: "entry" | "exit";
+}
+
+/** A fill whose price resolved to a bar (FB-1). `shifted` means it traded in a different minute than logged. */
+export interface FillBarMatch {
+  barTime: number;
+  shifted: boolean;
 }
 
 export interface NotTakenPlanHindsight {
@@ -145,6 +158,8 @@ export interface ObservedTrade {
   coverage: BarCoverage;
   chronology: ChronologyResolution;
   findings: TradeBarFinding[];
+  /** Keyed by fill `seq`. Set for fills that resolved to a bar (FB-1). Marks anchor on these bars. */
+  fillMatches?: ReadonlyMap<number, FillBarMatch>;
   excursions: Excursions | null;
   hindsight: {
     last_stop_touch: LaterTouch | null;
@@ -291,25 +306,53 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
   if (!bars.length) return result;
   // On an open trade the newest bar may still be forming.
   const newestBarTime = bars[bars.length - 1].time;
-  const windows = positionWindows(fills, closed ? exit : newestBarTime);
+  const matchBars = closed ? bars : bars.filter((bar) => bar.time < newestBarTime);
+  // FB-1: match each checkable fill to the bar its price traded in, in time order. A shifted fill
+  // takes its matched bar as its effective time for position windows. Stored times are never changed.
+  const timeline: PositionPoint[] = [];
+  const checkedBars: number[] = [];
+  const fillMatches = new Map<number, FillBarMatch>();
+  let notBefore: number | undefined;
+  for (const fill of fills) {
+    const time = barOpen(Date.parse(fill.t));
+    if (!closed && time + barMs > newestBarTime) {
+      timeline.push(fill);
+      continue;
+    }
+    checkedBars.push(time);
+    const match = matchFill(matchBars, fill.t, fill.price, symbol, { role: fill.role, notBefore, barMinutes });
+    if (match.kind === "shifted") {
+      notBefore = match.barTime;
+      fillMatches.set(fill.seq, { barTime: match.barTime, shifted: true });
+      timeline.push({ ...fill, t: new Date(match.barTime).toISOString() });
+      result.findings.push({
+        code: "fill_time_shifted", barTime: match.barTime, price: fill.price, basis: "inferred", segment: fill.seq,
+        statedBarTime: match.statedBarTime, offsetMin: match.offsetMin, role: fill.role,
+      });
+      continue;
+    }
+    timeline.push(fill);
+    if (match.kind === "stated") {
+      notBefore = match.barTime;
+      fillMatches.set(fill.seq, { barTime: match.barTime, shifted: false });
+    } else if (match.kind === "outside") {
+      // OD-28 resolves a missing logged minute to a nearby base bar first; that resolved bar is the evidence
+      // used by the exact-range search and the existing four-tick fallback.
+      result.findings.push({
+        code: "fill_outside_bar", barTime: match.barTime, price: fill.price, basis: "inferred", segment: fill.seq,
+      });
+    }
+  }
+  result.fillMatches = fillMatches;
+
+  const windows = positionWindows(timeline, closed ? exit : newestBarTime);
   const expected = closed ? windows.flatMap(({ from, to }) => expectedInsideBarTimes(from, to, barMs, symbol)) : [];
   const inside = closed
     ? expected.flatMap((time) => barsByTime.get(time) ?? [])
     : bars.filter((bar) => windows.some(({ from, to }) => bar.time >= from && bar.time + barMs <= to)
         && isRegularTradingBarInterval(symbol, bar.time, barMs));
 
-  const required = new Set(expected);
-  for (const fill of fills) {
-    const time = barOpen(Date.parse(fill.t));
-    if (!closed && time + barMs > newestBarTime) continue;
-    required.add(time);
-    const bar = barsByTime.get(time);
-    if (bar && !fillInsideBar(fill.price, bar, symbol)) {
-      result.findings.push({
-        code: "fill_outside_bar", barTime: time, price: fill.price, basis: "inferred", segment: fill.seq,
-      });
-    }
-  }
+  const required = new Set([...expected, ...checkedBars]);
   const available = [...required].filter((time) => barsByTime.has(time)).length;
   if (closed && available > 0 && available === required.size) result.coverage = "complete";
   else if (available > 0 || inside.length > 0) result.coverage = "partial";
