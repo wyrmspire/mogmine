@@ -13,6 +13,7 @@ import { getPlaybooksBackup, restorePlaybooks } from "@/lib/playbooks-store";
 import { getPlansBackup, restorePlans } from "@/lib/plans-store";
 import { getDrillsBackup, restoreDrills } from "@/lib/drills-store";
 import { getCallsBackup, restoreCalls } from "@/lib/calls-store";
+import { getDailyReviewsBackup, restoreDailyReviews } from "@/lib/daily-review-store";
 import { PlaybookEditor } from "./PlaybookEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -85,7 +86,7 @@ export function TuneScreen() {
   const sampleCount = journal.trades.length - realCount;
 
   const downloadBackup = () => {
-    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup(), getDrillsBackup(), getCallsBackup());
+    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup(), getDrillsBackup(), getCallsBackup(), getDailyReviewsBackup());
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -133,6 +134,8 @@ export function TuneScreen() {
     if (pending.drills) restoreDrills(pending.drills);
     // Calls merge by id the same way, and this device's copy of an edited call wins (DC-2).
     if (pending.calls) restoreCalls(pending.calls);
+    // An older backup has no daily reviews: keep this device's reviews (docs/06 §2.1).
+    if (pending.daily_reviews) restoreDailyReviews(pending.daily_reviews);
     const total = pending.trades.length;
     setPending(null);
     setError(null);
