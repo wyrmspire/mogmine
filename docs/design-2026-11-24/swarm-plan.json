@@ -750,6 +750,35 @@
           "needs_migration": true
         }
       ]
+    },
+    {
+      "wave": 8,
+      "packages": [
+        {
+          "id": "VOL-1",
+          "lane": "L3",
+          "agent": "swarm-3",
+          "prompt": "docs/design-2026-11-24/prompts/VOL-1.md",
+          "depends": [
+            "UX-E",
+            "IN-2",
+            "IN-3"
+          ],
+          "writes": [
+            "lib/volume.ts",
+            "components/VolumePane.ts",
+            "components/TradeChart.tsx",
+            "components/TradeDetail.tsx",
+            "lib/prefs-sanitize.ts",
+            "lib/theme.ts",
+            "app/globals.css",
+            "lib/candles.ts",
+            "lib/session-indicators.ts",
+            "lib/__tests__/volume.test.ts"
+          ],
+          "needs_migration": false
+        }
+      ]
     }
   ],
   "waiting_on_chris": []
