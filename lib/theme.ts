@@ -28,6 +28,8 @@ export interface ChartTheme {
   levelAdr: string;
   levelNeutral: string;
   levelLabelText: string;
+  /** Opacity of the level pill's background over the chart (`--level-label-bg-alpha`, LB-2). Optional: literal themes (shareCard) omit it and paint at 0.95. */
+  levelLabelBgAlpha?: number;
   vwap: string;
   /** Chart surface and label tokens (docs/design-2026-11-24/08 §4.1). */
   crosshairLabel: string;
@@ -52,6 +54,7 @@ function read(): ChartTheme {
   const style = getComputedStyle(document.documentElement);
   const value = (name: string) => style.getPropertyValue(name).trim() || NEUTRAL;
   const opacity = Number.parseFloat(style.getPropertyValue("--position-box-opacity"));
+  const labelAlpha = Number.parseFloat(style.getPropertyValue("--level-label-bg-alpha"));
   return {
     chartBg: value("--chart-bg"),
     gridH: value("--chart-grid-h"),
@@ -79,6 +82,7 @@ function read(): ChartTheme {
     levelAdr: value("--level-adr"),
     levelNeutral: value("--level-neutral"),
     levelLabelText: value("--level-label-text"),
+    levelLabelBgAlpha: Number.isFinite(labelAlpha) ? labelAlpha : 0.95,
     vwap: value("--indicator-vwap"),
     crosshairLabel: value("--chart-crosshair-label"),
     zoneReward: value("--zone-reward"),
