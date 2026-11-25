@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PastSessionReviews } from "./PastSessionReviews";
 import { PitStop } from "./PitStop";
 import { RStrip } from "./RStrip";
@@ -12,6 +12,8 @@ import { formatDuration, formatMoney, formatPoints, formatPrice, formatR } from 
 import { setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
+import { dayStatus, recentTradingDays } from "@/lib/day-review-screen";
+import { useDailyReviewsStore } from "@/lib/daily-review-store";
 import { updateTrade, useJournal } from "@/lib/store";
 import { formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -37,6 +39,31 @@ const DAY_CHIP_LIMIT = 14;
 function dayChipLabel(date: string) {
   const day = new Date(`${date}T00:00:00Z`);
   return `${WEEKDAYS[day.getUTCDay()]} ${day.getUTCDate()}`;
+}
+
+/** Days strip (06 §3): last 14 trading days, each linking to its day review. */
+function DaysStrip() {
+  const { reviews } = useDailyReviewsStore();
+  const [today] = useState(() => sessionDate(Date.now()));
+  const days = useMemo(() => recentTradingDays(today), [today]);
+  return (
+    <nav className="review-days" aria-label="Last 14 trading days">
+      <ol className="review-days-track">
+        {days.map((date) => {
+          const status = dayStatus(reviews, date);
+          const text = status === "done" ? "done ✓" : status === "draft" ? "draft" : "—";
+          return (
+            <li key={date}>
+              <Link className={`review-day is-${status}`} href={`/review/day/${date}`} aria-label={`Review ${dayChipLabel(date)}, ${text}`}>
+                <span className="review-day-date">{dayChipLabel(date)}</span>
+                <span className="review-day-status">{text}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
 }
 
 /** One trade at a time, untagged first, so a session's tagging is finished in about a minute (docs/05 §2C). */
@@ -88,6 +115,7 @@ function Queue() {
     return (
       <div className="page" style={{ maxWidth: 720 }}>
         <div className="page-head"><div><span className="eyebrow">Review queue</span><h1>All caught up</h1></div></div>
+        <DaysStrip />
         {dayChips}
         <div className="specular-card empty-state">
           <h3>{ids.length ? `${done} of ${ids.length} reviewed this pass` : "Nothing is waiting"}</h3>
@@ -122,6 +150,7 @@ function Queue() {
         <div><span className="eyebrow">Review queue</span><h1>{position + 1} of {ids.length}</h1><p>Playbook, tags, one line. Then mark it reviewed.</p></div>
         <Link className="btn-secondary drill-link" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills</Link>
       </div>
+      <DaysStrip />
       {dayChips}
 
       <section className="specular-card queue-card" aria-label={`Trade ${position + 1} of ${ids.length}`}>
