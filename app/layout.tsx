@@ -6,6 +6,7 @@ import "./globals.css";
 import "./chart-polish.css";
 import "./lab.css";
 import "./review-day.css";
+import "./levels.css";
 
 // Loaded by next/font (self-hosted at build time, no runtime request to Google).
 // globals.css builds --font-sans / --font-mono on top of these variables.
