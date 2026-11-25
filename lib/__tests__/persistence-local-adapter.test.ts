@@ -38,7 +38,11 @@ test("local: writes use the keys and shapes the UI stores already read", async (
   assert.deepEqual(trades.map((trade) => trade.id), ["t-1"]);
 
   await repo.mood_registry.put(DEFAULT_OWNER_USER_ID, DEFAULT_MOOD_REGISTRY);
-  await repo.prefs.put(DEFAULT_OWNER_USER_ID, { shield: true, goldPreset: "bullion", goldIntensity: 0.5, boxOpacity: 0.4, palette: "classic", timeZone: "America/New_York", showSamples: true, blindReview: false, riskBudgetUsd: 100 });
+  await repo.prefs.put(DEFAULT_OWNER_USER_ID, {
+    shield: true, goldPreset: "bullion", goldIntensity: 0.5, boxOpacity: 0.4, palette: "classic",
+    timeZone: "America/New_York", showSamples: true, blindReview: false, riskBudgetUsd: 100,
+    vwapAnchor: "off", levelLabels: "tap", ema200: false, reviewCardOrientation: "portrait",
+  });
   const mood = JSON.parse(store.getItem("mogmine-mood-v1") ?? "null") as Record<string, unknown>;
   assert.ok(mood.registry && typeof mood.registry === "object", "registry kept in the mood blob");
   assert.ok(JSON.parse(store.getItem("mogmine-prefs-v1") ?? "null").shield === true);

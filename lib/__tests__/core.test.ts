@@ -618,6 +618,10 @@ test("journal backup round-trips trades (notes, prices, tags, checklist, playboo
     showSamples: false,
     blindReview: true,
     riskBudgetUsd: 300,
+    vwapAnchor: "off",
+    levelLabels: "tap",
+    ema200: false,
+    reviewCardOrientation: "portrait",
   });
 
   assert.equal(backup.app, "mogmine");
