@@ -102,20 +102,20 @@ export interface TuneRiskBudgetDisplay {
 export function getTuneRiskBudgetDisplay(shield: boolean, riskBudgetUsd: number): TuneRiskBudgetDisplay {
   if (shield) {
     return {
-      label: "Risk budget",
+      label: "Default R size",
       valueText: "Hidden",
       inputValue: "Hidden",
-      inputAriaLabel: "Risk budget (hidden while Shield mode is on)",
+      inputAriaLabel: "Default R size (hidden while Shield mode is on)",
       isEditable: false,
-      hint: "Used by manual entry to suggest stop distance and by Trade Detail risk chips. Turn Shield mode off to change the dollar amount.",
+      hint: "Used for accounts without their own R size. Turn Shield mode off to change the dollar amount.",
     };
   }
   return {
-    label: "Risk budget ($ USD)",
+    label: "Default R size ($ USD)",
     valueText: `$${riskBudgetUsd}`,
     inputValue: String(riskBudgetUsd),
-    inputAriaLabel: "Risk budget in US dollars",
+    inputAriaLabel: "Default R size in US dollars",
     isEditable: true,
-    hint: "Used by manual entry to suggest stop distance and by Trade Detail risk chips (default $250).",
+    hint: "Used for accounts without their own R size and trades with no account (default $250).",
   };
 }

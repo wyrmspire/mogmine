@@ -135,13 +135,13 @@ test("shield toggle updates prefs correctly", () => {
 test("getTuneRiskBudgetDisplay masks amounts and disables editing when Shield is on", () => {
   const shielded = getTuneRiskBudgetDisplay(true, 250);
   assert.equal(shielded.isEditable, false);
-  assert.equal(shielded.label, "Risk budget");
+  assert.equal(shielded.label, "Default R size");
   assert.equal(shielded.valueText, "Hidden");
   assert.equal(shielded.inputValue, "Hidden");
-  assert.equal(shielded.inputAriaLabel, "Risk budget (hidden while Shield mode is on)");
+  assert.equal(shielded.inputAriaLabel, "Default R size (hidden while Shield mode is on)");
   assert.equal(
     shielded.hint,
-    "Used by manual entry to suggest stop distance and by Trade Detail risk chips. Turn Shield mode off to change the dollar amount."
+    "Used for accounts without their own R size. Turn Shield mode off to change the dollar amount."
   );
 
   // Strict check: no dollar signs, no numbers (e.g. 250), and no "USD"
@@ -158,13 +158,13 @@ test("getTuneRiskBudgetDisplay masks amounts and disables editing when Shield is
 test("getTuneRiskBudgetDisplay preserves editable dollar amounts when Shield is off", () => {
   const unshielded = getTuneRiskBudgetDisplay(false, 250);
   assert.equal(unshielded.isEditable, true);
-  assert.equal(unshielded.label, "Risk budget ($ USD)");
+  assert.equal(unshielded.label, "Default R size ($ USD)");
   assert.equal(unshielded.valueText, "$250");
   assert.equal(unshielded.inputValue, "250");
-  assert.equal(unshielded.inputAriaLabel, "Risk budget in US dollars");
+  assert.equal(unshielded.inputAriaLabel, "Default R size in US dollars");
   assert.equal(
     unshielded.hint,
-    "Used by manual entry to suggest stop distance and by Trade Detail risk chips (default $250)."
+    "Used for accounts without their own R size and trades with no account (default $250)."
   );
 
   const custom = getTuneRiskBudgetDisplay(false, 500);
