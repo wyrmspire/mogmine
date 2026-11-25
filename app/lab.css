@@ -1,0 +1,59 @@
+/* Playbook Lab (docs/design-2026-11-24/01 §4). Mobile-first at 390×844; the page never scrolls sideways. */
+
+.lab-page { overflow-x: clip; }
+
+/* Binder | Lab header, shared by /playbooks and /playbooks/lab. */
+.lab-mode { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--bg-inset); border: 1px solid var(--border-subtle); margin-bottom: 12px; }
+.lab-mode a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 76px; padding: 0 14px; border-radius: 9px; color: var(--text-muted); font-weight: 800; font-size: 0.8125rem; text-decoration: none; }
+.lab-mode a[aria-current="page"] { background: var(--bg-elevated); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border-strong); }
+
+/* Summary counts. */
+.lab-counts { display: grid; gap: 4px; font-size: 0.8125rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.lab-counts b { color: var(--text-primary); font-weight: 800; }
+
+/* Include-samples switch: the whole row is the 44 px target. */
+.lab-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; width: 100%; padding: 0 2px; border: 0; background: none; color: var(--text-primary); font-size: 0.8125rem; font-weight: 700; text-align: left; }
+.lab-switch small { display: block; color: var(--text-muted); font-weight: 500; font-size: 0.6875rem; }
+
+/* Sticky segmented switch: [ Playbooks ] [ Tags ] [ Map ] [ Gaps ]. */
+.lab-tabs { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; margin: 10px 0 14px; border-radius: 12px; background: var(--bg-inset); border: 1px solid var(--border-subtle); }
+.lab-tabs a { display: flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 9px; color: var(--text-muted); font-weight: 800; font-size: 0.75rem; text-decoration: none; }
+.lab-tabs a[aria-current="page"] { background: var(--bg-elevated); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border-strong); }
+
+.lab-panel { display: grid; gap: 10px; }
+.lab-panel h2 { font-size: 0.9375rem; letter-spacing: -0.01em; margin-top: 8px; }
+.lab-group-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-top: 6px; }
+
+/* Cards and rows. */
+.lab-card { display: grid; gap: 8px; padding: 14px; border-radius: var(--radius); background: var(--bg-surface); border: 1px solid var(--border-subtle); min-width: 0; }
+.lab-card h3 { font-size: 0.9375rem; letter-spacing: -0.01em; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.lab-card a.lab-title { color: var(--text-primary); text-decoration: none; }
+.lab-meta { font-size: 0.75rem; color: var(--text-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.lab-row { display: flex; flex-direction: column; gap: 4px; min-height: 44px; padding: 12px 14px; border-radius: var(--radius); background: var(--bg-surface); border: 1px solid var(--border-subtle); color: var(--text-primary); text-decoration: none; min-width: 0; }
+.lab-row-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-weight: 800; }
+.lab-badge { font-size: 0.6875rem; color: var(--text-muted); font-weight: 700; }
+.lab-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.lab-actions a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--border-strong); color: var(--text-primary); font-weight: 700; font-size: 0.8125rem; text-decoration: none; }
+
+/* Horizontal count bars: fill is the count's share of the largest bar in the group. */
+.lab-bars, .lab-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.lab-bar { display: grid; color: var(--text-primary); text-decoration: none; min-height: 44px; align-content: center; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.lab-bar-track { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--border-strong); overflow: hidden; }
+.lab-bar-fill { display: block; height: 100%; width: calc(var(--share, 0) * 100%); background: var(--gold-mid); border-radius: 3px; }
+
+/* Example rows: Sparkline thumbnails only (B-42). */
+.lab-examples { display: grid; gap: 6px; }
+.lab-example { display: flex; align-items: center; gap: 10px; min-height: 44px; color: var(--text-primary); text-decoration: none; font-size: 0.8125rem; min-width: 0; }
+.lab-example span { min-width: 0; overflow-wrap: anywhere; }
+
+.lab-archived summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--text-muted); font-weight: 700; font-size: 0.8125rem; }
+.lab-archived[open] summary { color: var(--text-primary); }
+
+.lab-note { font-size: 0.8125rem; color: var(--text-muted); }
+.lab-unknown { border-color: var(--border-strong); }
+
+/* 390×844 first; wider screens get two columns, never horizontal page scroll. */
+@media (min-width: 760px) {
+  .lab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .lab-tabs { max-width: 520px; }
+}

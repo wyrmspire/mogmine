@@ -11,6 +11,16 @@ import { usePlaybooks } from "@/lib/playbooks-store";
 import { usePrefs } from "@/lib/prefs";
 import { useJournal } from "@/lib/store";
 
+// Binder | Lab header (01 §2). Shared with the Lab page; a plain link pair, so it works with no client state.
+export function PlaybookModeTabs({ active }: { active: "binder" | "lab" }) {
+  return (
+    <nav className="lab-mode" aria-label="Playbook views">
+      <Link href="/playbooks" aria-current={active === "binder" ? "page" : undefined} style={{ minHeight: 44 }}>Binder</Link>
+      <Link href="/playbooks/lab" aria-current={active === "lab" ? "page" : undefined} style={{ minHeight: 44 }}>Lab</Link>
+    </nav>
+  );
+}
+
 export function PlaybookBinder() {
   const journal = useJournal();
   const playbooks = usePlaybooks();
@@ -36,6 +46,7 @@ export function PlaybookBinder() {
   if (open) {
     return (
       <div className="page binder-page">
+        <PlaybookModeTabs active="binder" />
         <div className="page-head">
           <div><span className="eyebrow">Binder</span><h1>{open.name}</h1></div>
           <button type="button" className="btn-secondary" onClick={() => setOpenId(null)} aria-label="Back to all playbooks in binder" style={{ minHeight: 44 }}>All playbooks</button>
@@ -47,6 +58,7 @@ export function PlaybookBinder() {
 
   return (
     <div className="page binder-page">
+      <PlaybookModeTabs active="binder" />
       <div className="page-head">
         <div><span className="eyebrow">Binder</span><h1>Playbooks</h1><p>Each setup, its best example and how it has gone.</p></div>
         <Link className="btn-secondary" href="/tune#playbooks" aria-label="Edit playbooks in Tune" style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}>Edit playbooks</Link>
