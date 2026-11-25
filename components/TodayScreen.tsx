@@ -13,6 +13,7 @@ import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { groupByDay, parseSessionDateParam, resolveViewedDate, stepRegularSessionDate, withSamples } from "@/lib/selectors";
 import type { DayGroup } from "@/lib/selectors";
+import { dayTradeCounts, formatDayTradeHeader, formatReviewQueueSummary } from "@/lib/day-counts";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { useJournal } from "@/lib/store";
 import { openAddTrade, rememberList, useToday } from "@/lib/ui";
@@ -77,8 +78,9 @@ function TodayView() {
   const unreviewed = trades.filter((trade) => trade.review_status !== "reviewed").length;
   const open = (group: DayGroup) => () => rememberList({ ids: group.trades.map((trade) => trade.id), label: formatSessionDate(group.date), href: dayHref(group.date) });
 
+  // UX-04: one rule for the header ("1 trade today (0 closed)"). Past days keep their own session wording.
   const subtitle = viewingToday
-    ? closed ? "Markets are closed for the weekend." : focus ? `${focus.stats.count} ${tradeWord(focus.stats.count)} this session` : "No trades yet this session"
+    ? formatDayTradeHeader(dayTradeCounts(trades, viewedDate), closed)
     : focus ? `${focus.stats.count} ${tradeWord(focus.stats.count)} that session` : "No trades that session";
 
   return (
@@ -159,7 +161,7 @@ function TodayView() {
         </div>
 
         <aside aria-label="Review queue">
-          <div className="section-title" style={{ marginTop: previous || focus ? 20 : 0 }}><h2>Review queue</h2><span>{unreviewed ? `${unreviewed} open` : ""}</span></div>
+          <div className="section-title" style={{ marginTop: previous || focus ? 20 : 0 }}><h2>Review queue</h2><span>{formatReviewQueueSummary(unreviewed, needsTags)}</span></div>
           {unreviewed === 0 ? (
             <div className="card card-pad muted" style={{ fontSize: 13 }}>All caught up.</div>
           ) : (

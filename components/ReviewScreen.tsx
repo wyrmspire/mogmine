@@ -9,6 +9,7 @@ import { ReviewChart } from "./ReviewChart";
 import { MoodShape, useTradeMood } from "./MoodShape";
 import { describeMood } from "@/lib/mood";
 import { formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
+import { formatReviewQueueSummary } from "@/lib/day-counts";
 import { setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
@@ -110,17 +111,19 @@ function Queue() {
 
   const trade = journal.trades.find((item) => item.id === ids[position]);
   const done = ids.filter((id) => journal.trades.find((item) => item.id === id)?.review_status === "reviewed").length;
+  // UX-05: the same wording and the same "needs tags" count as the Today queue and the nav badge.
+  const queueSummary = formatReviewQueueSummary(pending.length, pending.filter((item) => item.review_status === "new").length);
 
   if (!trade) {
     return (
       <div className="page" style={{ maxWidth: 720 }}>
-        <div className="page-head"><div><span className="eyebrow">Review queue</span><h1>All caught up</h1></div></div>
+        <div className="page-head"><div><span className="eyebrow">Review queue</span><h1>All caught up</h1>{queueSummary && <p className="muted num">{queueSummary}</p>}</div></div>
         <DaysStrip />
         {dayChips}
         <div className="specular-card empty-state">
           <h3>{ids.length ? `${done} of ${ids.length} reviewed this pass` : "Nothing is waiting"}</h3>
           <p>{ids.length && done < ids.length ? "Skipped trades stay in the queue for next time." : "Every trade has been reviewed."}</p>
-          <div className="actions"><Link className="btn-secondary" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/feed">Open the feed</Link><Link className="btn-secondary" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills: Take it?</Link></div>
+          <div className="actions"><Link className="btn-secondary" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/feed">Open the feed</Link><Link className="btn-secondary" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills: Take it?</Link><Link className="btn-secondary" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/playbooks/lab">Playbook Lab</Link></div>
         </div>
         <PastSessionReviews />
       </div>
@@ -147,7 +150,7 @@ function Queue() {
   return (
     <div className="page" style={{ maxWidth: 720 }}>
       <div className="page-head">
-        <div><span className="eyebrow">Review queue</span><h1>{position + 1} of {ids.length}</h1><p>Playbook, tags, one line. Then mark it reviewed.</p></div>
+        <div><span className="eyebrow">Review queue</span><h1>{position + 1} of {ids.length}</h1><p>Playbook, tags, one line. Then mark it reviewed.</p>{queueSummary && <p className="muted num">{queueSummary}</p>}</div>
         <Link className="btn-secondary drill-link" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills</Link>
       </div>
       <DaysStrip />
