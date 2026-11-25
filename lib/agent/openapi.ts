@@ -323,6 +323,33 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           errors: [...ERROR_STATUSES_READ, 422],
         }),
       },
+      "/levels": {
+        get: operation({
+          operationId: "getLevels",
+          summary: "Session levels, planned levels and Session VWAP as they stood at as_of (point-in-time, nothing stored)",
+          description:
+            "symbol MES or MNQ (MES reads MES=F). session_date is the trading day (YYYY-MM-DD). as_of is an ISO time with a zone, not in " +
+            "the future; it defaults to now. Only 1m bars that had closed by as_of are used, so nothing after it can leak in. " +
+            "computed: the LV-1 levels (PDH, PDL, RTH open/high/low, 3 PM close, Globex open, ONH, ONL, week high and low), each with " +
+            "value, formed_at and the coverage of its window. withheld: each candle level that cannot be stated yet, with a reason " +
+            "(gaps, no-bars, not-loaded, needs-1m, not-yet) and missing_bars; a withheld level has no value. PDC, pivots and ADR are not " +
+            "computed here (no settlement or ADR input is loaded). session_so_far: today's RTH high and low up to as_of. planned: the " +
+            "owner's plan levels for the date as they stood at as_of, with plan_id, plan_name, revision_id (null when the current levels " +
+            "were in force) and role (level, zone_low or zone_high). vwap.rth: Session VWAP from 09:30 ET, strict (approximate is always " +
+            "false). vwap.globex: VWAP from 18:00 ET, approximate true when small overnight gaps were tolerated (at most 3% of expected " +
+            "bars, a single gap of at most 15 minutes, none after 09:30 ET). A value is null with unavailable_reason not-yet or gaps. " +
+            "provenance: provider, timeframe, levels_calc_version (lv-1), indicators_calc_version, as_of and session_date. " +
+            "Upstream Yahoo calls share the candle limit (429 when exceeded). Nothing is stored.",
+          scope: "read",
+          parameters: [
+            { name: "symbol", in: "query", required: true, schema: { type: "string", enum: ["MES", "MNQ"] } },
+            { name: "session_date", in: "query", required: true, schema: { type: "string", format: "date", example: "2026-11-25" } },
+            { name: "as_of", in: "query", schema: { type: "string", format: "date-time" } },
+          ],
+          success: { status: 200, description: "computed, withheld, session_so_far, planned, vwap and provenance." },
+          errors: [...ERROR_STATUSES_READ, 422],
+        }),
+      },
       "/checks/trade": {
         post: operation({
           operationId: "checkTrade",

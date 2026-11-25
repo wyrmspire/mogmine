@@ -36,7 +36,7 @@ function routeFiles(dir: string): string[] {
 }
 
 const API = path.join(process.cwd(), "app/api/v1");
-const ROUTE_PAIRS = ["candles", "checks", "guide", "me", "records", "singletons", "vocabulary"]
+const ROUTE_PAIRS = ["candles", "checks", "guide", "levels", "me", "records", "singletons", "vocabulary"]
   .flatMap((group) => routeFiles(path.join(API, group)))
   .flatMap((file) => {
     const rel = path.relative(API, path.dirname(file)).split(path.sep).join("/");
@@ -61,7 +61,7 @@ test("spec: bearer auth is declared and applied to every operation by default", 
 });
 
 test("spec: the (path, method) pairs are exactly the methods the route files export", () => {
-  assert.equal(ROUTE_PAIRS.length, 13, "sanity: the v1 surface has thirteen operations");
+  assert.equal(ROUTE_PAIRS.length, 14, "sanity: the v1 surface has fourteen operations");
   const specPairs = opsOf().map(([method, route]) => `${method} ${route}`).sort();
   assert.deepEqual(specPairs, ROUTE_PAIRS);
 });
@@ -69,7 +69,7 @@ test("spec: the (path, method) pairs are exactly the methods the route files exp
 test("spec: operationIds are unique camelCase and exactly the agreed set", () => {
   const ids = opsOf().map(([, , op]) => op.operationId as string);
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual([...ids].sort(), ["archiveRecord", "checkTrade", "createRecord", "deleteRecord", "getCandles", "getGuide", "getMe", "getRecord", "getSingleton", "getVocabulary", "listRecords", "putSingleton", "updateRecord"]);
+  assert.deepEqual([...ids].sort(), ["archiveRecord", "checkTrade", "createRecord", "deleteRecord", "getCandles", "getGuide", "getLevels", "getMe", "getRecord", "getSingleton", "getVocabulary", "listRecords", "putSingleton", "updateRecord"]);
 });
 
 test("spec: path enums come from the registry constants (type excludes candles, key lists the singletons)", () => {
