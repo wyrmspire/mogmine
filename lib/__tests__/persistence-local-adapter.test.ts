@@ -7,6 +7,7 @@ import type { KeyValueStore } from "../persistence/local-adapter.ts";
 import { chooseAdapter, createAdapter, createUnavailableAdapter } from "../persistence/select.ts";
 import { DEFAULT_OWNER_USER_ID } from "../trades.ts";
 import { DEFAULT_MOOD_REGISTRY } from "../mood.ts";
+import { DEFAULT_TAG_REGISTRY, addTag } from "../tag-registry.ts";
 import { runPersistenceContractSuite, sampleTrade } from "./persistence-contract-suite.ts";
 
 const mock = () => createLocalAdapter({ kind: "mock", store: createMemoryKeyValueStore(), candles: createMemoryCandleStore() });
@@ -46,6 +47,22 @@ test("local: writes use the keys and shapes the UI stores already read", async (
   const mood = JSON.parse(store.getItem("mogmine-mood-v1") ?? "null") as Record<string, unknown>;
   assert.ok(mood.registry && typeof mood.registry === "object", "registry kept in the mood blob");
   assert.ok(JSON.parse(store.getItem("mogmine-prefs-v1") ?? "null").shield === true);
+});
+
+test("local: tag_registry lives under mogmine-tags-v1 and reads back sanitized (PL-3)", async () => {
+  const store = createMemoryKeyValueStore();
+  const { repositories: repo } = createLocalAdapter({ kind: "local", store, candles: createMemoryCandleStore() });
+  const first = await repo.tag_registry.get(DEFAULT_OWNER_USER_ID);
+  assert.deepEqual(first, { ok: true, value: null }, "nothing saved until the first write");
+  const reg = addTag(DEFAULT_TAG_REGISTRY, "setup", { label: "200 EMA Pullback" });
+  assert.equal(reg.ok, true);
+  if (!reg.ok) return;
+  const put = await repo.tag_registry.put(DEFAULT_OWNER_USER_ID, reg.registry);
+  assert.equal(put.ok, true);
+  const stored = JSON.parse(store.getItem("mogmine-tags-v1") ?? "null") as { setup: Array<{ label: string }> };
+  assert.ok(stored.setup.some((def) => def.label === "200 EMA Pullback"));
+  const read = await repo.tag_registry.get(DEFAULT_OWNER_USER_ID);
+  assert.equal(read.ok && read.value?.record.setup.some((def) => def.label === "200 EMA Pullback"), true);
 });
 
 test("local: unreadable stored JSON is invalid and is not overwritten", async () => {
