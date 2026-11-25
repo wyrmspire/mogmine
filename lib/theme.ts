@@ -31,6 +31,8 @@ export interface ChartTheme {
   /** Opacity of the level pill's background over the chart (`--level-label-bg-alpha`, LB-2). Optional: literal themes (shareCard) omit it and paint at 0.95. */
   levelLabelBgAlpha?: number;
   vwap: string;
+  /** 200 EMA line (`--ind-ema200`, IN-3). Optional: literal themes (shareCard) omit it and the chart uses its fallback. */
+  ema200?: string;
   /** Chart surface and label tokens (docs/design-2026-11-24/08 §4.1). */
   crosshairLabel: string;
   zoneReward: string;
@@ -84,6 +86,7 @@ function read(): ChartTheme {
     levelLabelText: value("--level-label-text"),
     levelLabelBgAlpha: Number.isFinite(labelAlpha) ? labelAlpha : 0.95,
     vwap: value("--indicator-vwap"),
+    ema200: value("--ind-ema200"),
     crosshairLabel: value("--chart-crosshair-label"),
     zoneReward: value("--zone-reward"),
     zoneRisk: value("--zone-risk"),
