@@ -1,0 +1,73 @@
+/* LB-B2 (docs/03 §3 LB-6, D-E): the level card over the chart and the keyboard level list in the View menu.
+   All rules for these live here, not in globals.css. */
+
+/* Level card: a solid surface (no see-through chart behind the numbers), tabular prices. */
+.level-card {
+  position: absolute;
+  z-index: 7;
+  box-sizing: border-box;
+  width: min(248px, calc(100% - 8px));
+  max-width: calc(100% - 8px);
+  padding: 6px 8px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font: 500 0.6875rem/1.4 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.level-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.level-card-title { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.level-card-close {
+  min-width: 44px;
+  min-height: 44px;
+  margin: -10px -8px -10px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.level-card-rows { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.level-card-rows li { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; }
+.level-card-name { overflow-wrap: anywhere; }
+.level-card-name em { font-style: normal; color: var(--text-muted); }
+.level-card-price { font-weight: 700; text-align: right; }
+.level-card-source { grid-column: 1 / -1; color: var(--text-faint); }
+
+/* Level list (View menu): a real disclosure, every row reachable by keyboard. */
+.levels-disclosure {
+  margin-top: 6px;
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--border-subtle);
+  font: 500 0.6875rem/1.4 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.levels-disclosure > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--text-primary); }
+.level-labels-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 4px 0 6px; }
+.level-labels-toggle button {
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.level-labels-toggle button[aria-pressed="true"] { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-strong); }
+.levels-disclosure-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.levels-disclosure-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px;
+  border-radius: 6px;
+}
+.levels-disclosure-list li:focus-visible { outline: 2px solid var(--gold-mid, var(--border-strong)); outline-offset: 1px; }
+.level-list-names { overflow-wrap: anywhere; }
+.level-list-price { font-weight: 700; white-space: nowrap; }
+.levels-disclosure-empty { margin: 0; color: var(--text-muted); }

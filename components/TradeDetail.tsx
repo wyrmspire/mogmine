@@ -20,6 +20,7 @@ import { StopMovesEditor } from "./StopMovesEditor";
 import { TradeCardSheet } from "./TradeCardSheet";
 import { RStrip } from "./RStrip";
 import { TradeChart } from "./TradeChart";
+import { LevelsDisclosureList } from "./LevelCard";
 import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
@@ -113,6 +114,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [fullscreen, setFullscreen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [showLevels, setShowLevels] = useState(true);
+  // LB-B2: the level row a keyboard or pointer is on in the View list; its ray's card opens on the chart.
+  const [highlightedTick, setHighlightedTick] = useState<number | null>(null);
   // IND-1: the VWAP anchor is remembered in prefs (default "off"); drill, review and playbook charts do not read it.
   const vwapAnchor = prefs.vwapAnchor;
   const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
@@ -506,6 +509,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                     </button>
                     {/* Withheld levels are named with their reason, never hidden (docs/12 §5, OD-55). Visible: touch has no tooltip. */}
                     {levels.withheld.length > 0 && <small style={{ display: "block", padding: "2px 4px", fontSize: "0.6875rem", color: "var(--text-muted)" }}>Withheld: {withheldText(levels.withheld)}</small>}
+                    <LevelsDisclosureList levels={levels.lines} symbol={trade.symbol} onHighlightTick={setHighlightedTick} />
                   </div>
                   <div className="view-menu-section">
                     <span className="view-menu-label">
@@ -570,7 +574,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} vwap={vwapLine} vwapApproximate={sessionVwapReport?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} highlightedLineTick={highlightedTick} vwap={vwapLine} vwapApproximate={sessionVwapReport?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>

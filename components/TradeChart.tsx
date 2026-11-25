@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, useSyncExternalStore } from "react";
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
 import { SessionLevelsPrimitive, computeLevelRightOffsetBars, levelPillColumnPx } from "./SessionLevelsPrimitive";
+import { LevelCard, levelHitForTick, selectExportLevelPills } from "./LevelCard";
 import { describeTrade } from "@/lib/describe";
 import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
@@ -13,7 +14,7 @@ import { TIMEFRAME_MINUTES, alignTradeToBars, defaultVisibleRange, fitWindow, in
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
 import type { NeighbourTradeProjection } from "@/lib/neighbour-trades";
-import { levelPills, tradeAnchors, type LevelLine } from "@/lib/chart-levels";
+import { levelPills, tradeAnchors, type LevelLine, type LevelPill } from "@/lib/chart-levels";
 import { resolveTapAction, type LevelHit } from "@/lib/level-hit-test";
 import { usePrefs } from "@/lib/prefs";
 import type { LevelLabelsMode } from "@/lib/prefs-sanitize";
@@ -77,6 +78,25 @@ interface Props {
   levelLabelsMode?: LevelLabelsMode;
   /** LB-6: a tap on a level opens its card (`hit`); a tap elsewhere, a pan or a zoom sends `null`. */
   onSelectLevel?: (hit: LevelHit | null) => void;
+  /** LB-B2: a focused level-list row (its tick) opens that level's card. Null when focus leaves. */
+  highlightedLineTick?: number | null;
+}
+
+/** What one paint of the level primitive needs from the latest props. */
+interface LevelPaint {
+  levels: readonly LevelLine[];
+  theme: ChartTheme;
+  bars: Candle[];
+  timeframe: Timeframe;
+  trade: TradeRecord;
+}
+
+/** Pushes pills and a mode to the level primitive. Shared by the live draw and the export snapshot (D-E). */
+function paintLevels(state: Live, paint: LevelPaint, mode: LevelLabelsMode, pills: readonly LevelPill[]) {
+  const { trade: tr, bars } = paint;
+  state.levelsPrimitive.update(paint.levels, paint.theme, TIMEFRAME_MINUTES[paint.timeframe] * 60_000, pills, {
+    lastBarTime: bars[bars.length - 1].time, mode, symbol: tr.symbol, entryPrice: tr.entry_price,
+  });
 }
 
 interface Live {
@@ -189,18 +209,36 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
 const NO_LEVELS: readonly LevelLine[] = [];
 const NO_VWAP: readonly VwapPoint[] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
   const prefs = usePrefs();
   const levelMode: LevelLabelsMode = levelLabelsMode ?? prefs.levelLabels;
+  // The open level card (LB-6). `fromList`: opened by a focused list row, so leaving the row closes it.
+  const [openLevel, setOpenLevel] = useState<{ hit: LevelHit; fromList: boolean } | null>(null);
   const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
   useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel }; });
+  const closeLevel = useCallback(() => {
+    setOpenLevel(null);
+    latest.current.onSelectLevel?.(null);
+  }, []);
+  // LB-B2: a focused or hovered level-list row opens that level's card. Leaving the row closes it again.
+  useEffect(() => {
+    // Next frame, so a quick blur-then-focus between rows settles on the last row only.
+    const frame = requestAnimationFrame(() => {
+      if (highlightedLineTick == null) { setOpenLevel((open) => (open?.fromList ? null : open)); return; }
+      const l = live.current;
+      if (!l) return;
+      const hit = levelHitForTick(latest.current.levels, highlightedLineTick, l.host.clientWidth / 2, (price) => l.series.priceToCoordinate(price));
+      setOpenLevel(hit ? { hit, fromList: true } : null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [highlightedLineTick]);
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -246,7 +284,26 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       reportExtension(l, latest.current.onExtensionChange);
       return { applied, remaining: room - applied > 0 };
     },
-    screenshot: () => live.current?.chart.takeScreenshot(true, false) ?? null,
+    screenshot: () => {
+      const l = live.current;
+      if (!l) return null;
+      const p = latest.current;
+      if (!p.theme || !p.bars.length || !p.levels.length || p.levelMode !== "tap") return l.chart.takeScreenshot(true, false);
+      // D-E: the PNG carries at most four labelled groups. Live "tap" mode is restored before this returns.
+      const paint: LevelPaint = { levels: p.levels, theme: p.theme, bars: p.bars, timeframe: p.timeframe, trade: p.trade };
+      const livePills = levelPills(p.levels, tradeAnchors(p.trade), p.trade.symbol, p.trade.entry_price);
+      const exportPills = selectExportLevelPills(livePills, p.trade.entry_price, p.trade.key_level_price ?? null);
+      paintLevels(l, paint, "always", exportPills);
+      l.levelLabels = exportPills.map((pill) => pill.label);
+      applyLevelRightOffset(l);
+      try {
+        return l.chart.takeScreenshot(true, false);
+      } finally {
+        paintLevels(l, paint, "tap", livePills);
+        l.levelLabels = [];
+        applyLevelRightOffset(l);
+      }
+    },
   }), []);
 
   // Draws the current props onto the existing chart. Switching timeframe only swaps data: the chart
@@ -311,9 +368,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t, p.neighbourTrades);
     const pills = p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : [];
-    l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000, pills, {
-      lastBarTime: bars[bars.length - 1].time, mode: p.levelMode, symbol: tr.symbol, entryPrice: tr.entry_price,
-    });
+    paintLevels(l, { levels: p.levels, theme: t, bars, timeframe: barTimeframe, trade: tr }, p.levelMode, pills);
     // Tap mode draws no pills, so no right-edge reserve either (LB-6): rightOffset stays 0.
     l.levelLabels = p.levelMode === "tap" ? [] : pills.map((pill) => pill.label);
     applyLevelRightOffset(l);
@@ -419,7 +474,14 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
           ?? (param.hoveredObjectId as string | undefined);
         const action = resolveTapAction(hitTradeId ?? null, state.levelsPrimitive.hitTestLevel(param.point.x, param.point.y));
         if (action.kind === "neighbour") latest.current.onSelectNeighbour?.(action.tradeId);
-        latest.current.onSelectLevel?.(action.kind === "level" ? action.hit : null);
+        const hit = action.kind === "level" ? action.hit : null;
+        setOpenLevel(hit ? { hit, fromList: false } : null);
+        latest.current.onSelectLevel?.(hit);
+      };
+      // A pan, zoom or wheel closes an open card (LB-6).
+      const dismissLevel = () => {
+        setOpenLevel(null);
+        latest.current.onSelectLevel?.(null);
       };
       chart.subscribeClick(onChartClick);
 
@@ -447,7 +509,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         // from setData / fit are not view changes.
         if (!state.programmaticRangeChange) {
           // A user zoom or pan closes an open level card (LB-6).
-          latest.current.onSelectLevel?.(null);
+          dismissLevel();
           window.clearTimeout(state.viewSettleTimer);
           state.viewSettleTimer = window.setTimeout(() => latest.current.onRendered?.(), 300);
         }
@@ -460,7 +522,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       const markUserPan = () => {
         state.userPanned = true;
         state.heldDefaultRange = null;
-        latest.current.onSelectLevel?.(null);
+        dismissLevel();
       };
       // A tap is not a pan: only an actual drag (or a wheel / pinch, which move the range) marks
       // one, so tapping the chart never drops the fitted default window (review follow-up to #82).
@@ -622,5 +684,6 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   />
   {/* Drag up or down to stretch the price scale; double-tap to auto-fit (docs/20 §3). */}
   <div ref={gripRef} className="price-axis-grip" aria-hidden="true" title="Drag to stretch the price scale. Double-click to auto-fit." />
+  {openLevel && <LevelCard hit={openLevel.hit} symbol={trade.symbol} onClose={closeLevel} />}
   </>;
 }
