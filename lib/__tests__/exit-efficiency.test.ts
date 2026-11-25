@@ -20,16 +20,18 @@ test("calculateExitEfficiency: calculates R-based efficiency for winning trade",
     quantity: 1,
   });
 
+  // Account R at the default $250 (1 MES = $5/pt): +4 pts = +$20 = +0.08R; MFE +7 pts = +$35 = +0.14R.
+  // The ratio stays unit-free: 4 ÷ 7 = 57%.
   const eff = calculateExitEfficiency(trade, 7);
   assert.ok(eff);
-  assert.equal(eff.realizedR, 0.8);
-  assert.equal(eff.mfeR, 1.4);
+  assert.equal(eff.realizedR, 0.08);
+  assert.equal(eff.mfeR, 0.14);
   assert.equal(eff.efficiencyPercent, 57);
-  assert.equal(eff.summary, "captured +0.8R of +1.4R available (57%)");
-  assert.equal(eff.concise, "+0.8R of +1.4R");
+  assert.equal(eff.summary, "captured +0.08R of +0.14R available (57%)");
+  assert.equal(eff.concise, "+0.08R of +0.14R");
 });
 
-test("calculateExitEfficiency: falls back to points when no stop loss exists", () => {
+test("calculateExitEfficiency: a trade with no stop still gets account R", () => {
   const trade = normalizeTrade({
     id: "eff-nostop",
     symbol: "MES",
@@ -43,12 +45,13 @@ test("calculateExitEfficiency: falls back to points when no stop loss exists", (
     quantity: 1,
   });
 
+  // Account R at $250: +5 pts = +$25 = +0.10R; MFE +10 pts = +$50 = +0.20R. Ratio 5 ÷ 10 = 50%.
   const eff = calculateExitEfficiency(trade, 10);
   assert.ok(eff);
-  assert.equal(eff.realizedR, null);
-  assert.equal(eff.mfeR, null);
+  assert.equal(eff.realizedR, 0.1);
+  assert.equal(eff.mfeR, 0.2);
   assert.equal(eff.efficiencyPercent, 50);
-  assert.equal(eff.summary, "captured +5.00 pts of +10.00 pts available (50%)");
+  assert.equal(eff.summary, "captured +0.10R of +0.20R available (50%)");
 });
 
 test("calculateExitEfficiency: returns null for open trades or zero MFE", () => {

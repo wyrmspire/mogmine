@@ -56,7 +56,9 @@ test("CD-2a: a miss is Take on a rule-breaking loser or Pass on a clean winner",
   assert.equal(isMiss("pass", trade("w", { points: 8 })), true);
   assert.equal(isMiss("pass", trade("w2", { points: 8, ...broken })), false);
   assert.equal(isMiss("smaller", trade("w3", { points: 8 })), false);
-  assert.equal(isMiss("take", trade("nostop", { stop_loss_price: null })), null);
+  // Account R needs P&L, not a stop: a no-stop loser that broke its rules is a miss on Take.
+  assert.equal(isMiss("take", trade("nostop", { stop_loss_price: null, points: -4, ...broken })), true);
+  assert.equal(isMiss("take", trade("nopnl", { exit_price: null })), null);
 });
 
 test("CD-2a: missed trades return after 1, 3 and 7 days, then retire until missed again", () => {
@@ -83,10 +85,14 @@ test("CD-2a: take vs pass averages R over each trade's latest answer and waits f
   const trades = [trade("a", { points: 8 }), trade("b", { points: -4 }), trade("c", { points: 4 }), trade("d", { stop_loss_price: null })];
   const records = [answer("a", "pass", 9), answer("a", "take", 8), answer("b", "take", 8), answer("c", "pass", 8), answer("d", "take", 8), answer("gone", "take", 8)];
   const score = takeVsPass(records, trades);
-  assert.deepEqual(score.take, { n: 2, avgR: (2 + -1) / 2 });
-  assert.deepEqual(score.pass, { n: 1, avgR: 1 });
+  // Account R at $250 (1 MES, $5/pt): a = +8 pts = +$40 = +0.16R (latest answer: take); b = -4 pts = -$20 = -0.08R;
+  // d = no stop but +4 pts = +$20 = +0.08R, so it now has a result R. c (pass) = +4 pts = +0.08R.
+  assert.equal(score.take.n, 3);
+  assert.ok(Math.abs((score.take.avgR ?? NaN) - 0.16 / 3) < 1e-9);
+  assert.equal(score.pass.n, 1);
+  assert.ok(Math.abs((score.pass.avgR ?? NaN) - 0.08) < 1e-9);
   assert.deepEqual(score.smaller, { n: 0, avgR: null });
-  assert.equal(score.noR, 1);
+  assert.equal(score.noR, 0);
   assert.equal(score.ready, false);
   const many = Array.from({ length: 30 }, (_, i) => trade(`m${i}`));
   assert.equal(takeVsPass(many.map((t) => answer(t.id, "take", 8)), many).ready, true);
