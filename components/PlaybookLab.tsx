@@ -2,7 +2,6 @@
 
 // Playbook Lab (docs/design-2026-11-24/01 §4.1–§4.3). Read-only: every count links to the Feed through the
 // model's `feedHref`. Pure facts come from lib/playbook-lab.ts (PL-1); this file only formats and lays them out.
-// Map and Gaps are summary panels here; PL-2b replaces each one in its marked slot.
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -18,6 +17,8 @@ import { resolveRSize, resultR } from "@/lib/r-size";
 import { useJournal } from "@/lib/store";
 import type { TradeRecord, TradeExitReason } from "@/lib/trades";
 import { PlaybookModeTabs } from "./PlaybookBinder";
+import { PlaybookLabGaps } from "./PlaybookLabGaps";
+import { PlaybookLabMap } from "./PlaybookLabMap";
 import { Sparkline } from "./Sparkline";
 
 const TABS = [
@@ -138,10 +139,8 @@ export function PlaybookLab() {
 
       {tab === "playbooks" && (detail ? <PlaybookDetail facet={detail} byId={byId} /> : <PlaybookList view={view} />)}
       {tab === "tags" && <TagsPanel view={view} byId={byId} />}
-      {/* PL-2b: replace MapPanel with <PlaybookLabMap /> here. */}
-      {tab === "map" && <MapPanel view={view} />}
-      {/* PL-2b: replace GapsPanel with <PlaybookLabGaps /> here. */}
-      {tab === "gaps" && <GapsPanel view={view} />}
+      {tab === "map" && <PlaybookLabMap view={view} />}
+      {tab === "gaps" && <PlaybookLabGaps view={view} />}
     </div>
   );
 }
@@ -341,47 +340,5 @@ function TagCard({ facet, byId }: { facet: TagFacet; byId: Map<string, TradeReco
         </>
       )}
     </article>
-  );
-}
-
-// PL-2b replaces this panel with <PlaybookLabMap />. Until then it only summarises the matrix.
-function MapPanel({ view }: { view: LabView }) {
-  return (
-    <section className="lab-panel" aria-labelledby="lab-map-title" data-lab-slot="map">
-      <h2 id="lab-map-title">Map</h2>
-      <div className="lab-card">
-        <p className="num lab-meta">{plural(view.matrix.length, "playbook × setup-tag pair")} used</p>
-        <p className="lab-note">The full grid is coming. Until then, each playbook row and tag card links its pairs to the Feed.</p>
-      </div>
-    </section>
-  );
-}
-
-// PL-2b replaces this panel with <PlaybookLabGaps />. Each line links to the matching trades in the Feed.
-function GapsPanel({ view }: { view: LabView }) {
-  const g = view.gaps;
-  const rows = [
-    { label: "Trades with no playbook", n: g.noPlaybook.length, href: g.noPlaybookHref },
-    { label: "Trades with a playbook but no setup tag", n: g.noSetupTag.length, href: g.noSetupTagHref },
-    { label: "Impulse (No Setup) trades", n: g.impulseCount, href: g.impulseHref },
-  ];
-  return (
-    <section className="lab-panel" aria-labelledby="lab-gaps-title" data-lab-slot="gaps">
-      <h2 id="lab-gaps-title">Gaps</h2>
-      <ul className="lab-grid lab-list">
-        {rows.map((row) => (
-          <li key={row.label}>
-            <Link className="lab-row" href={row.href}>
-              <span className="lab-row-head"><span>{row.label}</span><span className="num">{row.n}</span></span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <div className="lab-card">
-        <p className="num lab-meta">
-          Impulse share {g.impulseShare == null ? "—" : fmtPct(g.impulseShare)} · {plural(g.unusedPlaybooks.length, "playbook")} and {plural(g.unusedTags.length, "tag")} never used
-        </p>
-      </div>
-    </section>
   );
 }
