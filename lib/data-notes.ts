@@ -8,6 +8,7 @@
 import { formatPrice } from "./format.ts";
 import { formatDetailTime, formatListTime } from "./time.ts";
 import type { BarCoverage, TradeBarFinding } from "./trade-bar-validation.ts";
+import type { ExitStopMismatch } from "./stop-facts.ts";
 
 export type DataNoteId =
   | "coverage_missing"
@@ -17,6 +18,7 @@ export type DataNoteId =
   | "same_bar_unresolved"
   | "entry_bar_passed_stop"
   | "untimed_stop_move"
+  | "exit_stop_mismatch"
   | `${TradeBarFinding["code"]}:${string}`;
 
 export type DataNoteTone = "untrusted" | "quiet";
@@ -56,6 +58,8 @@ export interface DataNoteInput {
   entryBarPassedStop?: boolean;
   // SM-UT-3: the working stop when it moved without a recorded time (initial_stop_price ≠ stop_loss_price, no stop_moves).
   untimedStopMovePrice?: number | null;
+  // 05 §3.2: an exit on a stop/trail more than 2 ticks from the working stop. Quiet only.
+  exitStopMismatch?: ExitStopMismatch | null;
   symbol: string;
   zone?: string;
 }
@@ -98,6 +102,14 @@ export function collectDataNotes(input: DataNoteInput): DataNote[] {
       text: `Your stop moved to ${formatPrice(price, input.symbol)} at a time you did not record. Add the time to check it against the bars.`,
       tone: "quiet",
       action: { kind: "edit_untimed_stop", price },
+    });
+  }
+  if (input.exitStopMismatch) {
+    const { exitPrice, workingStopPrice, diffTicks } = input.exitStopMismatch;
+    notes.push({
+      id: "exit_stop_mismatch",
+      text: `Exit ${formatPrice(exitPrice, input.symbol)} is ${diffTicks} ticks past the working stop ${formatPrice(workingStopPrice, input.symbol)} (slippage?)`,
+      tone: "quiet",
     });
   }
   for (const finding of input.findings) {
