@@ -21,12 +21,36 @@ const trade = (id: string, entry_time: string, entry_price: number, over: Partia
 
 test("PS-4: the window runs from this checkpoint to the next one, else to the 17:00 ET close", () => {
   const powerHour = plan({ id: "ph", anchor_time_utc: "2026-11-12T19:00:00Z" });
-  assert.deepEqual(reviewWindow(plan(), powerHour), { from: Date.parse("2026-11-12T14:30:00Z"), to: Date.parse("2026-11-12T19:00:00Z") });
+  assert.deepEqual(reviewWindow(plan(), powerHour), { from: Date.parse("2026-11-12T14:30:00Z"), to: Date.parse("2026-11-12T19:00:00Z"), writtenAfterClose: false });
   assert.equal(reviewWindow(plan()).to, Date.parse("2026-11-12T22:00:00Z"));
   // An event preset has no anchor: it starts when it was written.
   assert.equal(reviewWindow(plan({ anchor_time_utc: null })).from, Date.parse("2026-11-12T13:00:00Z"));
   // A checkpoint from another day, or one before this one, does not shorten the window.
   assert.equal(reviewWindow(plan(), plan({ session_date: "2026-11-13", anchor_time_utc: "2026-11-13T14:30:00Z" })).to, Date.parse("2026-11-12T22:00:00Z"));
+});
+
+test("UX-A: an unanchored plan written after the 17:00 ET close reviews the whole session", () => {
+  // 2026-11-24T01:30Z is 20:30 ET on 11/23, after the close. The window is 18:00 ET 11/22 to 17:00 ET 11/23.
+  const late = plan({ session_date: "2026-11-23", anchor_time_utc: null, created_at: "2026-11-24T01:30:00Z" });
+  assert.deepEqual(reviewWindow(late), {
+    from: Date.parse("2026-11-22T23:00:00Z"), to: Date.parse("2026-11-23T22:00:00Z"), writtenAfterClose: true,
+  });
+  const review = sessionReview(late, [
+    trade("mon-am", "2026-11-23T14:45:00Z", 7611.25),
+    trade("mon-pm", "2026-11-23T18:30:00Z", 7600),
+    trade("mon-late", "2026-11-23T21:30:00Z", 7592.5),
+    trade("sun-before-open", "2026-11-22T22:30:00Z", 7600),
+  ]);
+  assert.equal(review.writtenAfterClose, true);
+  assert.deepEqual(review.rows.map((row) => row.trade_id), ["mon-am", "mon-pm", "mon-late"]);
+});
+
+test("UX-A: an anchored plan, or one written before the close, keeps its exact window", () => {
+  const anchored = plan({ session_date: "2026-11-23", anchor_time_utc: "2026-11-23T14:30:00Z", created_at: "2026-11-24T01:30:00Z" });
+  assert.deepEqual(reviewWindow(anchored), { from: Date.parse("2026-11-23T14:30:00Z"), to: Date.parse("2026-11-23T22:00:00Z"), writtenAfterClose: false });
+  const early = plan({ session_date: "2026-11-23", anchor_time_utc: null, created_at: "2026-11-23T14:00:00Z" });
+  assert.deepEqual(reviewWindow(early), { from: Date.parse("2026-11-23T14:00:00Z"), to: Date.parse("2026-11-23T22:00:00Z"), writtenAfterClose: false });
+  assert.equal(sessionReview(early, []).writtenAfterClose, false);
 });
 
 test("PS-4: rows show the rules seal, the nearest level in ticks and the watch list, in entry order", () => {
