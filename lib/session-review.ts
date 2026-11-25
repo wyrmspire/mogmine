@@ -22,6 +22,8 @@ export interface SessionReview {
   from: number;
   /** UTC ms, exclusive. The next checkpoint's anchor, or the session's 17:00 ET close. */
   to: number;
+  /** UX-A: an unanchored plan written after the close reviews the whole session, and the sheet says so. */
+  writtenAfterClose: boolean;
   rows: ReviewRow[];
   /** Totals over trades that have a checklist. Zero trades is a valid review. */
   rules: { followed: number; total: number };
@@ -31,16 +33,22 @@ export interface SessionReview {
 
 const startOf = (plan: PlanningSession) => Date.parse(plan.anchor_time_utc ?? plan.created_at);
 
-/** Where a review window starts and ends: this checkpoint up to `until`, or to the session close. */
+/**
+ * Where a review window starts and ends: this checkpoint up to `until`, or to the session close. A plan with
+ * no anchor written after the close (UX-06) gets the whole session, 18:00 ET prior day to 17:00 ET.
+ */
 export function reviewWindow(plan: PlanningSession, until?: PlanningSession | null) {
+  const bounds = equityIndexSessionBounds(plan.session_date);
+  if (plan.anchor_time_utc == null && Date.parse(plan.created_at) >= bounds.close) {
+    return { from: bounds.open, to: bounds.close, writtenAfterClose: true };
+  }
   const from = startOf(plan);
-  const close = equityIndexSessionBounds(plan.session_date).close;
   const next = until && until.session_date === plan.session_date ? startOf(until) : NaN;
-  return { from, to: Number.isFinite(next) && next > from ? next : close };
+  return { from, to: Number.isFinite(next) && next > from ? next : bounds.close, writtenAfterClose: false };
 }
 
 export function sessionReview(plan: PlanningSession, trades: readonly TradeRecord[], until?: PlanningSession | null): SessionReview {
-  const { from, to } = reviewWindow(plan, until);
+  const { from, to, writtenAfterClose } = reviewWindow(plan, until);
   const rows = trades
     .filter((trade) => {
       const entry = Date.parse(trade.entry_time);
@@ -74,6 +82,7 @@ export function sessionReview(plan: PlanningSession, trades: readonly TradeRecor
     plan_id: plan.id,
     from,
     to,
+    writtenAfterClose,
     rows,
     rules: {
       followed: withRules.reduce((sum, rules) => sum + rules.followed, 0),

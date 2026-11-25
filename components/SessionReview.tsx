@@ -56,6 +56,7 @@ export function SessionReview({ plan, trades, zone, onClose }: Props) {
             <span className="eyebrow">{formatSessionDate(plan.session_date)} · After-session review</span>
             <h2 id="review-title">{plan.name}</h2>
             <p className="num">{formatListTime(review.from, zone)} → {formatListTime(review.to, zone)}</p>
+            {review.writtenAfterClose && <p className="muted" style={{ fontSize: 12, margin: "2px 0 0" }}>Written after the close: showing the whole day</p>}
           </div>
           <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} onClick={onClose} aria-label="Close review">✕</button>
         </div>
