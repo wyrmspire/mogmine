@@ -7,6 +7,9 @@ import { NO_SETUP_ID } from "@/lib/playbooks";
 import { activePlaybooks, usePlaybooks } from "@/lib/playbooks-store";
 import { dollarsToCents } from "@/lib/accounts";
 import { formatBalance } from "@/lib/format";
+import { defaultAccountId } from "@/lib/accounts";
+import { useAccounts } from "@/lib/accounts-store";
+import { useJournal } from "@/lib/store";
 
 import { showToast } from "@/lib/toast";
 
@@ -23,6 +26,12 @@ export function ChallengeSetupSheet({
   const [sessionsText, setSessionsText] = useState(String(initialRules?.kind === "drawdown" ? initialRules.sessions : 20));
   const [limitDollarsText, setLimitDollarsText] = useState(initialRules?.kind === "drawdown" ? (initialRules.max_drawdown_cents / 100).toFixed(2) : "");
   const [targetTradesText, setTargetTradesText] = useState("10");
+
+  // Account scope (UX-08): null = all accounts. Defaults to the account used last.
+  const { accounts } = useAccounts();
+  const { trades } = useJournal();
+  const activeAccounts = accounts.filter((account) => !account.archived);
+  const [accountId, setAccountId] = useState<string | null>(() => defaultAccountId(accounts, trades));
 
   // Default: every playbook except "no-setup" (docs/17 §4)
   const [selectedPlaybooks, setSelectedPlaybooks] = useState<string[]>(() =>
@@ -111,7 +120,7 @@ export function ChallengeSetupSheet({
       };
     }
 
-    const res = startChallenge(rules);
+    const res = startChallenge(rules, undefined, accountId);
     if (!res.ok) {
       showToast(res.error);
       return;
@@ -177,6 +186,15 @@ export function ChallengeSetupSheet({
               </div>
             </div>
 
+            {activeAccounts.length > 0 && (
+              <label className="field wide" htmlFor="setup-account">
+                <span>Account</span>
+                <select id="setup-account" value={accountId ?? ""} onChange={(e) => setAccountId(e.target.value || null)}>
+                  <option value="">All accounts</option>
+                  {activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                </select>
+              </label>
+            )}
             {activeExisting && (
               <div className="banner warn field wide" role="alert" style={{ margin: "4px 0" }}>
                 An active {kind === "drawdown" ? "Drawdown Defender" : "Clean Run"} challenge is already running.

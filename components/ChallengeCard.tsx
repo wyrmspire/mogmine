@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChallengeSetupSheet } from "./ChallengeSetupSheet";
-import { evaluateChallenge } from "@/lib/challenges";
+import { evaluateChallenge, formatChallengeRoomLabel } from "@/lib/challenges";
 import type { ChallengeDefinition, ChallengeResult } from "@/lib/challenges";
 import { endChallenge, useChallenges } from "@/lib/challenge-store";
+import { useAccounts } from "@/lib/accounts-store";
 import { formatBalance } from "@/lib/format";
 import { formatSessionDate } from "@/lib/session";
 import { useJournal } from "@/lib/store";
@@ -61,6 +62,14 @@ function CleanRunDots({
       {elements}
     </div>
   );
+}
+
+/** Names the account a challenge is scoped to (UX-08). Renders nothing for all-accounts challenges. */
+export function ChallengeAccountBadge({ accountId }: { accountId: string | null }) {
+  const { accounts } = useAccounts();
+  if (accountId == null) return null;
+  const name = accounts.find((account) => account.id === accountId)?.name ?? "Removed account";
+  return <span className="challenge-account-badge">{name}</span>;
 }
 
 function DrawdownRow({
@@ -121,10 +130,10 @@ function DrawdownRow({
       <>
         <div className={`challenge-row-metrics ${isBreached ? "breached" : isClose ? "close" : ""}`}>
           {shield ? (
-            <span className="num">{pctUsed}% of limit used{isBreached ? " · limit reached" : isClose ? " · close" : ""}</span>
+            <span className="num">{formatChallengeRoomLabel(remainingCents, maxDrawdownCents, true)}{isBreached ? " · limit reached" : isClose ? " · close" : ""}</span>
           ) : (
             <span className="num">
-              {formatBalance(remainingCents)} left of {formatBalance(maxDrawdownCents)}
+              {formatChallengeRoomLabel(remainingCents, maxDrawdownCents, false)}
               {isBreached ? " · limit reached" : isClose ? " · close" : ""}
             </span>
           )}
@@ -151,6 +160,7 @@ function DrawdownRow({
       <Link href={`/challenges/${encodeURIComponent(challenge.id)}`} className="challenge-row-link" aria-label={`Drawdown Defender challenge: ${statusDesc}`}>
         <div className="challenge-row-head">
           <span className="challenge-name">DRAWDOWN DEFENDER</span>
+          <ChallengeAccountBadge accountId={challenge.account_id ?? null} />
           <span className="challenge-header-stat num">
             {sessionsDone} / {targetSessions} days
           </span>
@@ -191,6 +201,7 @@ function CleanRunRow({
       <Link href={`/challenges/${encodeURIComponent(challenge.id)}`} className="challenge-row-link" aria-label={`Clean Run challenge: ${cleanStatusDesc}`}>
         <div className="challenge-row-head">
           <span className="challenge-name">CLEAN RUN</span>
+          <ChallengeAccountBadge accountId={challenge.account_id ?? null} />
           <span className="challenge-header-stat num">best {bestRun}</span>
         </div>
 

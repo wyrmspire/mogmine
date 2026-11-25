@@ -76,9 +76,13 @@ export function sanitizeChallenge(raw: unknown): ChallengeDefinition | null {
   const calc_version = isFiniteNumber(obj.calc_version) ? obj.calc_version : CHALLENGE_CALC_VERSION;
   const user_id = typeof obj.user_id === "string" && obj.user_id.trim() ? obj.user_id : DEFAULT_OWNER_USER_ID;
 
+  // Legacy records have no account scope: they keep counting every account (UX-08).
+  const account_id = typeof obj.account_id === "string" && obj.account_id.trim() ? obj.account_id : null;
+
   const def: ChallengeDefinition = {
     id: obj.id,
     user_id,
+    account_id,
     rules,
     started_at: obj.started_at,
     ended_at,

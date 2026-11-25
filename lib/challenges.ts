@@ -15,6 +15,11 @@ export type ChallengeRules =
 export interface ChallengeDefinition {
   id: string; // crypto.randomUUID()
   user_id: string; // DEFAULT_OWNER_USER_ID (invariant 7)
+  /**
+   * Scope: only this trading account's trades count. null (or absent on older records) = all accounts, as before.
+   * Optional so unlisted fixtures that predate UX-08 still typecheck; sanitizeChallenge always writes it.
+   */
+  account_id?: string | null;
   rules: ChallengeRules; // frozen at start
   started_at: string; // UTC ISO
   ended_at: string | null; // set when the trader ends it, or on pass/fail
@@ -76,6 +81,8 @@ export function evaluateChallenge(
 
   for (const trade of trades) {
     if (trade.is_sample) continue;
+    // Account scope (UX-08): filter before any rule sees the trade. Challenge limits stay independent of the account's own rules.
+    if (definition.account_id != null && trade.account_id !== definition.account_id) continue;
 
     const entryMs = Date.parse(trade.entry_time);
     if (entryMs < startedMs) {
@@ -109,6 +116,20 @@ export function evaluateChallenge(
     return evaluateDrawdown(definition.rules, inScopeClosedTrades, issues, excludedBeforeStart, now);
   }
   return evaluateCleanRun(definition.rules, inScopeClosedTrades, issues, excludedBeforeStart);
+}
+
+/**
+ * The Drawdown Defender room, labelled by what it is (UX-07, `02-ux.md` §2.1). Never a bare "$50" that reads like equity.
+ * Shield shows a share of the limit, with no dollar sign.
+ */
+export function formatChallengeRoomLabel(roomCents: number, limitCents: number, shield: boolean): string {
+  if (shield) {
+    const percent = limitCents > 0 ? Math.max(0, Math.round((roomCents / limitCents) * 100)) : 0;
+    return `Room: ${percent}% of the limit`;
+  }
+  const dollars = Math.max(0, roomCents) / 100;
+  const amount = dollars.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return `Room before the challenge limit: $${amount} (from your high point)`;
 }
 
 function evaluateDrawdown(
