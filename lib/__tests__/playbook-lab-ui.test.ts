@@ -113,8 +113,8 @@ test("PL-2a: Lab Home, Playbooks, and Tags render all empty and loaded states", 
   assert.match(src, /No playbooks yet/);
   assert.match(src, /Not used yet\./);
   assert.match(src, /samples included/);
-  assert.match(src, /\{tab === "map" && <MapPanel view=\{view\} \/>\}/);
-  assert.match(src, /\{tab === "gaps" && <GapsPanel view=\{view\} \/>\}/);
+  assert.match(src, /\{tab === "map" && <PlaybookLabMap view=\{view\} \/>\}/);
+  assert.match(src, /\{tab === "gaps" && <PlaybookLabGaps view=\{view\} \/>\}/);
 
   // Zero-trade state with an empty model is still a valid view.
   const empty = lab([], false);
@@ -153,10 +153,10 @@ test("PL-2a: 390×844 layout clips horizontal overflow and uses only theme token
   assert.match(css, /grid-template-columns: repeat\(4, 1fr\)/);
 });
 
-test("PL-2a: Map and Gaps are placeholder slots for PL-2b and nothing else mounts them", () => {
+test("PL-2a: Map and Gaps mount their dedicated components without TradeChart", () => {
   const src = readSource("components/PlaybookLab.tsx");
-  assert.match(src, /PL-2b: replace MapPanel with <PlaybookLabMap \/>/);
-  assert.match(src, /PL-2b: replace GapsPanel with <PlaybookLabGaps \/>/);
+  assert.match(src, /<PlaybookLabMap view=\{view\} \/>/);
+  assert.match(src, /<PlaybookLabGaps view=\{view\} \/>/);
   assert.doesNotMatch(src, /TradeChart/);
 });
 

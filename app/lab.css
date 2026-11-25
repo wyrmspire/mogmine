@@ -52,6 +52,16 @@
 .lab-note { font-size: 0.8125rem; color: var(--text-muted); }
 .lab-unknown { border-color: var(--border-strong); }
 
+/* Map: the grid scrolls sideways inside its own box; the page never does (AGENTS §4). */
+.lab-map-scroll { max-width: 100%; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; border-radius: var(--radius); border: 1px solid var(--border-subtle); background: var(--bg-surface); }
+.lab-map { border-collapse: separate; border-spacing: 0; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.lab-map th, .lab-map td { min-width: 44px; height: 44px; padding: 0; border-bottom: 1px solid var(--border-subtle); border-right: 1px solid var(--border-subtle); text-align: center; vertical-align: middle; }
+.lab-map thead th { position: sticky; top: 0; padding: 6px 8px; min-width: 96px; height: auto; font-weight: 700; color: var(--text-muted); background: var(--bg-surface); white-space: normal; overflow-wrap: anywhere; vertical-align: bottom; }
+.lab-map-first { position: sticky; left: 0; z-index: 1; background: var(--bg-surface); min-width: 120px !important; max-width: 140px; padding: 6px 8px !important; text-align: left !important; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+.lab-map thead .lab-map-first { z-index: 2; }
+.lab-map-cell { color: var(--text-primary); }
+.lab-map-link { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; min-width: 44px; color: var(--text-primary); font-weight: 800; text-decoration: none; }
+
 /* 390×844 first; wider screens get two columns, never horizontal page scroll. */
 @media (min-width: 760px) {
   .lab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

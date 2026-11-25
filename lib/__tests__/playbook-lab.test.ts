@@ -57,6 +57,7 @@ function assertFeedParity(view: LabView, trades: TradeRecord[], includeSamples: 
   for (const unknown of view.unknownTags) assert.equal(count(unknown.feedHref), unknown.n, `unknown ${unknown.label}`);
   for (const cell of view.matrix) assert.equal(count(cell.feedHref), cell.n, `matrix ${cell.playbookId} × ${cell.tag}`);
   assert.equal(count(view.gaps.noPlaybookHref), view.gaps.noPlaybook.length, "no playbook gap");
+  assert.equal(count(view.gaps.noSetupTagHref), view.gaps.noSetupTag.length, "no setup tag gap");
   assert.equal(count(view.gaps.impulseHref), view.gaps.impulseCount, "impulse gap");
 }
 

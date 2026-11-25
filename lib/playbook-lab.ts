@@ -5,7 +5,7 @@ import { NO_SETUP_ID } from "./playbooks.ts";
 import type { Playbook } from "./playbooks.ts";
 import { PLAYBOOK_CARD_MIN_TRADES } from "./playbook-card.ts";
 import { resolveRSize, resultR } from "./r-size.ts";
-import { NO_PLAYBOOK_FILTER, NO_SETUP_TAG_FILTER, filtersToQuery } from "./selectors.ts";
+import { HAS_PLAYBOOK_FILTER, NO_PLAYBOOK_FILTER, NO_SETUP_TAG_FILTER, filtersToQuery } from "./selectors.ts";
 import type { FeedFilters } from "./selectors.ts";
 import { adherence, isExitReason, isOpen, isScratch, tradePnl } from "./trades.ts";
 import type { TradeExitReason, TradeRecord } from "./trades.ts";
@@ -100,10 +100,7 @@ export interface LabView {
     /** Trade ids with no playbook. */
     noPlaybook: string[];
     noPlaybookHref: string;
-    /**
-     * Trade ids with a playbook but no setup tag (01 §4.5). Its link (`tag=no-setup-tag`) cannot also
-     * filter by playbook, so the Feed shows a superset that includes trades with no playbook.
-     */
+    /** Trade ids with a playbook but no setup tag (01 §4.5). Linked via playbook=assigned&tag=no-setup-tag. */
     noSetupTag: string[];
     noSetupTagHref: string;
     unusedPlaybooks: string[];
@@ -325,7 +322,7 @@ export function labView(
       noPlaybook: eligible.filter((trade) => trade.playbook_id == null).map((trade) => trade.id),
       noPlaybookHref: feedHref({ playbook: NO_PLAYBOOK_FILTER }),
       noSetupTag: noSetupTag.map((trade) => trade.id),
-      noSetupTagHref: feedHref({ tag: NO_SETUP_TAG_FILTER }),
+      noSetupTagHref: feedHref({ playbook: HAS_PLAYBOOK_FILTER, tag: NO_SETUP_TAG_FILTER }),
       unusedPlaybooks: playbookFacets.filter((facet) => !facet.archived && facet.n === 0).map((facet) => facet.playbookId),
       unusedTags: tagFacets.filter((facet) => facet.n === 0).map((facet) => facet.tag),
       impulseCount,
