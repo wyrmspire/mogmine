@@ -26,7 +26,7 @@ export function DataNotesChip({ notes }: { notes: readonly DataNote[] }) {
   const trade = tradeId ? journal.trades.find((item) => item.id === tradeId) : undefined;
   const untrusted = hasUntrustedDataNote(notes);
 
-  const useMatchedFill = (action: Extract<DataNoteAction, { kind: "use_matched_fill" }>) => {
+  const applyMatchedFill = (action: Extract<DataNoteAction, { kind: "use_matched_fill" }>) => {
     if (!trade) return;
     const built = buildMatchedFillPatch(trade, action.role, action.matchedBarTime);
     if (!built) {
@@ -52,7 +52,7 @@ export function DataNotesChip({ notes }: { notes: readonly DataNote[] }) {
     if (action.kind === "use_matched_fill") {
       if (!trade) return null;
       return (
-        <button type="button" className="tool-button num" style={{ minHeight: 44 }} onClick={() => useMatchedFill(action)}>
+        <button type="button" className="tool-button num" style={{ minHeight: 44 }} onClick={() => applyMatchedFill(action)}>
           {action.label}
         </button>
       );
