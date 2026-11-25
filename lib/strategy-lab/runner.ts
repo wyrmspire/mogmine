@@ -6,9 +6,11 @@
 // then the trigger is evaluated with known-at levels only. A passing trigger becomes a trade: entry at the trigger
 // close, stop and target from the recipe, qty from fixed R, outcome from bracketOutcome (bars after the entry only).
 
+import type { TradeRecord } from "../trades.ts";
 import { attribute, featureKey } from "./attribution.ts";
 import { evaluateCondition } from "./conditions.ts";
 import { createLevelIndex, levelBookAt, withLevels } from "./levels.ts";
+import { overlayRecipe } from "./overlay.ts";
 import type { LevelBook } from "./types.ts";
 import { vwapLevelsAt } from "./vwap.ts";
 import { parseEtMinute, validateRecipe, majorOfVersion, inEtWindow, outputSpecOf } from "./recipe.ts";
@@ -34,6 +36,10 @@ export interface RunContext {
   rSizeUsd: number;
   /** Where the R size came from, shown on the results header. */
   rSizeSource?: "account" | "default";
+  accountName?: string | null;
+  /** Closed MES trades to evaluate against the recipe at their entry bars (§8.1, §8.6). */
+  trades?: readonly TradeRecord[];
+  includeSamples?: boolean;
   registry?: SkillRegistry;
   /** Wall clock for `ms`. Injected by tests; defaults to performance.now(). */
   now?: () => number;
@@ -264,6 +270,19 @@ export function runRecipe(input: Recipe, series: BarSeries, context: RunContext)
     .filter((s) => !usable.has(s.date))
     .map((s) => ({ date: s.date, reason: s.excluded?.reason ?? `only ${s.baseTimeframe} bars` }));
 
+  const overlays = context.trades
+    ? overlayRecipe({
+      recipe,
+      series,
+      trades: context.trades,
+      rSize: { usd: rSize, source: context.rSizeSource ?? "default" },
+      accountName: context.accountName,
+      run: { matches },
+      includeSamples: context.includeSamples,
+      registry,
+    }).rows
+    : [];
+
   return {
     recipe: { id: recipe.id, version: recipe.version },
     data: {
@@ -277,7 +296,7 @@ export function runRecipe(input: Recipe, series: BarSeries, context: RunContext)
     candidates,
     skips,
     matches,
-    overlays: [],
+    overlays,
     stats: attr.stats,
     splits: attr.splits,
     separators: attr.separators,
