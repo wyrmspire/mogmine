@@ -8,8 +8,9 @@ import { DEFAULT_CARD_THEME, getCardLayout } from "./shareCard.ts";
 import type { CardLayoutDimensions, CardSize } from "./shareCard.ts";
 import { getTheme } from "./theme.ts";
 import type { ChartTheme } from "./theme.ts";
-import { adherence, holdSeconds, isOpen, rMultiple, tradePnl, tradePoints } from "./trades.ts";
-import type { TradeRecord } from "./trades.ts";
+import { adherence, holdSeconds, isOpen, tradePnl, tradePoints } from "./trades.ts";
+import type { RSizeOptions, TradeRecord } from "./trades.ts";
+import { resolveRSize, resultR } from "./r-size.ts";
 
 export interface DayCardTradeItem {
   id: string;
@@ -18,7 +19,8 @@ export interface DayCardTradeItem {
   entryTime: string;
   exitTime: string | null;
   holdTimeText: string;
-  rMultiple: number | null;
+  /** Account R (`resultR`): gross P&L ÷ R size. Null while open or when P&L cannot be computed. */
+  resultR: number | null;
   formattedR: string;
   points: number | null;
   formattedPoints: string;
@@ -81,6 +83,7 @@ export function buildDayCardData(
   targetDate: string,
   trades: readonly TradeRecord[],
   shield = true,
+  opts?: RSizeOptions,
 ): DayCardData {
   const matchingTrades = trades
     .filter((trade) => {
@@ -117,7 +120,7 @@ export function buildDayCardData(
       closedTradeCount++;
     }
 
-    const r = tradeOpen ? null : rMultiple(t);
+    const r = tradeOpen ? null : resultR(t, resolveRSize(t, opts?.accounts, opts?.prefs));
     if (r != null) {
       rValues.push(r);
     }
@@ -165,7 +168,7 @@ export function buildDayCardData(
       entryTime: t.entry_time,
       exitTime: t.exit_time,
       holdTimeText: formatDuration(holdSeconds(t)),
-      rMultiple: r,
+      resultR: r,
       formattedR: tradeOpen ? "OPEN" : formatR(r),
       points: pts,
       formattedPoints: tradeOpen ? "" : formatPoints(pts, t.symbol),
@@ -399,7 +402,7 @@ export function renderDayCardCanvas(
       // Col 4: Outcome (Hero R / points). Privacy sweep: NEVER show dollars or contracts!
       ctx.textAlign = "right";
       ctx.font = "750 24px ui-monospace, monospace";
-      const outcomeTone = tr.rMultiple != null ? (tr.rMultiple >= 0 ? theme.profit : theme.risk) : theme.textPrimary;
+      const outcomeTone = tr.resultR != null ? (tr.resultR >= 0 ? theme.profit : theme.risk) : theme.textPrimary;
       ctx.fillStyle = outcomeTone;
       ctx.fillText(tr.formattedR, mainX + mainW - 16, itemMidY + 6);
       ctx.textAlign = "left";

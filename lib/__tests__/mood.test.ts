@@ -349,9 +349,11 @@ test("similarTrades: nearest shapes first, samples kept apart, R summary flags s
   const result = similarTrades(target, [target, like, alsoLike, unlike, sample, noStop], records, DEFAULT_MOOD_REGISTRY);
   assert.deepEqual(new Set(result.matches.map((match) => match.trade.id)), new Set(["s1", "s2", "s5"]));
   assert.ok(result.matches[0].similarity >= result.matches[1].similarity);
-  assert.equal(result.summary.n, 2);
-  assert.equal(result.summary.skipped, 1, "a trade with no stop has no R and is skipped, not 0");
-  assert.equal(result.summary.wins, 1);
+  // Account R at $250 (1 MES): s1 exits -10 pts = -$50 = -0.2R; s2 +10 pts = +0.2R; s5 has no stop but +10 pts = +0.2R.
+  // A missing stop no longer removes a trade from the R summary; only a trade without a computable P&L is skipped.
+  assert.equal(result.summary.n, 3);
+  assert.equal(result.summary.skipped, 0);
+  assert.equal(result.summary.wins, 2);
   assert.equal(result.summary.losses, 1);
   assert.equal(result.summary.enough, false);
   assert.equal(MIN_MOOD_SAMPLE, 20);
@@ -370,7 +372,8 @@ test("moodOutcomeStats: winner and loser shapes, expectancy by dominant spoke, s
   trades.push(trade("nostop", { stop_loss_price: null }));
   trades.push(trade("nomood"));
   const stats = moodOutcomeStats(trades, records, DEFAULT_MOOD_REGISTRY);
-  assert.deepEqual(stats.skipped, { sample: 1, open: 1, noR: 1, noMood: 1 });
+  // The no-stop trade has account R now (+$50 = +0.2R), so it is skipped for having no mood, not for having no R.
+  assert.deepEqual(stats.skipped, { sample: 1, open: 1, noR: 0, noMood: 2 });
   assert.equal(stats.used, 12);
   assert.equal(stats.enough, false);
   assert.equal(stats.winners.n, 8);
@@ -381,8 +384,9 @@ test("moodOutcomeStats: winner and loser shapes, expectancy by dominant spoke, s
   assert.equal(stats.winners.shape[stats.spokes.indexOf("fear")], null, "nobody scored fear: unknown, not 0");
   const calmGroup = stats.byDominant.find((group) => group.spoke === "calm");
   const fomoGroup = stats.byDominant.find((group) => group.spoke === "fomo");
-  assert.equal(calmGroup?.summary.meanR, 2);
-  assert.equal(fomoGroup?.summary.meanR, -1);
+  // Account R at $250: winners +$50 = +0.2R, losers -$25 = -0.1R.
+  assert.ok(Math.abs((calmGroup?.summary.meanR ?? NaN) - 0.2) < 1e-9);
+  assert.ok(Math.abs((fomoGroup?.summary.meanR ?? NaN) - -0.1) < 1e-9);
   // Pre-exit only: these records were captured at NOW, after every exit, so nothing qualifies.
   assert.equal(moodOutcomeStats(trades, records, DEFAULT_MOOD_REGISTRY, { phase: "pre_exit" }).used, 0);
 });

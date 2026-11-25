@@ -27,7 +27,7 @@ function makeTrade(overrides: Partial<TradeRecord> = {}): TradeRecord {
   });
 }
 
-test("runningStats handles empty sets and distinguishes omitted R from a scratch", () => {
+test("runningStats handles empty sets and reports account R (no-stop trades included)", () => {
   const empty = runningStats([], NOW).overall;
   assert.equal(empty.tradeCount, 0);
   assert.equal(empty.wins, 0);
@@ -41,10 +41,11 @@ test("runningStats handles empty sets and distinguishes omitted R from a scratch
   assert.equal(empty.skippedRCount, 0);
   assert.equal(empty.ruleAdherence, null);
 
-  const t1 = makeTrade({ entry_price: 6000, exit_price: 6010, stop_loss_price: 5995 }); // +10 pts ($50), risk 5 pts => +2R
-  const t2 = makeTrade({ entry_price: 6000, exit_price: 5995, stop_loss_price: 5995 }); // -5 pts (-$25), risk 5 pts => -1R
-  const t3 = makeTrade({ entry_price: 6000, exit_price: 6000, stop_loss_price: 5990 }); // 0 pts ($0 scratch), risk 10 pts => 0R
-  const t4 = makeTrade({ entry_price: 6000, exit_price: 6005, stop_loss_price: null }); // +5 pts ($25), no stop => null R
+  // Account R at the default $250 R size (no account, no prefs): result R = P&L ÷ $250.
+  const t1 = makeTrade({ entry_price: 6000, exit_price: 6010, stop_loss_price: 5995 }); // +10 pts ($50) => +0.2R
+  const t2 = makeTrade({ entry_price: 6000, exit_price: 5995, stop_loss_price: 5995 }); // -5 pts (-$25) => -0.1R
+  const t3 = makeTrade({ entry_price: 6000, exit_price: 6000, stop_loss_price: 5990 }); // 0 pts ($0 scratch) => 0R
+  const t4 = makeTrade({ entry_price: 6000, exit_price: 6005, stop_loss_price: null }); // +5 pts ($25), no stop => +0.1R (P&L known)
 
   const summary = runningStats([t1, t2, t3, t4], NOW).overall;
   assert.equal(summary.tradeCount, 4);
@@ -53,10 +54,10 @@ test("runningStats handles empty sets and distinguishes omitted R from a scratch
   assert.equal(summary.scratches, 1);
   assert.equal(summary.winRate, 2 / 4);
   assert.equal(summary.grossPnl, 50); // 50 - 25 + 0 + 25 = 50
-  assert.equal(summary.withR, 3);
-  assert.equal(summary.skippedRCount, 1);
-  assert.equal(summary.totalR, 1); // 2 - 1 + 0 = 1
-  assert.ok(Math.abs((summary.avgR ?? 0) - 1 / 3) < 1e-10);
+  assert.equal(summary.withR, 4);
+  assert.equal(summary.skippedRCount, 0);
+  assert.ok(Math.abs((summary.totalR ?? 0) - 0.2) < 1e-10); // 0.2 - 0.1 + 0 + 0.1 = 0.2
+  assert.ok(Math.abs((summary.avgR ?? 0) - 0.05) < 1e-10); // 0.2 / 4
 });
 
 test("unpriceable trades are counted without affecting gross or the win-rate denominator", () => {
@@ -70,7 +71,9 @@ test("unpriceable trades are counted without affecting gross or the win-rate den
   assert.equal(overall.incomplete, true);
   assert.equal(overall.winRate, 1);
   assert.equal(overall.scratches, 0);
-  assert.equal(overall.skippedRCount, 2);
+  // Account R needs only a computable P&L: the winner counts (1.5 ÷ $250); the unpriceable trade is skipped.
+  assert.equal(overall.withR, 1);
+  assert.equal(overall.skippedRCount, 1);
   assert.equal(runningStats([invalid], NOW).overall.winRate, null);
   assert.equal(runningStats([winner], NOW).overall.incomplete, false);
 });
@@ -209,7 +212,7 @@ test("runningStats groups by playbook and tag with rule adherence", () => {
       { id: "r1", label: "Rule 1", checked: true },
       { id: "r2", label: "Rule 2", checked: true },
     ],
-    exit_price: 6010, // +$50, +2R
+    exit_price: 6010, // +$50 => +0.2R at $250
     stop_loss_price: 5995,
   });
 
@@ -221,7 +224,7 @@ test("runningStats groups by playbook and tag with rule adherence", () => {
       { id: "r1", label: "Rule 1", checked: true },
       { id: "r2", label: "Rule 2", checked: false },
     ],
-    exit_price: 5995, // -$25, -1R
+    exit_price: 5995, // -$25 => -0.1R at $250
     stop_loss_price: 5995,
   });
 
@@ -230,8 +233,8 @@ test("runningStats groups by playbook and tag with rule adherence", () => {
     playbook_id: "vwap-trend-push",
     quick_tags: ["VWAP Hold"],
     checklist_state: [],
-    exit_price: 6005, // +$25
-    stop_loss_price: null, // no stop -> skipped R
+    exit_price: 6005, // +$25 => +0.1R; no stop does not exclude it from account R
+    stop_loss_price: null,
   });
 
   const stats = runningStats([p1, p2, p3], NOW);
@@ -245,8 +248,8 @@ test("runningStats groups by playbook and tag with rule adherence", () => {
   assert.equal(orb.losses, 1);
   assert.equal(orb.winRate, 0.5);
   assert.equal(orb.grossPnl, 25);
-  assert.equal(orb.totalR, 1);
-  assert.equal(orb.avgR, 0.5);
+  assert.ok(Math.abs((orb.totalR ?? 0) - 0.1) < 1e-10); // 0.2 - 0.1
+  assert.ok(Math.abs((orb.avgR ?? 0) - 0.05) < 1e-10); // 0.1 / 2
   assert.equal(orb.withR, 2);
   assert.equal(orb.skippedRCount, 0);
   assert.deepEqual(orb.ruleAdherence, {
@@ -260,10 +263,10 @@ test("runningStats groups by playbook and tag with rule adherence", () => {
   const vwap = stats.byPlaybook.find((p) => p.playbookId === "vwap-trend-push")!;
   assert.ok(vwap);
   assert.equal(vwap.tradeCount, 1);
-  assert.equal(vwap.totalR, null);
-  assert.equal(vwap.avgR, null);
-  assert.equal(vwap.withR, 0);
-  assert.equal(vwap.skippedRCount, 1);
+  assert.ok(Math.abs((vwap.totalR ?? 0) - 0.1) < 1e-10);
+  assert.ok(Math.abs((vwap.avgR ?? 0) - 0.1) < 1e-10);
+  assert.equal(vwap.withR, 1);
+  assert.equal(vwap.skippedRCount, 0);
   assert.equal(vwap.ruleAdherence, null);
 
   // Tags

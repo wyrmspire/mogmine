@@ -10,7 +10,7 @@
 //
 // No table and no migration until OD-30 is settled. See docs/18.
 
-import { rMultiple } from "./trades.ts";
+import { resolveRSize, resultR } from "./r-size.ts";
 import type { TradeRecord } from "./trades.ts";
 
 export type MoodSource = "user" | "voice_ai";
@@ -459,7 +459,7 @@ export function similarTrades(
     .filter((trade) => trade.id !== target.id && trade.is_sample === target.is_sample)
     .flatMap((trade) => {
       const score = moodSimilarity(base, moodVector(trade, records, registry, vectorOptions), options.minOverlap ?? MIN_SPOKE_OVERLAP);
-      return score && score.similarity >= minSimilarity ? [{ trade, similarity: score.similarity, r: rMultiple(trade) }] : [];
+      return score && score.similarity >= minSimilarity ? [{ trade, similarity: score.similarity, r: resultR(trade, resolveRSize(trade)) }] : [];
     })
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
@@ -511,7 +511,7 @@ export function moodOutcomeStats(trades: TradeRecord[], records: MoodRecord[], r
   for (const trade of trades) {
     if (trade.is_sample) { skipped.sample += 1; continue; }
     if (trade.exit_time == null) { skipped.open += 1; continue; }
-    const r = rMultiple(trade);
+    const r = resultR(trade, resolveRSize(trade));
     if (r == null) { skipped.noR += 1; continue; }
     const vector = moodVector(trade, records, registry, options);
     if (!knownCount(vector)) { skipped.noMood += 1; continue; }
