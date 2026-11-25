@@ -224,3 +224,7 @@ Per `npm run check:file-length`, any PR touching or growing one of these 14 file
 ## Addendum (2026-11-24 5:40 PM CT): wave 8, `VOL-1` volume
 
 Chris: "we have been ignoring volume everywhere." Added package `VOL-1` (lane L3, `swarm-3`, wave 8, after every package that writes `components/TradeChart.tsx`): a volume histogram pane under the candles styled with the `08-visual-quality.md` tokens (View toggle, default on), plus an audit/fix so real Yahoo bar volume reaches `sessionVwap` and sample bars stop faking `volume: 1` (VWAP withheld instead of equal-weighted). Prompt: [prompts/VOL-1.md](prompts/VOL-1.md). Volume *analysis* (profile studies, relative volume, delta, volume-based setups) belongs to the separate Strategy Lab work (09-strategy-lab.md) and is out of scope here.
+
+## Addendum (2026-11-24 9:02 PM CT): planned TP/SL boxes always stay drawn
+
+Chris: when SL is hit, the planned TP box must not disappear. Planned TP and planned SL boxes stay on the chart for every outcome; an early/manual exit is a marker or line over those still-visible planned boxes. Styling follows 08 (no opacity/anchoring changes). Folded into **SM-2** (wave 3; already owns `lib/trade-marks.ts` and `components/PositionBoxPrimitive.ts`) — see [prompts/SM-2.md](prompts/SM-2.md) addendum. Not a new package.
