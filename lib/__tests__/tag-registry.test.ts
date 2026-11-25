@@ -208,7 +208,7 @@ test("backup: a tag-only backup with no trades still restores; a legacy backup h
 
 function agentCommands() {
   const adapter = createLocalAdapter({ kind: "mock", store: createMemoryKeyValueStore(), candles: createMemoryCandleStore() });
-  return createJournalCommands(adapter.repositories);
+  return createJournalCommands(adapter.repositories, undefined, { now: () => NOW_MS });
 }
 
 test("local adapter: tag_registry is a singleton that round-trips and sanitizes on read", async () => {
@@ -295,13 +295,15 @@ test("write checks: Moved Stop stays accepted after a registry edit", () => {
   assert.equal(checkTags(reg, [MOVED_STOP_TAG]).ok, true);
 });
 
-// The integration the spec asks for: PUT a new tag, GET vocabulary, then POST a trade with it. The POST leg runs in
-// dispatch.ts, which still builds its write-check context from the seed constants (SETUP_TAGS) and is outside PL-3's
-// writable files. Until dispatch passes `tagRegistry`, this leg is recorded as a todo, not a pass.
-test("agent API: POST /records/trades accepts a registry tag and refuses retired or unknown ones (dispatch.ts wiring)", { todo: "dispatch.ts writeVocabulary and trade-check.ts must pass tagRegistry (out of PL-3 scope)" }, async () => {
+test("agent API: POST /records/trades accepts a registry tag and refuses retired or unknown ones (dispatch.ts wiring)", async () => {
   const commands = agentCommands();
-  const reg = ok(addTag(DEFAULT_TAG_REGISTRY, "setup", { label: "200 EMA Pullback" }));
+  const added = ok(addTag(DEFAULT_TAG_REGISTRY, "setup", { label: "200 EMA Pullback" }));
+  const reg = ok(retireTag(added, idOf(added, "Level Sweep")));
   await dispatchAgentRoute({ kind: "writeSingleton", key: "tag_registry", body: reg }, commands, WHO, { nowMs: NOW_MS });
-  const posted = await dispatchAgentRoute({ kind: "create", type: "trades", body: writeBody(["200 EMA Pullback"]) }, commands, WHO, { nowMs: NOW_MS });
+  const posted = await dispatchAgentRoute({ kind: "create", type: "trades", body: { id: "accepted-1", ...writeBody(["200 EMA Pullback"]) } }, commands, WHO, { nowMs: NOW_MS });
   assert.equal(posted.status, 201);
+  const retiredPost = await dispatchAgentRoute({ kind: "create", type: "trades", body: { ...writeBody(["Level Sweep"]), id: "retired-1" } }, commands, WHO, { nowMs: NOW_MS });
+  assert.equal(retiredPost.status, 422);
+  const unknownPost = await dispatchAgentRoute({ kind: "create", type: "trades", body: { ...writeBody(["Unknown Tag"]), id: "unknown-1" } }, commands, WHO, { nowMs: NOW_MS });
+  assert.equal(unknownPost.status, 422);
 });

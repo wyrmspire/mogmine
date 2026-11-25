@@ -218,11 +218,8 @@ const SINGLETON_PARSERS: { [K in SingletonKey]: Parser<SingletonRecordTypes[K]> 
   },
   mood_registry: (raw) => (isObject(raw) ? good(sanitizeRegistry(raw)) : bad("The mood spoke registry must be an object.")),
   tag_registry: (raw) => (isObject(raw) ? good(sanitizeTagRegistry(raw)) : bad("The tag registry must be an object.")),
-  prompt_library: (raw) => (
-    isObject(raw) && raw.schema === PROMPT_LIBRARY_SCHEMA && Array.isArray(raw.prompts) && typeof raw.seeds_version === "number"
-      ? good(raw as unknown as PromptLibraryV1)
-      : bad("The prompt library has an unknown schema.")
-  ),
+  prompt_library: (raw) => isObject(raw) && raw.schema === PROMPT_LIBRARY_SCHEMA && Array.isArray(raw.prompts) && typeof raw.seeds_version === "number"
+    ? good(raw as unknown as PromptLibraryV1) : bad("The prompt library has an unknown schema."),
 };
 
 /**
