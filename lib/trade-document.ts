@@ -21,7 +21,7 @@ import type {
 
 export const TRADE_DOC_SCHEMA = "mogmine.trade.v1" as const;
 
-export type EventBasis = "broker" | "stated" | "inferred";
+export type EventBasis = "broker" | "stated" | "inferred" | "untimed";
 export type TradeDocSide = "long" | "short";
 export type TradeDocSourceKind = "manual" | "csv" | "broker";
 
@@ -1579,24 +1579,13 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
       });
     }
   } else if (record.initial_stop_price != null && record.stop_loss_price !== record.initial_stop_price) {
-    const moveTime = pickStopMoveTime(record.entry_time, record.exit_time, record.initial_stop_set_at);
-    if (record.stop_loss_price != null) {
-      events.push({
-        seq: seq++,
-        t: moveTime,
-        type: "modify",
-        basis: "inferred",
-        order: "stop",
-        price: record.stop_loss_price,
-      });
-    } else {
-      events.push({
-        seq: seq++,
-        t: moveTime,
-        type: "cancel",
-        basis: "inferred",
-        order: "stop",
-      });
+    // SM-UT-1/2: an unrecorded move has no known time, so it is never taken from initial_stop_set_at.
+    // A closed trade's move sits at the exit instant (basis "untimed"). An open trade keeps the initial stop
+    // as the working stop across the hold. A removed stop with no time falls back to the entry instant.
+    if (record.stop_loss_price == null) {
+      events.push({ seq: seq++, t: record.exit_time ?? record.entry_time, type: "cancel", basis: "untimed", order: "stop" });
+    } else if (record.exit_time != null) {
+      events.push({ seq: seq++, t: record.exit_time, type: "modify", basis: "untimed", order: "stop", price: record.stop_loss_price });
     }
   }
 
@@ -1696,29 +1685,12 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
   };
 }
 
-function pickStopMoveTime(entryTime: string, exitTime: string | null, setAt: string | null): string {
-  const entryMs = Date.parse(entryTime);
-  const exitMs = exitTime != null ? Date.parse(exitTime) : null;
-  if (setAt != null) {
-    const setMs = Date.parse(setAt);
-    if (
-      Number.isFinite(setMs) &&
-      Number.isFinite(entryMs) &&
-      setMs >= entryMs &&
-      (exitMs == null || !Number.isFinite(exitMs) || setMs <= exitMs)
-    ) {
-      return setAt;
-    }
-  }
-  return entryTime;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
 }
 
 function isBasis(value: unknown): value is EventBasis {
-  return value === "broker" || value === "stated" || value === "inferred";
+  return value === "broker" || value === "stated" || value === "inferred" || value === "untimed";
 }
 
 function isTimestamp(value: unknown): value is string {
