@@ -53,6 +53,8 @@ import { useListContext, useOnline } from "@/lib/ui";
 import { getCandleFreshness } from "@/lib/freshness";
 import { DataNotesChip } from "./DataNotesChip";
 import { collectDataNotes } from "@/lib/data-notes";
+import { checkExitStopConsistency } from "@/lib/stop-facts";
+import { StopFacts } from "./StopFacts";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
 import type { ChartDetailLevel } from "@/lib/hindsight";
 
@@ -369,6 +371,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     chronologyUnresolved: observation?.coverage === "complete" && observation.chronology === "unresolved",
     findings: observation?.findings ?? [],
     entryBarPassedStop: observation?.entryBarPassedStop,
+    exitStopMismatch: checkExitStopConsistency(trade),
     untimedStopMovePrice: !trade.stop_moves?.length && trade.initial_stop_price != null && trade.stop_loss_price != null && trade.stop_loss_price !== trade.initial_stop_price ? trade.stop_loss_price : null,
     symbol: trade.symbol,
     zone,
@@ -660,6 +663,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={rSize.cents / 100} shield={prefs.shield} />}
           {/* The frozen first stop once the working stop has moved, or why R is blank (R-10). */}
           {stopHistory && <p className="initial-stop">{stopHistory}</p>}
+          <StopFacts trade={trade} rSize={rSize} />
 
           {/* G2 (#36): Interactive stop-move editor & widening suggestion (UX-33) */}
           <StopMovesEditor
