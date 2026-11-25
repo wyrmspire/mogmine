@@ -40,3 +40,9 @@ Per Chris's direction on 2026-11-24 (4:46 PM CT — *"I don't really think anyth
 | ID | Question | Default Chosen | Why | Packages Affected | Chris Can Override |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **D-VOL** | How should volume appear on the trade chart, and what if bars have no real volume? | Volume histogram pane under the candles, on by default (View toggle, persisted), up/down candle colors at ~0.35 alpha from the 08 tokens, behind candles and zones. Sample/fixture bars without real volume: hide the pane and withhold VWAP rather than equal-weighting. | Chris: "we have been ignoring volume everywhere"; VWAP is meaningless without real volume. | `VOL-1` | Yes |
+
+## Addendum (2026-11-24 9:02 PM CT)
+
+| ID | Question | Default Chosen | Why | Packages Affected | Chris Can Override |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **D-TP** | When SL is hit, should the planned TP box disappear? | No. Planned TP and planned SL boxes always stay drawn, for every outcome. An early/manual exit is shown as a marker or line over those still-visible planned boxes. Styling follows 08. | Chris, 9:02 PM CT. | `SM-2` (wave 3 addendum) | Yes |

@@ -100,3 +100,13 @@ HARD RULES:
 - Never modify, delete or re-create Chris's real trade records or accounts (no calls to the live /api/v1 with real tokens, no Supabase writes). Use fixtures and unit tests.
 - Stay inside this package's scope and its listed writable files. Out-of-scope need = stop and write it in the handoff.
 - Never edit BOARD.md, NOTES.md, DECISIONS.md. Never merge PRs, never push to main, never force-push other branches, never touch other worktrees.
+
+## Addendum (2026-11-24 9:02 PM CT) — Planned boxes always stay drawn
+
+Chris: when the stop is hit, the planned TP box disappears. It must not. Planned TP and planned SL boxes stay drawn for the trade no matter the outcome (SL hit, TP hit, or early/manual exit). If he exits early (before TP or SL), keep the planned boxes and show the actual exit as a distinct marker or line over them. Styling stays with `docs/design-2026-11-24/08-visual-quality.md` (no opacity or anchoring experiments).
+
+Do this in the already-writable files (`lib/trade-marks.ts`, `components/PositionBoxPrimitive.ts`, `lib/__tests__/trade-marks.test.ts`). If the marks already exist but the box is clipped off-screen (autoscale / visible range fitted only to candles or the actual SL), fix the range so planned TP and SL prices stay in view — a small `components/TradeChart.tsx` edit is allowed only for that visible-range fix (≤ 10 net lines; state before/after counts).
+
+Targeted tests only (no full suite):
+- `mes-failed-reclaim` (exit = SL, planned TP is 7560.75): `buildMarks` includes a `layer: "plan"` profit zone with `p0`/`p1` covering `planned_target_price`, and the price range used for autoscale includes 7560.75.
+- Early/manual exit (exit is neither SL nor TP, e.g. `mes-opening-scalp`): both planned SL and TP zones are still present, plus a distinct actual-exit marker or line (not by deleting the plan).
