@@ -77,14 +77,14 @@ test("R-08b data: mixed priced, unpriced, open and undated trades", () => {
   assert.equal(stats.overall.unpriceableCount, 1);
   assert.equal(stats.overall.incomplete, true);
   assert.equal(stats.overall.grossPnl, 100); // 50 + 25 + 25
-  assert.equal(stats.overall.skippedRCount, 2); // closedUnpriceable (no valid R) + closedNoStop
+  assert.equal(stats.overall.skippedRCount, 1); // only closedUnpriceable; closedNoStop has +0.10R (D-A)
   assert.equal(stats.excludedOpenCount, 1);
   assert.equal(stats.undatedCount, 1);
 
   // Formatting checks
   assert.equal(formatMoney(stats.overall.grossPnl), "+$100.00");
   assert.equal(formatPercent(stats.overall.winRate), "100%");
-  assert.equal(formatR(stats.overall.totalR), "+3.0R");
+  assert.equal(formatR(stats.overall.totalR), "+0.4R"); // $100 ÷ $250 default R size = +0.40R
 
   assert.equal(stats.thisWeek.tradeCount, 0);
 });
@@ -100,8 +100,8 @@ test("R-08b data: an unpriceable trade and a scratch without a stop have distinc
   const summary = runningStats([unpriceable, scratch], NOW).overall;
   assert.equal(summary.pricedCount, 1);
   assert.equal(summary.scratches, 1);
-  assert.equal(summary.skippedRCount, 2);
-  assert.equal(summary.totalR, null);
+  assert.equal(summary.skippedRCount, 1); // only unpriceable; scratch without stop has 0R (D-A)
+  assert.equal(summary.totalR, 0);
 });
 
 test("R-08b running stats breakdowns: playbook name mapping and tag aggregation", () => {

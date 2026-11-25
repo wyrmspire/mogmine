@@ -20,12 +20,12 @@ for (const direction of ["LONG", "SHORT"] as const) {
   const s = direction === "LONG" ? 1 : -1;
 
   test(`${direction}: a plain stop-out has no efficiency and is "Stopped Out", not "Premature Exit"`, () => {
-    // sim 18-c: −1R at the stop after about +0.18R of MFE used to read −550 %.
+    // sim 18-c: −$50 (−0.20R on $250 default R size) at the stop after +$8.75 (+0.04R) of MFE used to read −550 %.
     const stopped = trade(direction, 7350 - 10 * s);
     const eff = calculateExitEfficiency(stopped, 1.75)!;
     assert.equal(eff.efficiencyPercent, null);
     assert.equal(eff.efficiencyRatio, null);
-    assert.equal(eff.summary, "closed at −1.0R; best was +0.2R");
+    assert.equal(eff.summary, "closed at −0.20R; best was +0.04R");
     const pva = derivePlanVsActual(stopped);
     assert.equal(pva.fidelity, "Stopped Out");
     assert.equal(stopOutcome(stopped), "stop");
@@ -34,22 +34,22 @@ for (const direction of ["LONG", "SHORT"] as const) {
     assert.equal(exitRow.deltaDisplay, "—");
     assert.equal(pva.rows.some((row) => row.label === "Exit / Target"), false);
     const result = pva.rows.find((row) => row.label === "Result (R)")!;
-    assert.equal(result.planned, "+2.0R at target");
-    assert.equal(result.actual, "−1.0R");
+    assert.equal(result.planned, "R:R 2.0:1 at target");
+    assert.equal(result.actual, "−0.20R");
   });
 
   test(`${direction}: slippage through the stop is shown on the stop row`, () => {
     const slipped = trade(direction, 7350 - 11 * s);
     const exitRow = derivePlanVsActual(slipped).rows.find((row) => row.label === "Exit / Stop")!;
     assert.equal(exitRow.tone, "negative");
-    assert.equal(exitRow.deltaR, -0.1);
+    assert.equal(exitRow.deltaR, -0.02);
   });
 
   test(`${direction}: a winner's efficiency is the share of MFE kept, clamped to 100 %`, () => {
     const win = trade(direction, 7350 + 8 * s);
     const eff = calculateExitEfficiency(win, 14)!;
     assert.equal(eff.efficiencyPercent, 57);
-    assert.equal(eff.summary, "captured +0.8R of +1.4R available (57%)");
+    assert.equal(eff.summary, "captured +0.16R of +0.28R available (57%)");
     // MFE estimated a tick under the fill: never over 100 %.
     assert.equal(calculateExitEfficiency(win, 7.75)!.efficiencyPercent, 100);
     assert.equal(derivePlanVsActual(win).fidelity, "Premature Exit");
@@ -63,15 +63,15 @@ for (const direction of ["LONG", "SHORT"] as const) {
     assert.equal(derivePlanVsActual(scratch).fidelity, "Scratch");
   });
 
-  test(`${direction}: an exit on a stop trailed past the entry is "Trailed Stop Hit" with R on the first risk`, () => {
+  test(`${direction}: an exit on a stop trailed past the entry is "Trailed Stop Hit" with account R`, () => {
     const trailed = trade(direction, 7350 + 6 * s, { stop_loss_price: 7350 + 6 * s });
     assert.equal(stopOutcome(trailed), "trail");
     const pva = derivePlanVsActual(trailed);
     assert.equal(pva.fidelity, "Trailed Stop Hit");
-    assert.equal(pva.fidelityNote, `Exited on the moved stop at ${(7350 + 6 * s).toFixed(2)}, +0.6R.`);
+    assert.equal(pva.fidelityNote, `Exited on the moved stop at ${(7350 + 6 * s).toFixed(2)}, +0.12R.`);
     const eff = calculateExitEfficiency(trailed, 15)!;
     assert.equal(eff.efficiencyPercent, 40);
-    assert.equal(eff.realizedR, 0.6);
+    assert.equal(eff.realizedR, 0.12);
   });
 
   test(`${direction}: an MFE under 2 ticks is noise, not an opportunity`, () => {

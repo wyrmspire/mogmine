@@ -34,7 +34,8 @@ test("without an initial stop, a risk-side current stop still sets R; a trailed 
   assert.equal(rMultiple(unknown), null);
   assert.equal(stopHistoryText(unknown, time),
     "Stop 7350.00 is not on the risk side of the entry and no initial stop is recorded, so R is not known.");
-  assert.match(describeTrade(unknown, "America/Chicago"), /stop not usable for R/);
+  // D-A: describeTrade reports account R (+$450 ÷ $250 = +1.80R) even when stop-width rMultiple is null.
+  assert.match(describeTrade(unknown, "America/Chicago"), /plus 1\.80 R\.$/);
 });
 
 test("an initial stop on the wrong side (a typo) falls back to the current risk-side stop", () => {

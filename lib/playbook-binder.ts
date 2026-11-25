@@ -60,7 +60,7 @@ export function playbookSampleLine(data: PlaybookCardData): string {
   const { stats } = data;
   const parts = [`n = ${stats.trades}`];
   if (stats.belowMinimum) parts.push(`rates from ${PLAYBOOK_CARD_MIN_TRADES}`);
-  if (stats.skippedR > 0) parts.push(`${stats.skippedR} without a stop, left out of R`);
+  if (stats.skippedR > 0) parts.push(`${stats.skippedR} unpriceable, left out of R`);
   return parts.join(" · ");
 }
 
