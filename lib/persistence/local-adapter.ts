@@ -17,6 +17,8 @@ import { sanitizeDailyReviews } from "../daily-review-sanitize.ts";
 import { sanitizeDrills } from "../drills-sanitize.ts";
 import { sanitizeCalls } from "../calls-sanitize.ts";
 import { sanitizePrefs } from "../prefs-sanitize.ts";
+import { sanitizeTagRegistry } from "../tag-registry.ts";
+import type { TagRegistry } from "../tag-registry.ts";
 import type { Prefs } from "../prefs-sanitize.ts";
 import type { PromptLibraryV1 } from "../discretionary-prompts.ts";
 import type { Candle } from "../trades.ts";
@@ -149,7 +151,7 @@ const SLOTS: { [K in CollectionKey]: CollectionSlot<CollectionRecordTypes[K]> } 
   },
 };
 
-const SINGLETON_SLOTS: { prefs: SingletonSlot<Prefs>; mood_registry: SingletonSlot<MoodSpokeRegistry> } = {
+const SINGLETON_SLOTS: { prefs: SingletonSlot<Prefs>; mood_registry: SingletonSlot<MoodSpokeRegistry>; tag_registry: SingletonSlot<TagRegistry> } = {
   prefs: {
     storageKey: "mogmine-prefs-v1",
     read: (blob) => (blob == null ? null : sanitizePrefs(blob)),
@@ -159,6 +161,11 @@ const SINGLETON_SLOTS: { prefs: SingletonSlot<Prefs>; mood_registry: SingletonSl
     storageKey: "mogmine-mood-v1",
     read: (blob) => (isObject(blob) && "registry" in blob ? sanitizeRegistry(blob.registry) : null),
     write: (blob, value) => objectWith(blob, { registry: value }),
+  },
+  tag_registry: {
+    storageKey: "mogmine-tags-v1",
+    read: (blob) => (blob == null ? null : sanitizeTagRegistry(blob)),
+    write: (_blob, value) => value,
   },
 };
 
@@ -175,7 +182,7 @@ export function sanitizeCollectionRecord(key: CollectionKey, raw: unknown): { id
   return clean ?? null;
 }
 
-export function sanitizeSingletonRecord(key: "prefs" | "mood_registry", raw: unknown): unknown | null {
+export function sanitizeSingletonRecord(key: "prefs" | "mood_registry" | "tag_registry", raw: unknown): unknown | null {
   const slot = SINGLETON_SLOTS[key] as unknown as SingletonSlot<unknown>;
   return slot.read(slot.write({}, raw));
 }
@@ -381,6 +388,7 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
     mood_records: collection("mood_records"),
     mood_candidates: collection("mood_candidates"),
     mood_registry: singleton("mood_registry"),
+    tag_registry: singleton("tag_registry"),
     prefs: singleton("prefs"),
     accounts: collection("accounts"),
     balance_checks: collection("balance_checks"),

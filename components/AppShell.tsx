@@ -19,6 +19,7 @@ import { hydrateMood } from "@/lib/mood-store";
 import { hydrateAccounts } from "@/lib/accounts-store";
 import { hydrateChallenges } from "@/lib/challenge-store";
 import { hydratePlaybooks } from "@/lib/playbooks-store";
+import { hydrateTagRegistry } from "@/lib/tag-registry-store";
 import { hydratePlans } from "@/lib/plans-store";
 import { hydrateDrills } from "@/lib/drills-store";
 import { hydrateCalls } from "@/lib/calls-store";
@@ -50,7 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const online = useOnline();
   const save = useHeaderSaveLabel(journal.saveState);
 
-  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); hydratePlans(); hydrateDrills(); hydrateCalls(); hydrateDailyReviews(); }, []);
+  useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); hydrateTagRegistry(); hydratePlans(); hydrateDrills(); hydrateCalls(); hydrateDailyReviews(); }, []);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   const waiting = journal.hydrated ? withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status === "new").length : 0;

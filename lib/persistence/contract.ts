@@ -13,6 +13,7 @@ import type { DrillRecord } from "../drills.ts";
 import type { DiscretionCall, PromptDismissal } from "../calls.ts";
 import type { PromptLibraryV1 } from "../discretionary-prompts.ts";
 import type { DailyReview } from "../daily-review.ts";
+import type { TagRegistry } from "../tag-registry.ts";
 
 /** Opaque owner id. Device: `DEFAULT_OWNER_USER_ID` ("demo-owner"). Supabase: `auth.users.id` (shared with Showmob). */
 export type UserId = string;
@@ -123,6 +124,8 @@ export interface CollectionRecordTypes {
 export interface SingletonRecordTypes {
   prefs: Prefs;
   mood_registry: MoodSpokeRegistry;
+  /** PL-3: setup and execution tag definitions, one document per owner. */
+  tag_registry: TagRegistry;
   prompt_library: PromptLibraryV1;
 }
 

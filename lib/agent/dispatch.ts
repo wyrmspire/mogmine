@@ -15,6 +15,7 @@ import type { TradeRecord } from "../trades.ts";
 import { sessionDate } from "../session.ts";
 import type { Prefs } from "../prefs-sanitize.ts";
 import { EXECUTION_TAGS, PLAYBOOK_SEEDS, SETUP_TAGS } from "../playbooks.ts";
+import { DEFAULT_TAG_REGISTRY, sanitizeTagRegistry } from "../tag-registry.ts";
 import { isValidRSizeCents } from "../r-size.ts";
 import { checkTradeWrite } from "./write-checks.ts";
 import type { AgentWriteWarning, TradeWriteCheckResult, WriteCheckContext } from "./write-checks.ts";
@@ -112,6 +113,8 @@ async function writeVocabulary(commands: JournalCommands): Promise<PersistResult
   const stored = await commands.readSingleton("prefs");
   if (!stored.ok) return stored;
   const prefs = stored.value?.record ?? null;
+  const tags = await commands.readSingleton("tag_registry");
+  const tagRegistry = tags.ok && tags.value ? sanitizeTagRegistry(tags.value.record) : DEFAULT_TAG_REGISTRY;
   const seeds = playbooks.value.length > 0 ? playbooks.value : PLAYBOOK_SEEDS;
   return {
     ok: true,
@@ -125,6 +128,7 @@ async function writeVocabulary(commands: JournalCommands): Promise<PersistResult
       })),
       setupTags: [...SETUP_TAGS],
       executionTags: [...EXECUTION_TAGS],
+      tagRegistry,
       defaultRSizeCents: resolveRSize({ account_id: null }, [], prefs).cents,
     },
   };

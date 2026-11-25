@@ -7,7 +7,9 @@ import { EXIT_REASONS, FUTURES_SPECS } from "../trades.ts";
 import type { TradeExitReason } from "../trades.ts";
 import { PLAN_PRESETS } from "../plans.ts";
 import type { PlanPreset } from "../plans.ts";
-import { PLAYBOOK_SEEDS, EXECUTION_TAGS, SETUP_TAGS } from "../playbooks.ts";
+import { PLAYBOOK_SEEDS } from "../playbooks.ts";
+import { DEFAULT_TAG_REGISTRY, activeExecutionTagLabels, activeSetupTagLabels, sanitizeTagRegistry } from "../tag-registry.ts";
+import type { TagDef } from "../tag-registry.ts";
 import { isValidRSizeCents, resolveRSize } from "../r-size.ts";
 
 /** The display zone used when the owner has not chosen one (prefs `timeZone`). */
@@ -29,6 +31,13 @@ export interface VocabularyPlaybook {
   archived: boolean;
 }
 
+/** An active tag with its description and playbooks (PL-3). The label is what goes in `quick_tags`. */
+export interface VocabularyTag {
+  label: string;
+  description: string;
+  playbook_ids: string[];
+}
+
 export interface VocabularyAccount {
   id: string;
   name: string;
@@ -41,6 +50,8 @@ export interface VocabularyPayload {
   playbooks: VocabularyPlaybook[];
   setup_tags: string[];
   execution_tags: string[];
+  setup_tag_details: VocabularyTag[];
+  execution_tag_details: VocabularyTag[];
   accounts: VocabularyAccount[];
   default_r_size_cents: number;
   exit_reasons: Array<{ value: TradeExitReason; label: string; effect: string }>;
@@ -48,6 +59,10 @@ export interface VocabularyPayload {
   plan_presets: Array<{ preset: PlanPreset; name: string; anchor_ct: string | null }>;
   time: { display_zone: string; session_zone: string; session_rollover_et: string };
 }
+
+const tagDetails = (defs: TagDef[]): VocabularyTag[] => defs
+  .filter((def) => !def.retired)
+  .map((def) => ({ label: def.label, description: def.description, playbook_ids: [...def.playbook_ids] }));
 
 /**
  * Builds the vocabulary for the owner behind `commands`. Playbooks include archived ones (flagged, so old trades still
@@ -61,6 +76,9 @@ export async function buildVocabulary(commands: JournalCommands): Promise<Persis
   const stored = await commands.readSingleton("prefs");
   if (!stored.ok) return stored;
   const prefs = stored.value?.record ?? null;
+  // A missing or unreadable registry (none saved yet, or the table is not migrated) answers with the seeds, never an error.
+  const tags = await commands.readSingleton("tag_registry");
+  const registry = tags.ok && tags.value ? sanitizeTagRegistry(tags.value.record) : DEFAULT_TAG_REGISTRY;
 
   const defaultRSizeCents = resolveRSize({ account_id: null }, [], prefs).cents;
   const ordered = playbooks.value.length > 0 ? playbooks.value : PLAYBOOK_SEEDS;
@@ -78,8 +96,10 @@ export async function buildVocabulary(commands: JournalCommands): Promise<Persis
     value: {
       house_rules_version: HOUSE_RULES_VERSION,
       playbooks: playbookRows,
-      setup_tags: [...SETUP_TAGS],
-      execution_tags: [...EXECUTION_TAGS],
+      setup_tags: activeSetupTagLabels(registry),
+      execution_tags: activeExecutionTagLabels(registry),
+      setup_tag_details: tagDetails(registry.setup),
+      execution_tag_details: tagDetails(registry.execution),
       accounts: accounts.value.map((account) => {
         const own = isValidRSizeCents(account.r_size_cents);
         return {

@@ -104,7 +104,7 @@ test("route keys: collections come from the v1 registry; candles and prompt_libr
   assert.equal(isCollectionKey("prompt_library"), false);
   assert.equal(isCollectionKey("prefs"), false);
   assert.equal(isCollectionKey("showmob_users"), false);
-  assert.deepEqual([...SINGLETON_KEYS].sort(), ["mood_registry", "prefs"]);
+  assert.deepEqual([...SINGLETON_KEYS].sort(), ["mood_registry", "prefs", "tag_registry"]);
   assert.equal(isSingletonKey("prefs"), true);
   assert.equal(isSingletonKey("prompt_library"), false);
   assert.equal(isSingletonKey("trades"), false);

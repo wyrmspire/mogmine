@@ -9,6 +9,7 @@ import { observeTrade } from "../trade-bar-validation.ts";
 import { deriveTrade, fromLegacy } from "../trade-document.ts";
 import { resolveRSize, resultR, riskCents, riskR, isValidRSizeCents } from "../r-size.ts";
 import { PLAYBOOK_SEEDS, EXECUTION_TAGS, SETUP_TAGS } from "../playbooks.ts";
+import { DEFAULT_TAG_REGISTRY, sanitizeTagRegistry } from "../tag-registry.ts";
 import { checkTradeWrite } from "./write-checks.ts";
 import type { AgentWriteWarning, WriteCheckContext } from "./write-checks.ts";
 import type { JournalCommands } from "../commands/journal-commands.ts";
@@ -204,6 +205,8 @@ async function checkVocabulary(commands: JournalCommands): Promise<{ ok: true; v
   const stored = await commands.readSingleton("prefs");
   if (!stored.ok) return { ok: false };
   const prefs = stored.value?.record ?? null;
+  const tags = await commands.readSingleton("tag_registry");
+  const tagRegistry = tags.ok && tags.value ? sanitizeTagRegistry(tags.value.record) : DEFAULT_TAG_REGISTRY;
   const seeds = playbooks.value.length > 0 ? playbooks.value : PLAYBOOK_SEEDS;
   return {
     ok: true,
@@ -220,6 +223,7 @@ async function checkVocabulary(commands: JournalCommands): Promise<{ ok: true; v
         })),
         setupTags: [...SETUP_TAGS],
         executionTags: [...EXECUTION_TAGS],
+        tagRegistry,
         defaultRSizeCents: resolveRSize({ account_id: null }, [], prefs).cents,
         dayPriceRange: null,
       },

@@ -10,11 +10,13 @@ import { getChallengesBackup, restoreChallenges } from "@/lib/challenge-store";
 import { getMoodBackup, restoreMood } from "@/lib/mood-store";
 import { getAccountsBackup, restoreAccounts } from "@/lib/accounts-store";
 import { getPlaybooksBackup, restorePlaybooks } from "@/lib/playbooks-store";
+import { getTagRegistryBackup, restoreTagRegistry } from "@/lib/tag-registry-store";
 import { getPlansBackup, restorePlans } from "@/lib/plans-store";
 import { getDrillsBackup, restoreDrills } from "@/lib/drills-store";
 import { getCallsBackup, restoreCalls } from "@/lib/calls-store";
 import { getDailyReviewsBackup, restoreDailyReviews } from "@/lib/daily-review-store";
 import { PlaybookEditor } from "./PlaybookEditor";
+import { TagRegistryEditor } from "./TagRegistryEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 
@@ -86,7 +88,7 @@ export function TuneScreen() {
   const sampleCount = journal.trades.length - realCount;
 
   const downloadBackup = () => {
-    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup(), getDrillsBackup(), getCallsBackup(), getDailyReviewsBackup());
+    const payload = buildBackup(journal.trades, prefs, getMoodBackup(), getAccountsBackup(), getChallengesBackup(), getPlaybooksBackup(), getPlansBackup(), getDrillsBackup(), getCallsBackup(), getDailyReviewsBackup(), getTagRegistryBackup());
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -128,6 +130,8 @@ export function TuneScreen() {
     restoreChallenges(pending.challenges);
     // An older backup has no playbook list: keep this device's playbooks.
     if (pending.playbooks) restorePlaybooks(pending.playbooks);
+    // An older backup has no tag registry: keep this device's tags (PL-3).
+    if (pending.tag_registry) restoreTagRegistry(pending.tag_registry);
     // An older backup has no plans: keep this device's plans.
     if (pending.plans) restorePlans(pending.plans);
     // Drill answers merge by id, so an older backup never erases newer answers (CD-2b).
@@ -409,6 +413,7 @@ export function TuneScreen() {
         <Link href="/playbooks/lab">Playbooks &amp; Lab</Link>
       </div>
       <PlaybookEditor />
+      <TagRegistryEditor />
 
       <div className="section-title">
         <h2>Journal backup</h2>
