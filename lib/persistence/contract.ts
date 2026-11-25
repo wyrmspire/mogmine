@@ -12,6 +12,7 @@ import type { PlanningSession } from "../plans.ts";
 import type { DrillRecord } from "../drills.ts";
 import type { DiscretionCall, PromptDismissal } from "../calls.ts";
 import type { PromptLibraryV1 } from "../discretionary-prompts.ts";
+import type { DailyReview } from "../daily-review.ts";
 
 /** Opaque owner id. Device: `DEFAULT_OWNER_USER_ID` ("demo-owner"). Supabase: `auth.users.id` (shared with Showmob). */
 export type UserId = string;
@@ -116,6 +117,7 @@ export interface CollectionRecordTypes {
   drills: DrillRecord;
   calls: DiscretionCall;
   prompt_dismissals: PromptDismissal;
+  daily_reviews: DailyReview;
 }
 
 export interface SingletonRecordTypes {
