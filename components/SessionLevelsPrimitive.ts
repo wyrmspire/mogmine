@@ -4,12 +4,18 @@
 // (`levelPills`: the trade's own prices, then planned, then nearest the entry) and are laid out every paint at
 // the current scale (`layoutPills`), so zoom and resize re-run it. A pill that does not fit is dropped and its
 // rays draw faint; the View tooltip still lists the level.
+// LB-5/LB-6 (`levelLabels: "tap"`, the default): no pills, rays only, and at most three price-only axis tags for
+// the groups nearest the entry. A tap on a ray is read by `hitTestLevel`.
 import type { CanvasRenderingTarget2D } from "fancy-canvas";
-import type { IPrimitivePaneView, ISeriesPrimitive, SeriesAttachedParameter, Time, UTCTimestamp } from "lightweight-charts";
+import type { IPrimitivePaneView, ISeriesPrimitive, ISeriesPrimitiveAxisView, SeriesAttachedParameter, Time, UTCTimestamp } from "lightweight-charts";
 // Relative with extension so node tests and the Chrome check can load this file directly.
 import { layoutPills } from "../lib/label-stack.ts";
+import { hitLevel, selectAxisTagGroups } from "../lib/level-hit-test.ts";
+import type { LevelHit } from "../lib/level-hit-test.ts";
+import { formatPrice } from "../lib/format.ts";
 import type { LevelLine, LevelPill, LevelRole } from "@/lib/chart-levels";
 import type { ChartTheme } from "@/lib/theme";
+import type { LevelLabelsMode } from "@/lib/prefs-sanitize";
 
 const FONT = "500 11px ui-monospace, SFMono-Regular, Menlo, monospace";
 const PILL_HEIGHT = 16;
@@ -23,6 +29,8 @@ const PILL_GAP_PX = 8;
 const RAY_OVERSHOOT_PX = 4;
 // Pill background opacity when the theme does not carry `--level-label-bg-alpha` (LB-2).
 const PILL_BG_ALPHA = 0.95;
+// Off-pane axis tags park here so lightweight-charts' own label placement ignores them.
+const OFF_PANE = -1000;
 
 /** Width of one pill as `draw` lays it out, for a label of `label` text. */
 export function levelPillWidthPx(label: string) {
@@ -57,6 +65,9 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
   private theme?: ChartTheme;
   private barMs = 60_000;
   private lastBarTime: number | null = null;
+  private mode: LevelLabelsMode = "tap";
+  private symbol = "MES";
+  private entryPrice: number | null = null;
   // Both layers sit under candles and wicks (LB-1): the pills never cover a bar.
   private readonly views: readonly IPrimitivePaneView[] = [
     { zOrder: () => "bottom", renderer: () => ({ draw: (target) => this.draw(target, "rays") }) },
@@ -71,24 +82,81 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
 
   /**
    * `barMs` is the displayed bar size: a level's start time snaps to the bar that holds it (B-23).
-   * `pills` defaults to one pill per line, in order.
+   * `pills` defaults to one pill per line, in order. `mode` defaults to `"tap"` (LB-5): no pills, and up to
+   * three price-only axis tags for the groups nearest `entryPrice`. `"always"` draws the right-edge pills instead.
    */
-  update(lines: readonly LevelLine[], theme: ChartTheme, barMs: number, pills?: readonly LevelPill[], options: { lastBarTime?: number | null } = {}) {
+  update(lines: readonly LevelLine[], theme: ChartTheme, barMs: number, pills?: readonly LevelPill[], options: {
+    lastBarTime?: number | null; mode?: LevelLabelsMode; symbol?: string; entryPrice?: number | null;
+  } = {}) {
     this.lines = lines;
     // Rays stop at the last bar (LB-4). Null keeps the full-width ray.
     this.lastBarTime = options.lastBarTime ?? null;
     this.pills = pills ?? lines.map((line, rank) => ({
       price: line.price, label: line.label, role: line.role, tone: null, rank, lineTicks: [line.price_ticks],
     }));
+    this.mode = options.mode ?? "tap";
+    this.symbol = options.symbol ?? "MES";
+    this.entryPrice = options.entryPrice ?? null;
     this.theme = theme;
     this.barMs = barMs;
     this.attachment?.requestUpdate();
   }
 
+  /** LB-6: price-only tags for the merged groups nearest the entry, at most three. Empty in `"always"` mode. */
+  priceAxisViews(): readonly ISeriesPrimitiveAxisView[] {
+    const { attachment, theme } = this;
+    if (this.mode !== "tap" || !attachment || !theme || this.entryPrice == null) return [];
+    const paneHeight = attachment.chart.paneSize().height;
+    return selectAxisTagGroups(this.pills, this.entryPrice).map((group): ISeriesPrimitiveAxisView => {
+      const coordinate = () => attachment.series.priceToCoordinate(group.price) ?? OFF_PANE;
+      return {
+        coordinate,
+        text: () => formatPrice(group.price, this.symbol),
+        textColor: () => theme.levelLabelText,
+        backColor: () => roleColor(theme, group.role),
+        visible: () => { const y = coordinate(); return y >= 0 && y <= paneHeight; },
+        tickVisible: () => true,
+      };
+    });
+  }
+
+  /** The level under a tap at CSS `(x, y)`: a ray within 10 px (and across its drawn span), or a zone. Null when none. */
+  hitTestLevel(x: number, y: number): LevelHit | null {
+    const { attachment } = this;
+    if (!attachment) return null;
+    const pane = attachment.chart.paneSize();
+    return hitLevel(this.lines, [], { x, y }, {
+      priceToY: (price) => {
+        const raw = attachment.series.priceToCoordinate(price);
+        return raw == null || raw < 0 || raw > pane.height ? null : raw;
+      },
+      raySpanX: (line) => this.raySpan(line, pane.width),
+    });
+  }
+
+  /** Where a ray is drawn across the pane: from its start bar (or the left edge) to the last bar + 4 px. Null when empty. */
+  private raySpan(line: LevelLine, paneWidth: number): { x0: number; x1: number } | null {
+    const { attachment } = this;
+    if (!attachment) return null;
+    const scale = attachment.chart.timeScale();
+    const lastBarX = this.lastBarTime != null ? scale.timeToCoordinate(Math.floor(this.lastBarTime / 1000) as UTCTimestamp) : null;
+    const x1 = lastBarX != null ? Math.min(paneWidth, Math.round(lastBarX + RAY_OVERSHOOT_PX)) : paneWidth;
+    let x0 = 0;
+    if (line.startAt != null) {
+      const bar = Math.floor(line.startAt / this.barMs) * this.barMs;
+      const x = scale.timeToCoordinate(Math.floor(bar / 1000) as UTCTimestamp);
+      // The forming bar is off the loaded data: draw from the edge rather than guess (B-23).
+      if (x != null) x0 = Math.max(0, Math.min(paneWidth, x));
+    }
+    return x1 <= x0 ? null : { x0, x1 };
+  }
+
   private draw(target: CanvasRenderingTarget2D, layer: "rays" | "labels") {
     const { attachment, theme } = this;
     if (!attachment || !theme || (!this.lines.length && !this.pills.length)) return;
-    const scale = attachment.chart.timeScale();
+    // Tap mode draws no pills (LB-6): the labels layer is empty, and no ray fades for a collision.
+    const tap = this.mode === "tap";
+    if (tap && layer === "labels") return;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize: pane }) => {
       const pills = this.pills.flatMap((pill) => {
         const y = attachment.series.priceToCoordinate(pill.price);
@@ -101,29 +169,21 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
       ctx.font = FONT;
       if (layer === "rays") {
         ctx.lineWidth = 1;
-        const lastBarX = this.lastBarTime != null ? scale.timeToCoordinate(Math.floor(this.lastBarTime / 1000) as UTCTimestamp) : null;
-        const rayRight = lastBarX != null ? Math.min(pane.width, Math.round(lastBarX + RAY_OVERSHOOT_PX)) : pane.width;
         for (const line of this.lines) {
           const raw = attachment.series.priceToCoordinate(line.price);
           if (raw == null || raw < 0 || raw > pane.height) continue;
+          const span = this.raySpan(line, pane.width);
+          if (!span) continue;
           const y = Math.round(raw) + 0.5;
-          let x0 = 0;
-          if (line.startAt != null) {
-            const bar = Math.floor(line.startAt / this.barMs) * this.barMs;
-            const x = scale.timeToCoordinate(Math.floor(bar / 1000) as UTCTimestamp);
-            // The forming bar is off the loaded data: draw from the edge rather than guess (B-23).
-            if (x != null) x0 = Math.max(0, Math.min(pane.width, x));
-          }
-          if (rayRight <= x0) continue;
-          const faded = faint.has(line.price_ticks);
+          const faded = !tap && faint.has(line.price_ticks);
           // Settlement levels (PDC, 3 PM close, settle) are quiet dotted neutral rays (Q-7).
           const settlement = line.settlement === true;
           ctx.globalAlpha = faded ? 0.3 : settlement ? 0.6 : 0.8;
           ctx.strokeStyle = settlement ? theme.levelNeutral : roleColor(theme, line.role);
           ctx.setLineDash(settlement ? [1, 3] : line.proxy ? [4, 4] : []);
           ctx.beginPath();
-          ctx.moveTo(x0, y);
-          ctx.lineTo(rayRight, y);
+          ctx.moveTo(span.x0, y);
+          ctx.lineTo(span.x1, y);
           ctx.stroke();
         }
       } else {

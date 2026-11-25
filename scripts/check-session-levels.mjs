@@ -15,6 +15,7 @@ const transpile = (source) => ts.transpileModule(source, {
 }).outputText;
 
 const labelStack = transpile(read("../lib/label-stack.ts"));
+const levelHitTest = transpile(read("../lib/level-hit-test.ts"));
 const levelsPainter = transpile(read("../components/SessionLevelsPrimitive.ts"));
 const lightweightCharts = fileURLToPath(new URL(
   "../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js", import.meta.url,
@@ -37,8 +38,14 @@ try {
   const html = join(folder, "session-levels.html");
   writeFileSync(html, `<!doctype html><meta charset="utf-8"><pre id="result"></pre><div id="chart"></div>
     <script src="${pathToFileURL(lightweightCharts)}"></script>
-    <script>const stack = (() => { const exports = {}; ${labelStack}; return exports; })();
-      const require = () => stack; const exports = {}; ${levelsPainter}</script>
+    <script>
+      // Modules the painter requires. The real formatter pulls in trades.ts; MES prints two decimals, which is all this paints.
+      const modules = {
+        "../lib/label-stack.ts": (() => { const exports = {}; ${labelStack}; return exports; })(),
+        "../lib/level-hit-test.ts": (() => { const exports = {}; ${levelHitTest}; return exports; })(),
+        "../lib/format.ts": { formatPrice: (value) => value.toFixed(2) },
+      };
+      const require = (path) => modules[path]; const exports = {}; ${levelsPainter}</script>
     <script>
     const result = document.querySelector("#result");
     try {
@@ -103,49 +110,42 @@ try {
         return originalFillRect.apply(this, args);
       };
 
-      // Test with levels visible
       const lastBarTime = times[times.length - 1];
-      levelsPrimitive.update(levels, theme, 60_000, pills, { lastBarTime });
-      const screenshotVisible = chart.takeScreenshot(true);
+      const rayOf = (line) => line.path.length === 2 && line.path[0].args[1] === line.path[1].args[1];
+      // Paints the primitive in one label mode and records what it drew.
+      const capture = (mode) => {
+        renderedText.length = 0;
+        renderedLines.length = 0;
+        levelsPrimitive.update(levels, theme, 60_000, pills, { lastBarTime, mode, symbol: "MES", entryPrice: 7600 });
+        chart.takeScreenshot(true);
+        const y = levels[0] && series.priceToCoordinate(levels[0].price);
+        // The price scale can settle its width after the first paint, so read the geometry of this paint.
+        const geometry = { lastBarX: chart.timeScale().timeToCoordinate(lastBarTime / 1000), paneWidth: chart.paneSize().width };
+        const hit = levelsPrimitive.hitTestLevel(120, y);
+        // Pill labels are "price name"; the axis tags are price only, so they carry no space.
+        const pillLabels = renderedText.filter(t => t.text.includes(" "));
+        const ys = pillLabels.map(t => t.y).sort((a, b) => a - b);
+        const paneRight = Math.max(...pillLabels.map(t => t.right));
+        return {
+          pillLabels: pillLabels.map(t => t.text),
+          minGap: ys.slice(1).reduce((gap, v, i) => Math.min(gap, v - ys[i]), Infinity),
+          rightEdgeCount: pillLabels.filter(t => t.right > paneRight - 20).length,
+          rayCount: renderedLines.filter(rayOf).length,
+          rayEnds: renderedLines.filter(rayOf).map(l => l.path[1].args[0]),
+          geometry,
+          dottedRays: renderedLines.filter(l => l.dash.length === 2 && l.dash[0] === 1 && l.dash[1] === 3).map(l => ({ alpha: l.alpha, strokeStyle: l.strokeStyle })),
+          axis: levelsPrimitive.priceAxisViews().map(v => ({ text: v.text(), visible: v.visible(), textColor: v.textColor(), backColor: v.backColor() })),
+          hit: hit && { kind: hit.kind, price: hit.price, lines: hit.lines.length, ray: y },
+          miss: levelsPrimitive.hitTestLevel(120, -50),
+        };
+      };
       const zOrders = levelsPrimitive.paneViews().map((view) => view.zOrder());
-      const lastBarX = chart.timeScale().timeToCoordinate(lastBarTime / 1000);
-      const paneWidth = chart.paneSize().width;
-      const rayEnds = renderedLines.filter(l => l.path.length === 2 && l.path[0].args[1] === l.path[1].args[1]).map(l => l.path[1].args[0]);
-      const dottedRays = renderedLines.filter(l => l.dash.length === 2 && l.dash[0] === 1 && l.dash[1] === 3);
-      const visibleLabels = renderedText.map(t => t.text);
-      const rayCount = renderedLines.filter(l => l.path.length === 2 && l.path[0].args[1] === l.path[1].args[1]).length;
-
-      // Check right-edge positioning: labels should sit close to width (pane.width is the chart width excluding price scale)
-      const levelLabels = renderedText.filter(t => t.text.includes(" "));
-      // Stacked pills never overlap (16 px pills, 17 px pitch).
-      const ys = levelLabels.map(t => t.y).sort((a, b) => a - b);
-      const minGap = ys.slice(1).reduce((gap, y, i) => Math.min(gap, y - ys[i]), Infinity);
-      // Pills are right-aligned: every label ends within 20 px of the pane edge.
-      const paneRight = Math.max(...levelLabels.map(t => t.right));
-      const rightEdgeLabels = levelLabels.filter(t => t.right > paneRight - 20);
-
-      // Test toggle off
-      renderedText.length = 0;
-      renderedLines.length = 0;
-      levelsPrimitive.update([], theme, 60_000);
-      chart.takeScreenshot(true);
-      const hiddenLabelsCount = renderedText.filter(t => t.text.includes(" ")).length;
-      const hiddenRaysCount = renderedLines.filter(l => l.path.length === 2 && l.path[0].args[1] === l.path[1].args[1]).length;
 
       result.textContent = JSON.stringify({
         levelsCount: levels.length,
-        visibleLabels,
-        rayCount,
         zOrders,
-        lastBarX,
-        paneWidth,
-        expectedRayEnd: Math.min(paneWidth, Math.round(lastBarX + 4)),
-        rayEnds,
-        dottedRays: dottedRays.map(l => ({ alpha: l.alpha, strokeStyle: l.strokeStyle })),
-        rightEdgeCount: rightEdgeLabels.length,
-        minGap,
-        hiddenLabelsCount,
-        hiddenRaysCount,
+        tap: capture("tap"),
+        always: capture("always"),
       });
     } catch (error) {
       result.textContent = JSON.stringify({ error: String(error) });
@@ -163,26 +163,47 @@ try {
   console.log("Session levels check passed:", res);
   // 19 levels; PDH/RTH high and ADR inner low/RTH low share ticks, so 17 lines.
   assert.equal(res.levelsCount, 17);
-  assert.ok(res.minGap >= 16.5, `pills overlap: ${res.minGap}`);
-  // UX-21: at most 8 pills, nearest the reference first; the rest keep their rays (faint).
-  const drawn = res.visibleLabels.filter((label) => / [A-Z]/.test(label));
+  // LB-1: both layers under candles.
+  assert.deepEqual(res.zOrders, ["bottom", "bottom"]);
+  // LB-4: rays stop at the last bar + 4px, measured on the same paint that drew them.
+  const rayStops = (mode) => {
+    const { geometry, rayEnds } = res[mode];
+    assert.ok(geometry.lastBarX != null && geometry.lastBarX < geometry.paneWidth, `${mode}: last bar must be in view`);
+    const expected = Math.min(geometry.paneWidth, Math.round(geometry.lastBarX + 4));
+    assert.ok(rayEnds.length > 0 && rayEnds.every((x) => x <= expected + 0.5), `${mode}: ray past last bar`);
+    assert.ok(Math.max(...rayEnds) >= expected - 0.5, `${mode}: rays stop short of last bar + 4px`);
+  };
+
+  // LB-6 (`levelLabels: "tap"`, the default): no pills, rays present, at most 3 price-only axis tags, tap opens a ray.
+  const tap = res.tap;
+  assert.equal(tap.pillLabels.length, 0, `tap mode drew pills: ${tap.pillLabels}`);
+  assert.ok(tap.rayCount >= 15, `tap mode rays: ${tap.rayCount}`);
+  rayStops("tap");
+  assert.ok(tap.axis.length >= 1 && tap.axis.length <= 3, `axis tags: ${tap.axis.length}`);
+  for (const tag of tap.axis) {
+    assert.match(tag.text, /^\d{4}\.\d{2}$/, `axis tag is not price only: ${tag.text}`);
+    assert.ok(tag.visible, "axis tag off pane");
+  }
+  assert.ok(tap.hit && tap.hit.kind === "group" && tap.hit.lines >= 1, `tap on a ray missed: ${JSON.stringify(tap.hit)}`);
+  assert.equal(tap.miss, null);
+
+  // `"always"`: the right-edge pill column (LB-A, max 8), no axis tags.
+  const always = res.always;
+  const drawn = always.pillLabels.filter((label) => / [A-Z]/.test(label));
+  rayStops("always");
   assert.ok(drawn.length <= 8, `too many pills: ${drawn.length}`);
   assert.ok(drawn.some(l => l.includes("7619.75 PP")));
   assert.ok(drawn.some(l => l.includes("7593.00")));
   assert.ok(drawn.some(l => l.includes("7628.75 ONH")));
   assert.ok(!drawn.some(l => l.includes("7743.75 R2")), "the farthest level gave up its pill");
-  assert.ok(res.rayCount >= 15);
-  // LB-1: both layers under candles. LB-4: rays stop at lastBar + 4px, settlement rays dotted neutral 0.6.
-  assert.deepEqual(res.zOrders, ["bottom", "bottom"]);
-  assert.ok(res.lastBarX != null && res.lastBarX < res.paneWidth, "last bar must be in view");
-  assert.ok(res.rayEnds.length > 0 && res.rayEnds.every((x) => x <= res.expectedRayEnd + 0.5), `ray past last bar: ${Math.max(...res.rayEnds)}`);
-  assert.ok(Math.max(...res.rayEnds) >= res.expectedRayEnd - 0.5, "rays stop short of last bar + 4px");
-  assert.ok(res.dottedRays.length >= 1, "no settlement ray is dotted");
+  assert.ok(always.minGap >= 16.5, `pills overlap: ${always.minGap}`);
+  assert.ok(always.rightEdgeCount >= Math.min(8, drawn.length));
+  assert.equal(always.axis.length, 0, "always mode must not draw axis tags");
+  assert.ok(always.rayCount >= 15);
   // 0.6 is the settlement ray; 0.3 is the faint ray of a level whose pill was dropped (UX-21).
-  for (const ray of res.dottedRays) assert.ok(ray.alpha === 0.6 || ray.alpha === 0.3, `dotted ray alpha ${ray.alpha}`);
-  assert.ok(res.rightEdgeCount >= Math.min(8, drawn.length));
-  assert.equal(res.hiddenLabelsCount, 0);
-  assert.equal(res.hiddenRaysCount, 0);
+  assert.ok(always.dottedRays.length >= 1, "no settlement ray is dotted");
+  for (const ray of always.dottedRays) assert.ok(ray.alpha === 0.6 || ray.alpha === 0.3, `dotted ray alpha ${ray.alpha}`);
+  assert.ok(always.hit && always.hit.kind === "group", "always mode hit test missed a ray");
 } finally {
   rmSync(folder, { recursive: true, force: true });
 }
