@@ -1,0 +1,235 @@
+/* DR-2: the Days strip on /review and the day review screen /review/day/[date]. Component CSS lives here, not in globals.css. */
+
+/* Days strip: horizontal scroll inside its own box, so 390 px never overflows the page. */
+.review-days {
+  margin: 0 0 14px;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.review-days-track {
+  display: flex;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 2px 0 6px;
+  width: max-content;
+}
+.review-day {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  min-width: 76px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  color: inherit;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.review-day-date { font-size: 13px; font-weight: 600; }
+.review-day-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+.review-day-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted, #6b7280);
+}
+.review-day.is-draft .review-day-status::before { background: var(--gold, #d4a843); }
+.review-day.is-done .review-day-status::before { background: var(--positive, #3fb950); }
+.review-day[aria-current="date"] { border-color: var(--gold, #d4a843); }
+
+/* Day review header: ‹ date › and the account scope. */
+.day-review-head {
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.day-review-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.day-review-nav h1 { margin: 0; }
+.day-review-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  color: inherit;
+  text-decoration: none;
+  font-size: 20px;
+}
+.day-review-step.is-disabled { opacity: 0.35; }
+.day-review-scope select {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 10px;
+  border-radius: 10px;
+  font: inherit;
+}
+.day-review-summary {
+  margin: 0 0 12px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.day-review-note,
+.day-review-empty {
+  font-size: 13px;
+  opacity: 0.85;
+  margin: 6px 0 12px;
+}
+.day-review-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--gold, #d4a843);
+  font-size: 14px;
+}
+
+/* Trade rows: the slot DR-3 replaces with the ReviewCard grid. */
+.day-review-trades { margin-bottom: 18px; }
+.day-review-list,
+.day-review-points,
+.day-review-plans ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.day-review-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  min-width: 0;
+}
+.day-review-row.is-unlinked { opacity: 0.6; }
+.day-review-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+.day-review-check input { width: 20px; height: 20px; }
+.day-review-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  flex: 1 1 auto;
+  min-height: 44px;
+  min-width: 0;
+  padding: 6px 0;
+  color: inherit;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Plans today (read-only). */
+.day-review-plans { margin: 0 0 18px; font-size: 14px; }
+.day-review-plans h2 { font-size: 14px; margin: 0 0 6px; }
+.day-review-plans li { padding: 4px 0; overflow-wrap: anywhere; }
+
+/* Point groups. */
+.day-review-group { margin: 0 0 14px; }
+.day-review-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.day-review-group-head h2 { font-size: 15px; margin: 0; }
+.day-review-points li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.day-review-points li > span { min-width: 0; }
+.day-review-point-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+.day-review-point-form textarea,
+.day-review-lesson textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 10px;
+  resize: vertical;
+}
+.day-review-point-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.day-review-point-row select {
+  flex: 1 1 160px;
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+  font: inherit;
+  border-radius: 10px;
+}
+
+/* Lesson for tomorrow. */
+.day-review-lesson { margin: 0 0 16px; }
+.day-review-lesson label { display: grid; gap: 6px; font-size: 14px; }
+.day-review-lesson small { font-size: 12px; opacity: 0.8; font-variant-numeric: tabular-nums; }
+
+/* Footer actions. */
+.day-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 24px;
+}
+.day-review-actions > button {
+  flex: 1 1 200px;
+  max-width: 100%;
+}
+
+.day-review .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 390 px: nothing wider than the screen. */
+@media (max-width: 480px) {
+  .day-review-head { align-items: stretch; }
+  .day-review-scope select { width: 100%; }
+  .day-review-link { gap: 2px 8px; }
+}
