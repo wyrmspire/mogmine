@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { tradeSessionVwap, vwapOnBars } from "../chart-indicators.ts";
+import { joinSessionBars, tradeSessionVwap, tradeSessionVwapReport, vwapOnBars } from "../chart-indicators.ts";
+import { equityIndexSessionBounds } from "../session.ts";
 import type { Candle } from "../trades.ts";
 
 const minute = 60_000;
@@ -51,4 +52,37 @@ test("IND-1: a 5m chart takes the value known at each bar's close, never earlier
   assert.deepEqual(vwapOnBars(points, [{ time: rth }, { time: rth + minute }], "1m"), [
     { time: rth, value: 100 }, { time: rth + minute, value: 102.25 },
   ]);
+});
+
+test("VW-2: a Globex session with 23 overnight gaps draws approximately, with the reason", () => {
+  const open = equityIndexSessionBounds("2026-11-24").open; // 18:00 ET on 11/23
+  const close = equityIndexSessionBounds("2026-11-24").close; // 17:00 ET on 11/24
+  const missing = (offset: number) => offset < 10 || (offset >= 77 && offset < 89) || offset === 359;
+  const candles = Array.from({ length: 1380 }, (_, offset) => offset)
+    .filter((offset) => !missing(offset))
+    .map((offset) => bar(open + offset * minute, 100, 100, 100, 1));
+  const gapTrade = { symbol: "MES", entry_time: "2026-11-24T15:00:00Z" };
+  const report = tradeSessionVwapReport(gapTrade, candles, "1m", "globex");
+  assert.ok(report);
+  assert.equal(report.approximate, true);
+  assert.equal(report.missingBars, 23);
+  assert.equal(report.reason, "≈ 23 min missing overnight");
+  assert.equal(report.points.at(-1)!.time, close);
+  // RTH is whole in this session, so RTH VWAP draws exactly: the tolerance is Globex-only.
+  assert.equal(tradeSessionVwapReport(gapTrade, candles, "1m", "rth")?.approximate, false);
+
+  const full = Array.from({ length: 1380 }, (_, offset) => bar(open + offset * minute, 100, 100, 100, 1));
+  const exact = tradeSessionVwapReport(gapTrade, full, "1m", "globex");
+  assert.equal(exact?.approximate, false);
+  assert.equal(exact?.reason, null);
+});
+
+test("joinSessionBars keeps one bar per open time in time order, and joins only on the same timeframe", () => {
+  const trade = [bar(rth + minute, 101, 99, 100, 1), bar(rth + 2 * minute, 102, 100, 101, 1)];
+  const session = [bar(rth, 100, 99, 99, 1), { ...bar(rth + minute, 1, 1, 1, 1) }];
+  const joined = joinSessionBars(session, "1m", trade, "1m");
+  assert.deepEqual(joined.map(({ time }) => time), [rth, rth + minute, rth + 2 * minute]);
+  assert.equal(joined[1].high, 101, "the trade's own bar wins a duplicate open time");
+  assert.deepEqual(joinSessionBars(session, "5m", trade, "1m"), trade, "mismatched timeframes never mix");
+  assert.deepEqual(joinSessionBars([], null, trade, "1m"), trade);
 });

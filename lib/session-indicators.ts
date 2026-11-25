@@ -13,16 +13,26 @@ interface SettlementCandle extends Pick<Candle, "close"> {
   availableAt: number;
 }
 
+/**
+ * `complete` (default) draws VWAP only over a complete anchored window. `globex-tolerant` also draws Globex
+ * VWAP over the bars that exist when the overnight gaps are small (VW-2, D-F). Levels stay strict either way.
+ */
+export type GapPolicy = "complete" | "globex-tolerant";
+
 export interface SessionIndicatorOptions {
   symbol: "MES" | "MNQ";
   timeframe: Timeframe;
   asOf: number;
   anchor: Anchor;
   settlement?: SettlementCandle;
+  gapPolicy?: GapPolicy;
 }
 
 const MINUTE_MS = 60_000;
 const VALUE_AREA_FRACTION = 0.7;
+/** VW-2: Globex VWAP tolerance. Missing expected bars must stay within this share, in one run of at most this many minutes. */
+const GLOBEX_MAX_MISSING_SHARE = 0.03;
+const GLOBEX_MAX_GAP_MIN = 15;
 const LABELS = {
   pdh: "PDH", pdl: "PDL", pdc: "PDC", onh: "ONH", onl: "ONL",
   week_high: "Wk high", week_low: "Wk low", poc: "POC", vah: "VAH", val: "VAL",
@@ -60,6 +70,35 @@ function mergeWindows(windows: readonly Window[]): Window {
       complete: coverages.every((coverage) => coverage.complete),
     },
   };
+}
+
+interface GapMetrics {
+  missingBars: number;
+  longestGapMin: number;
+  /** Missing expected bars that open at or after the RTH open and end by the RTH close or the cutoff. */
+  rthMissingBars: number;
+}
+
+/** Walks the expected grid, so a bar that is present but malformed counts as missing. */
+function gapMetrics({ bars, coverage }: Window, barMs: number, rthOpen: number, rthEnd: number): GapMetrics {
+  const present = new Set(bars.map(({ time }) => time));
+  const first = Math.ceil(coverage.from / barMs) * barMs;
+  let missingBars = 0;
+  let rthMissingBars = 0;
+  let run = 0;
+  let longestRun = 0;
+  for (let i = 0; i < coverage.expectedBars; i += 1) {
+    const time = first + i * barMs;
+    if (present.has(time)) {
+      run = 0;
+      continue;
+    }
+    missingBars += 1;
+    run += 1;
+    longestRun = Math.max(longestRun, run);
+    if (time >= rthOpen && time + barMs <= rthEnd) rthMissingBars += 1;
+  }
+  return { missingBars, longestGapMin: longestRun * barMs / MINUTE_MS, rthMissingBars };
 }
 
 function typicalPrice(bar: Candle): number {
@@ -110,7 +149,7 @@ function volumeProfile(bars: readonly Candle[], tickSize: number) {
  * The regular weekday calendar withholds values when holiday or early-close bars are absent.
  */
 export function computeSessionIndicators(candles: readonly Candle[], options: SessionIndicatorOptions) {
-  const { symbol, timeframe, asOf, anchor, settlement } = options;
+  const { symbol, timeframe, asOf, anchor, settlement, gapPolicy = "complete" } = options;
   const spec = specFor(symbol);
   const barMs = TIMEFRAME_MINUTES[timeframe] * MINUTE_MS;
   if (!spec || !barMs || !Number.isFinite(new Date(asOf).getTime())) return null;
@@ -152,9 +191,16 @@ export function computeSessionIndicators(candles: readonly Candle[], options: Se
     add("pdc", settlement.close, settlement.availableAt);
   }
 
-  const volumeUsable = anchored.coverage.complete && anchored.bars.every(({ volume }) => Number.isFinite(volume) && volume >= 0);
-  const vwap = volumeUsable ? sessionVwap(anchored.bars, barMs) : [];
-  const profile = volumeUsable ? volumeProfile(anchored.bars, spec.tickSize) : null;
+  const gaps = gapMetrics(anchored, barMs, today.rthOpen, Math.min(today.rthClose, asOf));
+  const volumesUsable = anchored.bars.every(({ volume }) => Number.isFinite(volume) && volume >= 0);
+  // VW-2: Globex VWAP may use a window with small overnight gaps. Levels never do.
+  const tolerated = anchor === "globex" && gapPolicy === "globex-tolerant" && anchored.coverage.expectedBars > 0
+    && gaps.missingBars / anchored.coverage.expectedBars <= GLOBEX_MAX_MISSING_SHARE
+    && gaps.longestGapMin <= GLOBEX_MAX_GAP_MIN && gaps.rthMissingBars === 0;
+  const approximate = tolerated && gaps.missingBars > 0;
+  const vwap = (anchored.coverage.complete || tolerated) && volumesUsable ? sessionVwap(anchored.bars, barMs) : [];
+  const strictUsable = anchored.coverage.complete && volumesUsable;
+  const profile = strictUsable ? volumeProfile(anchored.bars, spec.tickSize) : null;
   const lastBar = anchored.bars.at(-1);
   if (profile && lastBar) {
     const formedAt = lastBar.time + barMs;
@@ -166,7 +212,10 @@ export function computeSessionIndicators(candles: readonly Candle[], options: Se
   return {
     calcVersion: "session-indicators-v1",
     symbol, sessionDate: date, previousSessionDate: priorDate, asOf, anchor, timeframe,
-    coverage: { anchored: anchored.coverage, previousDay: previousDay.coverage, overnight: overnight.coverage, week: week.coverage },
+    coverage: {
+      anchored: { ...anchored.coverage, ...gaps, approximate },
+      previousDay: previousDay.coverage, overnight: overnight.coverage, week: week.coverage,
+    },
     vwap, levels,
   };
 }
