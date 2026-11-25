@@ -59,7 +59,8 @@ try {
       const levelsPrimitive = new exports.SessionLevelsPrimitive();
       series.attachPrimitive(levelsPrimitive);
 
-      chart.timeScale().setVisibleLogicalRange({ from: 0, to: 45 });
+      // Last bar (index 59) inside the pane, so the ray end is measured rather than clipped to the edge.
+      chart.timeScale().setVisibleLogicalRange({ from: 0, to: 75 });
       chart.priceScale("right").setVisibleRange({ from: 7540, to: 7750 });
 
       const theme = {
@@ -67,7 +68,7 @@ try {
         textPrimary: "#f4f5f7", textMuted: "#8e95a9", surface: "#0d0f17", elevated: "#141824",
         boxOpacity: 0.28,
         levelResistance: "#ef4444", levelSupport: "#10b981", levelAdr: "#f5b544",
-        levelNeutral: "#9ca3af", levelLabelText: "#ffffff",
+        levelNeutral: "#9ca3af", levelLabelText: "#ffffff", levelLabelBgAlpha: 0.95,
       };
 
       // 1. Capture fills and strokes
@@ -90,7 +91,7 @@ try {
         };
       }
       proto.stroke = function (...args) {
-        renderedLines.push({ path: currentPath, strokeStyle: this.strokeStyle, dash: this.getLineDash() });
+        renderedLines.push({ path: currentPath, strokeStyle: this.strokeStyle, dash: this.getLineDash(), alpha: this.globalAlpha });
         return originalStroke.apply(this, args);
       };
       proto.fillText = function (text, ...args) {
@@ -103,8 +104,14 @@ try {
       };
 
       // Test with levels visible
-      levelsPrimitive.update(levels, theme, 60_000, pills);
+      const lastBarTime = times[times.length - 1];
+      levelsPrimitive.update(levels, theme, 60_000, pills, { lastBarTime });
       const screenshotVisible = chart.takeScreenshot(true);
+      const zOrders = levelsPrimitive.paneViews().map((view) => view.zOrder());
+      const lastBarX = chart.timeScale().timeToCoordinate(lastBarTime / 1000);
+      const paneWidth = chart.paneSize().width;
+      const rayEnds = renderedLines.filter(l => l.path.length === 2 && l.path[0].args[1] === l.path[1].args[1]).map(l => l.path[1].args[0]);
+      const dottedRays = renderedLines.filter(l => l.dash.length === 2 && l.dash[0] === 1 && l.dash[1] === 3);
       const visibleLabels = renderedText.map(t => t.text);
       const rayCount = renderedLines.filter(l => l.path.length === 2 && l.path[0].args[1] === l.path[1].args[1]).length;
 
@@ -129,6 +136,12 @@ try {
         levelsCount: levels.length,
         visibleLabels,
         rayCount,
+        zOrders,
+        lastBarX,
+        paneWidth,
+        expectedRayEnd: Math.min(paneWidth, Math.round(lastBarX + 4)),
+        rayEnds,
+        dottedRays: dottedRays.map(l => ({ alpha: l.alpha, strokeStyle: l.strokeStyle })),
         rightEdgeCount: rightEdgeLabels.length,
         minGap,
         hiddenLabelsCount,
@@ -159,6 +172,14 @@ try {
   assert.ok(drawn.some(l => l.includes("7628.75 ONH")));
   assert.ok(!drawn.some(l => l.includes("7743.75 R2")), "the farthest level gave up its pill");
   assert.ok(res.rayCount >= 15);
+  // LB-1: both layers under candles. LB-4: rays stop at lastBar + 4px, settlement rays dotted neutral 0.6.
+  assert.deepEqual(res.zOrders, ["bottom", "bottom"]);
+  assert.ok(res.lastBarX != null && res.lastBarX < res.paneWidth, "last bar must be in view");
+  assert.ok(res.rayEnds.length > 0 && res.rayEnds.every((x) => x <= res.expectedRayEnd + 0.5), `ray past last bar: ${Math.max(...res.rayEnds)}`);
+  assert.ok(Math.max(...res.rayEnds) >= res.expectedRayEnd - 0.5, "rays stop short of last bar + 4px");
+  assert.ok(res.dottedRays.length >= 1, "no settlement ray is dotted");
+  // 0.6 is the settlement ray; 0.3 is the faint ray of a level whose pill was dropped (UX-21).
+  for (const ray of res.dottedRays) assert.ok(ray.alpha === 0.6 || ray.alpha === 0.3, `dotted ray alpha ${ray.alpha}`);
   assert.ok(res.rightEdgeCount >= Math.min(8, drawn.length));
   assert.equal(res.hiddenLabelsCount, 0);
   assert.equal(res.hiddenRaysCount, 0);

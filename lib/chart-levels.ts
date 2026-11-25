@@ -30,7 +30,14 @@ export interface LevelLine {
   proxy: boolean;
   /** UTC ms where the ray starts. Null runs from the left edge (prior-day levels). */
   startAt: number | null;
+  /** A settlement-type level (PDC, 3 PM close, settle): drawn as a quiet 1px dotted ray (Q-7, LB-4). */
+  settlement?: boolean;
 }
+
+// Planned levels named after a settlement read the same as the computed ones (Q-7).
+const SETTLEMENT_LABEL = /\b(pdc|settle|settlement|3\s*pm\s*close)\b/i;
+const isSettlement = (level: LineSource) => level.type === "pdc" || level.type === "rth_close"
+  || (level.type === "planned" && SETTLEMENT_LABEL.test(level.label));
 
 // Opens, the pivot and settlement are neutral (docs/12 §5). ADR bands are yellow.
 const NEUTRAL = new Set<ComputedLevelType>(["pdc", "pp", "rth_open", "rth_close", "globex_open"]);
@@ -70,6 +77,7 @@ export function levelLines(levels: readonly LineSource[], referencePrice: number
       keys: group.map((level) => level.key),
       proxy: group.some((level) => level.label === "PDC (proxy)"),
       startAt,
+      settlement: group.some(isSettlement),
     };
   }).sort((a, b) => b.price_ticks - a.price_ticks);
 }
