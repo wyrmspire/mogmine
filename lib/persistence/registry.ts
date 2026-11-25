@@ -55,6 +55,8 @@ export const RECORD_CONTRACTS: readonly RecordContract[] = [
     derivedNeverStored: [], notes: "" },
   { key: "mood_registry", domainType: "MoodSpokeRegistry", module: "lib/mood.ts, lib/mood-store.ts", deviceKey: "mogmine-mood-v1#registry", table: "mogmine_mood_registries", ownership: "stamped", ...own, readiness: "v1", inBackup: true, deletePolicy: "hard",
     derivedNeverStored: [], notes: "Singleton per user (primary key user_id); spokes as jsonb." },
+  { key: "tag_registry", domainType: "TagRegistry, TagDef", module: "lib/tag-registry.ts, lib/tag-registry-store.ts", deviceKey: "mogmine-tags-v1", table: "mogmine_tag_registries", ownership: "stamped", ...own, readiness: "v1", inBackup: true, deletePolicy: "hard",
+    derivedNeverStored: [], notes: "Singleton per user; setup and execution tag defs (PL-3, docs/design-2026-11-24/01-playbook-lab.md §5). Labels stay in trade quick_tags." },
   { key: "prefs", domainType: "Prefs", module: "lib/prefs.ts", deviceKey: "mogmine-prefs-v1", table: "mogmine_user_prefs", ownership: "stamped", ...own, readiness: "v1", inBackup: true, deletePolicy: "hard",
     derivedNeverStored: [], notes: "docs/06 `user_preferences`. Singleton per user; whole Prefs as jsonb so new prefs need no migration." },
   { key: "accounts", domainType: "TradingAccount", module: "lib/accounts.ts, lib/accounts-store.ts", deviceKey: "mogmine-accounts-v1#accounts", table: "mogmine_accounts", ownership: "user_id", ...own, readiness: "v1", inBackup: true, deletePolicy: "archive",

@@ -167,12 +167,12 @@ export function parseListQuery(searchParams: URLSearchParams): AgentListQuery {
 
 /** Collections the API exposes: every v1 record type with many rows per owner (read from the registry). */
 export const COLLECTION_KEYS: readonly CollectionKey[] = RECORD_CONTRACTS
-  .filter((entry) => entry.readiness === "v1" && entry.key !== "prefs" && entry.key !== "mood_registry")
+  .filter((entry) => entry.readiness === "v1" && entry.key !== "prefs" && entry.key !== "mood_registry" && entry.key !== "tag_registry")
   .map((entry) => entry.key as CollectionKey);
 
 /** Singletons the API exposes. `prompt_library` is deferred and memory-only (docs/26 §4), so it is not exposed. */
 export const SINGLETON_KEYS: readonly SingletonKey[] = RECORD_CONTRACTS
-  .filter((entry) => entry.readiness === "v1" && (entry.key === "prefs" || entry.key === "mood_registry"))
+  .filter((entry) => entry.readiness === "v1" && (entry.key === "prefs" || entry.key === "mood_registry" || entry.key === "tag_registry"))
   .map((entry) => entry.key as SingletonKey);
 
 export function isCollectionKey(value: string): value is CollectionKey {

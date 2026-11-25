@@ -30,6 +30,7 @@ import type { DailyReview } from "../daily-review.ts";
 import { isValidSessionDate, sanitizeDailyReview, sanitizeReviewPoint } from "../daily-review-sanitize.ts";
 import { PROMPT_LIBRARY_SCHEMA } from "../discretionary-prompts.ts";
 import type { PromptLibraryV1 } from "../discretionary-prompts.ts";
+import { sanitizeTagRegistry } from "../tag-registry.ts";
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; message: string };
 type Parser<T> = (raw: unknown) => Parsed<T>;
@@ -216,6 +217,7 @@ const SINGLETON_PARSERS: { [K in SingletonKey]: Parser<SingletonRecordTypes[K]> 
     return good(sanitizePrefs(raw));
   },
   mood_registry: (raw) => (isObject(raw) ? good(sanitizeRegistry(raw)) : bad("The mood spoke registry must be an object.")),
+  tag_registry: (raw) => (isObject(raw) ? good(sanitizeTagRegistry(raw)) : bad("The tag registry must be an object.")),
   prompt_library: (raw) => (
     isObject(raw) && raw.schema === PROMPT_LIBRARY_SCHEMA && Array.isArray(raw.prompts) && typeof raw.seeds_version === "number"
       ? good(raw as unknown as PromptLibraryV1)
