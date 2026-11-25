@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { equityIndexSessionBounds } from "../session.ts";
 import { computeSessionIndicators, type GapPolicy } from "../session-indicators.ts";
 import { createLevelIndex, levelBookAt } from "../strategy-lab/levels.ts";
+import { getSkill, listSkills, SKILLS } from "../strategy-lab/registry.ts";
 import { buildBarSeries } from "../strategy-lab/series.ts";
 import { CONTEXT_SKILLS, contextRanges, openingRange, vwapRelation } from "../strategy-lab/skills/context.ts";
 import { vwapAt, vwapLevelsAt } from "../strategy-lab/vwap.ts";
@@ -441,4 +442,11 @@ test("context skills: registered metadata, declared output keys, and no lookahea
   // Friday's regular session is complete, so every skill is computed rather than skipped.
   const friday = ctxAt(series, indexOf(series, rthAt(FRI, 90)), levelIndex);
   for (const skill of CONTEXT_SKILLS) okValues(skill, friday);
+
+  // Default SKILLS registry wires all 17 MVP skills (S1–S9, V1–V5, M1–M3).
+  assert.equal(Object.keys(SKILLS).length, 17);
+  assert.equal(listSkills().length, 17);
+  for (const skill of CONTEXT_SKILLS) {
+    assert.equal(getSkill(skill.meta.id), skill);
+  }
 });

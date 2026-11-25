@@ -1,3 +1,9 @@
+import { sessionClockSkill } from "./skills/clock.ts";
+import { CONTEXT_SKILLS } from "./skills/context.ts";
+import { levelMap, structureStop } from "./skills/levels.ts";
+import { MEASURE_SKILLS } from "./skills/measure.ts";
+import { MTF_SKILLS } from "./skills/mtf.ts";
+import { VOLUME_SKILLS } from "./skills/volume-flow.ts";
 import type { Skill, SkillMeta } from "./types.ts";
 
 export type SkillRegistry = Readonly<Record<string, Skill>>;
@@ -23,8 +29,16 @@ export function createSkillRegistry(skills: readonly Skill[]): SkillRegistry {
   return Object.freeze(entries);
 }
 
-/** Wave A contains no concrete skills; later packages compose them here. */
-export const SKILLS: SkillRegistry = createSkillRegistry([]);
+/** Canonical MVP skill registry: S1–S9 (clock/mtf/levels/context), V1–V5 (volume), and M1–M3 (measures). */
+export const SKILLS: SkillRegistry = createSkillRegistry([
+  sessionClockSkill,
+  ...MTF_SKILLS,
+  levelMap,
+  structureStop,
+  ...CONTEXT_SKILLS,
+  ...VOLUME_SKILLS,
+  ...MEASURE_SKILLS,
+]);
 
 export function getSkill(ref: string, registry: SkillRegistry = SKILLS): Skill | undefined {
   if (ref.includes("@")) return registry[ref];
