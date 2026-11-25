@@ -3,7 +3,7 @@
 > **Read this file FIRST before planning, scaffolding, or editing any code in this repository.**  
 > This guide protects smaller/faster models and specialized subagents from common charting, market-data, futures-math, and architecture pitfalls.
 >
-> **Then read [BOARD.md](BOARD.md)** for what to do next and how agents share work, and **[NOTES.md](NOTES.md)** for the current state and the last handoff, and check [DECISIONS.md](DECISIONS.md) before choosing a name or re-opening a settled choice. Workflow for people and agents is in [CONTRIBUTING.md](CONTRIBUTING.md). Before treating Supabase as a blocker, read [22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
+> **Then read [MOGMINE-BLUEPRINT.md](MOGMINE-BLUEPRINT.md)** — the canonical project map: current state, priorities, and the owner's locked definition of R. It supersedes older documents where they conflict on those three things. **Then read [BOARD.md](BOARD.md)** for what to do next and how agents share work, and **[NOTES.md](NOTES.md)** for the current state and the last handoff, and check [DECISIONS.md](DECISIONS.md) before choosing a name or re-opening a settled choice. Workflow for people and agents is in [CONTRIBUTING.md](CONTRIBUTING.md). Before treating Supabase as a blocker, read [22 — Development Mode and Backend Boundary](docs/22-development-mode-and-backend-boundary.md).
 
 ---
 
