@@ -3,6 +3,7 @@
 // The day review screen, /review/day/[date] (docs/06 §3, Q-3 and Q-4 in 92). Saves go through lib/daily-review-store.ts.
 // Trade totals come from dailyReviewTotals (Shield-aware). "Done for the day" never changes a trade's review_status.
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -99,8 +100,7 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   const [snapshots, setSnapshots] = useState<Record<string, HTMLCanvasElement>>({});
   const [shareOpen, setShareOpen] = useState(false);
   const [exportShield, setExportShield] = useState(true); // OD-46a: Shield on by default
-  const [png, setPng] = useState<Blob | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [encoded, setEncoded] = useState<{ key: string; blob: Blob; url: string; width: number; height: number } | null>(null);
   const onSnapshotReady = useCallback((tradeId: string, canvas: HTMLCanvasElement, shield: boolean) => {
     setSnapshots((prev) => ({ ...prev, [snapshotKey(tradeId, shield)]: canvas }));
   }, []);
@@ -153,37 +153,43 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   const nextDate = stepRegularSessionDate(date, 1);
 
   // UX-70: the PNG is encoded as soon as the sheet opens or an input changes, so the Share tap has a Blob ready.
-  // Deps are store identities and primitives only, so the effect never loops on its own output.
   const orientation = prefs.reviewCardOrientation;
   const cardShield = shareOpen ? exportShield : prefs.shield;
+  const snapKeys = linkedIds.map((id) => (snapshots[snapshotKey(id, exportShield)] ? "1" : "0")).join("");
+  const shareKey = `${date}|${orientation}|${exportShield ? 1 : 0}|${linkedIds.join(",")}|${snapKeys}`;
+  const readyShare = shareOpen && encoded?.key === shareKey ? encoded : null;
   useEffect(() => {
     if (!shareOpen) return;
     let cancelled = false;
-    setPng(null);
+    let objectUrl: string | null = null;
     const byTrade = new Map(journal.trades.map((trade) => [trade.id, trade] as const));
     const shareTrades = linkedIds.map((id) => byTrade.get(id)).filter((trade): trade is TradeRecord => Boolean(trade && !trade.is_sample));
     const picked: DaySheetSnapshots = {};
     for (const trade of shareTrades) picked[trade.id] = snapshots[snapshotKey(trade.id, exportShield)] ?? null;
     const model = buildDaySheetModel(date, shareTrades, orientation, exportShield, { accounts: accounts.accounts, prefs, zone: prefs.timeZone });
-    encodeDaySheet(model, picked).then((blob) => { if (!cancelled) setPng(blob); }, () => { if (!cancelled) setPng(null); });
-    return () => { cancelled = true; };
-  }, [shareOpen, exportShield, orientation, linkedIds, journal.trades, snapshots, date, accounts.accounts, prefs]);
-  useEffect(() => {
-    if (!png) { setPreviewUrl(null); return; }
-    const url = URL.createObjectURL(png);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [png]);
+    encodeDaySheet(model, picked).then(
+      (blob) => {
+        if (cancelled || !blob) return;
+        objectUrl = URL.createObjectURL(blob);
+        setEncoded({ key: shareKey, blob, url: objectUrl, width: model.width, height: model.height });
+      },
+      () => { if (!cancelled) setEncoded(null); },
+    );
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [shareOpen, shareKey, exportShield, orientation, linkedIds, journal.trades, snapshots, date, accounts.accounts, prefs]);
   // The tap calls navigator.share (or the download link) synchronously: the file is already encoded.
   const shareDay = () => {
-    if (!png) return;
+    if (!readyShare) return;
     const name = daySheetFileName(date, orientation);
-    const file = new File([png], name, { type: "image/png" });
+    const file = new File([readyShare.blob], name, { type: "image/png" });
     if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
       navigator.share({ files: [file] }).catch(() => undefined);
       return;
     }
-    const url = URL.createObjectURL(png);
+    const url = URL.createObjectURL(readyShare.blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = name;
@@ -355,10 +361,10 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
             <input type="checkbox" checked={exportShield} onChange={(event) => setExportShield(event.target.checked)} />
             <span>Shield: hide dollars and contract size</span>
           </label>
-          {previewUrl
-            ? <img src={previewUrl} alt={`Day sheet for ${date}`} style={{ width: "100%", height: "auto", borderRadius: 12 }} />
+          {readyShare
+            ? <Image src={readyShare.url} width={readyShare.width} height={readyShare.height} unoptimized alt={`Day sheet for ${date}`} style={{ width: "100%", height: "auto", borderRadius: 12 }} />
             : <p className="muted">Preparing the image…</p>}
-          <button type="button" className="btn-primary" style={{ minHeight: 44 }} disabled={!png} onClick={shareDay}>
+          <button type="button" className="btn-primary" style={{ minHeight: 44 }} disabled={!readyShare} onClick={shareDay}>
             Share image
           </button>
         </section>
