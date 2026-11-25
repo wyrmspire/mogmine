@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { evaluateChallenge } from "@/lib/challenges";
+import { evaluateChallenge, formatChallengeRoomLabel } from "@/lib/challenges";
+import { ChallengeAccountBadge } from "./ChallengeCard";
 import type { ChallengePoint } from "@/lib/challenges";
 import { endChallenge, useChallenges } from "@/lib/challenge-store";
 import { formatBalance, formatMoney } from "@/lib/format";
@@ -284,6 +285,7 @@ export function ChallengeDetail({ id }: { id: string }) {
           <h1>
             {isDrawdown ? "Drawdown Defender" : "Clean Run"}
           </h1>
+          <ChallengeAccountBadge accountId={challenge.account_id ?? null} />
           <p className="challenge-start-date">
             Started {formatSessionDate(sessionDate(new Date(challenge.started_at).getTime()), true)}
             {challenge.ended_at && ` · Ended ${formatSessionDate(sessionDate(new Date(challenge.ended_at).getTime()), true)}`}
@@ -356,11 +358,11 @@ export function ChallengeDetail({ id }: { id: string }) {
                 <small id="metric-room-label">Room Remaining</small>
                 {prefs.shield ? (
                   <b className="num" aria-labelledby="metric-room-label">
-                    {Math.max(0, 100 - Math.round(((displayResult.drawdown_cents ?? 0) / rules.max_drawdown_cents) * 100))}%
+                    {formatChallengeRoomLabel(displayResult.remaining_cents ?? 0, rules.max_drawdown_cents, true)}
                   </b>
                 ) : (
                   <b className="num" aria-labelledby="metric-room-label">
-                    {formatBalance(displayResult.remaining_cents ?? 0)}
+                    {formatChallengeRoomLabel(displayResult.remaining_cents ?? 0, rules.max_drawdown_cents, false)}
                   </b>
                 )}
               </div>

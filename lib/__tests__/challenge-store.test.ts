@@ -6,10 +6,12 @@ import {
   getChallengesState,
   resetChallengesForTests,
   restoreChallenges,
+  sanitizeChallenge,
   sanitizeChallengeRules,
   sanitizeChallenges,
   startChallenge,
 } from "../challenge-store.ts";
+import { parseChallengeRecord } from "../commands/journal-commands.ts";
 import { CHALLENGE_CALC_VERSION } from "../challenges.ts";
 import type { ChallengeDefinition } from "../challenges.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
@@ -148,6 +150,7 @@ test("R-09b: backup round-trips challenges", () => {
   const challenge1: ChallengeDefinition = {
     id: "c-1",
     user_id: "test-user",
+    account_id: null,
     rules: { kind: "drawdown", sessions: 20, max_drawdown_cents: 30000 },
     started_at: "2026-11-17T14:00:00Z",
     ended_at: null,
@@ -156,6 +159,7 @@ test("R-09b: backup round-trips challenges", () => {
   const challenge2: ChallengeDefinition = {
     id: "c-2",
     user_id: "test-user",
+    account_id: null,
     rules: { kind: "clean_run", target_trades: 10, playbook_ids: ["pb-1", "pb-2"] },
     started_at: "2026-11-16T14:00:00Z",
     ended_at: "2026-11-17T10:00:00Z",
@@ -248,6 +252,7 @@ test("R-09b: sanitization rules and duplicates", () => {
   const validDef: ChallengeDefinition = {
     id: "c-dup",
     user_id: "u-1",
+    account_id: null,
     rules: { kind: "drawdown", sessions: 10, max_drawdown_cents: 10000 },
     started_at: "2026-11-17T12:00:00Z",
     ended_at: null,
@@ -285,5 +290,40 @@ test("R-09b: malformed result points cannot enter a restored attempt", () => {
       state: "passed", provisional: false, issues: [], points: [null],
       decided_by: null, excluded_before_start: 0,
     },
-  }]), [ended]);
+  }]), [{ ...ended, account_id: null }]);
+});
+
+test("UX-08: legacy challenge JSON without account_id normalizes to null, and an account id is kept", () => {
+  const legacy = { id: "legacy", user_id: "test-user", rules: { kind: "clean_run", target_trades: 3, playbook_ids: [] }, started_at: "2026-11-17T14:00:00Z", ended_at: null, calc_version: 1 };
+  assert.equal(sanitizeChallenge(legacy)?.account_id, null);
+  assert.equal(sanitizeChallenge({ ...legacy, account_id: "" })?.account_id, null);
+  assert.equal(sanitizeChallenge({ ...legacy, account_id: "sim-acct-eval-50k" })?.account_id, "sim-acct-eval-50k");
+});
+
+test("UX-08: startChallenge stores the chosen account, and null means all accounts", () => {
+  resetChallengesForTests();
+  const scoped = startChallenge({ kind: "drawdown", sessions: 5, max_drawdown_cents: 30000 }, "2026-11-17T14:00:00Z", "sim-acct-eval-50k");
+  assert.equal(scoped.ok, true);
+  if (!scoped.ok) return;
+  assert.equal(scoped.challenge.account_id, "sim-acct-eval-50k");
+
+  resetChallengesForTests();
+  const all = startChallenge({ kind: "clean_run", target_trades: 3, playbook_ids: ["pb-trend"] }, "2026-11-17T14:00:00Z");
+  assert.equal(all.ok, true);
+  if (!all.ok) return;
+  assert.equal(all.challenge.account_id, null);
+});
+
+test("UX-08: command layer accepts optional account_id and rejects a non-string or empty one", () => {
+  const valid = { id: "c-cmd", user_id: "test-user", rules: { kind: "drawdown", sessions: 5, max_drawdown_cents: 30000 }, started_at: "2026-11-17T14:00:00Z", ended_at: null, calc_version: 1 };
+  const omitted = parseChallengeRecord(valid);
+  assert.equal(omitted.ok, true);
+  if (omitted.ok) assert.equal(omitted.value.account_id, null);
+  assert.equal(parseChallengeRecord({ ...valid, account_id: null }).ok, true);
+  const scoped = parseChallengeRecord({ ...valid, account_id: "sim-acct-eval-50k" });
+  assert.equal(scoped.ok && scoped.value.account_id, "sim-acct-eval-50k");
+
+  const numeric = parseChallengeRecord({ ...valid, account_id: 123 });
+  assert.equal(numeric.ok, false);
+  assert.equal(parseChallengeRecord({ ...valid, account_id: "" }).ok, false);
 });
