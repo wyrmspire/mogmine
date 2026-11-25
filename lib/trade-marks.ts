@@ -123,7 +123,8 @@ function resultTone(pnl: number | null): MarkTone {
 }
 
 function combineBasis(a: EventBasis, b: EventBasis): EventBasis {
-  if (a === "inferred" || b === "inferred") return "inferred";
+  // SM-UT-2: an untimed move displays as approximate, like an inferred value.
+  if (a === "inferred" || b === "inferred" || a === "untimed" || b === "untimed") return "inferred";
   if (a === "stated" || b === "stated") return "stated";
   return "broker";
 }
@@ -398,10 +399,11 @@ export function buildMarks(
         dash, tone, width: 1.5, basis: stop.basis,
         ...(start.approximate ? { approximate: true } : {}),
       });
-      const text = [
-        stop.widened ? "WIDENED" : "",
-        detail === "high" ? `${formatDetailTime(stop.from)} · ${formatPrice(stop.price, derived.symbol)}` : "",
-      ].filter(Boolean).join(" · ");
+      // SM-UT-2: the dashed step at the exit bar is drawn at every detail level; only the label is gated.
+      const timeLabel = stop.basis === "untimed"
+        ? (detail === "low" ? "" : "moved · time?")
+        : detail === "high" ? `${formatDetailTime(stop.from)} · ${formatPrice(stop.price, derived.symbol)}` : "";
+      const text = [stop.widened ? "WIDENED" : "", timeLabel].filter(Boolean).join(" · ");
       marks.push({ kind: "flag", ...start, price: stop.price, shape: "dot", text, basis: stop.basis, tone });
     }
   }

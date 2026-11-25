@@ -16,17 +16,21 @@ export type DataNoteId =
   | "continuous_contract"
   | "same_bar_unresolved"
   | "entry_bar_passed_stop"
+  | "untimed_stop_move"
   | `${TradeBarFinding["code"]}:${string}`;
 
 export type DataNoteTone = "untrusted" | "quiet";
 
 /** A one-tap fix the UI may offer (FB-2 renders "Use HH:MM"). Nothing changes until the trader taps it. */
-export interface DataNoteAction {
-  kind: "use_matched_fill";
-  role: "entry" | "exit";
-  matchedBarTime: number;
-  label: string;
-}
+export type DataNoteAction =
+  | {
+    kind: "use_matched_fill";
+    role: "entry" | "exit";
+    matchedBarTime: number;
+    label: string;
+  }
+  // SM-UT-3: opens the stop-moves editor (components/StopMovesEditor.tsx) pre-filled with this price.
+  | { kind: "edit_untimed_stop"; price: number };
 
 export interface DataNote {
   id: DataNoteId;
@@ -50,6 +54,8 @@ export interface DataNoteInput {
   findings: readonly TradeBarFinding[];
   // R-POST-4 / D-H: the entry bar's pre-fill range crossed the stop at entry. Quiet only, never a finding.
   entryBarPassedStop?: boolean;
+  // SM-UT-3: the working stop when it moved without a recorded time (initial_stop_price ≠ stop_loss_price, no stop_moves).
+  untimedStopMovePrice?: number | null;
   symbol: string;
   zone?: string;
 }
@@ -83,6 +89,15 @@ export function collectDataNotes(input: DataNoteInput): DataNote[] {
       id: "entry_bar_passed_stop",
       text: "The entry bar traded past the stop before your fill. That is not counted as a stop touch.",
       tone: "quiet",
+    });
+  }
+  if (input.untimedStopMovePrice != null) {
+    const price = input.untimedStopMovePrice;
+    notes.push({
+      id: "untimed_stop_move",
+      text: `Your stop moved to ${formatPrice(price, input.symbol)} at a time you did not record. Add the time to check it against the bars.`,
+      tone: "quiet",
+      action: { kind: "edit_untimed_stop", price },
     });
   }
   for (const finding of input.findings) {
