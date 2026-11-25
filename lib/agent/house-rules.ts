@@ -82,7 +82,7 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     title: "R is measured against the account's R size",
     summary: "R uses the account's R size (r_size_cents), not the stop width. Never write R; the app computes it.",
     rule:
-      "R is measured against the account's R size, stored in dollars as `r_size_cents` on the account. It is never the stop width. Do not write R anywhere in notes or fields; the app computes `resultR` and `riskR` from the fills and the account's `r_size_cents`. Until `r_size_cents` is stored, do not write risk or R into notes.",
+      "R is measured against the account's R size, stored in integer cents as `r_size_cents` on the account. It is never the stop width. Do not write R anywhere in notes or fields; the app computes `resultR` and `riskR` from the fills and the account's `r_size_cents`. Until `r_size_cents` is stored, do not write risk or R into notes.",
     why: "Risk was shown as 1R, measured against the stop width, instead of the fixed dollar R of the account.",
     badExample: "note: \"Risked 1R on a 12-point stop.\"",
     goodExample: "Store the dollars the trader risked in the account's terms; leave R out of the notes and let the app compute it.",
