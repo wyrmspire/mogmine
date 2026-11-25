@@ -175,7 +175,7 @@ export function checkStopMoves(record: TradeRecord, rawMoves: unknown): StopMove
       return { time: iso(at), price, ok: false, message: `${price} is off the ${tick ?? "tick"} grid for ${record.symbol}.` };
     }
     const last = index === rawMoves.length - 1;
-    if (last && record.stop_loss_price != null && Math.abs(record.stop_loss_price - price) > 1e-9) {
+    if (last && toTicks(record.stop_loss_price ?? NaN, record.symbol) !== toTicks(price, record.symbol)) {
       return { time: iso(at), price, ok: false, message: `The working stop must equal the last stop move (${price.toFixed(2)}).` };
     }
     return { time: iso(at), price, ok: true };

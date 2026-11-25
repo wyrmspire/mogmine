@@ -195,7 +195,7 @@ test("candles: the cache is bounded (least recently used goes first)", () => {
 });
 
 test("candles: cache misses over 15 a minute for one key are 429; hits are not counted", async () => {
-  let clock = NOW;
+  const clock = NOW;
   const provider = fakeProvider(TRADE_C_BARS);
   const loader = createCandleLoader({
     provider,
