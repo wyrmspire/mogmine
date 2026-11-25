@@ -1,6 +1,7 @@
 // DR-1a: daily review model, sanitizer, local store and backup (docs/design-2026-11-24/06 §2 rules 1–6, §2.1; Q-3, Q-4 in 92).
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   DAILY_REVIEW_LIMITS,
   dailyReviewId,
@@ -262,6 +263,11 @@ describe("Backup round-trip and older backups", () => {
     const payload = buildBackup([], undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, [reviewA]);
     const parsed = parseBackupFile(JSON.stringify(payload));
     assert.equal(parsed.ok, true);
+  });
+
+  it("a daily-review-only restore cannot clear the device trade journal", () => {
+    const tuneSource = readFileSync(new URL("../../components/TuneScreen.tsx", import.meta.url), "utf8");
+    assert.match(tuneSource, /if \(pending\.trades\.length\) replaceTrades\(pending\.trades\);/);
   });
 
   it("a legacy backup without daily_reviews leaves existing device reviews untouched", () => {

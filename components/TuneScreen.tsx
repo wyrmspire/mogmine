@@ -120,7 +120,7 @@ export function TuneScreen() {
 
   const confirmRestore = () => {
     if (!pending) return;
-    replaceTrades(pending.trades);
+    if (pending.trades.length) replaceTrades(pending.trades);
     if (pending.prefs) setPrefs(pending.prefs);
     // An older backup has no mood data: keep what this device has rather than wipe it.
     if (pending.mood) restoreMood(pending.mood);
