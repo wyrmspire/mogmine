@@ -22,6 +22,9 @@ import { sanitizeCall, sanitizeDismissal } from "../calls-sanitize.ts";
 import { sanitizeChallenge } from "../challenge-sanitize.ts";
 import { sanitizePrefs } from "../prefs-sanitize.ts";
 import { sessionDate } from "../session.ts";
+import { DAILY_REVIEW_LIMITS } from "../daily-review.ts";
+import type { DailyReview } from "../daily-review.ts";
+import { isValidSessionDate, sanitizeDailyReview, sanitizeReviewPoint } from "../daily-review-sanitize.ts";
 import { PROMPT_LIBRARY_SCHEMA } from "../discretionary-prompts.ts";
 import type { PromptLibraryV1 } from "../discretionary-prompts.ts";
 
@@ -158,6 +161,21 @@ const callParser: Parser<CollectionRecordTypes["calls"]> = (raw) => {
   return one(sanitizeCall, "This call does not match its kind (for example, a flip needs a signal direction).")(raw);
 };
 
+/** docs/06 §2: a review needs an id, a trading day, a scope and a time. Over-long text is refused here (the sanitizer cuts it). */
+const dailyReviewParser: Parser<DailyReview> = (raw) => {
+  if (!isObject(raw) || typeof raw.id !== "string" || !raw.id.trim()) return bad("A daily review needs an id.");
+  if (!isValidSessionDate(raw.session_date)) return bad("A daily review needs a session date (YYYY-MM-DD).");
+  if (raw.account_id != null && (typeof raw.account_id !== "string" || !raw.account_id.trim())) return bad("A daily review's account must be an id or null (whole day).");
+  if (typeof raw.recorded_at !== "string" || !Number.isFinite(Date.parse(raw.recorded_at))) return bad("A daily review needs a valid recorded time.");
+  if (raw.lesson !== undefined && (typeof raw.lesson !== "string" || raw.lesson.length > DAILY_REVIEW_LIMITS.lesson)) {
+    return bad(`The lesson is at most ${DAILY_REVIEW_LIMITS.lesson} characters.`);
+  }
+  if (raw.points !== undefined && (!Array.isArray(raw.points) || raw.points.some((point) => !sanitizeReviewPoint(point) || (point as { text: string }).text.length > DAILY_REVIEW_LIMITS.pointText))) {
+    return bad(`Every point needs a kind and text of at most ${DAILY_REVIEW_LIMITS.pointText} characters.`);
+  }
+  return one(sanitizeDailyReview, "This daily review is not valid.")(raw);
+};
+
 /** Validation for every collection type. Each entry is the existing sanitizer for that record. */
 const COLLECTION_PARSERS: { [K in CollectionKey]: Parser<CollectionRecordTypes[K]> } = {
   trades: parseTrade,
@@ -171,6 +189,7 @@ const COLLECTION_PARSERS: { [K in CollectionKey]: Parser<CollectionRecordTypes[K
   drills: one(sanitizeDrillRecord, "A drill record needs a trade, a kind, an answer and a time."),
   calls: callParser,
   prompt_dismissals: one(sanitizeDismissal, "A dismissal needs a trade, a prompt, a reason and a time."),
+  daily_reviews: dailyReviewParser,
 };
 
 /** Singletons: one document per owner. Prompt library has no sanitizer yet, so only its shape is checked. */
@@ -221,6 +240,7 @@ export interface AgentListFilters {
 const FILTERS_BY_COLLECTION: Partial<Record<CollectionKey, ReadonlyArray<keyof AgentListFilters>>> = {
   trades: ["session_date", "from", "to", "account_id", "playbook_id"],
   plans: ["session_date"],
+  daily_reviews: ["session_date"],
 };
 
 export interface JournalCommands {
@@ -273,6 +293,15 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
     return good({ ...record, user_id: owner } as T);
   }
 
+  /** Q-3 / docs/06 rule 5: one daily review per (session_date, account_id). Another review on that scope is a conflict. */
+  async function reviewScopeClash(review: DailyReview): Promise<PersistResult<never> | null> {
+    const rows = await repoFor("daily_reviews").list(owner);
+    if (!rows.ok) return rows;
+    const scope = (row: DailyReview) => `${row.session_date}|${row.account_id ?? "*"}`;
+    const clash = rows.value.find((row) => row.id !== review.id && scope(row) === scope(review));
+    return clash ? fail("conflict", `A daily review for ${review.session_date} already exists (${clash.id}).`, "daily_reviews", clash.id) : null;
+  }
+
   async function write<K extends CollectionKey>(key: K, parsed: CollectionRecordTypes[K], expectedUpdatedAt?: string) {
     const stamped = ownedBy<CollectionRecordTypes[K]>(key, parsed);
     if (!stamped.ok) return fail<Stored<CollectionRecordTypes[K]>>("forbidden", stamped.message, key, idOf(parsed));
@@ -288,6 +317,10 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
       const existing = await repoFor(key).get(owner, idOf(parsed.value));
       if (existing.ok) return fail("conflict", `A ${key} record with this id already exists.`, key, idOf(parsed.value));
       if (existing.error.code !== "not_found") return existing;
+      if (key === "daily_reviews") {
+        const clash = await reviewScopeClash(parsed.value as DailyReview);
+        if (clash) return clash;
+      }
       if (key !== "trades") return write(key, parsed.value);
       const inputs = await rSizeInputs();
       if (!inputs.ok) return inputs;
@@ -342,6 +375,13 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
       const candidate = withoutDerived(key, { ...base, ...patch, id });
       const parsed = COLLECTION_PARSERS[key](candidate);
       if (!parsed.ok) return fail("invalid", parsed.message, key, id);
+      if (key === "daily_reviews") {
+        const before = current.value.record as DailyReview;
+        const after = parsed.value as DailyReview;
+        const scopeChanged = before.session_date !== after.session_date || (before.account_id ?? null) !== (after.account_id ?? null);
+        const clash = scopeChanged ? await reviewScopeClash(after) : null;
+        if (clash) return clash;
+      }
       if (key !== "trades") return write(key, parsed.value, current.value.meta.updated_at);
       const trade = parsed.value as TradeRecord;
       const accountChanged = "account_id" in patch && patch.account_id !== (current.value.record as TradeRecord).account_id;

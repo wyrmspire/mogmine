@@ -67,6 +67,8 @@ export const RECORD_CONTRACTS: readonly RecordContract[] = [
     derivedNeverStored: [], notes: "checklist_rules jsonb, ordered." },
   { key: "plans", domainType: "PlanningSession, PlanRevision, PlannedLevel", module: "lib/plans.ts, lib/plans-store.ts", deviceKey: "mogmine-plans-v1", table: "mogmine_plans", ownership: "user_id", ...own, readiness: "v1", inBackup: true, deletePolicy: "hard",
     derivedNeverStored: [], notes: "After-session review is computed. levels and revisions jsonb on the row in v1 (revisions are append-only history)." },
+  { key: "daily_reviews", domainType: "DailyReview, ReviewPoint", module: "lib/daily-review.ts, lib/daily-review-store.ts", deviceKey: "mogmine-daily-reviews-v1", table: "mogmine_daily_reviews", ownership: "user_id", ...own, readiness: "v1", inBackup: true, deletePolicy: "hard",
+    derivedNeverStored: ["totals", "cards"], notes: "One per (session_date, account_id); trade_ids explicit." },
   { key: "drills", domainType: "DrillRecord", module: "lib/drills.ts, lib/drills-store.ts", deviceKey: "mogmine-drills-v1", table: "mogmine_drills", ownership: "user_id", ...own, readiness: "v1", inBackup: true, deletePolicy: "cascade_parent", parent: "trades",
     derivedNeverStored: [], notes: "" },
   { key: "calls", domainType: "DiscretionCall", module: "lib/calls.ts, lib/calls-store.ts", deviceKey: "mogmine-calls-v1#calls", table: "mogmine_calls", ownership: "user_id", ...own, readiness: "v1", inBackup: true, deletePolicy: "hard",

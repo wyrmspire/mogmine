@@ -35,7 +35,7 @@ export function createUnavailableAdapter(): PersistenceAdapter {
     repositories: {
       trades: collection, mood_records: collection, mood_candidates: collection, accounts: collection,
       balance_checks: collection, challenges: collection, playbooks: collection, plans: collection,
-      drills: collection, calls: collection, prompt_dismissals: collection,
+      drills: collection, calls: collection, prompt_dismissals: collection, daily_reviews: collection,
       mood_registry: singleton, prefs: singleton, prompt_library: singleton,
       candles: { get: fail, put: fail },
     } as unknown as PersistenceAdapter["repositories"],

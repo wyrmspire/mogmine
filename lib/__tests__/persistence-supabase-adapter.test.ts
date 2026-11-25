@@ -182,3 +182,21 @@ test("supabase live (opt-in, read-only): anon sees no mogmine_ rows", { skip: !(
   const { data } = await client.from("mogmine_trades").select("id").limit(1);
   assert.equal((data ?? []).length, 0);
 });
+
+test("supabase: daily reviews land in mogmine_daily_reviews under the signed-in uid, and an unapplied table reads as unavailable", async () => {
+  const { db, repo } = setup();
+  const review = {
+    id: "review-2026-11-23", user_id: DEFAULT_OWNER_USER_ID, session_date: "2026-11-23", account_id: null, trade_ids: [],
+    plan_ids: [], points: [], lesson: "Wait for the retest", status: "draft" as const, recorded_at: "2026-11-23T22:00:00.000Z",
+  };
+  const put = await repo.daily_reviews.put(DEFAULT_OWNER_USER_ID, review);
+  assert.equal(put.ok, true);
+  const rows = db.tables.get("mogmine_daily_reviews") ?? [];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].user_id, CHRIS);
+  assert.equal(rows[0].id, "review-2026-11-23");
+
+  db.failNext({ code: "PGRST205", message: "Could not find the table 'public.mogmine_daily_reviews' in the schema cache" });
+  const offline = await repo.daily_reviews.list(DEFAULT_OWNER_USER_ID, {});
+  assert.equal(!offline.ok && offline.error.code, "unavailable");
+});
