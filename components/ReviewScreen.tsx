@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PastSessionReviews } from "./PastSessionReviews";
-import { PitStop } from "./PitStop";
+import { PitStop, showsNoSetupPicked } from "./PitStop";
 import { RStrip } from "./RStrip";
 import { ReviewChart } from "./ReviewChart";
 import { MoodShape, useTradeMood } from "./MoodShape";
@@ -161,6 +161,7 @@ function Queue() {
               <strong>{trade.symbol}</strong>
               <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
               {trade.is_sample && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}
+              {!sealed && showsNoSetupPicked(trade) && <span className="tag-chip muted">No setup</span>}
             </span>
             {/* UX-c: each unit stays whole ("Fri, Nov 13", "3m 30s"); the line breaks only between units. */}
             <span className="row-meta queue-meta">
