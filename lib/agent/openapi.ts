@@ -300,6 +300,47 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           errors: ERROR_STATUSES_READ,
         }),
       },
+      "/candles": {
+        get: operation({
+          operationId: "getCandles",
+          summary: "Cleaned 1m, 5m or 15m bars for a window, with Central Time labels and coverage",
+          description:
+            "symbol MES, MNQ or another supported contract (MES reads MES=F, never ES=F). from and to are ISO times with a zone, " +
+            "from before to. The window is at most 26 hours for 1m and 7 days for 5m and 15m (422 otherwise). Each bar has time (UTC ms), " +
+            "iso, ct (Central Time, e.g. \"14:13\"), open, high, low, close, volume. Bars with null or NaN prices, a range that does not hold " +
+            "open and close, or a time outside the window are dropped. A future window is 200 with no bars and reason \"future\"; a window " +
+            "with no regular trading time (a weekend) is 200 with no bars and reason \"closed\". coverage: expected bars, present bars, and gaps " +
+            "(runs of missing expected bars). Upstream Yahoo calls are capped at 15 a minute per key (429 when exceeded); cache hits are free. " +
+            "Nothing is stored.",
+          scope: "read",
+          parameters: [
+            { name: "symbol", in: "query", required: true, schema: { type: "string", example: "MES" } },
+            { name: "from", in: "query", required: true, schema: { type: "string", format: "date-time" } },
+            { name: "to", in: "query", required: true, schema: { type: "string", format: "date-time" } },
+            { name: "timeframe", in: "query", schema: { type: "string", enum: ["1m", "5m", "15m"], default: "1m" } },
+          ],
+          success: { status: 200, description: "The bars, ticker, provider, coverage and reason (when set)." },
+          errors: [...ERROR_STATUSES_READ, 422],
+        }),
+      },
+      "/checks/trade": {
+        post: operation({
+          operationId: "checkTrade",
+          summary: "Check a draft (or stored) trade against the 1m bars before saving: fills, stop moves, findings, warnings and R",
+          description:
+            "Read scope although it is a POST: it writes nothing, so call it as often as needed (HR-2). Body: a draft trade in the create " +
+            "shape, or { \"id\": \"…\" } for a stored trade. Each fill is matched within 5 minutes (match: stated, shifted, outside, no-bars); " +
+            "a shifted fill carries matched (UTC ISO), offset_min and a message to ask the trader. stop_moves are checked against the hold " +
+            "and the tick grid. findings come from the post-entry bar check (the entry bar is never inside the hold). warnings are the " +
+            "write checks (not blocking). refusal is the message a save would be refused with, or null. derived gives risk_cents, risk_r, " +
+            "result_r, r_size_cents, r_size_source and stated_risk_r. The window is the trade's 1m bars from 10 minutes before the entry to " +
+            "10 minutes after the exit (or the entry, when open).",
+          scope: "read",
+          requestBody: jsonBody("A draft trade (the create shape), or { \"id\": \"…\" } for a stored trade."),
+          success: { status: 200, description: "fills, stop_moves, findings, warnings, refusal, derived and window." },
+          errors: [...ERROR_STATUSES_READ, 404, 422],
+        }),
+      },
       "/records/{type}/{id}/archive": {
         parameters: [typeParam, idParam],
         post: operation({

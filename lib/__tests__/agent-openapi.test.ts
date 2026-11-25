@@ -36,7 +36,7 @@ function routeFiles(dir: string): string[] {
 }
 
 const API = path.join(process.cwd(), "app/api/v1");
-const ROUTE_PAIRS = ["guide", "me", "records", "singletons", "vocabulary"]
+const ROUTE_PAIRS = ["candles", "checks", "guide", "me", "records", "singletons", "vocabulary"]
   .flatMap((group) => routeFiles(path.join(API, group)))
   .flatMap((file) => {
     const rel = path.relative(API, path.dirname(file)).split(path.sep).join("/");
@@ -61,7 +61,7 @@ test("spec: bearer auth is declared and applied to every operation by default", 
 });
 
 test("spec: the (path, method) pairs are exactly the methods the route files export", () => {
-  assert.equal(ROUTE_PAIRS.length, 11, "sanity: the v1 surface has eleven operations");
+  assert.equal(ROUTE_PAIRS.length, 13, "sanity: the v1 surface has thirteen operations");
   const specPairs = opsOf().map(([method, route]) => `${method} ${route}`).sort();
   assert.deepEqual(specPairs, ROUTE_PAIRS);
 });
@@ -69,7 +69,7 @@ test("spec: the (path, method) pairs are exactly the methods the route files exp
 test("spec: operationIds are unique camelCase and exactly the agreed set", () => {
   const ids = opsOf().map(([, , op]) => op.operationId as string);
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual([...ids].sort(), ["archiveRecord", "createRecord", "deleteRecord", "getGuide", "getMe", "getRecord", "getSingleton", "getVocabulary", "listRecords", "putSingleton", "updateRecord"]);
+  assert.deepEqual([...ids].sort(), ["archiveRecord", "checkTrade", "createRecord", "deleteRecord", "getCandles", "getGuide", "getMe", "getRecord", "getSingleton", "getVocabulary", "listRecords", "putSingleton", "updateRecord"]);
 });
 
 test("spec: path enums come from the registry constants (type excludes candles, key lists the singletons)", () => {
@@ -85,10 +85,15 @@ test("spec: path enums come from the registry constants (type excludes candles, 
   }
 });
 
-test("spec: every GET is read scope and every other method is write scope", () => {
+// docs/07 §5: `/checks/trade` is a POST that writes nothing, so it is read scope. It is the only exception.
+const READ_SCOPE_POSTS = new Set(["POST /checks/trade"]);
+
+test("spec: every GET is read scope and every other method is write scope (except the read-only check POST)", () => {
   for (const [method, route, op] of opsOf()) {
-    assert.equal(op["x-mogmine-scope"], method === "GET" ? "read" : "write", `${method} ${route}`);
+    const readScope = method === "GET" || READ_SCOPE_POSTS.has(`${method} ${route}`);
+    assert.equal(op["x-mogmine-scope"], readScope ? "read" : "write", `${method} ${route}`);
   }
+  assert.equal(READ_SCOPE_POSTS.size, 1, "the exception list stays as small as docs/07 §5 says");
 });
 
 test("spec: list query parameters and limit bounds", () => {
