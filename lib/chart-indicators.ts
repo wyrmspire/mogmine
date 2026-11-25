@@ -13,26 +13,70 @@ export interface VwapPoint {
   value: number;
 }
 
+export interface TradeSessionVwapReport {
+  points: { time: number; value: number }[];
+  /** True when Globex VWAP was drawn over a window with missing bars (VW-2). */
+  approximate: boolean;
+  missingBars: number;
+  /** Visible note for an approximate line, e.g. "≈ 23 min missing overnight"; null when exact. */
+  reason: string | null;
+}
+
 /**
- * Cumulative VWAP points for the trade's own session, from the trade's native candles. The cutoff is the
- * session's 17:00 ET close or the last loaded bar, whichever is first: the candle set runs 15 h past the
- * exit, and a later cutoff would anchor to the next session. Null when the anchored window has a gap.
+ * Cumulative VWAP and its completeness for the trade's own session, from the trade's native candles. The cutoff
+ * is the session's 17:00 ET close or the last loaded bar, whichever is first: the candle set runs 15 h past the
+ * exit, and a later cutoff would anchor to the next session. Null when the anchored window cannot be drawn:
+ * RTH needs every bar, Globex may skip small overnight gaps (VW-2).
  */
-export function tradeSessionVwap(
+export function tradeSessionVwapReport(
   trade: { symbol: string; entry_time: string },
   candles: readonly Candle[],
   baseTimeframe: Timeframe,
   anchor: VwapAnchor,
-): { time: number; value: number }[] | null {
+): TradeSessionVwapReport | null {
   const symbol = trade.symbol.toUpperCase();
   const entry = Date.parse(trade.entry_time);
   if ((symbol !== "MES" && symbol !== "MNQ") || !Number.isFinite(entry) || !candles.length) return null;
   const barMs = TIMEFRAME_MINUTES[baseTimeframe] * 60_000;
   const lastClose = Math.max(...candles.map((bar) => bar.time)) + barMs;
   const asOf = Math.min(lastClose, equityIndexSessionBounds(sessionDate(entry)).close);
-  const result = computeSessionIndicators(candles, { symbol, timeframe: baseTimeframe, asOf, anchor });
-  if (!result || !result.coverage.anchored.complete || !result.vwap.length) return null;
-  return result.vwap;
+  const gapPolicy = anchor === "globex" ? "globex-tolerant" : "complete";
+  const result = computeSessionIndicators(candles, { symbol, timeframe: baseTimeframe, asOf, anchor, gapPolicy });
+  if (!result || !result.vwap.length) return null;
+  const { approximate, missingBars } = result.coverage.anchored;
+  const missingMinutes = missingBars * TIMEFRAME_MINUTES[baseTimeframe];
+  return {
+    points: result.vwap,
+    approximate,
+    missingBars,
+    reason: approximate ? `≈ ${missingMinutes} min missing overnight` : null,
+  };
+}
+
+/** Cumulative VWAP points for the trade's own session. See `tradeSessionVwapReport`. */
+export function tradeSessionVwap(
+  trade: { symbol: string; entry_time: string },
+  candles: readonly Candle[],
+  baseTimeframe: Timeframe,
+  anchor: VwapAnchor,
+): { time: number; value: number }[] | null {
+  return tradeSessionVwapReport(trade, candles, baseTimeframe, anchor)?.points ?? null;
+}
+
+/**
+ * VW-1: the session's bars (18:00 ET to the close or now) joined with the trade's own bars, one per open time and
+ * in time order. Session bars join only on the trade's timeframe, so a 5m session never mixes into a 1m series.
+ */
+export function joinSessionBars(
+  session: readonly Candle[],
+  sessionTimeframe: Timeframe | null,
+  bars: readonly Candle[],
+  timeframe: Timeframe,
+): Candle[] {
+  if (sessionTimeframe !== timeframe) return [...bars];
+  const byTime = new Map<number, Candle>();
+  for (const bar of [...session, ...bars]) byTime.set(bar.time, bar);
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
 
 /**

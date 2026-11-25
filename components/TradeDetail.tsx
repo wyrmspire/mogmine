@@ -24,7 +24,7 @@ import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
 import { useTradeLevels } from "./useTradeLevels";
-import { tradeSessionVwap, vwapOnBars } from "@/lib/chart-indicators";
+import { joinSessionBars, tradeSessionVwapReport, vwapOnBars } from "@/lib/chart-indicators";
 import type { VwapPoint } from "@/lib/chart-indicators";
 import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withheld";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
@@ -368,14 +368,17 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     chronologyUnresolved: observation?.coverage === "complete" && observation.chronology === "unresolved",
     findings: observation?.findings ?? [],
     entryBarPassedStop: observation?.entryBarPassedStop,
+    untimedStopMovePrice: !trade.stop_moves?.length && trade.initial_stop_price != null && trade.stop_loss_price != null && trade.stop_loss_price !== trade.initial_stop_price ? trade.stop_loss_price : null,
     symbol: trade.symbol,
     zone,
   });
   // Computed session levels (LV-1 / LV-2, docs/24 §5, OD-15): the prior session and this session up to
   // entry, read from the chart's own series. The trade's candle window alone never holds the prior session.
-  const levels = useTradeLevels(trade, showLevels);
-  const sessionVwap = useMemo(() => (ready && vwapAnchor !== "off"
-    ? tradeSessionVwap(trade, candles.candles, candles.baseTimeframe, vwapAnchor) : null), [ready, candles, trade, vwapAnchor]);
+  const levels = useTradeLevels(trade, showLevels, vwapAnchor !== "off");
+  const sessionVwapReport = useMemo(() => (ready && vwapAnchor !== "off" ? tradeSessionVwapReport(trade,
+    joinSessionBars(levels.sessionCandles, levels.sessionTimeframe, candles.candles, candles.baseTimeframe),
+    candles.baseTimeframe, vwapAnchor) : null), [ready, candles, trade, vwapAnchor, levels.sessionCandles, levels.sessionTimeframe]);
+  const sessionVwap = sessionVwapReport?.points ?? null;
   const vwapLine = useMemo(() => (sessionVwap && displayedBars ? vwapOnBars(sessionVwap, displayedBars, timeframe) : NO_VWAP),
     [sessionVwap, displayedBars, timeframe]);
 
@@ -502,7 +505,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                   </div>
                   <div className="view-menu-section">
                     <span className="view-menu-label">
-                      Session VWAP{vwapAnchor !== "off" && ready && !sessionVwap ? " · unavailable: bars missing in the session" : ""}
+                      Session VWAP{vwapAnchor !== "off" && ready && !sessionVwap ? " · unavailable: bars missing in the session" : sessionVwapReport?.reason ? ` · ${sessionVwapReport.reason}` : ""}
                     </span>
                     <div className="view-menu-toggle-group three" role="group" aria-label="Session VWAP anchor">
                       {([["off", "Off", "No VWAP"], ["rth", "RTH", "From 09:30 ET"], ["globex", "Globex", "From 18:00 ET"]] as const).map(([value, label, hint]) => (
@@ -563,7 +566,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} vwap={vwapLine} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} vwap={vwapLine} vwapApproximate={sessionVwapReport?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
