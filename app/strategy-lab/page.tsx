@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
-import { StrategyLabMark } from "@/components/StrategyLabMark";
+import { Suspense } from "react";
+import { StrategyLabWorkspace } from "@/components/StrategyLabWorkspace";
 
 export const metadata: Metadata = { title: "Strategy Lab — MogMine" };
 
-// Mark a point, then read the Context Card for it (docs/design-2026-11-24/09 §12.1–§12.2).
+// useSearchParams inside StrategyLabWorkspace needs a Suspense boundary so /strategy-lab prerenders cleanly.
 export default function StrategyLabPage() {
   return (
     <main className="sl-page">
       <h1 className="sl-title">Strategy Lab</h1>
-      <StrategyLabMark />
+      <Suspense fallback={<div className="sl-skeleton" role="status" aria-label="Loading Strategy Lab" />}>
+        <StrategyLabWorkspace />
+      </Suspense>
     </main>
   );
 }

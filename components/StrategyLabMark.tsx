@@ -6,14 +6,19 @@
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { StrategyLabContextCard, type ExcludedSession } from "@/components/StrategyLabContextCard";
 import { useAccounts } from "@/lib/accounts-store";
+import { activePlaybooks, usePlaybooks } from "@/lib/playbooks-store";
 import { sessionDate } from "@/lib/session";
 import { usePrefs } from "@/lib/prefs";
+import { useJournal } from "@/lib/store";
+import type { TradeRecord } from "@/lib/trades";
+import { etParts } from "@/lib/strategy-lab/et-clock";
 import { labRSize } from "@/lib/strategy-lab/r";
 import {
   buildContextCard, deriveCardState, markTimeUtc, rSizeBasis,
   type CardMark, type CardRSize, type CardSide, type CardState, type ContextCard,
 } from "@/lib/strategy-lab/context-card";
 import { loadBarSeries, recentSessionDates, type ExclusionReason } from "@/lib/strategy-lab/bars";
+import type { BarSeries } from "@/lib/strategy-lab/types";
 
 /** Sessions loaded for a mark: the mark's session and the 11 before it (§10.2: ≤ 12 requests on first load). */
 export const CONTEXT_SESSIONS = 12;
@@ -45,11 +50,48 @@ function timeText(minuteOfDay: number): string {
   return `${String(Math.floor(minuteOfDay / 60)).padStart(2, "0")}:${String(minuteOfDay % 60).padStart(2, "0")}`;
 }
 
+export interface MarkSeed {
+  key: string;
+  date: string;
+  time: string;
+  priceText: string;
+  side: CardSide;
+  accountId?: string;
+  tradeId?: string;
+}
+
+export function seedFromTrade(trade: TradeRecord): MarkSeed | null {
+  const entryMs = Date.parse(trade.entry_time);
+  if (!Number.isFinite(entryMs) || !Number.isFinite(trade.entry_price)) return null;
+  const p = etParts(entryMs);
+  const date = `${String(p.year).padStart(4, "0")}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+  const time = `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+  return {
+    key: `trade:${trade.id}`,
+    date,
+    time,
+    priceText: String(snapToTick(trade.entry_price)),
+    side: trade.direction === "SHORT" ? "short" : "long",
+    accountId: trade.account_id ?? "",
+    tradeId: trade.id,
+  };
+}
+
+export interface StrategyLabMarkProps {
+  seed?: MarkSeed | null;
+  playbookId?: string | null;
+  onPlaybookChange?: (next: string | null) => void;
+  accountId?: string;
+  onAccountChange?: (next: string) => void;
+  onFindSimilar?: (series: BarSeries, mark: CardMark, rSize: CardRSize) => void;
+  onSaveAsRecipe?: (series: BarSeries, mark: CardMark, rSize: CardRSize) => void;
+}
+
 type RunState =
   | { status: "idle" }
   | { status: "loading"; mark: CardMark; progress: { done: number; total: number } }
   | { status: "error"; mark: CardMark; message: string }
-  | { status: "done"; mark: CardMark; card: ContextCard; excluded: ExcludedSession[] };
+  | { status: "done"; mark: CardMark; series: BarSeries; card: ContextCard; excluded: ExcludedSession[] };
 
 const noSub = () => () => {};
 let clientDefaultClock = "";
@@ -70,22 +112,35 @@ function subscribeOnline(listener: () => void) {
   };
 }
 
-export function StrategyLabMark() {
+export function StrategyLabMark({
+  seed = null, playbookId, onPlaybookChange, accountId: controlledAccount, onAccountChange, onFindSimilar, onSaveAsRecipe,
+}: StrategyLabMarkProps = {}) {
   const accountStore = useAccounts();
+  const playbooksStore = usePlaybooks();
+  const journal = useJournal();
   const prefs = usePrefs();
   const accounts = accountStore.accounts.filter((account) => !account.archived);
+  const playbooks = activePlaybooks(playbooksStore.playbooks, playbookId ?? null);
+  const mesTrades = journal.trades.filter((t) => t.symbol === "MES" && !t.is_sample);
 
   // Empty on server render so SSR and hydration match; defaults populate from the client snapshot.
   const [defaultDate, defaultTime] = useSyncExternalStore(noSub, getDefaultClock, () => "|").split("|");
   const offline = useSyncExternalStore(subscribeOnline, () => !navigator.onLine, () => false);
-  const [userDate, setDate] = useState<string | null>(null);
-  const [userTime, setTime] = useState<string | null>(null);
+  const [userDate, setDate] = useState<string | null>(seed?.date ?? null);
+  const [userTime, setTime] = useState<string | null>(seed?.time ?? null);
   const date = userDate ?? defaultDate;
   const time = userTime ?? defaultTime;
-  const [priceText, setPriceText] = useState("");
-  const [side, setSide] = useState<CardSide>("long");
-  const [accountId, setAccountId] = useState("");
+  const [priceText, setPriceText] = useState(seed?.priceText ?? "");
+  const [side, setSide] = useState<CardSide>(seed?.side ?? "long");
+  const [localAccountId, setLocalAccountId] = useState(seed?.accountId ?? "");
+  const [pickedTradeId, setPickedTradeId] = useState(seed?.tradeId ?? "");
   const [run, setRun] = useState<RunState>({ status: "idle" });
+
+  const accountId = controlledAccount ?? localAccountId;
+  const setAccountId = (next: string) => {
+    setLocalAccountId(next);
+    onAccountChange?.(next);
+  };
 
   const minuteOfDay = parseTime(time);
   const price = Number(priceText);
@@ -94,6 +149,20 @@ export function StrategyLabMark() {
   const rSize = labRSize(selectedAccount?.id ?? null, accounts, prefs);
   const cardRSize: CardRSize = { usd: rSize.usd, source: rSize.source, accountName: selectedAccount?.name ?? null };
   const canBuild = date !== "" && minuteOfDay !== null && priceValid && run.status !== "loading";
+
+  function applyTrade(tradeId: string) {
+    setPickedTradeId(tradeId);
+    const found = journal.trades.find((t) => t.id === tradeId);
+    if (!found) return;
+    const next = seedFromTrade(found);
+    if (!next) return;
+    setDate(next.date);
+    setTime(next.time);
+    setPriceText(next.priceText);
+    setSide(next.side);
+    if (next.accountId !== undefined) setAccountId(next.accountId);
+    if (found.playbook_id && onPlaybookChange) onPlaybookChange(found.playbook_id);
+  }
 
   function stepTime(delta: number) {
     const base = minuteOfDay ?? 0;
@@ -122,7 +191,7 @@ export function StrategyLabMark() {
         load.status === "excluded" ? [{ date: load.date, reason: EXCLUSION_TEXT[load.reason] }] : []
       ));
       const card = buildContextCard(data.series, mark, { rSize: cardRSize, shield: prefs.shield, excludedSessions: excluded.length });
-      setRun({ status: "done", mark, card, excluded });
+      setRun({ status: "done", mark, series: data.series, card, excluded });
     } catch {
       setRun({ status: "error", mark, message: ERROR_TEXT });
     }
@@ -144,6 +213,28 @@ export function StrategyLabMark() {
   return (
     <>
       <form className="sl-form" onSubmit={onBuild} aria-label="Mark a point">
+        {onPlaybookChange ? (
+          <div className="sl-field">
+            <label className="sl-label" htmlFor="sl-playbook">Playbook</label>
+            <select id="sl-playbook" className="sl-input" value={playbookId ?? ""} onChange={(e) => onPlaybookChange(e.target.value || null)}>
+              <option value="">All playbooks (exploration)</option>
+              {playbooks.map((pb) => <option key={pb.id} value={pb.id}>{pb.name}</option>)}
+            </select>
+          </div>
+        ) : null}
+
+        {mesTrades.length > 0 ? (
+          <div className="sl-field">
+            <label className="sl-label" htmlFor="sl-from-trade">From a trade</label>
+            <select id="sl-from-trade" className="sl-input" value={pickedTradeId} onChange={(e) => applyTrade(e.target.value)}>
+              <option value="">Choose an MES trade…</option>
+              {mesTrades.slice(0, 40).map((t) => (
+                <option key={t.id} value={t.id}>{t.entry_time.slice(0, 16).replace("T", " ")} · {t.direction} {t.entry_price}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
         <div className="sl-field">
           <label className="sl-label" htmlFor="sl-date">Date (ET)</label>
           <input id="sl-date" className="sl-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -204,6 +295,8 @@ export function StrategyLabMark() {
           progress={run.status === "loading" ? run.progress : null}
           excluded={run.status === "done" ? run.excluded : []}
           onRetry={() => { void build(run.mark); }}
+          onFindSimilar={run.status === "done" && onFindSimilar ? () => onFindSimilar(run.series, run.mark, cardRSize) : undefined}
+          onSaveAsRecipe={run.status === "done" && onSaveAsRecipe ? () => onSaveAsRecipe(run.series, run.mark, cardRSize) : undefined}
         />
       ) : null}
     </>

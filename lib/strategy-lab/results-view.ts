@@ -5,7 +5,9 @@
  * multiple-comparison line is always present, NaN or missing values read "n/a", and R is shown in R only.
  */
 import { featureKey, multipleComparisonLine, MIN_FULL_N, MIN_THIN_N } from "./attribution.ts";
-import { clockText } from "./et-clock.ts";
+import { clockText, etParts } from "./et-clock.ts";
+import { outputSpecOf } from "./recipe.ts";
+import { SKILLS, type SkillRegistry } from "./registry.ts";
 import type {
   BarSeries, Match, RunResult, Separator, SkillOutputRef, Split, SplitBucket, Stats, TodCell, Value,
 } from "./types.ts";
@@ -72,6 +74,37 @@ export function bucketTone(n: number): BucketTone {
 export function defaultSliceLabel(ref: SkillOutputRef): string {
   const params = ref.params ? Object.keys(ref.params).sort().map((k) => `${k}=${String(ref.params?.[k])}`) : [];
   return `${ref.skill} · ${ref.out}${params.length ? ` (${params.join(", ")})` : ""}`;
+}
+
+/** Human-readable slice label resolved from the skill registry's OutputSpec, falling back to `defaultSliceLabel`. */
+export function skillSliceLabel(ref: SkillOutputRef, registry: SkillRegistry = SKILLS): string {
+  const spec = outputSpecOf(ref, registry);
+  return spec?.label ?? defaultSliceLabel(ref);
+}
+
+/** Compact run summary for the recipe list (§12.3), e.g. "last run: n 14 · +0.06R · 20 sess". */
+export function runSummaryLine(result: Pick<RunResult, "stats" | "data">): string {
+  return `last run: n ${result.stats.n} · ${signedR(result.stats.avgR)} · ${result.data.sessionsUsed.length} sess`;
+}
+
+export interface MarkSeedFields {
+  date: string;
+  time: string;
+  priceText: string;
+  side: "long" | "short";
+}
+
+/**
+ * Converts a 1m bar's open timestamp (`barOpenMs`) into a Mark form seed at that bar's decision close
+ * (`barOpenMs + 60_000`, §4.4 / §12.5 "Open at this time").
+ */
+export function markSeedFromBar(barOpenMs: number, price: number, side: "long" | "short"): MarkSeedFields {
+  const decisionMs = barOpenMs + 60_000;
+  const p = etParts(decisionMs);
+  const date = `${String(p.year).padStart(4, "0")}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+  const time = `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+  const snapped = Math.round(price / 0.25) * 0.25;
+  return { date, time, priceText: String(snapped), side };
 }
 
 export function headerLine(title: string, version: number, sessionsUsed: number, sessionsRequested: number): string {

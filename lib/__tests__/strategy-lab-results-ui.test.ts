@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { attribute, featureKey, multipleComparisonLine } from "../strategy-lab/attribution.ts";
-import { rSizeBasis } from "../strategy-lab/context-card.ts";
+import { rSizeBasis, etToUtc } from "../strategy-lab/context-card.ts";
 import {
-  bucketTone, comparisonNote, dataLines, defaultSliceLabel, edgeRows, headerLine, matchPage, riskMultipleText,
-  signedR, sparkline, splitRowViews, statLines, todRowViews, valueText, MINUS, MATCH_PAGE_SIZE,
+  bucketTone, comparisonNote, dataLines, defaultSliceLabel, edgeRows, headerLine, markSeedFromBar, matchPage,
+  riskMultipleText, runSummaryLine, signedR, skillSliceLabel, sparkline, splitRowViews, statLines, todRowViews,
+  valueText, MINUS, MATCH_PAGE_SIZE,
 } from "../strategy-lab/results-view.ts";
 import type { BarSeries, Match, Outcome, SkillOutputRef, Stats } from "../strategy-lab/types.ts";
 
@@ -346,4 +347,24 @@ test("dataLines: sessions used, exclusions, missing-bar counts, and the R basis"
     "R = $300 (SIM Eval 50K)",
     "Not used: 2026-11-24 (bars missing)",
   ]);
+});
+
+test("skillSliceLabel, runSummaryLine, and markSeedFromBar align with registry labels and decision-bar close", () => {
+  const realRvol: SkillOutputRef = { skill: "rvol", out: "rvolBucket" };
+  assert.notEqual(skillSliceLabel(realRvol), defaultSliceLabel(realRvol));
+  assert.equal(skillSliceLabel({ skill: "unknownSkill", out: "x" }), "unknownSkill · x");
+
+  const line = runSummaryLine({
+    stats: fakeStats({ n: 14, avgR: 0.06 }),
+    data: {
+      sessionsRequested: 22, sessionsUsed: Array.from({ length: 20 }, (_, k) => `2026-11-${k + 1}`),
+      excluded: [], barsMissing: 0, volumeMissing: 0, rSize: { usd: 300, source: "account" },
+    },
+  });
+  assert.equal(line, "last run: n 14 · +0.06R · 20 sess");
+
+  // Bar opened at 08:11 ET on 2026-11-24 closes at 08:12 ET, so "Open at this time" seeds 08:12 ET.
+  const barOpen = etToUtc("2026-11-24", 8 * 60 + 11);
+  const seed = markSeedFromBar(barOpen, 5912.25, "long");
+  assert.deepEqual(seed, { date: "2026-11-24", time: "08:12", priceText: "5912.25", side: "long" });
 });

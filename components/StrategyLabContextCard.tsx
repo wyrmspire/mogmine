@@ -16,6 +16,8 @@ export interface StrategyLabContextCardProps {
   progress: { done: number; total: number } | null;
   excluded: readonly ExcludedSession[];
   onRetry: () => void;
+  onFindSimilar?: () => void;
+  onSaveAsRecipe?: () => void;
 }
 
 const REASON_TEXT: Record<SkipReason | "no-value", string> = {
@@ -88,7 +90,9 @@ function StatusBox({ tone, children }: { tone: "info" | "error"; children: React
   return <div className={`sl-status${tone === "error" ? " sl-status--error" : ""}`}>{children}</div>;
 }
 
-export function StrategyLabContextCard({ state, card, message, progress, excluded, onRetry }: StrategyLabContextCardProps) {
+export function StrategyLabContextCard({
+  state, card, message, progress, excluded, onRetry, onFindSimilar, onSaveAsRecipe,
+}: StrategyLabContextCardProps) {
   if (state === "loading") {
     const detail = progress ? ` ${progress.done} of ${progress.total} sessions` : "";
     return (
@@ -136,8 +140,22 @@ export function StrategyLabContextCard({ state, card, message, progress, exclude
         ) : null}
       </section>
       <div className="sl-actions">
-        <button type="button" className="sl-btn sl-btn--block" disabled title="Find similar is not built yet">Find similar</button>
-        <button type="button" className="sl-btn sl-btn--block" disabled title="Saving recipes is not built yet">Save as recipe</button>
+        <button
+          type="button"
+          className="sl-btn sl-btn--primary sl-btn--block"
+          disabled={!onFindSimilar || card.decisionIndex === null}
+          onClick={onFindSimilar}
+        >
+          Find similar
+        </button>
+        <button
+          type="button"
+          className="sl-btn sl-btn--block"
+          disabled={!onSaveAsRecipe || card.decisionIndex === null}
+          onClick={onSaveAsRecipe}
+        >
+          Save as recipe
+        </button>
       </div>
     </div>
   );
