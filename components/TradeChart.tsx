@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, useSyncExternalStore } from "react";
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
+import { addVolumePane, paintVolumePane, type VolumeSeries } from "./VolumePane";
 import { SessionLevelsPrimitive, computeLevelRightOffsetBars, levelPillColumnPx } from "./SessionLevelsPrimitive";
 import { LevelCard, levelHitForTick, selectExportLevelPills } from "./LevelCard";
 import { describeTrade } from "@/lib/describe";
@@ -61,6 +62,8 @@ interface Props {
   vwap?: readonly VwapPoint[];
   /** IN-2: true when Globex VWAP includes tolerated overnight gaps (HUD prefixes ≈). */
   vwapApproximate?: boolean;
+  /** VOL-1: draw the volume band under the candles. The caller withholds it when the bars carry no real volume. */
+  showVolume?: boolean;
   /** IN-3: the 200 EMA on the displayed bars (View → 200 EMA). Empty hides it. */
   ema?: readonly EmaPoint[];
   /** IN-3: the warm-up has gaps: the line is dashed and the HUD prefixes ≈. */
@@ -109,6 +112,8 @@ interface Live {
   host: HTMLDivElement;
   chart: IChartApi;
   series: CandleSeries;
+  /** VOL-1: volume band, added before the candles so it draws underneath them. */
+  volumeSeries: VolumeSeries;
   primitive: PositionBoxPrimitive;
   levelsPrimitive: SessionLevelsPrimitive;
   /** Labels of the pills drawn this frame: they size the `rightOffset` reserve (OD-55a). */
@@ -217,7 +222,7 @@ const NO_LEVELS: readonly LevelLine[] = [];
 const NO_VWAP: readonly VwapPoint[] = [];
 const NO_EMA: readonly EmaPoint[] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapApproximate = false, ema = NO_EMA, emaApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapApproximate = false, showVolume = false, ema = NO_EMA, emaApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
@@ -226,11 +231,11 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   const levelMode: LevelLabelsMode = levelLabelsMode ?? prefs.levelLabels;
   // The open level card (LB-6). `fromList`: opened by a focused list row, so leaving the row closes it.
   const [openLevel, setOpenLevel] = useState<{ hit: LevelHit; fromList: boolean } | null>(null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapApproximate, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapApproximate, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapApproximate, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapApproximate, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel }; });
   const closeLevel = useCallback(() => {
     setOpenLevel(null);
     latest.current.onSelectLevel?.(null);
@@ -361,6 +366,8 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       l.renderedBars = bars;
       l.renderedTimeframe = barTimeframe;
     }
+    // VOL-1: the volume band repaints with the bars, its toggle and the theme. It sets the candle margins too.
+    setProgrammaticRange(l, () => { paintVolumePane(l.chart, l.volumeSeries, bars, t, p.showVolume, l.host.clientHeight); });
 
     if (timeframeChanged) {
       l.extraBefore = 0;
@@ -441,6 +448,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         handleScroll: { vertTouchDrag: false },
         handleScale: { axisPressedMouseMove: true, pinch: true, mouseWheel: true },
       });
+      const volumeSeries = addVolumePane(chart, lwc);
       const series = chart.addSeries(lwc.CandlestickSeries, {
         borderVisible: false, priceLineVisible: false, lastValueVisible: false,
         priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
@@ -464,7 +472,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
       });
       const state: Live = {
-        lwc, host, chart, series, primitive, levelsPrimitive, levelLabels: [], levelRightOffset: 0, vwapSeries, renderedVwap: null,
+        lwc, host, chart, series, volumeSeries, primitive, levelsPrimitive, levelLabels: [], levelRightOffset: 0, vwapSeries, renderedVwap: null,
         emaSeries, renderedEma: null,
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
@@ -656,6 +664,8 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
 
       const resize = new ResizeObserver(() => {
         chart.applyOptions({ width: host.clientWidth, height: host.clientHeight });
+        const p = latest.current;
+        if (p.theme) paintVolumePane(chart, state.volumeSeries, p.bars, p.theme, p.showVolume, host.clientHeight);
         applyLevelRightOffset(state);
         requestAnimationFrame(placeGrip);
         if (!state.userPanned && state.heldDefaultRange) {
@@ -694,7 +704,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, levels, vwap, ema, emaApproximate, zone, privacy, theme, neighbourTrades, levelMode]);
+  }, [trade, bars, timeframe, marks, levels, vwap, showVolume, ema, emaApproximate, zone, privacy, theme, neighbourTrades, levelMode]);
 
   return <><div
     ref={hostRef}

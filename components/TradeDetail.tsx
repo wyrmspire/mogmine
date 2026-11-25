@@ -28,6 +28,7 @@ import { useTradeLevels } from "./useTradeLevels";
 import { joinSessionBars, tradeSessionVwapReport, vwapOnBars } from "@/lib/chart-indicators";
 import type { VwapPoint } from "@/lib/chart-indicators";
 import { ema200Status, emaOnBars } from "@/lib/ema";
+import { hasRealVolume } from "@/lib/volume";
 import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withheld";
 import { FRESH_EXIT_MS, ensureCandles, exitIsFresh, useCandles } from "@/lib/candles";
 import { calculateExitEfficiency } from "@/lib/exit-efficiency";
@@ -391,6 +392,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     [sessionVwap, displayedBars, timeframe]);
   // IN-3: the 200 EMA on the displayed bars (View → 200 EMA, prefs.ema200).
   const emaLine = useMemo(() => (prefs.ema200 && levels.ema200 && displayedBars ? emaOnBars(levels.ema200.points, displayedBars) : []), [prefs.ema200, levels.ema200, displayedBars]);
+  // VOL-1: the volume band (View → Volume) needs real traded volume. Sample bars carry none, so it is hidden there.
+  const volumeReal = useMemo(() => (displayedBars ? hasRealVolume(displayedBars) : false), [displayedBars]);
 
   const online = useOnline();
   const freshness = getCandleFreshness({
@@ -516,7 +519,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                   </div>
                   <div className="view-menu-section">
                     <span className="view-menu-label">
-                      Session VWAP{vwapAnchor !== "off" && ready && !sessionVwap ? " · unavailable: bars missing in the session" : sessionVwapReport?.reason ? ` · ${sessionVwapReport.reason}` : ""}
+                      Session VWAP{vwapAnchor !== "off" && ready && !sessionVwap ? (volumeReal ? " · unavailable: bars missing in the session" : " · unavailable: no volume in these bars") : sessionVwapReport?.reason ? ` · ${sessionVwapReport.reason}` : ""}
                     </span>
                     <div className="view-menu-toggle-group three" role="group" aria-label="Session VWAP anchor">
                       {([["off", "Off", "No VWAP"], ["rth", "RTH", "From 09:30 ET"], ["globex", "Globex", "From 18:00 ET"]] as const).map(([value, label, hint]) => (
@@ -530,6 +533,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                   <div className="view-menu-section">
                     <span className="view-menu-label">200 EMA{prefs.ema200 ? ema200Status(levels.ema200) : ""}</span>
                     <div className="view-menu-toggle-group" role="group" aria-label="200 EMA">{([[false, "Off"], [true, "On"]] as const).map(([value, label]) => <button key={label} type="button" aria-pressed={prefs.ema200 === value} onClick={() => setPrefs({ ema200: value })}><span>{label}</span></button>)}</div>
+                  </div>
+                  <div className="view-menu-section">
+                    <span className="view-menu-label">{volumeReal ? "Volume" : trade.is_sample ? "Volume unavailable for sample bars" : "Volume unavailable for these bars"}</span>
+                    <div className="view-menu-toggle-group" role="group" aria-label="Volume">{([[false, "Off"], [true, "On"]] as const).map(([value, label]) => <button key={label} type="button" aria-pressed={prefs.showVolume === value} disabled={!volumeReal} onClick={() => setPrefs({ showVolume: value })}><span>{label}</span></button>)}</div>
                   </div>
                   <div className="view-menu-section">
                     <button
@@ -581,7 +588,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} highlightedLineTick={highlightedTick} vwap={vwapLine} vwapApproximate={sessionVwapReport?.approximate} ema={emaLine} emaApproximate={levels.ema200?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} highlightedLineTick={highlightedTick} vwap={vwapLine} vwapApproximate={sessionVwapReport?.approximate} showVolume={volumeReal && prefs.showVolume} ema={emaLine} emaApproximate={levels.ema200?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>

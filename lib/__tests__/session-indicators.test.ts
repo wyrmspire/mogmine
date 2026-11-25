@@ -166,6 +166,30 @@ test("missing, duplicate and malformed candles cannot produce complete session v
   assert.equal(computeSessionIndicators([], { symbol: "MES", timeframe: "1m", asOf: NaN, anchor: "rth" }), null);
 });
 
+test("VOL-1: VWAP weights by real bar volume, hand-checked on three bars", () => {
+  const candles = [bar(rth, 100, 100), bar(rth + minute, 110, 300), bar(rth + 2 * minute, 120, 600)];
+  const result = calculate(candles, rth + 3 * minute);
+  // Σ(typical price × volume) / Σ volume = (100·100 + 110·300 + 120·600) / 1000 = 115.
+  const expected = (100 * 100 + 110 * 300 + 120 * 600) / (100 + 300 + 600);
+  assert.equal(expected, 115);
+  assert.ok(Math.abs(result.vwap.at(-1)!.value - expected) < 1e-10);
+});
+
+test("VOL-1: the same three prices with equal volumes give a different VWAP, so weighting matters", () => {
+  const weighted = calculate([bar(rth, 100, 100), bar(rth + minute, 110, 300), bar(rth + 2 * minute, 120, 600)], rth + 3 * minute);
+  const equal = calculate([bar(rth, 100, 200), bar(rth + minute, 110, 200), bar(rth + 2 * minute, 120, 200)], rth + 3 * minute);
+  assert.equal(equal.vwap.at(-1)!.value, 110);
+  assert.notEqual(weighted.vwap.at(-1)!.value, equal.vwap.at(-1)!.value);
+});
+
+test("VOL-1: bars without real volume (sample bars carry 0) withhold VWAP and the profile, not equal-weight", () => {
+  const candles = [bar(rth, 100, 0), bar(rth + minute, 110, 0), bar(rth + 2 * minute, 120, 0)];
+  const result = calculate(candles, rth + 3 * minute);
+  assert.equal(result.coverage.anchored.complete, true, "every bar is present");
+  assert.deepEqual(result.vwap, []);
+  assert.deepEqual(result.levels, []);
+});
+
 test("session bounds follow New York through spring and fall DST weekends", () => {
   assert.equal(offsetSessionDate("2026-03-01", -1), "2026-02-28");
   assert.equal(sessionWeekMonday("2026-11-12"), "2026-11-09");

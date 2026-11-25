@@ -29,6 +29,8 @@ export interface Prefs {
   levelLabels: LevelLabelsMode;
   /** Draw the 200 EMA on the trade chart (IN-3, D-G). */
   ema200: boolean;
+  /** Volume pane under the trade chart (VOL-1). Shown only when the bars carry real volume. Optional in the type so existing Prefs literals still compile; sanitize always fills it. */
+  showVolume?: boolean;
   /** Orientation of exported review cards (Q-5). */
   reviewCardOrientation: ReviewCardOrientation;
 }
@@ -46,6 +48,7 @@ export const DEFAULT_PREFS: Prefs = {
   vwapAnchor: "off",
   levelLabels: "tap",
   ema200: false,
+  showVolume: true,
   reviewCardOrientation: "portrait",
 };
 
@@ -73,6 +76,7 @@ export function sanitize(raw: Partial<Prefs>): Prefs {
     vwapAnchor: raw.vwapAnchor === "rth" || raw.vwapAnchor === "globex" ? raw.vwapAnchor : DEFAULT_PREFS.vwapAnchor,
     levelLabels: raw.levelLabels === "always" ? "always" : DEFAULT_PREFS.levelLabels,
     ema200: raw.ema200 === true,
+    showVolume: raw.showVolume !== false,
     reviewCardOrientation: raw.reviewCardOrientation === "landscape" ? "landscape" : DEFAULT_PREFS.reviewCardOrientation,
   };
 }
