@@ -5,7 +5,8 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { useAccounts } from "@/lib/accounts-store";
 import {
   DAILY_REVIEW_LIMITS, dailyReviewTotals, findExistingDailyReview, makeDailyReview, proposePlanIds, proposeTradeIds, unlinkedDayTradeIds,
@@ -13,16 +14,20 @@ import {
 import type { DailyReview, ReviewPoint, ReviewPointKind } from "@/lib/daily-review";
 import { updateDailyReview, upsertDailyReview, useDailyReviewsStore } from "@/lib/daily-review-store";
 import { markLinkedTradesReviewed } from "@/lib/day-review-screen";
+import { buildDaySheetModel, daySheetFileName, encodeDaySheet } from "@/lib/day-sheet";
+import type { DaySheetSnapshots } from "@/lib/day-sheet";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { parseSessionDateParam, stepRegularSessionDate } from "@/lib/selectors";
 import { usePlansStore } from "@/lib/plans-store";
-import { usePrefs } from "@/lib/prefs";
+import { setPrefs, usePrefs } from "@/lib/prefs";
+import type { ReviewCardOrientation } from "@/lib/prefs-sanitize";
 import { formatListTime } from "@/lib/time";
 import { updateTrade, useJournal } from "@/lib/store";
 import { showToast } from "@/lib/toast";
 import type { TradeRecord } from "@/lib/trades";
 import type { LocalSave } from "@/lib/save-label";
 import { useInlineSaveText } from "./useSaveLabel";
+import { ReviewCard, ReviewCardStyles } from "./ReviewCard";
 
 const POINT_GROUPS: { kind: ReviewPointKind; title: string; placeholder: string }[] = [
   { kind: "went_well", title: "Went well", placeholder: "What worked, and why it worked" },
@@ -33,6 +38,12 @@ const POINT_GROUPS: { kind: ReviewPointKind; title: string; placeholder: string 
 
 const pathFor = (date: string, account: string | null) => `/review/day/${date}${account ? `?account=${encodeURIComponent(account)}` : ""}`;
 const newPointId = () => `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+const ORIENTATIONS: ReadonlyArray<[ReviewCardOrientation, string]> = [["portrait", "Portrait 4:5"], ["landscape", "Landscape 16:9"]];
+const SHEET_STYLE: CSSProperties = {
+  position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 60, maxHeight: "85vh", overflowY: "auto",
+  display: "grid", gap: 12, padding: 16, background: "var(--elevated, #11131c)", borderTop: "1px solid var(--chart-border)",
+};
+const snapshotKey = (tradeId: string, shield: boolean) => `${tradeId}|${shield ? 1 : 0}`;
 
 /** Online state for the offline note. Server render assumes online (the screen waits for hydration anyway). */
 function useOnline() {
@@ -84,6 +95,15 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   const [saveState, setSaveState] = useState<LocalSave>("idle");
   const saveText = useInlineSaveText(saveState);
   const [adding, setAdding] = useState<ReviewPointKind | null>(null);
+  // DR-3: chart snapshots keyed by trade and privacy. Cards behind the Share sheet render with the export's Shield.
+  const [snapshots, setSnapshots] = useState<Record<string, HTMLCanvasElement>>({});
+  const [shareOpen, setShareOpen] = useState(false);
+  const [exportShield, setExportShield] = useState(true); // OD-46a: Shield on by default
+  const [png, setPng] = useState<Blob | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const onSnapshotReady = useCallback((tradeId: string, canvas: HTMLCanvasElement, shield: boolean) => {
+    setSnapshots((prev) => ({ ...prev, [snapshotKey(tradeId, shield)]: canvas }));
+  }, []);
 
   // Writes one patch. With no saved review yet, the first write creates it from the current draft (rule 5 keeps one per scope).
   const save = (patch: Partial<DailyReview>) => {
@@ -131,6 +151,45 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   const dayPlans = plans.plans.filter((plan) => plan.session_date === date && !plan.archived);
   const done = review?.status === "done";
   const nextDate = stepRegularSessionDate(date, 1);
+
+  // UX-70: the PNG is encoded as soon as the sheet opens or an input changes, so the Share tap has a Blob ready.
+  // Deps are store identities and primitives only, so the effect never loops on its own output.
+  const orientation = prefs.reviewCardOrientation;
+  const cardShield = shareOpen ? exportShield : prefs.shield;
+  useEffect(() => {
+    if (!shareOpen) return;
+    let cancelled = false;
+    setPng(null);
+    const byTrade = new Map(journal.trades.map((trade) => [trade.id, trade] as const));
+    const shareTrades = linkedIds.map((id) => byTrade.get(id)).filter((trade): trade is TradeRecord => Boolean(trade && !trade.is_sample));
+    const picked: DaySheetSnapshots = {};
+    for (const trade of shareTrades) picked[trade.id] = snapshots[snapshotKey(trade.id, exportShield)] ?? null;
+    const model = buildDaySheetModel(date, shareTrades, orientation, exportShield, { accounts: accounts.accounts, prefs, zone: prefs.timeZone });
+    encodeDaySheet(model, picked).then((blob) => { if (!cancelled) setPng(blob); }, () => { if (!cancelled) setPng(null); });
+    return () => { cancelled = true; };
+  }, [shareOpen, exportShield, orientation, linkedIds, journal.trades, snapshots, date, accounts.accounts, prefs]);
+  useEffect(() => {
+    if (!png) { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(png);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [png]);
+  // The tap calls navigator.share (or the download link) synchronously: the file is already encoded.
+  const shareDay = () => {
+    if (!png) return;
+    const name = daySheetFileName(date, orientation);
+    const file = new File([png], name, { type: "image/png" });
+    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+      navigator.share({ files: [file] }).catch(() => undefined);
+      return;
+    }
+    const url = URL.createObjectURL(png);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   const toggleLink = (id: string) => {
     const next = linkedIds.includes(id) ? linkedIds.filter((item) => item !== id) : [...linkedIds, id];
@@ -191,28 +250,42 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
         </div>
       )}
 
-      {/* DR-3 mounts the <ReviewCard /> grid in this slot; until then, a compact list of the day's trades. */}
+      <div className="day-review-orientation" role="group" aria-label="Review card orientation" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        {ORIENTATIONS.map(([value, label]) => (
+          <button key={value} type="button" aria-pressed={orientation === value} className={orientation === value ? "btn-primary" : "btn-secondary"} style={{ minHeight: 44 }} onClick={() => setPrefs({ reviewCardOrientation: value })}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <section className="day-review-trades" data-slot="review-cards" aria-label="Trades this day">
+        <ReviewCardStyles />
         {candidates.length === 0 && <p className="day-review-empty">A day without trades is still a review. Write what you saw.</p>}
+        <div className="review-card-grid" data-orientation={orientation}>
+          {candidates.filter((trade) => linkedIds.includes(trade.id)).map((trade) => (
+            <div key={trade.id} className="day-review-cell">
+              <label className="day-review-check" style={{ minHeight: 44, display: "flex", alignItems: "center", gap: 8 }}>
+                <input type="checkbox" checked onChange={() => toggleLink(trade.id)} aria-label={`Unlink ${trade.symbol} ${formatListTime(trade.entry_time, prefs.timeZone)}`} />
+                <span className="muted">Linked to this day</span>
+              </label>
+              <ReviewCard trade={trade} orientation={orientation} shield={cardShield} zone={prefs.timeZone} onSnapshotReady={onSnapshotReady} />
+            </div>
+          ))}
+        </div>
         <ul className="day-review-list">
-          {candidates.map((trade) => {
-            const linked = linkedIds.includes(trade.id);
-            const row = totals.trades.find((item) => item.id === trade.id);
-            return (
-              <li key={trade.id} className={`day-review-row${linked ? "" : " is-unlinked"}`}>
-                <label className="day-review-check">
-                  <input type="checkbox" checked={linked} onChange={() => toggleLink(trade.id)} aria-label={`Link ${trade.symbol} ${formatListTime(trade.entry_time, prefs.timeZone)}`} />
-                </label>
-                <Link className="day-review-link" href={`/trades/${trade.id}`}>
-                  <strong>{trade.symbol}</strong>
-                  <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}>{trade.direction}</span>
-                  <span className="muted">{formatListTime(trade.entry_time, prefs.timeZone)}</span>
-                  {row && <span className="num">{row.formattedR}</span>}
-                  {trade.is_sample && <span className="muted">sample</span>}
-                </Link>
-              </li>
-            );
-          })}
+          {candidates.filter((trade) => !linkedIds.includes(trade.id)).map((trade) => (
+            <li key={trade.id} className="day-review-row is-unlinked">
+              <label className="day-review-check">
+                <input type="checkbox" checked={false} onChange={() => toggleLink(trade.id)} aria-label={`Link ${trade.symbol} ${formatListTime(trade.entry_time, prefs.timeZone)}`} />
+              </label>
+              <Link className="day-review-link" href={`/trades/${trade.id}`}>
+                <strong>{trade.symbol}</strong>
+                <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}>{trade.direction}</span>
+                <span className="muted">{formatListTime(trade.entry_time, prefs.timeZone)}</span>
+                {trade.is_sample && <span className="muted">sample</span>}
+              </Link>
+            </li>
+          ))}
         </ul>
       </section>
 
@@ -267,7 +340,29 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
             Also mark {unreviewed.length} linked trades reviewed
           </button>
         )}
+        <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => setShareOpen(true)} disabled={shareOpen}>
+          Share day
+        </button>
       </div>
+
+      {shareOpen && (
+        <section className="day-share-sheet" role="dialog" aria-label="Share day" style={SHEET_STYLE}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <strong>Share day</strong>
+            <button type="button" className="btn-ghost" style={{ minHeight: 44, minWidth: 44 }} onClick={() => setShareOpen(false)}>Close</button>
+          </div>
+          <label style={{ minHeight: 44, display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={exportShield} onChange={(event) => setExportShield(event.target.checked)} />
+            <span>Shield: hide dollars and contract size</span>
+          </label>
+          {previewUrl
+            ? <img src={previewUrl} alt={`Day sheet for ${date}`} style={{ width: "100%", height: "auto", borderRadius: 12 }} />
+            : <p className="muted">Preparing the image…</p>}
+          <button type="button" className="btn-primary" style={{ minHeight: 44 }} disabled={!png} onClick={shareDay}>
+            Share image
+          </button>
+        </section>
+      )}
     </div>
   );
 }

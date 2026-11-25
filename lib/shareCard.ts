@@ -14,7 +14,7 @@ import type { RSizeOptions } from "./trades.ts";
 import { resolveRSize, resultR } from "./r-size.ts";
 import type { ChecklistItem, TradeRecord } from "./trades.ts";
 
-export type CardSize = "4:5" | "9:16" | "1:1";
+export type CardSize = "4:5" | "9:16" | "1:1" | "16:9";
 export type CardSide = "front" | "back";
 export type CardType = "TRADE" | "DRILL" | "PLAYBOOK" | "DAY" | "PLAN" | "MISTAKE" | "CHALLENGE";
 
@@ -46,6 +46,7 @@ export const CARD_SIZES: Record<CardSize, { width: number; height: number; aspec
   "4:5": { width: 1080, height: 1350, aspectRatio: "4/5" },
   "9:16": { width: 1080, height: 1920, aspectRatio: "9/16" },
   "1:1": { width: 1080, height: 1080, aspectRatio: "1/1" },
+  "16:9": { width: 1920, height: 1080, aspectRatio: "16/9" },
 };
 
 /**
@@ -90,6 +91,19 @@ export const CARD_LAYOUT_TABLE: Record<CardSize, CardLayoutDimensions> = {
     stats: { y: 746, height: 76 },
     context: { y: 836, height: 180 },
     footer: { y: 1030, height: 34 },
+  },
+  // Landscape review cards (docs/06 §4, Q-5): 1920×1080 for desktop grids and wide share targets.
+  "16:9": {
+    size: "16:9",
+    width: 1920,
+    height: 1080,
+    aspectRatio: "16/9",
+    paddingX: 52,
+    header: { y: 32, height: 112 },
+    main: { x: 52, y: 160, width: 1816, height: 616, innerMargin: 16 }, // 616 / 1080 = 57.04%
+    stats: { y: 800, height: 92 },
+    context: { y: 912, height: 112 },
+    footer: { y: 1036, height: 28 },
   },
 };
 
