@@ -4,6 +4,7 @@
 // (share cards, stats labels) reads the same names the screens show.
 import type { ChecklistItem, TradeStyle } from "./trades.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
+import type { TagRegistry } from "./tag-registry.ts";
 
 export interface PlaybookRule {
   id: string;
@@ -53,6 +54,33 @@ export const SETUP_TAGS = ["SMT Divergence", "Pushed w/ NQ", "Level Sweep", "VWA
 export const EXECUTION_TAGS = ["A+ Patience", "Chased Entry", "Cut Early", "Moved Stop", "Revenge"];
 
 let registry: readonly Playbook[] = PLAYBOOK_SEEDS;
+
+// PL-3: the live tag vocabulary. Until the tag-registry store hydrates, these read the seeds above.
+let tagRegistry: TagRegistry | null = null;
+let liveSetupTags: readonly string[] = SETUP_TAGS;
+let liveExecutionTags: readonly string[] = EXECUTION_TAGS;
+
+/** Called by the tag registry store before it notifies subscribers. Active labels only; retired tags are not offered. */
+export function setTagRegistry(reg: TagRegistry | null) {
+  tagRegistry = reg;
+  liveSetupTags = reg ? reg.setup.filter((def) => !def.retired).map((def) => def.label) : SETUP_TAGS;
+  liveExecutionTags = reg ? reg.execution.filter((def) => !def.retired).map((def) => def.label) : EXECUTION_TAGS;
+}
+
+/** Active setup tag labels on this device. */
+export function currentSetupTags(): readonly string[] {
+  return liveSetupTags;
+}
+
+/** Active execution tag labels on this device. */
+export function currentExecutionTags(): readonly string[] {
+  return liveExecutionTags;
+}
+
+/** The full tag registry on this device (retired tags included), or null before it hydrates. */
+export function currentTagRegistry(): TagRegistry | null {
+  return tagRegistry;
+}
 
 /** Called by the playbook store before it notifies subscribers. */
 export function setPlaybookRegistry(list: readonly Playbook[]) {

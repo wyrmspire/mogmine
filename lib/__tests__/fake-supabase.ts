@@ -6,7 +6,7 @@ import type { DbError, DbResult, DbRow, QueryLike, SupabaseLike } from "../persi
 type Row = DbRow & { id?: string };
 type Op = { kind: "select" } | { kind: "upsert"; row: Record<string, unknown>; onConflict: string } | { kind: "update"; patch: Record<string, unknown> } | { kind: "delete" };
 
-const SINGLETON_TABLES = new Set(["mogmine_user_prefs", "mogmine_mood_registries"]);
+const SINGLETON_TABLES = new Set(["mogmine_user_prefs", "mogmine_mood_registries", "mogmine_tag_registries"]);
 const CASCADE: Record<string, { table: string; column: string }[]> = {
   mogmine_trades: [
     { table: "mogmine_mood_records", column: "trade_id" },

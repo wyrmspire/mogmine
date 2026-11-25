@@ -242,7 +242,7 @@ export function createSupabaseAdapter(options: SupabaseAdapterOptions): Persiste
     };
   }
 
-  function singleton(key: "prefs" | "mood_registry"): SingletonRepository<unknown> {
+  function singleton(key: "prefs" | "mood_registry" | "tag_registry"): SingletonRepository<unknown> {
     const table = contractFor(key).table;
     return {
       async get(who) {
@@ -299,6 +299,7 @@ export function createSupabaseAdapter(options: SupabaseAdapterOptions): Persiste
     mood_records: collection("mood_records"),
     mood_candidates: collection("mood_candidates"),
     mood_registry: singleton("mood_registry"),
+    tag_registry: singleton("tag_registry"),
     prefs: singleton("prefs"),
     accounts: collection("accounts"),
     balance_checks: collection("balance_checks"),

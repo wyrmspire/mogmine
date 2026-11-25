@@ -10,6 +10,7 @@ import { createSupabaseAdapter, mapDbError } from "../persistence/supabase-adapt
 import { createAdapter } from "../persistence/select.ts";
 import { RECORD_CONTRACTS, isMogmineTable } from "../persistence/registry.ts";
 import { DEFAULT_OWNER_USER_ID } from "../trades.ts";
+import { DEFAULT_TAG_REGISTRY, addTag } from "../tag-registry.ts";
 import { createFakeSupabase } from "./fake-supabase.ts";
 import { runPersistenceContractSuite, sampleTrade } from "./persistence-contract-suite.ts";
 
@@ -131,6 +132,21 @@ test("supabase: singletons round-trip and honour expectedUpdatedAt", async () =>
   assert.equal(!stale.ok && stale.error.code, "conflict");
   const fresh = await repo.mood_registry.put(CHRIS, first.value.record, { expectedUpdatedAt: first.value.meta.updated_at });
   assert.ok(fresh.ok);
+});
+
+test("supabase: tag_registry is a singleton on mogmine_tag_registries and honours expectedUpdatedAt (PL-3)", async () => {
+  const { repo } = setup();
+  assert.equal(RECORD_CONTRACTS.find((entry) => entry.key === "tag_registry")?.table, "mogmine_tag_registries");
+  const added = addTag(DEFAULT_TAG_REGISTRY, "setup", { label: "200 EMA Pullback" });
+  assert.equal(added.ok, true);
+  if (!added.ok) return;
+  const first = await repo.tag_registry.put(CHRIS, added.registry);
+  assert.ok(first.ok, first.ok ? "" : first.error.message);
+  assert.equal(first.value.record.setup.some((def) => def.label === "200 EMA Pullback"), true);
+  const stale = await repo.tag_registry.put(CHRIS, first.value.record, { expectedUpdatedAt: "1999-01-01T00:00:00.000Z" });
+  assert.equal(!stale.ok && stale.error.code, "conflict");
+  const read = await repo.tag_registry.get(CHRIS);
+  assert.equal(read.ok && read.value?.record.setup.length, DEFAULT_TAG_REGISTRY.setup.length + 1);
 });
 
 test("supabase: the command layer runs over the adapter (owner uid, update, cascade)", async () => {

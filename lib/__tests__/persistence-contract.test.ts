@@ -14,7 +14,7 @@ import { PREFS_KEY } from "../prefs.ts";
 
 // Compile-time exhaustiveness: adding a RecordTypeKey without listing it here fails typecheck.
 const EVERY_KEY: Record<RecordTypeKey, true> = {
-  trades: true, mood_records: true, mood_candidates: true, mood_registry: true, prefs: true, accounts: true,
+  trades: true, mood_records: true, mood_candidates: true, mood_registry: true, tag_registry: true, prefs: true, accounts: true,
   balance_checks: true, challenges: true, playbooks: true, plans: true, drills: true, calls: true,
   prompt_dismissals: true, prompt_library: true, candles: true, daily_reviews: true,
 };

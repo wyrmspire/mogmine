@@ -69,7 +69,7 @@ function memoryRepos() {
     trades: memoryCollection(), mood_records: memoryCollection(), mood_candidates: memoryCollection(), accounts: memoryCollection(),
     balance_checks: memoryCollection(), challenges: memoryCollection(), playbooks: memoryCollection(), plans: memoryCollection(),
     drills: memoryCollection(), calls: memoryCollection(), prompt_dismissals: memoryCollection(), daily_reviews: memoryCollection(),
-    prefs: memorySingleton(), mood_registry: memorySingleton(), prompt_library: memorySingleton(),
+    prefs: memorySingleton(), mood_registry: memorySingleton(), tag_registry: memorySingleton(), prompt_library: memorySingleton(),
     candles: { async get() { return { ok: true as const, value: null }; }, async put() { return { ok: true as const, value: undefined }; } },
   };
   return repos as unknown as JournalRepositories;

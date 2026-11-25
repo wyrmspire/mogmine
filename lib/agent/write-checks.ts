@@ -4,6 +4,8 @@
 import { canonicalSymbol, FUTURES_SPECS } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 import { riskCents, riskComparison } from "../r-size.ts";
+import { activeExecutionTagLabels, activeSetupTagLabels } from "../tag-registry.ts";
+import type { TagRegistry } from "../tag-registry.ts";
 
 export interface AgentWriteWarning {
   code:
@@ -23,8 +25,11 @@ export type TradeWriteCheckResult = { ok: true; warnings: AgentWriteWarning[] } 
 export interface WriteCheckContext {
   playbooks: readonly { id: string; name: string; archived: boolean }[];
   accounts: readonly { id: string; name: string; r_size_cents: number | null; archived: boolean }[];
-  setupTags: readonly string[];
-  executionTags: readonly string[];
+  /** Active setup and execution labels. Used when `tagRegistry` is absent (the seeds, in older callers). */
+  setupTags?: readonly string[];
+  executionTags?: readonly string[];
+  /** PL-3: the owner's live tag registry. When present, its active labels are the only valid `quick_tags`. */
+  tagRegistry?: TagRegistry;
   defaultRSizeCents: number;
   /** Cached bars' low and high for the trade's day. Null or absent when no bars are cached: then no range check runs. */
   dayPriceRange?: { low: number; high: number } | null;
@@ -53,6 +58,12 @@ function numbersIn(text: string): number[] {
 function restatesFields(text: string, prices: number[]): boolean {
   if (R_OR_DOLLAR.some((pattern) => pattern.test(text))) return true;
   return numbersIn(text).some((value) => prices.includes(value));
+}
+
+/** Active labels the checks accept: from the live registry when the caller has one, else the lists it passed in. */
+function activeTagLists(ctx: WriteCheckContext): { setup: readonly string[]; execution: readonly string[] } {
+  if (ctx.tagRegistry) return { setup: activeSetupTagLabels(ctx.tagRegistry), execution: activeExecutionTagLabels(ctx.tagRegistry) };
+  return { setup: ctx.setupTags ?? [], execution: ctx.executionTags ?? [] };
 }
 
 function listTags(tags: readonly string[]): string {
@@ -96,10 +107,11 @@ function refusal(candidate: TradeRecord, rawInput: Record<string, unknown>, ctx:
 
   const tagsWritten = ctx.writtenFields.has("quick_tags") || (ctx.isCreate && candidate.quick_tags.length > 0);
   if (tagsWritten) {
-    const valid = new Set([...ctx.setupTags, ...ctx.executionTags]);
+    const lists = activeTagLists(ctx);
+    const valid = new Set([...lists.setup, ...lists.execution]);
     const unknown = candidate.quick_tags.filter((tag) => !valid.has(tag));
     if (unknown.length > 0) {
-      return `Unknown quick_tags ${listTags(unknown)}. Setup tags: ${listTags(ctx.setupTags)}. Execution tags: ${listTags(ctx.executionTags)}.`;
+      return `Unknown quick_tags ${listTags(unknown)}. Setup tags: ${listTags(lists.setup)}. Execution tags: ${listTags(lists.execution)}.`;
     }
   }
 
@@ -120,7 +132,7 @@ function refusal(candidate: TradeRecord, rawInput: Record<string, unknown>, ctx:
 /** Warnings (201 with `warnings`). They never block a write. */
 function warningsFor(candidate: TradeRecord, ctx: WriteCheckContext): AgentWriteWarning[] {
   const warnings: AgentWriteWarning[] = [];
-  const setup = new Set(ctx.setupTags);
+  const setup = new Set(activeTagLists(ctx).setup);
 
   if (ctx.isCreate && candidate.playbook_id == null) {
     warnings.push({ code: "playbook_missing", message: "No playbook_id on this new trade. Take one from GET /api/v1/vocabulary." });
