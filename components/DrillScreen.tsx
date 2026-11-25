@@ -19,7 +19,9 @@ import { formatListTime } from "@/lib/time";
 import { observeTrade } from "@/lib/trade-bar-validation";
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
 import { buildMarks } from "@/lib/trade-marks";
-import { TIMEFRAME_MINUTES, candleCacheKey, processRead, rMultiple } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, candleCacheKey, processRead } from "@/lib/trades";
+import { resolveRSize, resultR, riskR } from "@/lib/r-size";
+import { useAccounts } from "@/lib/accounts-store";
 import type { TradeRecord } from "@/lib/trades";
 
 const SKIP_TEXT: Record<DrillSkip, string> = {
@@ -141,13 +143,17 @@ function DrillCard({ trade, stored, answer, showPlaybook, zone, privacy, onAnswe
   // The front never sees the exit: it is drawn as an open trade on bars that closed by the entry.
   const sealedTrade = useMemo(() => ({ ...trade, exit_time: null, exit_price: null, status: "open" as const }), [trade]);
   const frontBars = useMemo(() => cutAtEntry(stored.candles, trade.entry_time, timeframe), [stored, trade.entry_time, timeframe]);
+  const accounts = useAccounts();
+  const prefs = usePrefs();
+  const rSize = resolveRSize(trade, accounts.accounts, prefs);
+  const accountRiskR = riskR(trade, rSize);
   const marks = useMemo(() => {
     if (!answer) return [];
     const derived = deriveTrade(fromLegacy(trade));
     const observed = observeTrade(derived, stored.candles, TIMEFRAME_MINUTES[timeframe]);
-    return buildMarks(derived, observed, timeframe, "medium", privacy, { candleTimes: stored.candles.map(({ time }) => time) });
-  }, [answer, trade, stored, timeframe, privacy]);
-  const r = rMultiple(trade);
+    return buildMarks(derived, observed, timeframe, "medium", privacy, { candleTimes: stored.candles.map(({ time }) => time), accountRiskR });
+  }, [answer, trade, stored, timeframe, privacy, accountRiskR]);
+  const r = resultR(trade, rSize);
   const process = processRead(trade);
   const miss = answer ? isMiss(answer, trade) : null;
 

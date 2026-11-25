@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { rStripLayout, rStripLabel } from "../rstrip.ts";
+import { rStripCaption, rStripInputFromTrade, rStripLayout, rStripLabel } from "../rstrip.ts";
 
 const long = { direction: "LONG" as const, entry: 100, exit: 103, stop: 99, target: 103 };
 
@@ -47,7 +47,7 @@ test("works without candles and without a plan; Shield does not need dollars", (
   assert.equal(bare?.stop, null);
   assert.equal(bare?.target, null);
   assert.ok(bare && bare.entry < (bare.exit ?? 0));
-  assert.equal(rStripLabel("stopped-out", -1, 2), "Stopped out, exit -1.0R");
+  assert.equal(rStripLabel("stopped-out", -1, 2), "Stopped out, exit \u22121.0R");
 });
 
 test("an unusable entry yields no strip", () => {
@@ -77,4 +77,20 @@ test("the exit outcome follows the money, not the classification", () => {
 
   // No exit price: no marker, no outcome.
   assert.equal(rStripLayout({ direction: "LONG", entry: 100, exit: null, stop: 99, target: 103 })?.exitOutcome, null);
+});
+
+test("the caption is in account R on a 0.25R trade; the strip geometry is unchanged", () => {
+  // $300 R size; MES entry 6840, stop 6825 (15 pts = $75 = 0.25R), target 6870 (2:1), exit at the target.
+  const trade = {
+    symbol: "MES", direction: "LONG" as const, quantity: 1, account_id: null, r_size_cents: 30000,
+    entry_price: 6840, exit_price: 6870, stop_loss_price: 6825, initial_stop_price: 6825, planned_target_price: 6870,
+  };
+  const layout = rStripLayout(rStripInputFromTrade(trade));
+  assert.ok(layout);
+  assert.equal(layout.stop, 0);
+  assert.equal(layout.target, 1);
+  assert.equal(layout.exit, 1);
+  assert.equal(rStripCaption(trade, layout), "Ran to plan, exit +0.5R, plan +0.5R");
+  // The R size only moves the labels: $150 makes the same exit +1R.
+  assert.equal(rStripCaption(trade, layout, 15000), "Ran to plan, exit +1.0R, plan +1.0R");
 });

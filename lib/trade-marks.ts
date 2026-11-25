@@ -1,6 +1,7 @@
 // Display list for issue #34 and docs/15 §3.4. Prices and UTC bar opens stay in data coordinates.
 import { formatDetailTime } from "./time.ts";
 import { formatPoints, formatPrice, formatR } from "./format.ts";
+import { formatAccountR } from "./rstrip.ts";
 import { stopAtExit } from "./trade-document.ts";
 import type { DerivedTrade, EventBasis, ExitReason, PositionPoint } from "./trade-document.ts";
 import { alignToBar } from "./trades.ts";
@@ -89,6 +90,8 @@ export interface BuildMarksOptions {
   archived?: boolean;
   /** Whether to draw R ruler marks at whole R multiples (M3, #42). */
   showRuler?: boolean;
+  /** The trade's initial risk in account R (0.25 for $75 on a $300 R size). Labels read in account R; null means 1. */
+  accountRiskR?: number | null;
   /** Optional playbook tag or title to mark on the plan box corner (M3, #42). */
   playbookTag?: string;
   playbookName?: string;
@@ -223,7 +226,9 @@ export function buildMarks(
       for (const target of targets) {
         const multiple = targets.length > 1;
         const name = multiple ? target.key.toUpperCase() : "TP";
-        const risk = target.planned_r == null ? "" : ` ${target.planned_r.toFixed(1)}R`;
+        const risk = target.planned_r == null ? "" : options.accountRiskR == null
+          ? ` ${target.planned_r.toFixed(1)}R`
+          : ` ${formatAccountR(target.planned_r * options.accountRiskR)}`;
         const size = multiple && !shield && plan ? ` · ${target.qty} of ${plan.qty}` : "";
         marks.push({
           kind: "zone", ...planSpan, layer: "plan", p0: innerPrice, p1: target.price,
@@ -238,6 +243,8 @@ export function buildMarks(
       if (options.showRuler && initialRisk != null && initialRisk > 0) {
         const targetR = targets.find((t) => t.planned_r != null)?.planned_r;
         const maxR = targetR != null && targetR > 0 ? Math.ceil(targetR) : 3;
+        // Lines sit at whole multiples of the trade's own stop width; each is labelled with its account R value.
+        const unitR = options.accountRiskR ?? 1;
         for (let r = 1; r <= Math.min(5, maxR); r++) {
           const rPrice = plannedEntry + r * initialRisk * (isLong ? 1 : -1);
           marks.push({
@@ -256,7 +263,7 @@ export function buildMarks(
             marks.push({
               kind: "label",
               anchor: { t: planSpan.t0, price: rPrice },
-              text: `+${r}R`,
+              text: formatAccountR(r * unitR),
               priority: 2,
               tone: "neutral",
               basis: plan?.basis ?? initialStop?.basis,

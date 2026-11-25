@@ -7,7 +7,7 @@ import {
   acceptSuggestedTagPatch,
   addStopMovePatch,
   hasWidenedStop,
-  initialRMultiple,
+  initialRiskMultiple,
   isStopMove,
   isStopMoveLockingProfit,
   isStopMoveWidening,
@@ -15,7 +15,7 @@ import {
   normalizeTrade,
   recordStopMovesPatch,
   removeStopMovePatch,
-  rMultiple,
+  riskMultiple,
   sanitizeStopMoves,
   suggestedQuickTags,
   updateStopMovePatch,
@@ -118,11 +118,11 @@ test("G2 / R-10: adding stop moves keeps initial_stop_price frozen", () => {
   assert.equal(trade2.stop_loss_price, 6005);
   assert.equal(trade2.stop_moves?.length, 2);
 
-  // initialRMultiple remains measured against frozen 5990 risk (10 pts = $50)
+  // initialRiskMultiple remains measured against frozen 5990 risk (10 pts = $50)
   // Realized gain: 6010 - 6000 = +10 pts = +1.0R against initial stop
-  assert.equal(initialRMultiple(trade2), 1);
-  // A stop trailed above the entry never blanks R: rMultiple measures the initial stop too (riskStopPrice).
-  assert.equal(rMultiple(trade2), 1);
+  assert.equal(initialRiskMultiple(trade2), 1);
+  // A stop trailed above the entry never blanks R: riskMultiple measures the initial stop too (riskStopPrice).
+  assert.equal(riskMultiple(trade2), 1);
 });
 
 test("G2 / R-10: first stop set on a stop-less trade initializes initial_stop_price", () => {

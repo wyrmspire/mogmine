@@ -13,7 +13,7 @@ import { shareCardContent, shareCardFileName, shouldBuildShareCard } from "../sh
 import { formatDetailTime, formatListTime, fromZonedInput, toZonedInput } from "../time.ts";
 import { buildBackup, parseBackupFile } from "../store.ts";
 import { processRead } from "../trades.ts";
-import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, defaultVisibleRange, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, isClosed, normalizeTrade, rMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks, visibleLogicalBars } from "../trades.ts";
+import { FUTURES_SPECS, MIN_FITTED_BARS, adherence, aggregateCandles, candleCacheKey, candleSignature, classifyTrade, defaultTimeframe, defaultVisibleRange, deriveReviewStatus, fillInsideBar, fitWindow, includeInPriceRange, isClosed, normalizeTrade, riskMultiple, snapToBar, snapToTick, tradePnl, tradePoints, tradeTicks, visibleLogicalBars } from "../trades.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
 import { isIosDevice, shouldShowHomeScreenHint } from "../install.ts";
 import type { Candle } from "../trades.ts";
@@ -43,13 +43,13 @@ test("tick sizes that are not exact in binary still give exact dollars", () => {
 
 test("R is null without a stop, never zero", () => {
   const trade = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 2, entry_price: 6844.25, exit_price: 6849 });
-  assert.equal(rMultiple(trade), null);
-  assert.equal(formatR(rMultiple(trade)), "—R");
-  assert.equal(rMultiple({ ...trade, stop_loss_price: 6844.25 }), null);
+  assert.equal(riskMultiple(trade), null);
+  assert.equal(formatR(riskMultiple(trade)), "—R");
+  assert.equal(riskMultiple({ ...trade, stop_loss_price: 6844.25 }), null);
   const withStop = { ...trade, stop_loss_price: 6841.25 };
-  assert.ok(Math.abs(rMultiple(withStop)! - 19 / 12) < 1e-12);
-  assert.equal(formatR(rMultiple(withStop)), "+1.6R");
-  assert.equal(formatR(rMultiple({ ...withStop, exit_price: 6841.25 })), "−1.0R");
+  assert.ok(Math.abs(riskMultiple(withStop)! - 19 / 12) < 1e-12);
+  assert.equal(formatR(riskMultiple(withStop)), "+1.6R");
+  assert.equal(formatR(riskMultiple({ ...withStop, exit_price: 6841.25 })), "−1.0R");
 });
 
 test("classification compares raw elapsed milliseconds at thresholds", () => {

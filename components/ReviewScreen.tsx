@@ -15,7 +15,9 @@ import { formatSessionDate, sessionDate } from "@/lib/session";
 import { updateTrade, useJournal } from "@/lib/store";
 import { formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { holdSeconds, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { holdSeconds, tradePnl, tradePoints } from "@/lib/trades";
+import { resolveRSize, resultR } from "@/lib/r-size";
+import { useAccounts } from "@/lib/accounts-store";
 import type { TradeRecord } from "@/lib/trades";
 import { rememberList } from "@/lib/ui";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
@@ -41,6 +43,7 @@ function dayChipLabel(date: string) {
 function Queue() {
   const journal = useJournal();
   const prefs = usePrefs();
+  const accounts = useAccounts();
   const pending = withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status !== "reviewed");
   // Queue and day chips are fixed when the screen opens: tagging a trade must not make the card or the chips jump away.
   const [dayOptions] = useState(() => [...new Set(pending.map((trade) => sessionDate(trade.entry_time)))].sort((a, b) => (a < b ? 1 : -1)).slice(0, DAY_CHIP_LIMIT));
@@ -109,7 +112,7 @@ function Queue() {
   };
 
   const pnl = tradePnl(trade);
-  const r = rMultiple(trade);
+  const r = resultR(trade, resolveRSize(trade, accounts.accounts, prefs));
   const points = formatPoints(tradePoints(trade), trade.symbol);
 
   return (

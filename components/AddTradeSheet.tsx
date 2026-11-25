@@ -12,13 +12,14 @@ import { formatMoney, formatPointDistance, formatPoints, formatR, formatUsdAmoun
 import { usePrefs } from "@/lib/prefs";
 import { AccountSelect } from "./AccountSelect";
 import { defaultAccountId } from "@/lib/accounts";
+import { resolveRSize } from "@/lib/r-size";
 import { useAccounts } from "@/lib/accounts-store";
 import { ONE_TAP_MOOD_SCORE, spokeChipLabel } from "@/lib/mood";
 import { recordUserMood, useMood } from "@/lib/mood-store";
 import { addTradeAndFlush, useJournal } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { EXIT_REASONS, FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { EXIT_REASONS, FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedRewardRisk, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { TradeStatus } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft, useOnline } from "@/lib/ui";
 
@@ -164,9 +165,11 @@ export function AddTradeSheet() {
     : null;
   const riskUsd = priced ? initialRiskUsd(priced) : null;
   const riskPoints = priced && priced.stop_loss_price != null ? formatPointDistance(priced.entry_price - priced.stop_loss_price, draft.symbol) : null;
-  const plan = priced ? plannedR(priced) : null;
+  const plan = priced ? plannedRewardRisk(priced) : null;
   const pnl = priced ? tradePnl(priced) : null;
-  const r = priced ? rMultiple(priced) : null;
+  // Result in account R (resultR, 04 §3.1): P&L ÷ the selected account's R size. Computed here because the draft is not a full TradeRecord yet.
+  const rSize = resolveRSize({ account_id: accountId }, accounts.accounts, prefs);
+  const r = pnl == null ? null : (pnl * 100) / rSize.cents;
 
   // Find the times from the prices (OD-41 (5), docs/20 §2.2). Runs a moment after the prices settle,
   // or on "Find times". A hand-set time is a hint and is never overwritten.
@@ -326,7 +329,7 @@ export function AddTradeSheet() {
 
           <div className="form-preview" aria-live="polite">
             <span>{riskUsd != null || riskPoints != null
-              ? <>Risk {prefs.shield ? riskPoints : `${formatUsdAmount(riskUsd)} · ${riskPoints}`}{plan != null && <> · Plan {formatR(plan)}</>}</>
+              ? <>Risk {prefs.shield ? riskPoints : `${formatUsdAmount(riskUsd)} · ${riskPoints}`}{plan != null && <> · Plan R:R {plan.toFixed(1)}:1</>}</>
               : "Add a stop to see the risk"}</span>
             <span>{isOpenDraft
               ? "Open. The result appears when you close it."

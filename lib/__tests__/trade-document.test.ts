@@ -12,10 +12,10 @@ import {
 import type { TradeDocument, TradeEvent } from "../trade-document.ts";
 import {
   FUTURES_SPECS,
-  initialRMultiple,
+  initialRiskMultiple,
   isScratch,
   normalizeTrade,
-  rMultiple,
+  riskMultiple,
   specFor,
   tradePnl,
   tradePoints,
@@ -654,7 +654,7 @@ test("fromLegacy + deriveTrade matches legacy money math across all demo trades"
     assert.equal(derived.ticks, tradeTicks(record), `${record.id}: ticks`);
     assert.equal(derived.points, tradePoints(record), `${record.id}: points`);
     assert.equal(derived.pnl_usd, tradePnl(record), `${record.id}: pnl_usd`);
-    const expectedR = record.initial_stop_price != null ? initialRMultiple(record) : rMultiple(record);
+    const expectedR = record.initial_stop_price != null ? initialRiskMultiple(record) : riskMultiple(record);
     assert.equal(derived.r_multiple, expectedR, `${record.id}: r_multiple`);
     assert.equal(derived.is_scratch, isScratch(record), `${record.id}: is_scratch`);
     assert.deepEqual(derived.errors, [], `${record.id}: zero structural errors`);

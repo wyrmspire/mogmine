@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText, laterTouch, laterTouchLabel } from "../hindsight.ts";
-import { rMultiple, tradePnl } from "../trades.ts";
+import { riskMultiple, tradePnl } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
 
 const minute = 60_000;
@@ -140,9 +140,9 @@ test("hindsight never changes R or P&L", () => {
     planned_target_price: 6010,
     quantity: 1,
   } satisfies Partial<TradeRecord> as TradeRecord & { exit_time: string; exit_price: number };
-  const before = { r: rMultiple(record), pnl: tradePnl(record) };
+  const before = { r: riskMultiple(record), pnl: tradePnl(record) };
   buildHindsight(record, after([[38, 6008, 6012]]));
-  assert.equal(rMultiple(record), before.r);
+  assert.equal(riskMultiple(record), before.r);
   assert.equal(tradePnl(record), before.pnl);
   assert.equal(before.r, 0.2);
 });

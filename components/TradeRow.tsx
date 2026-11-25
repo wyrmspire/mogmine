@@ -7,8 +7,11 @@ import { formatDuration, formatMoney, formatPoints, formatR } from "@/lib/format
 import { playbookName } from "@/lib/playbooks";
 import type { Playbook } from "@/lib/playbooks";
 import { usePlaybooks } from "@/lib/playbooks-store";
+import { useAccounts } from "@/lib/accounts-store";
+import { usePrefs } from "@/lib/prefs";
+import { resolveRSize, resultR } from "@/lib/r-size";
 import { formatListTime } from "@/lib/time";
-import { adherence, holdSeconds, isOpen, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { adherence, holdSeconds, isOpen, tradePnl, tradePoints } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 
@@ -31,7 +34,9 @@ function context(trade: TradeRecord, playbooks: readonly Playbook[]) {
 export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
   const { playbooks } = usePlaybooks();
   const pnl = tradePnl(trade);
-  const r = rMultiple(trade);
+  const accounts = useAccounts();
+  const prefs = usePrefs();
+  const r = resultR(trade, resolveRSize(trade, accounts.accounts, prefs));
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const info = context(trade, playbooks);
   const score = adherence(trade);

@@ -6,7 +6,7 @@ import { parseBackupFile } from "../store.ts";
 import { shareCardContent } from "../shareCard.ts";
 import {
   buildSparkline, candleSignature, classifyTrade, excursions, exitFlagReason, holdSeconds, initialRiskUsd,
-  isClosed, isOpen, isScratch, normalizeTrade, plannedR, rMultiple, tradePnl, tradePoints, tradeTicks, validateTradeInput,
+  isClosed, isOpen, isScratch, normalizeTrade, plannedRewardRisk, riskMultiple, tradePnl, tradePoints, tradeTicks, validateTradeInput,
 } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 
@@ -38,7 +38,7 @@ test("R-03a: every money function returns null for an open trade (no unrealised 
   assert.equal(tradeTicks(open), null);
   assert.equal(tradePoints(open), null);
   assert.equal(tradePnl(open), null);
-  assert.equal(rMultiple(open), null);
+  assert.equal(riskMultiple(open), null);
   assert.equal(isScratch(open), false);
   assert.equal(exitFlagReason(open), null);
   const bars: Candle[] = [0, 1, 2, 3].map((i) => ({ time: Date.parse(entryTime) + i * 60_000, open: 6000, high: 6002, low: 5998, close: 6001, volume: 1 }));
@@ -50,7 +50,7 @@ test("R-03a: every money function returns null for an open trade (no unrealised 
 
 test("R-03a: risk and planned R do not need the exit and keep working on an open trade", () => {
   assert.equal(initialRiskUsd(open), 50);
-  assert.equal(plannedR(open), 2);
+  assert.equal(plannedRewardRisk(open), 2);
 });
 
 test("R-03a: hold and style of an open trade are measured up to now", () => {

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { formatMoney, formatPoints, formatR } from "../format.ts";
-import { alignToBar, alignTradeToBars, canonicalSymbol, initialRiskUsd, isScratch, normalizeTrade, plannedR, rMultiple, snapToBar, snapToTick, specFor, toTicks, tradePnl, tradePoints, tradeTicks, validateTradeInput } from "../trades.ts";
+import { alignToBar, alignTradeToBars, canonicalSymbol, initialRiskUsd, isScratch, normalizeTrade, plannedRewardRisk, riskMultiple, snapToBar, snapToTick, specFor, toTicks, tradePnl, tradePoints, tradeTicks, validateTradeInput } from "../trades.ts";
 
 const minute = 60_000;
 const base = { id: "v", entry_time: "2026-11-10T15:43:00.000Z", exit_time: "2026-11-10T15:45:00.000Z" };
@@ -29,7 +29,7 @@ test("issue #50: an unknown contract has no spec and no money", () => {
   assert.equal(tradePnl(trade), null);
   assert.equal(tradeTicks(trade), null);
   assert.equal(tradePoints(trade), null);
-  assert.equal(rMultiple(trade), null);
+  assert.equal(riskMultiple(trade), null);
   assert.equal(formatMoney(tradePnl(trade)), "—");
   assert.equal(formatPoints(tradePoints(trade), "XYZ"), "—");
   assert.equal(snapToTick(100, "XYZ"), null);
@@ -40,20 +40,20 @@ test("issue #50: an unknown contract has no spec and no money", () => {
 test("issue #50: a stop on the wrong side gives no R, never a positive R from distance", () => {
   // Long entered at 6000 with a stop above it.
   const longWrong = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 1, entry_price: 6000, exit_price: 6002, stop_loss_price: 6001, planned_target_price: 6004 });
-  assert.equal(rMultiple(longWrong), null);
-  assert.equal(plannedR(longWrong), null);
+  assert.equal(riskMultiple(longWrong), null);
+  assert.equal(plannedRewardRisk(longWrong), null);
   assert.equal(initialRiskUsd(longWrong), null);
   // A stop at the entry is zero distance: invalid too.
-  assert.equal(rMultiple({ ...longWrong, stop_loss_price: 6000 }), null);
+  assert.equal(riskMultiple({ ...longWrong, stop_loss_price: 6000 }), null);
   // The same prices with the stop below the entry are priced: 8 ticks won on 4 ticks of risk.
-  assert.equal(formatR(rMultiple({ ...longWrong, stop_loss_price: 5999 })), "+2.0R");
+  assert.equal(formatR(riskMultiple({ ...longWrong, stop_loss_price: 5999 })), "+2.0R");
 
   // Short entered at 6000 with a stop below it.
   const shortWrong = normalizeTrade({ ...base, symbol: "MES", direction: "SHORT", quantity: 1, entry_price: 6000, exit_price: 5998, stop_loss_price: 5999, planned_target_price: 5996 });
-  assert.equal(rMultiple(shortWrong), null);
-  assert.equal(plannedR(shortWrong), null);
+  assert.equal(riskMultiple(shortWrong), null);
+  assert.equal(plannedRewardRisk(shortWrong), null);
   assert.equal(initialRiskUsd(shortWrong), null);
-  assert.equal(formatR(rMultiple({ ...shortWrong, stop_loss_price: 6001 })), "+2.0R");
+  assert.equal(formatR(riskMultiple({ ...shortWrong, stop_loss_price: 6001 })), "+2.0R");
 
   assert.equal(validateTradeInput({ symbol: "MES", direction: "LONG", quantity: 1, entry_price: 6000, exit_price: 6002, stop_loss_price: 6001, ...noLevels }).stop_loss_price, "A long's stop sits below the entry");
   assert.equal(validateTradeInput({ symbol: "MES", direction: "SHORT", quantity: 1, entry_price: 6000, exit_price: 5998, stop_loss_price: 5999, ...noLevels }).stop_loss_price, "A short's stop sits above the entry");
@@ -63,11 +63,11 @@ test("issue #50: nonfinite prices give null, never NaN", () => {
   const nanExit = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 1, entry_price: 6000, exit_price: Number.NaN, stop_loss_price: 5999 });
   assert.equal(tradePnl(nanExit), null);
   assert.equal(tradePoints(nanExit), null);
-  assert.equal(rMultiple(nanExit), null);
+  assert.equal(riskMultiple(nanExit), null);
   const infEntry = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 1, entry_price: Infinity, exit_price: 6001 });
   assert.equal(tradePnl(infEntry), null);
   assert.equal(toTicks(Number.NaN, "MES"), null);
-  assert.equal(rMultiple({ ...nanExit, exit_price: 6001, stop_loss_price: Number.NaN }), null);
+  assert.equal(riskMultiple({ ...nanExit, exit_price: 6001, stop_loss_price: Number.NaN }), null);
   const errors = validateTradeInput({ symbol: "MES", direction: "LONG", quantity: 1, entry_price: Number.NaN, exit_price: 6001, stop_loss_price: null, ...noLevels });
   assert.equal(errors.entry_price, "Enter the entry price");
 });
@@ -76,7 +76,7 @@ test("issue #50: quantity must be a whole number of 1 or more", () => {
   for (const quantity of [0, -1, 1.5, Number.NaN]) {
     const trade = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity, entry_price: 6000, exit_price: 6001, stop_loss_price: 5999 });
     assert.equal(tradePnl(trade), null, `pnl for quantity ${quantity}`);
-    assert.equal(rMultiple(trade), null, `R for quantity ${quantity}`);
+    assert.equal(riskMultiple(trade), null, `R for quantity ${quantity}`);
     assert.equal(initialRiskUsd(trade), null, `risk for quantity ${quantity}`);
     const errors = validateTradeInput({ symbol: "MES", direction: "LONG", quantity, entry_price: 6000, exit_price: 6001, stop_loss_price: 5999, ...noLevels });
     assert.ok(errors.quantity, `quantity ${quantity} is rejected`);
@@ -90,7 +90,7 @@ test("issue #50: an off-tick MES price is rejected, never rounded into money", (
   assert.equal(offTick.entry_price, 6844.3, "the imported price is kept exactly");
   assert.equal(toTicks(6844.3, "MES"), null);
   assert.equal(tradePnl(offTick), null);
-  assert.equal(rMultiple(offTick), null);
+  assert.equal(riskMultiple(offTick), null);
   // Snapping is still available, but only when a caller asks for it.
   assert.equal(snapToTick(6844.3, "MES"), 6844.25);
   const errors = validateTradeInput({ symbol: "MES", direction: "LONG", quantity: 1, entry_price: 6844.3, exit_price: 6849, stop_loss_price: 6841.25, ...noLevels });
@@ -107,7 +107,7 @@ test("issue #84: a manual execution is valid without stop, target or key level a
   assert.equal(trade.stop_loss_price, null);
   assert.equal(trade.planned_target_price, null);
   assert.equal(trade.key_level_price, null);
-  assert.equal(rMultiple(trade), null);
+  assert.equal(riskMultiple(trade), null);
 });
 
 test("issue #51: a timestamp four days from any bar is unresolved, not snapped", () => {
@@ -138,26 +138,26 @@ test("issue #51: a missing bar is nearby within three bars, and unresolved beyon
   assert.equal(snapToBar([Date.parse("2026-11-10T14:00:00Z")], Date.parse("2026-11-10T15:45:00Z"), "1h"), null);
 });
 
-test("issue #63: plannedR rejects a target on the wrong side or at the entry", () => {
+test("issue #63: plannedRewardRisk rejects a target on the wrong side or at the entry", () => {
   // Long entered at 6000 with a valid stop at 5999 (4 ticks risk).
   const longBase = normalizeTrade({ ...base, symbol: "MES", direction: "LONG", quantity: 1, entry_price: 6000, exit_price: 6002, stop_loss_price: 5999 });
   // Target below entry: wrong side yields null.
-  assert.equal(plannedR({ ...longBase, planned_target_price: 5998 }), null);
+  assert.equal(plannedRewardRisk({ ...longBase, planned_target_price: 5998 }), null);
   // Target at entry: zero reward yields null.
-  assert.equal(plannedR({ ...longBase, planned_target_price: 6000 }), null);
+  assert.equal(plannedRewardRisk({ ...longBase, planned_target_price: 6000 }), null);
   // Valid target above entry: 8 ticks reward on 4 ticks risk = 2.0R.
-  assert.equal(plannedR({ ...longBase, planned_target_price: 6002 }), 2);
-  assert.equal(formatR(plannedR({ ...longBase, planned_target_price: 6002 })!), "+2.0R");
+  assert.equal(plannedRewardRisk({ ...longBase, planned_target_price: 6002 }), 2);
+  assert.equal(formatR(plannedRewardRisk({ ...longBase, planned_target_price: 6002 })!), "+2.0R");
 
   // Short entered at 6000 with a valid stop at 6001 (4 ticks risk).
   const shortBase = normalizeTrade({ ...base, symbol: "MES", direction: "SHORT", quantity: 1, entry_price: 6000, exit_price: 5998, stop_loss_price: 6001 });
   // Target above entry: wrong side yields null.
-  assert.equal(plannedR({ ...shortBase, planned_target_price: 6002 }), null);
+  assert.equal(plannedRewardRisk({ ...shortBase, planned_target_price: 6002 }), null);
   // Target at entry: zero reward yields null.
-  assert.equal(plannedR({ ...shortBase, planned_target_price: 6000 }), null);
+  assert.equal(plannedRewardRisk({ ...shortBase, planned_target_price: 6000 }), null);
   // Valid target below entry: 8 ticks reward on 4 ticks risk = 2.0R.
-  assert.equal(plannedR({ ...shortBase, planned_target_price: 5998 }), 2);
-  assert.equal(formatR(plannedR({ ...shortBase, planned_target_price: 5998 })!), "+2.0R");
+  assert.equal(plannedRewardRisk({ ...shortBase, planned_target_price: 5998 }), 2);
+  assert.equal(formatR(plannedRewardRisk({ ...shortBase, planned_target_price: 5998 })!), "+2.0R");
 });
 
 test("issue #63: tradeTicks and isScratch fail closed on invalid quantity or unpriceable trade", () => {

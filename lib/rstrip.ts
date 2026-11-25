@@ -1,4 +1,6 @@
+import { tradePnl } from "./trades.ts";
 import type { TradeDirection, TradeRecord } from "./trades.ts";
+import { resolveRSize } from "./r-size.ts";
 
 /** How the exit sits on the planned stop–target range. */
 export type RStripKind = "stopped-out" | "cut-early" | "ran-to-plan" | "beyond-target" | "no-plan";
@@ -113,7 +115,7 @@ export function rStripLayout(input: RStripInput): RStripLayout | null {
 }
 
 export type StripTrade = Pick<TradeRecord, "direction" | "entry_price" | "exit_price" | "stop_loss_price" | "planned_target_price">
-  & Partial<Pick<TradeRecord, "initial_stop_price">>;
+  & Partial<Pick<TradeRecord, "initial_stop_price" | "symbol" | "quantity" | "account_id" | "r_size_cents">>;
 
 /**
  * The strip's 1R stop, by the rule of `riskStopPrice` (R-10): the initial stop when it is on the risk side of the
@@ -148,22 +150,42 @@ const KIND_LABEL: Record<RStripKind, string> = {
   "no-plan": "Entry to exit",
 };
 
+const MINUS = "\u2212";
+
+/**
+ * A result in account R, signed, with one decimal (+1.0R, +0.5R) or two when needed (+0.25R). Used for every R label
+ * on the chart and strip. Never the stop-width ratio.
+ */
+export function formatAccountR(r: number | null | undefined): string {
+  if (r == null || !Number.isFinite(r)) return "—R";
+  const cents = Math.round(Math.abs(r) * 100);
+  const text = (cents / 100).toFixed(cents % 10 === 0 ? 1 : 2);
+  return `${r < 0 && cents > 0 ? MINUS : "+"}${text}R`;
+}
+
 export function rStripLabel(kind: RStripKind, r: number | null, planned: number | null): string {
   const bits = [KIND_LABEL[kind]];
-  if (r != null) bits.push(`exit ${r.toFixed(1)}R`);
+  if (r != null) bits.push(`exit ${formatAccountR(r)}`);
   if (planned != null && (kind === "ran-to-plan" || kind === "beyond-target" || kind === "cut-early")) {
-    bits.push(`plan ${planned.toFixed(1)}R`);
+    bits.push(`plan ${formatAccountR(planned)}`);
   }
   return bits.join(", ");
 }
 
-export function rStripCaption(trade: StripTrade, layout: RStripLayout) {
-  const axis = { direction: trade.direction, entry: trade.entry_price, stop: stripStop(trade) };
-  const r = trade.exit_price != null && axis.stop != null
-    ? stripOffset(trade.exit_price, axis)
-    : null;
-  const planned = trade.planned_target_price != null && axis.stop != null
-    ? stripOffset(trade.planned_target_price, axis)
-    : null;
-  return rStripLabel(layout.kind, r, planned);
+/** Account R of a price: the dollar result if the trade had exited there, ÷ the R size in cents. */
+function accountROf(trade: StripTrade, price: number, cents: number): number | null {
+  if (trade.symbol == null || trade.quantity == null) return null;
+  const dollars = tradePnl({ ...trade, symbol: trade.symbol, quantity: trade.quantity, exit_price: price });
+  return dollars == null || !(cents > 0) ? null : (dollars * 100) / cents;
+}
+
+/**
+ * The caption in account R (04 §3.5). The geometry stays on the trade's own stop–target span; only the labels change.
+ * `accountRSizeCents` wins when supplied, else the trade's resolved R size (its frozen `r_size_cents`, else the default).
+ */
+export function rStripCaption(trade: StripTrade, layout: RStripLayout, accountRSizeCents?: number | null) {
+  const cents = accountRSizeCents ?? resolveRSize({ account_id: trade.account_id ?? null, r_size_cents: trade.r_size_cents }).cents;
+  const exit = trade.exit_price != null ? accountROf(trade, trade.exit_price, cents) : null;
+  const planned = trade.planned_target_price != null ? accountROf(trade, trade.planned_target_price, cents) : null;
+  return rStripLabel(layout.kind, exit, planned);
 }

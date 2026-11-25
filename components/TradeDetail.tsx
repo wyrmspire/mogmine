@@ -15,7 +15,7 @@ import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
 import { RiskLine } from "./RiskLine";
 import { useAccounts } from "@/lib/accounts-store";
-import { resolveRSize } from "@/lib/r-size";
+import { resolveRSize, resultR, riskR } from "@/lib/r-size";
 import { StopMovesEditor } from "./StopMovesEditor";
 import { TradeCardSheet } from "./TradeCardSheet";
 import { RStrip } from "./RStrip";
@@ -46,7 +46,7 @@ import { observeTrade, validateTradeAgainstBars } from "@/lib/trade-bar-validati
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
 import { buildMarks } from "@/lib/trade-marks";
 import type { Mark } from "@/lib/trade-marks";
-import { TIMEFRAMES, TIMEFRAME_MINUTES, aggregateCandles, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, rMultiple, tradePnl, tradePoints } from "@/lib/trades";
+import { TIMEFRAMES, TIMEFRAME_MINUTES, aggregateCandles, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext, useOnline } from "@/lib/ui";
@@ -97,6 +97,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   // R size in dollars for this trade: its frozen size, else its account's, else the Default R size (04 §3.2).
   const accountsState = useAccounts();
   const rSize = resolveRSize(trade, accountsState.accounts, prefs);
+  const accountRiskR = riskR(trade, rSize);
   const accountName = accountsState.accounts.find((account) => account.id === trade.account_id)?.name ?? null;
   const undatedExit = trade.exit_time != null && !Number.isFinite(Date.parse(trade.exit_time));
   const [chosen, setChosen] = useState<Timeframe>(() => {
@@ -270,7 +271,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   };
 
   const pnl = tradePnl(trade);
-  const r = rMultiple(trade);
+  const r = resultR(trade, rSize);
   const stopHistory = stopHistoryText(trade, (iso) => formatListTime(iso, zone));
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const sign = trade.direction === "LONG" ? 1 : -1;
@@ -299,7 +300,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     if (!displayedBars?.length) return [];
     const candleTimes = displayedBars.map(({ time }) => time);
     const marks = buildMarks(derived, observation, timeframe, detailLevel, renderPrivacy, {
-      candleTimes, continuationEdges: { before: showEarlier }, showRuler: true,
+      candleTimes, continuationEdges: { before: showEarlier }, showRuler: true, accountRiskR,
     });
     if (keyPrice != null) {
       const keyLevel: Mark = {
@@ -329,7 +330,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       }
     }
     return marks;
-  }, [displayedBars, derived, observation, timeframe, detailLevel, renderPrivacy, showEarlier, keyPrice, neighbours]);
+  }, [displayedBars, derived, observation, timeframe, detailLevel, renderPrivacy, showEarlier, keyPrice, neighbours, accountRiskR]);
   const ex = useMemo(() => (ready ? excursions(trade, candles.candles, baseMinutes) : null), [ready, candles, trade, baseMinutes]);
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
