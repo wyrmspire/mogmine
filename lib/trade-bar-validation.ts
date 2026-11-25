@@ -1,7 +1,7 @@
 import { laterTouch } from "./hindsight.ts";
 import type { HindsightOutcome, LaterTouch } from "./hindsight.ts";
 import { matchFill } from "./fill-match.ts";
-import { expectedInsideBarTimes, isRegularTradingBarInterval, sessionCloseUtc } from "./session.ts";
+import { insideBarTimes, isRegularTradingBarInterval, sessionCloseUtc } from "./session.ts";
 import { stopAtExit } from "./trade-document.ts";
 import type { DerivedTrade, EventBasis, PositionPoint, WorkingOrderSegment } from "./trade-document.ts";
 import { excursionsFromBars, isWholeQuantity } from "./trades.ts";
@@ -89,14 +89,15 @@ export function validateTradeAgainstBars(trade: ValidatedTrade, candles: Candle[
   }
 
   const barMs = barMinutes * 60_000;
-  const expected = expectedInsideBarTimes(entry, exit, barMs, trade.symbol);
+  const expected = insideBarTimes(entry, exit, barMs, trade.symbol);
   const entryBarTime = Math.floor(entry / barMs) * barMs;
   const exitBarTime = Math.floor(exit / barMs) * barMs;
   const coverage = coverageFor(candles, expected, entryBarTime, exitBarTime);
   // Same-bar holds have complete data when that bar exists, but chronology is unresolved.
   const chronology: ChronologyResolution = entryBarTime === exitBarTime ? "unresolved" : "resolved";
 
-  const completed = candles.filter((bar) => bar.time >= entry && bar.time + barMs <= exit);
+  // R-POST-1: the entry bar is never inside the hold, even when the entry has `:00` seconds.
+  const completed = candles.filter((bar) => bar.time >= entryBarTime + barMs && bar.time + barMs <= exit);
   const issues: TradeBarIssue[] = [];
 
   if (trade.stop_loss_price != null) {
@@ -161,6 +162,11 @@ export interface ObservedTrade {
   /** Keyed by fill `seq`. Set for fills that resolved to a bar (FB-1). Marks anchor on these bars. */
   fillMatches?: ReadonlyMap<number, FillBarMatch>;
   excursions: Excursions | null;
+  /**
+   * R-POST-4 / D-H: the entry bar's pre-fill range crossed the stop in force at entry. Recorded as a
+   * quiet fact only: it is not a finding, so it draws no chart flag and is not counted as a stop touch.
+   */
+  entryBarPassedStop?: boolean;
   hindsight: {
     last_stop_touch: LaterTouch | null;
     target_touches: Array<LaterTouch & { target: string }>;
@@ -346,16 +352,33 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
   result.fillMatches = fillMatches;
 
   const windows = positionWindows(timeline, closed ? exit : newestBarTime);
-  const expected = closed ? windows.flatMap(({ from, to }) => expectedInsideBarTimes(from, to, barMs, symbol)) : [];
+  // R-POST-1: a window's entry bar (its fill's bar, or the matched bar under D-I) is never inside the hold.
+  const expected = closed ? windows.flatMap(({ from, to }) => insideBarTimes(from, to, barMs, symbol)) : [];
   const inside = closed
     ? expected.flatMap((time) => barsByTime.get(time) ?? [])
-    : bars.filter((bar) => windows.some(({ from, to }) => bar.time >= from && bar.time + barMs <= to)
+    : bars.filter((bar) => windows.some(({ from, to }) => bar.time >= barOpen(from) + barMs && bar.time + barMs <= to)
         && isRegularTradingBarInterval(symbol, bar.time, barMs));
 
   const required = new Set([...expected, ...checkedBars]);
   const available = [...required].filter((time) => barsByTime.has(time)).length;
   if (closed && available > 0 && available === required.size) result.coverage = "complete";
   else if (available > 0 || inside.length > 0) result.coverage = "partial";
+
+  // R-POST-4: the entry bar (matched under D-I) is checked against the stop in force at the entry instant.
+  // Only a complete bar counts; an open trade's newest bar may still be forming.
+  const entryFill = timeline.find((fill) => fill.position_after > 0);
+  if (entryFill) {
+    const entryTime = Date.parse(entryFill.t);
+    const entryBarTime = barOpen(entryTime);
+    const entryBar = barsByTime.get(entryBarTime);
+    const entryBarComplete = closed || entryBarTime < newestBarTime;
+    // The stop in force when the entry bar traded: a stop placed by the entry fill itself starts at the fill
+    // (its `from` can sit after a matched entry bar's open), so accept any stop working by the bar's end.
+    const stopAtEntry = stops.find((stop) => Date.parse(stop.from) <= entryBarTime + barMs
+      && (stop.to == null || Date.parse(stop.to) > entryTime));
+    result.entryBarPassedStop = Boolean(entryBar && entryBarComplete && stopAtEntry
+      && stopTouched(direction, stopAtEntry.price, entryBar));
+  }
 
   for (const [index, stop] of stops.entries()) {
     const from = Date.parse(stop.from);

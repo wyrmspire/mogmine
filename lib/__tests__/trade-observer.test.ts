@@ -61,7 +61,8 @@ const golden: Array<{
       finding("stop_traded_through", "15:48", 7601, 1),
       finding("stop_traded_through", "15:59", 7606, 2),
     ],
-    excursions: [7593, 7607],
+    // SM-1 (R-POST-1): the 15:34 entry bar (low 7593) is never inside the hold; the 15:35 low 7594 is the lowest inside bar.
+    excursions: [7594, 7607],
   },
   {
     name: "ex-ignored",
@@ -82,7 +83,8 @@ const golden: Array<{
     name: "ex-partials",
     candles: [["15:34", 7598, 7602], ["15:42", 7603, 7605], ["15:44", 7602, 7611], ["16:05", 7600, 7612.5]],
     findings: [],
-    excursions: [7598, 7612.5],
+    // SM-1 (R-POST-1): the 15:34 entry bar (low 7598) is excluded; the entry fill at 7600 is the lowest price.
+    excursions: [7600, 7612.5],
   },
 ];
 
@@ -151,7 +153,8 @@ test("a bar during a flat gap after a full exit cannot prove a later position cr
     ["15:44", 7594, 7611], ["15:45", 7510, 7700], ["15:46", 7598, 7601], ["15:47", 7597, 7601],
   ]));
   assert.deepEqual(result.findings, []);
-  assert.deepEqual(result.excursions, { maePrice: 7595, mfePrice: 7601, coverage: "partial" });
+  // SM-1 (R-POST-1, R-POST-2): the 15:46 entry bar is excluded, leaving one inside bar (15:47), so no MAE/MFE.
+  assert.equal(result.excursions, null);
 });
 
 test("an open trade uses completed bars and keeps its newest bar and excursions provisional", () => {
@@ -367,7 +370,7 @@ test("a 5m scalp reports alignment without using the entry/exit wick as an excur
   assert.deepEqual(result.findings, []);
 });
 
-test("an exact bar-open entry counts and an exact bar-open exit excludes that entire candle", () => {
+test("an exact bar-open entry is excluded from the hold (R-POST-1) and an exact bar-open exit excludes that entire candle", () => {
   const doc = fixture("ex-sl");
   doc.events[3].t = "2026-11-12T15:36:00Z";
   const result = observeTrade(deriveTrade(doc), bars([
@@ -375,7 +378,8 @@ test("an exact bar-open entry counts and an exact bar-open exit excludes that en
   ]));
   assert.equal(result.coverage, "complete");
   assert.deepEqual(result.findings, []);
-  assert.deepEqual(result.excursions, { maePrice: 7595, mfePrice: 7607, coverage: "complete" });
+  // SM-1: the 15:34 entry bar and the 15:36 exit bar are both outside the hold; one inside bar (15:35) gives null (R-POST-2).
+  assert.equal(result.excursions, null);
 });
 
 test("a short uses lows for its target and MFE and highs for its stop and MAE", () => {

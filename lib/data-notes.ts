@@ -15,6 +15,7 @@ export type DataNoteId =
   | "not_1m"
   | "continuous_contract"
   | "same_bar_unresolved"
+  | "entry_bar_passed_stop"
   | `${TradeBarFinding["code"]}:${string}`;
 
 export type DataNoteTone = "untrusted" | "quiet";
@@ -47,6 +48,8 @@ export interface DataNoteInput {
   // The displayed bar contains both fills. Only meaningful when coverage is "complete".
   chronologyUnresolved: boolean;
   findings: readonly TradeBarFinding[];
+  // R-POST-4 / D-H: the entry bar's pre-fill range crossed the stop at entry. Quiet only, never a finding.
+  entryBarPassedStop?: boolean;
   symbol: string;
   zone?: string;
 }
@@ -74,6 +77,13 @@ export function collectDataNotes(input: DataNoteInput): DataNote[] {
   }
   if (input.coverage === "complete" && input.chronologyUnresolved) {
     notes.push({ id: "same_bar_unresolved", text: "Entry and exit sit in the same bar, so this check cannot establish order between them.", tone: "quiet" });
+  }
+  if (input.entryBarPassedStop === true) {
+    notes.push({
+      id: "entry_bar_passed_stop",
+      text: "The entry bar traded past the stop before your fill. That is not counted as a stop touch.",
+      tone: "quiet",
+    });
   }
   for (const finding of input.findings) {
     const { code, segment, barTime, price, basis } = finding;
