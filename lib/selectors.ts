@@ -2,8 +2,9 @@
 // Lists never see candles (B-42).
 import { formatSessionDate, offsetSessionDate, sessionDate, sessionWeekMonday } from "./session.ts";
 import { SETUP_TAGS, playbookName } from "./playbooks.ts";
-import { adherence, isOpen, rMultiple, tradePnl } from "./trades.ts";
-import type { TradeRecord } from "./trades.ts";
+import { adherence, isOpen, tradePnl } from "./trades.ts";
+import type { RSizeOptions, TradeRecord } from "./trades.ts";
+import { resolveRSize, resultR } from "./r-size.ts";
 
 export interface DayStats {
   count: number;
@@ -16,7 +17,7 @@ export interface DayStats {
   unpriceableCount: number;
   /** True when the gross total omits at least one trade that could not be priced. */
   incomplete: boolean;
-  /** Sum of R over trades that have a stop, and how many that was. */
+  /** Sum of account R (resultR) over trades whose P&L is computable, and how many that was. */
   netR: number | null;
   withR: number;
   /** Process score: trades that followed every rule, out of trades that were graded (UX-13). */
@@ -27,7 +28,7 @@ export interface DayStats {
   openCount: number;
 }
 
-export function dayStats(trades: TradeRecord[]): DayStats {
+export function dayStats(trades: TradeRecord[], opts?: RSizeOptions): DayStats {
   let wins = 0, gross = 0, pricedCount = 0, unpriceableCount = 0, netR = 0, withR = 0, processFollowed = 0, processGraded = 0, needsReview = 0, openCount = 0;
   for (const trade of trades) {
     // An open trade has no result yet: counted apart, never in P&L, win rate or R (OD-38).
@@ -43,7 +44,7 @@ export function dayStats(trades: TradeRecord[]): DayStats {
       } else {
         unpriceableCount += 1;
       }
-      const r = rMultiple(trade);
+      const r = resultR(trade, resolveRSize(trade, opts?.accounts, opts?.prefs));
       if (r != null) { netR += r; withR += 1; }
     }
     const score = adherence(trade);
@@ -249,7 +250,7 @@ export interface SummaryStats {
   totalR: number | null;
   avgR: number | null;
   withR: number;
-  /** Trades for which rMultiple returns null, including unpriceable trades. */
+  /** Trades for which account resultR returns null (P&L not computable), including unpriceable trades. */
   skippedRCount: number;
   ruleAdherence: {
     followed: number;
@@ -281,7 +282,7 @@ export interface RunningStats {
   undatedCount: number;
 }
 
-function summarizeTrades(trades: TradeRecord[]): SummaryStats {
+function summarizeTrades(trades: TradeRecord[], opts?: RSizeOptions): SummaryStats {
   let wins = 0;
   let losses = 0;
   let scratches = 0;
@@ -307,7 +308,7 @@ function summarizeTrades(trades: TradeRecord[]): SummaryStats {
       unpriceableCount += 1;
     }
 
-    const r = rMultiple(trade);
+    const r = resultR(trade, resolveRSize(trade, opts?.accounts, opts?.prefs));
     if (r != null) {
       totalR += r;
       withR += 1;
@@ -358,6 +359,7 @@ function summarizeTrades(trades: TradeRecord[]): SummaryStats {
 export function runningStats(
   trades: readonly TradeRecord[],
   now: number | string,
+  opts?: RSizeOptions,
 ): RunningStats {
   let excludedSampleCount = 0;
   let excludedOpenCount = 0;
@@ -414,21 +416,21 @@ export function runningStats(
   const byPlaybook: PlaybookStats[] = [...playbookGroups.entries()]
     .map(([playbookId, list]) => ({
       playbookId,
-      ...summarizeTrades(list),
+      ...summarizeTrades(list, opts),
     }))
     .sort((a, b) => b.tradeCount - a.tradeCount || (a.playbookId ?? "").localeCompare(b.playbookId ?? "", "en"));
   const byTag: TagStats[] = [...tagGroups.entries()]
     .map(([tag, list]) => ({
       tag,
-      ...summarizeTrades(list),
+      ...summarizeTrades(list, opts),
     }))
     .sort((a, b) => b.tradeCount - a.tradeCount || a.tag.localeCompare(b.tag, "en"));
 
   return {
-    overall: summarizeTrades(eligible),
-    last20: summarizeTrades(datedTrades.slice(-20)),
-    thisWeek: summarizeTrades(weekTrades),
-    thisMonth: summarizeTrades(monthTrades),
+    overall: summarizeTrades(eligible, opts),
+    last20: summarizeTrades(datedTrades.slice(-20), opts),
+    thisWeek: summarizeTrades(weekTrades, opts),
+    thisMonth: summarizeTrades(monthTrades, opts),
     byPlaybook,
     byTag,
     excludedSampleCount,

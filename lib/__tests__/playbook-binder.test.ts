@@ -39,15 +39,18 @@ test("CD-3b: below 10 trades the rates say so; the count and R skips always prin
     { label: "Win rate", value: "Not enough trades yet" },
     { label: "Avg R", value: "Not enough trades yet" },
   ]);
-  assert.equal(playbookSampleLine(data), "n = 2 · rates from 10 · 1 without a stop, left out of R");
+  // D-A: closed trades without a stop still have account R; only unpriceable trades are skipped.
+  assert.equal(playbookSampleLine(data), "n = 2 · rates from 10");
+  const unpriceable = playbookCardData(book("orb"), [trade({ points: 8 }), trade({ exit_price: 7600.1 })], [], now);
+  assert.equal(playbookSampleLine(unpriceable), "n = 2 · rates from 10 · 1 unpriceable, left out of R");
 });
 
 test("CD-3b: at 10 trades the rates print, formatted by lib/format", () => {
   const trades = Array.from({ length: 10 }, (_, i) => trade({ points: i < 6 ? 8 : -4 }));
   const cells = playbookStatCells(playbookCardData(book("orb"), trades, [], now), false);
   assert.equal(cells[1].value, "60%");
-  // 6 × +2R and 4 × −1R over 10 trades.
-  assert.equal(cells[2].value, "+0.8R");
+  // 6 × +0.16R and 4 × −0.08R over 10 trades = +0.064R avg → +0.1R.
+  assert.equal(cells[2].value, "+0.1R");
   assert.equal(playbookSampleLine(playbookCardData(book("orb"), trades, [], now)), "n = 10");
 });
 
@@ -63,7 +66,7 @@ test("CD-3b: a binder tile says 'not enough' once, prints rates at 10, and hides
   const few = playbookCardData(book("orb"), [trade()], [], now);
   assert.equal(playbookTileStats(few, false), "1 trade · not enough for rates yet");
   const ten = playbookCardData(book("orb"), Array.from({ length: 10 }, () => trade({ points: 8 })), [], now);
-  assert.equal(playbookTileStats(ten, false), "Trades 10 · Win rate 100% · Avg R +2.0R");
+  assert.equal(playbookTileStats(ten, false), "Trades 10 · Win rate 100% · Avg R +0.2R");
   assert.equal(playbookTileStats(ten, true), "Results hidden by Shield");
 });
 

@@ -3,9 +3,17 @@
 
 import { insideBarTimes } from "./session.ts";
 import { isValidRSizeCents, isValidStatedRiskR, riskCents } from "./r-size.ts";
+import type { TradingAccount } from "./accounts.ts";
+import type { Prefs } from "./prefs-sanitize.ts";
 export { expectedInsideBarTimes } from "./session.ts";
 
 export type TradeDirection = "LONG" | "SHORT";
+
+/** Optional account R sizes and prefs for account-R consumers (RS-3a). Omit both to use the default R size. */
+export interface RSizeOptions {
+  accounts?: readonly Pick<TradingAccount, "id" | "r_size_cents">[];
+  prefs?: Partial<Pick<Prefs, "riskBudgetUsd">> | null;
+}
 export type TradeStyle = "scalp" | "session_90m" | "investment";
 export type Timeframe = "1m" | "5m" | "15m" | "1h";
 export type ReviewStatus = "new" | "tagged" | "reviewed";
@@ -302,13 +310,18 @@ export function initialRiskUsd(trade: Priced & Pick<TradeRecord, "stop_loss_pric
   return (riskTicks * trade.quantity * cents) / 100;
 }
 
-/** R = P&L ÷ initial risk (`riskStopPrice`). `null` without a valid stop, never 0 (AGENTS §3b-4, OD-10). */
-export function rMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price"> & Stops): number | null {
+/**
+ * Captured ticks ÷ the trade's own initial risk ticks (`riskStopPrice`). This is the stop-width ratio ("× risk"),
+ * NOT account R: account R is `resultR` in `lib/r-size.ts` (04 §3.1, D-A). `null` without a valid stop.
+ */
+export function riskMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price"> & Stops): number | null {
   const riskTicks = stopRiskTicks(trade);
   const ticks = tradeTicks(trade);
   if (riskTicks == null || ticks == null || !isWholeQuantity(trade.quantity)) return null;
   return ticks / riskTicks;
 }
+/** @deprecated Renamed to `riskMultiple` (RS-3a). Remove after RS-3b. */
+export const rMultiple = riskMultiple;
 
 /**
  * The patch for setting or changing a trade's stop (R-10). The first stop a trade ever has is
@@ -325,10 +338,12 @@ export function stopPatch(
   return { stop_loss_price: price, initial_stop_price: price, initial_stop_set_at: now };
 }
 
-/** R against the frozen initial stop (R-10): the same math as `rMultiple`, on `initial_stop_price`. `null` without one. */
-export function initialRMultiple(trade: Priced & Pick<TradeRecord, "initial_stop_price">): number | null {
-  return trade.initial_stop_price == null ? null : rMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
+/** Stop-width ratio against the frozen initial stop (R-10): the same math as `riskMultiple`, on `initial_stop_price`. */
+export function initialRiskMultiple(trade: Priced & Pick<TradeRecord, "initial_stop_price">): number | null {
+  return trade.initial_stop_price == null ? null : riskMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
 }
+/** @deprecated Renamed to `initialRiskMultiple` (RS-3a). Remove after RS-3b. */
+export const initialRMultiple = initialRiskMultiple;
 
 /**
  * A backup restore never overwrites an initial stop the device already holds for the same trade
@@ -854,10 +869,10 @@ export function excursionsFromBars(
 }
 
 /**
- * Planned reward ÷ initial risk, or null without a stop and target, or when the stop or
+ * Planned reward ÷ initial risk (shown as `R:R`), or null without a stop and target, or when the stop or
  * target is on the wrong side (or at the entry) (issue #50, #63).
  */
-export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "planned_target_price"> & Stops): number | null {
+export function plannedRewardRisk(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "planned_target_price"> & Stops): number | null {
   if (trade.planned_target_price == null || !isWholeQuantity(trade.quantity)) return null;
   const riskTicks = stopRiskTicks(trade);
   const sign = sideSign(trade.direction);
@@ -868,6 +883,8 @@ export function plannedR(trade: Priced & Pick<TradeRecord, "stop_loss_price" | "
   if (rewardTicks <= 0) return null;
   return rewardTicks / riskTicks;
 }
+/** @deprecated Renamed to `plannedRewardRisk` (RS-3a). Remove after RS-3b. */
+export const plannedR = plannedRewardRisk;
 
 /**
  * A scratch is a result within 0.1R or 2 ticks of the entry, whichever is larger.

@@ -53,8 +53,8 @@ test("CD-3c: without Shield the stats row prints the R-08a numbers", () => {
   const { ctx, texts } = mockContext();
   renderPlaybookCardCanvas(ctx, null, data, { size: "4:5", side: "front", shield: false, theme: DEFAULT_CARD_THEME, dateLabel: "Nov 22, 2026" });
   assert.ok(texts.includes("67%"), texts.join(" | "));
-  // 8 × +2R and 4 × −1R over 12 trades.
-  assert.ok(texts.includes("+1.0R"), texts.join(" | "));
+  // 8 × +0.48R (+$120 ÷ $250) and 4 × −0.24R (−$60 ÷ $250) over 12 trades = +0.24R avg → +0.2R.
+  assert.ok(texts.includes("+0.2R"), texts.join(" | "));
   assert.ok(texts.includes("12"));
 });
 

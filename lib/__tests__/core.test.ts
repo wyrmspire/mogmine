@@ -507,14 +507,16 @@ test("chart text equivalent describes direction, size, times, prices and R or po
   });
   assert.equal(
     describeTrade(trade, "America/Chicago", false),
-    "Long MES, 2 contracts, entered 09:43:00 CST at 5948.50, exited 09:45:00 CST at 5961.50, plus 2.6 R.",
+    "Long MES, 2 contracts, entered 09:43:00 CST at 5948.50, exited 09:45:00 CST at 5961.50, plus 0.52 R.",
   );
   assert.equal(
     describeTrade(trade, "America/Chicago", true),
-    "Long MES, entered 09:43:00 CST at 5948.50, exited 09:45:00 CST at 5961.50, plus 2.6 R.",
+    "Long MES, entered 09:43:00 CST at 5948.50, exited 09:45:00 CST at 5961.50, plus 0.52 R.",
   );
+  // D-A: closed trades without a stop still have account R ($130 ÷ $250 = +0.52R); unpriceable trades fall back.
   const noStop = { ...trade, stop_loss_price: null };
-  assert.match(describeTrade(noStop, "America/Chicago", true), /plus 13 points, no stop recorded\.$/);
+  assert.match(describeTrade(noStop, "America/Chicago", true), /plus 0\.52 R\.$/);
+  assert.match(describeTrade({ ...trade, symbol: "UNKNOWN" }, "America/Chicago", true), /result not available\.$/);
 });
 
 test("Shield / privacy mode omits dollars and contract size in descriptions and share file names (UX-64, UX-72)", () => {
@@ -534,7 +536,7 @@ test("Shield / privacy mode omits dollars and contract size in descriptions and 
   const shielded = describeTrade(trade, "America/Chicago", true);
   assert.match(open, /3 contracts/);
   assert.doesNotMatch(shielded, /contract|3×|\$|usd/i);
-  assert.match(shielded, /plus 1\.6 R/);
+  assert.match(shielded, /plus 0\.28 R/);
 
   const fileName = shareCardFileName(trade);
   assert.equal(fileName, "mes-long-2026-11-10-trade-card.png");
