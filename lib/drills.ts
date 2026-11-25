@@ -1,6 +1,7 @@
 // CD-2a drill cards (docs/23 §4, OD-46): pure deck selection, eligibility, the sealed cut and scoring.
 // No storage and no React. Answers live in `mogmine-drills-v1` (CD-2b) and never touch `take_again`.
-import { TIMEFRAME_MINUTES, isOpen, processRead, rMultiple } from "./trades.ts";
+import { TIMEFRAME_MINUTES, isOpen, processRead } from "./trades.ts";
+import { resolveRSize, resultR } from "./r-size.ts";
 import type { Candle, Timeframe, TradeRecord } from "./trades.ts";
 
 const DAY_MS = 86_400_000;
@@ -87,7 +88,7 @@ export function playbookDeck(trades: readonly TradeRecord[], playbookId: string,
  * *Pass* on a winning trade that followed them. Null when the trade has no R or no process read to judge by.
  */
 export function isMiss(answer: DrillAnswer, trade: TradeRecord): boolean | null {
-  const r = rMultiple(trade);
+  const r = resultR(trade, resolveRSize(trade));
   const process = processRead(trade);
   if (r == null || process == null) return null;
   if (answer === "take") return r < 0 && process === "broken";
@@ -151,7 +152,8 @@ export function takeVsPass(records: readonly DrillRecord[], trades: readonly Tra
   const groups: Record<DrillAnswer, number[]> = { take: [], smaller: [], pass: [] };
   let noR = 0;
   for (const record of latest.values()) {
-    const r = rMultiple(byId.get(record.trade_id)!);
+    const trade = byId.get(record.trade_id)!;
+    const r = resultR(trade, resolveRSize(trade));
     if (r == null) noR += 1;
     else groups[record.answer].push(r);
   }

@@ -141,9 +141,9 @@ test("CD-4: buildDayCardData aggregates Net R, points, and process adherence", (
     entry_time: "2026-11-10T14:35:00.000Z",
     exit_time: "2026-11-10T14:40:00.000Z",
     entry_price: 5980.0,
-    exit_price: 5985.0, // +5.0 pts
+    exit_price: 5985.0, // +5.0 pts x 3 MES x $5 = +$75 => +0.3R at the default $250 R size
     stop_loss_price: 5977.0,
-    initial_stop_price: 5977.0, // risk 3.0 pts -> +1.666R -> ~1.7R
+    initial_stop_price: 5977.0, // stop-width ratio is 1.67 x risk; no longer the R shown
     checklist_state: [
       { id: "r1", label: "Rule 1", checked: true },
       { id: "r2", label: "Rule 2", checked: true },
@@ -155,9 +155,7 @@ test("CD-4: buildDayCardData aggregates Net R, points, and process adherence", (
     entry_time: "2026-11-10T15:10:00.000Z",
     exit_time: "2026-11-10T15:15:00.000Z",
     entry_price: 5990.0,
-    exit_price: 5987.0, // -3.0 pts
-    stop_loss_price: 5987.0,
-    initial_stop_price: 5987.0, // risk 3.0 pts -> -1.0R
+    exit_price: 5987.0, // -3.0 pts x 3 MES x $5 = -$45 => -0.18R at $250
     checklist_state: [
       { id: "r1", label: "Rule 1", checked: true },
       { id: "r2", label: "Rule 2", checked: false },
@@ -174,8 +172,8 @@ test("CD-4: buildDayCardData aggregates Net R, points, and process adherence", (
   assert.equal(data.lossCount, 1);
   assert.equal(data.winRate, 50);
 
-  // Net R: +1.6666 - 1.0 = +0.6666R -> +0.7R
-  assert.equal(data.formattedNetR, "+0.7R");
+  // Net account R: +0.3 - 0.18 = +0.12R -> "+0.1R" (formatR shows one decimal)
+  assert.equal(data.formattedNetR, "+0.1R");
   assert.equal(data.formattedNetPoints, "+2.00 pts");
 
   // Process adherence: 3 checked out of 4 total = 75%
@@ -250,7 +248,7 @@ test("CD-4: zero-trade session edge case", () => {
   }
 });
 
-test("CD-4: no-stop edge case (Guardrail 4: R is null without a stop, never 0)", () => {
+test("CD-4: no-stop trade still has account R (result R); the stop-based risk ratio is not shown", () => {
   const tradeNoStop = createMockTrade({
     entry_time: "2026-11-10T14:35:00.000Z",
     exit_time: "2026-11-10T14:40:00.000Z",
@@ -262,11 +260,12 @@ test("CD-4: no-stop edge case (Guardrail 4: R is null without a stop, never 0)",
 
   const data = buildDayCardData("2026-11-10", [tradeNoStop], true);
 
+  // +5 pts x 3 MES x $5 = +$75 => +0.3R at $250; a missing stop does not drop it.
   assert.equal(data.tradeCount, 1);
-  assert.equal(data.netR, null);
-  assert.equal(data.formattedNetR, "—R");
-  assert.equal(data.trades[0].rMultiple, null);
-  assert.equal(data.trades[0].formattedR, "—R");
+  assert.equal(data.netR, 0.3);
+  assert.equal(data.formattedNetR, "+0.3R");
+  assert.equal(data.trades[0].resultR, 0.3);
+  assert.equal(data.trades[0].formattedR, "+0.3R");
   assert.equal(data.formattedNetPoints, "+5.00 pts");
 });
 

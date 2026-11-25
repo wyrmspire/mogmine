@@ -1,7 +1,22 @@
 // lib/plan-vs-actual.ts — Planned vs. Actual execution comparison (M2, #42, BET-06)
-import { formatPoints, formatPrice, formatR } from "./format.ts";
-import { hasWidenedStop, isScratch, plannedR, riskStopPrice, rMultiple, toTicks } from "./trades.ts";
-import type { TradeRecord } from "./trades.ts";
+import { formatPoints, formatPrice } from "./format.ts";
+import { hasWidenedStop, isScratch, isWholeQuantity, plannedRewardRisk, specFor, tickValueCents, toTicks } from "./trades.ts";
+import type { RSizeOptions, TradeRecord } from "./trades.ts";
+import { resolveRSize, resultR } from "./r-size.ts";
+
+/** Account R with two decimals (04 §3.1): `+2.05R`, `−0.25R`. `—R` when missing. */
+function formatAccountR(r: number | null) {
+  if (r == null || !Number.isFinite(r)) return "—R";
+  return `${r < 0 ? "−" : "+"}${Math.abs(r).toFixed(2)}R`;
+}
+
+/** A price move in points, as account R: dollars (points × $/tick ÷ tick × quantity) ÷ R size. Null when unpriceable. */
+function pointsToAccountR(points: number, trade: TradeRecord, rSizeCents: number): number | null {
+  const spec = specFor(trade.symbol);
+  const tickCents = tickValueCents(trade.symbol);
+  if (!spec || tickCents == null || !isWholeQuantity(trade.quantity) || !(rSizeCents > 0)) return null;
+  return Math.round(points / spec.tickSize * tickCents * trade.quantity) / rSizeCents;
+}
 
 export interface PlanVsActualRow {
   label: string;
@@ -36,7 +51,8 @@ export interface PlanVsActualComparison {
 /**
  * Pure selector comparing what the trader planned against what actually happened.
  */
-export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
+export function derivePlanVsActual(trade: TradeRecord, opts?: RSizeOptions): PlanVsActualComparison {
+  const rSize = resolveRSize(trade, opts?.accounts, opts?.prefs).cents;
   const symbol = trade.symbol;
   const isLong = trade.direction === "LONG";
   const sign = isLong ? 1 : -1;
@@ -48,13 +64,13 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
 
   const hasPlan = initialStop != null || plannedTarget != null;
 
-  const realizedR = rMultiple(trade);
-  const planR = plannedR(trade);
+  // Account R (04 §3.5): the realised result, and the plan's reward:risk ratio (shown as `R:R`, never as R).
+  const realizedR = resultR(trade, rSize);
+  const planRR = plannedRewardRisk(trade);
 
-  // 1R is the first risk (riskStopPrice, R-10), never the distance to a stop trailed past the entry.
-  const riskStop = riskStopPrice(trade);
-  const initialRisk = riskStop != null ? Math.abs(actualEntry - riskStop) : null;
   const stopOut = stopOutcome(trade);
+  // Price differences measured in account R (dollar diff ÷ R size). Null without a priceable trade.
+  const toR = (points: number) => pointsToAccountR(points, trade, rSize);
 
   const rows: PlanVsActualRow[] = [];
 
@@ -62,16 +78,16 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
   if (initialStop != null) {
     const currentStop = trade.stop_loss_price ?? initialStop;
     const stopDeltaPts = (currentStop - initialStop) * sign;
-    const stopDeltaR = initialRisk && initialRisk > 0 ? stopDeltaPts / initialRisk : null;
+    const stopDeltaR = toR(stopDeltaPts);
     let stopTone: PlanVsActualRow["tone"] = "neutral";
     let stopDeltaStr = "—";
     if (Math.abs(currentStop - initialStop) > 0.0001) {
       if (stopDeltaPts > 0) {
         stopTone = "positive"; // trailed closer to profit
-        stopDeltaStr = `+${formatPoints(stopDeltaPts, symbol)} (${formatR(stopDeltaR)})`;
+        stopDeltaStr = `+${formatPoints(stopDeltaPts, symbol)} (${formatAccountR(stopDeltaR)})`;
       } else {
         stopTone = "negative"; // widened away from profit
-        stopDeltaStr = `${formatPoints(stopDeltaPts, symbol)} (${formatR(stopDeltaR)})`;
+        stopDeltaStr = `${formatPoints(stopDeltaPts, symbol)} (${formatAccountR(stopDeltaR)})`;
       }
     }
     rows.push({
@@ -88,7 +104,7 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
   // On a stop-out the exit is compared with the stop it hit (slippage), never with the target it never reached.
   if (stopOut && actualExit != null && trade.stop_loss_price != null) {
     const slipPts = (actualExit - trade.stop_loss_price) * sign;
-    const slipR = initialRisk && initialRisk > 0 ? slipPts / initialRisk : null;
+    const slipR = toR(slipPts);
     const slipped = Math.abs(slipPts) > 0.0001;
     rows.push({
       label: "Exit / Stop",
@@ -96,21 +112,21 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
       actual: formatPrice(actualExit, symbol),
       deltaPoints: slipPts,
       deltaR: slipR,
-      deltaDisplay: slipped ? `${slipPts > 0 ? "+" : ""}${formatPoints(slipPts, symbol)} (${formatR(slipR)})` : "—",
+      deltaDisplay: slipped ? `${slipPts > 0 ? "+" : ""}${formatPoints(slipPts, symbol)} (${formatAccountR(slipR)})` : "—",
       tone: !slipped ? "neutral" : slipPts > 0 ? "positive" : "negative",
     });
   } else if (plannedTarget != null && actualExit != null) {
     const exitDeltaPts = (actualExit - plannedTarget) * sign;
-    const exitDeltaR = initialRisk && initialRisk > 0 ? exitDeltaPts / initialRisk : null;
+    const exitDeltaR = toR(exitDeltaPts);
     let exitTone: PlanVsActualRow["tone"] = "neutral";
     let exitDeltaStr = "—";
     if (Math.abs(actualExit - plannedTarget) > 0.0001) {
       if (exitDeltaPts >= 0) {
         exitTone = "positive";
-        exitDeltaStr = `+${formatPoints(exitDeltaPts, symbol)} (${formatR(exitDeltaR)})`;
+        exitDeltaStr = `+${formatPoints(exitDeltaPts, symbol)} (${formatAccountR(exitDeltaR)})`;
       } else {
         exitTone = "negative";
-        exitDeltaStr = `${formatPoints(exitDeltaPts, symbol)} (${formatR(exitDeltaR)})`;
+        exitDeltaStr = `${formatPoints(exitDeltaPts, symbol)} (${formatAccountR(exitDeltaR)})`;
       }
     }
     rows.push({
@@ -124,18 +140,20 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
     });
   }
 
-  // Risk / Reward comparison (R)
-  if (planR != null && realizedR != null) {
-    const deltaR = realizedR - planR;
+  // Result comparison: the plan's reward at target in account R against the realised account R.
+  // The plan's reward:risk ratio is shown as `R:R 2.0:1` (never `2.0R`).
+  const plannedTargetR = plannedTarget != null && planRR != null ? toR((plannedTarget - actualEntry) * sign) : null;
+  if (planRR != null && realizedR != null && plannedTargetR != null) {
+    const deltaR = realizedR - plannedTargetR;
     const tone: PlanVsActualRow["tone"] = deltaR >= 0 ? "positive" : "negative";
     rows.push({
       label: "Result (R)",
-      // The plan's R is the reward at the target over the first risk: always positive.
-      planned: `${formatR(planR)} at target`,
-      actual: formatR(realizedR),
+      // The plan's reward is the target over the first risk: always positive.
+      planned: `R:R ${planRR.toFixed(1)}:1 at target`,
+      actual: formatAccountR(realizedR),
       deltaPoints: null,
       deltaR,
-      deltaDisplay: formatR(deltaR),
+      deltaDisplay: formatAccountR(deltaR),
       tone,
     });
   }
@@ -155,7 +173,7 @@ export function derivePlanVsActual(trade: TradeRecord): PlanVsActualComparison {
     fidelityNote = "Exited at the stop: the planned risk, taken as planned.";
   } else if (stopOut === "trail") {
     fidelity = "Trailed Stop Hit";
-    fidelityNote = `Exited on the moved stop at ${formatPrice(trade.stop_loss_price!, symbol)}${realizedR != null ? `, ${formatR(realizedR)}` : ""}.`;
+    fidelityNote = `Exited on the moved stop at ${formatPrice(trade.stop_loss_price!, symbol)}${realizedR != null ? `, ${formatAccountR(realizedR)}` : ""}.`;
   } else if (isScratch(trade)) {
     fidelity = "Scratch";
     fidelityNote = "Closed within a scratch of the entry.";

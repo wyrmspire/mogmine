@@ -9,7 +9,9 @@ import { getTheme } from "./theme.ts";
 import type { ChartTheme } from "./theme.ts";
 import { CHART_TOKENS } from "./chart-paint.ts";
 import { formatDateTime } from "./time.ts";
-import { adherence, holdSeconds, rMultiple, tradePnl, tradePoints } from "./trades.ts";
+import { adherence, holdSeconds, tradePnl, tradePoints } from "./trades.ts";
+import type { RSizeOptions } from "./trades.ts";
+import { resolveRSize, resultR } from "./r-size.ts";
 import type { ChecklistItem, TradeRecord } from "./trades.ts";
 
 export type CardSize = "4:5" | "9:16" | "1:1";
@@ -145,12 +147,12 @@ export function shareCardContent(
   trade: TradeRecord,
   zone: string,
   privacy: boolean,
-  options?: { cardType?: CardType; sampleSize?: number },
+  options?: { cardType?: CardType; sampleSize?: number } & RSizeOptions,
 ): ShareCardContent {
   const score = adherence(trade);
   const quantity = `${trade.quantity} ${trade.quantity === 1 ? "contract" : "contracts"}`;
   const points = formatPoints(tradePoints(trade), trade.symbol);
-  const r = rMultiple(trade);
+  const r = resultR(trade, resolveRSize(trade, options?.accounts, options?.prefs));
   const formattedR = formatR(r);
   const blindAnswer = formatBlindAnswer(trade.take_again);
   const rulesText = score ? `${score.followed}/${score.total} RULES` : null;
