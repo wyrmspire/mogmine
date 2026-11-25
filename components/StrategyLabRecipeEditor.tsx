@@ -20,6 +20,8 @@ export interface StrategyLabRecipeEditorProps {
   /** The recipe to edit, or null for a new one. Mount with a `key` per recipe so the draft starts fresh. */
   recipeId: string | null;
   playbookId: string | null;
+  /** Unsaved recipe draft (e.g. from Find similar, §10.4) to open in the editor before committing. */
+  initialDraft?: Draft | null;
   /** True when the stored newest version has runs. A changed save then appends the next version. */
   newestHasRuns?: boolean;
   /** Shown once on the editor, e.g. "R = $300 (SIM Eval 50K)". */
@@ -48,10 +50,11 @@ function newRecipeId(): string {
   return `rcp-${Date.now().toString(36)}`;
 }
 
-/** The draft for a stored id, or a fresh draft (the id is kept when the store does not have it). */
-function startingDraft(store: RecipeStore, recipeId: string | null, playbookId: string | null): Draft {
+/** The draft for a stored id, an unsaved initial draft, or a fresh draft. */
+function startingDraft(store: RecipeStore, recipeId: string | null, playbookId: string | null, initialDraft?: Draft | null): Draft {
   const existing = recipeId ? findRecipe(store, recipeId) : undefined;
   if (existing) return draftFromRecipe(existing);
+  if (initialDraft) return JSON.parse(JSON.stringify(initialDraft)) as Draft;
   return newRecipeDraft({ id: recipeId ?? newRecipeId(), playbookId });
 }
 
@@ -126,9 +129,9 @@ function RowValueInput({ id, spec, op, value, onChange }: {
 }
 
 export function StrategyLabRecipeEditor({
-  store, recipeId, playbookId, newestHasRuns, rSizeLabel, onSave, onCancel,
+  store, recipeId, playbookId, initialDraft, newestHasRuns, rSizeLabel, onSave, onCancel,
 }: StrategyLabRecipeEditorProps) {
-  const [draft, setDraft] = useState<Draft>(() => startingDraft(store, recipeId, playbookId));
+  const [draft, setDraft] = useState<Draft>(() => startingDraft(store, recipeId, playbookId, initialDraft));
   const [tab, setTab] = useState<Tab>("form");
   const [jsonText, setJsonText] = useState("");
   const [jsonParseErrors, setJsonParseErrors] = useState<RecipeIssue[]>([]);
@@ -194,7 +197,7 @@ export function StrategyLabRecipeEditor({
   const sizingMode = asText(getIn(draft, ["sizing", "mode"]));
 
   return (
-    <section className="sl-page" aria-labelledby="sl-editor-heading">
+    <section className="sl-result" aria-labelledby="sl-editor-heading">
       <div className="sl-card-head">
         <h2 id="sl-editor-heading" className="sl-card-title">Recipe · v{asNumber(draft.version) ?? 1}</h2>
         <div className="sl-seg" role="group" aria-label="Editor view">
@@ -345,9 +348,7 @@ export function StrategyLabRecipeEditor({
             </div>
           </FieldBlock>
 
-          <p className="sl-hint">
-            Measure and the account and slippage fields are edited in the JSON tab.
-          </p>
+          <p className="sl-hint">Measure and the account and slippage fields are edited in the JSON tab.</p>
         </div>
       )}
 

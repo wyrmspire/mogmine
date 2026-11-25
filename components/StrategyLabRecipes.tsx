@@ -37,10 +37,9 @@ export function windowText(recipe: Recipe): string {
 function RecipeCard({ recipe, lastRun, onOpen }: { recipe: Recipe; lastRun?: string; onOpen: (id: string) => void }) {
   const conditions = countConditions(recipe.trigger);
   return (
-    <button type="button" className="sl-card sl-row" onClick={() => onOpen(recipe.id)} aria-label={`Open ${recipe.name}, version ${recipe.version}`}>
+    <button type="button" className="sl-card sl-recipe-card" onClick={() => onOpen(recipe.id)} aria-label={`Open ${recipe.name}, version ${recipe.version}`}>
       <span className="sl-row-main">
-        <span className="sl-card-title">{recipe.name}</span>
-        <span className="sl-row-value">v{recipe.version}</span>
+        <span className="sl-card-title">{recipe.name} · v{recipe.version}</span>
       </span>
       <span className="sl-row-note">
         {recipe.side} · {windowText(recipe)} · {conditions} {conditions === 1 ? "condition" : "conditions"}
@@ -54,7 +53,7 @@ export function StrategyLabRecipes({ store, playbookId, playbookName, lastRuns, 
   const recipes = playbookId === null ? latestRecipes(store) : recipesForPlaybook(store, playbookId);
   const heading = playbookId === null ? "All recipes" : (playbookName ?? playbookId);
   return (
-    <section className="sl-page" aria-labelledby="sl-recipes-heading">
+    <section className="sl-result" aria-labelledby="sl-recipes-heading">
       <div className="sl-card-head">
         <h2 id="sl-recipes-heading" className="sl-card-title">
           {heading} · {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"}
