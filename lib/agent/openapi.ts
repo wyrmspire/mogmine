@@ -59,6 +59,14 @@ const writeRuleReminder = (origin: string) =>
   "HR-7 keep stated_risk_r as the trader said it; HR-9 daily reviews go in daily_reviews; HR-10 never write derived values. " +
   `Read the full rules at ${guideUrl(origin)}.`;
 
+/** Trade writes (#API-2b): refusals are 422, and the saved trade's response carries non-blocking `warnings`. */
+const TRADE_WRITE_NOTE =
+  " Trades: refused with 422 when playbook_id or account_id is not the owner's (the message lists the valid ones), " +
+  "when a quick_tags value is not in the vocabulary, when entry_time or exit_time is more than 5 minutes in the future, " +
+  "or when risk_cents differs from the computed value. Saved trades also return `warnings` (never blocking): " +
+  "playbook_missing, setup_tag_missing, notes_restate_fields (HR-1), stop_moved_without_time (HR-4), " +
+  "exit_reason_mismatch (HR-5), stated_risk_differs (HR-7), price_out_of_range (only when cached bars exist).";
+
 const ERROR_ENUM = Object.keys(ERROR_CODES);
 
 const typeParam = {
@@ -201,7 +209,19 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
         Ok: {
           type: "object",
           required: ["ok", "data"],
-          properties: { ok: { const: true }, data: { description: "The record, list or document (see the operation)." } },
+          properties: {
+            ok: { const: true },
+            data: { description: "The record, list or document (see the operation)." },
+            warnings: {
+              type: "array",
+              description: "Trade writes only. Non-blocking warnings about the saved trade; empty when there are none.",
+              items: {
+                type: "object",
+                required: ["code", "message"],
+                properties: { code: { type: "string" }, message: { type: "string" } },
+              },
+            },
+          },
         },
         Error: {
           type: "object",
@@ -245,8 +265,8 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           parameters: listParams,
         }),
         post: operation({
-          operationId: "createRecord", summary: "Create a record", scope: "write", description: writeRuleReminder(origin),
-          success: { status: 201, description: "The stored record." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
+          operationId: "createRecord", summary: "Create a record", scope: "write", description: writeRuleReminder(origin) + TRADE_WRITE_NOTE,
+          success: { status: 201, description: "The stored record. Trades add `warnings` (possibly empty)." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
           requestBody: jsonBody("The full record, with a client-generated `id`. Derived fields are refused."),
         }),
       },
@@ -259,8 +279,8 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           parameters: [includeParam],
         }),
         patch: operation({
-          operationId: "updateRecord", summary: "Change some fields of a record", scope: "write", description: writeRuleReminder(origin),
-          success: { status: 200, description: "The stored record." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
+          operationId: "updateRecord", summary: "Change some fields of a record", scope: "write", description: writeRuleReminder(origin) + TRADE_WRITE_NOTE,
+          success: { status: 200, description: "The stored record. Trades add `warnings` (possibly empty)." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
           requestBody: jsonBody("The fields to change. Other fields keep their values."),
         }),
         delete: operation({
