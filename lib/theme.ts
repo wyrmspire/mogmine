@@ -3,7 +3,8 @@
 
 export interface ChartTheme {
   chartBg: string;
-  chartGrid: string;
+  gridH: string;
+  gridV: string;
   chartAxis: string;
   chartBorder: string;
   crosshair: string;
@@ -28,6 +29,19 @@ export interface ChartTheme {
   levelNeutral: string;
   levelLabelText: string;
   vwap: string;
+  /** Chart surface and label tokens (docs/design-2026-11-24/08 §4.1). */
+  crosshairLabel: string;
+  zoneReward: string;
+  zoneRisk: string;
+  entryLine: string;
+  labelMuted: string;
+  chipReward: string;
+  chipRisk: string;
+  chipNeutral: string;
+  chipWarn: string;
+  chipGhost: string;
+  fontMono: string;
+  fontSans: string;
 }
 
 const NEUTRAL = "#888888";
@@ -40,8 +54,9 @@ function read(): ChartTheme {
   const opacity = Number.parseFloat(style.getPropertyValue("--position-box-opacity"));
   return {
     chartBg: value("--chart-bg"),
-    chartGrid: value("--chart-grid"),
-    chartAxis: value("--text-muted"),
+    gridH: value("--chart-grid-h"),
+    gridV: value("--chart-grid-v"),
+    chartAxis: value("--chart-axis-text"),
     chartBorder: value("--chart-border"),
     crosshair: value("--chart-crosshair"),
     candleUp: value("--candle-up"),
@@ -65,6 +80,18 @@ function read(): ChartTheme {
     levelNeutral: value("--level-neutral"),
     levelLabelText: value("--level-label-text"),
     vwap: value("--indicator-vwap"),
+    crosshairLabel: value("--chart-crosshair-label"),
+    zoneReward: value("--zone-reward"),
+    zoneRisk: value("--zone-risk"),
+    entryLine: value("--chart-entry-line"),
+    labelMuted: value("--chart-label-muted"),
+    chipReward: value("--chip-reward-bg"),
+    chipRisk: value("--chip-risk-bg"),
+    chipNeutral: value("--chip-neutral-bg"),
+    chipWarn: value("--chip-warn-bg"),
+    chipGhost: value("--chip-ghost-bg"),
+    fontMono: value("--font-mono"),
+    fontSans: value("--font-sans"),
   };
 }
 
@@ -72,6 +99,9 @@ export function getTheme() {
   theme ??= read();
   return theme;
 }
+
+// Canvas text uses the next/font families, which load after first paint (display: swap). Re-read then.
+if (typeof document !== "undefined") void document.fonts?.ready.then(() => refreshTheme());
 
 /** Call after any change to the theme variables. Subscribers redraw. */
 export function refreshTheme() {

@@ -12,10 +12,12 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const painter = ts.transpileModule(read("../components/PositionBoxPrimitive.ts"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
-// The painter imports `separateLabels` (UX-a); hand it label-stack through a tiny require shim.
-const labelStack = ts.transpileModule(read("../lib/label-stack.ts"), {
+// The painter imports `separateLabels` (UX-a) and the chart paint helpers (08 §7.1); hand both through a tiny require shim.
+const transpile = (path) => ts.transpileModule(read(path), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
+const labelStack = transpile("../lib/label-stack.ts");
+const chartPaint = transpile("../lib/chart-paint.ts");
 const lightweightCharts = fileURLToPath(new URL(
   "../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js", import.meta.url,
 ));
@@ -43,8 +45,11 @@ try {
   const html = join(folder, "position-box.html");
   writeFileSync(html, `<!doctype html><meta charset="utf-8"><pre id="result"></pre><div id="chart"></div>
     <script src="${pathToFileURL(lightweightCharts)}"></script>
-    <script>const stack = (() => { const exports = {}; ${labelStack}; return exports; })();
-      const require = () => stack; const exports = {}; ${painter}</script>
+    <script>const modules = {
+      "../lib/label-stack.ts": (() => { const exports = {}; ${labelStack}; return exports; })(),
+      "../lib/chart-paint.ts": (() => { const exports = {}; ${chartPaint}; return exports; })(),
+    };
+      const require = (name) => modules[name]; const exports = {}; ${painter}</script>
     <script>
     const result = document.querySelector("#result");
     try {
@@ -67,6 +72,9 @@ try {
       const theme = {
         profit: "#00ff00", risk: "#ff0000", profitText: "#00ff00", lossText: "#ff0000",
         textPrimary: "#ffffff", textMuted: "#888888", boxOpacity: 0.5,
+        chartBg: "#000000", zoneReward: "#00ff00", zoneRisk: "#ff0000", entryLine: "#ffffff", labelMuted: "#888888",
+        chipReward: "#00aa00", chipRisk: "#aa0000", chipNeutral: "#222222", chipGhost: "#101010",
+        fontMono: "monospace", fontSans: "sans-serif",
       };
       primitive.update(marks.box, theme);
       const screenshot = chart.takeScreenshot(true);
@@ -121,7 +129,7 @@ try {
         && path[0][0] === path[1][0]
         && Math.round(path[0][1]) === y(from) && Math.round(path[1][1]) === y(to));
       const trail = { steps: [step(7595, 7601), step(7601, 7606)],
-        hatch: lines.some(({ path, alpha }) => alpha === 0.25 && path.length === 2 && path[0][0] !== path[1][0]),
+        hatch: lines.some(({ path, alpha }) => alpha === 0.15 && path.length === 2 && path[0][0] !== path[1][0]),
         text: findings.includes("TRAIL") };
 
       findings.length = 0;
@@ -149,14 +157,18 @@ try {
   assert.ok(!result.error, result.error);
   const { pixels, opacitySamples, trail, ignored } = result;
   assert.ok(pixels, "Chrome must produce screenshot pixels");
-  assert.deepEqual(pixels.planRisk, [36, 0, 0]);
-  assert.deepEqual(pixels.planProfit, [0, 36, 0]);
-  assert.deepEqual(pixels.planBorder, pixels.planProfit);
+  // 08 §4.1: plan fill is flat 0.40 of Position Box Opacity; actual fades 0.55 → 0.85 from entry to exit.
+  assert.deepEqual(pixels.planRisk, [51, 0, 0]);
+  assert.deepEqual(pixels.planProfit, [0, 51, 0]);
+  // The plan's dashed target edge (0.55) sits on this pixel: the edge rule, not the fill.
+  assert.deepEqual(pixels.planBorder, [0, 163, 0]);
   assert.deepEqual(pixels.outside, [0, 0, 0]);
-  assert.deepEqual(pixels.actual, [0, 146, 0]);
-  assert.deepEqual(pixels.actualBorder, pixels.actual);
-  assert.ok(pixels.sameBar.every((pixel) => pixel[0] > 100 && pixel[1] === 0 && pixel[2] === 0));
-  assert.deepEqual(opacitySamples, [{ green: 11, sameRange: true }, { green: 46, sameRange: true }]);
+  // Midway between entry and exit the gradient is ~0.35; the plan fill beneath it is cut out, not stacked.
+  assert.deepEqual(pixels.actual, [0, 88, 0]);
+  // The solid 0.90 exit edge.
+  assert.deepEqual(pixels.actualBorder, [0, 240, 0]);
+  assert.ok(pixels.sameBar.every((pixel) => pixel[0] > 80 && pixel[1] === 0 && pixel[2] === 0));
+  assert.deepEqual(opacitySamples, [{ green: 15, sameRange: true }, { green: 66, sameRange: true }]);
   assert.deepEqual(trail, { steps: [true, true], hatch: true, text: true });
   assert.deepEqual(ignored, { cross: true, hatch: true, manualExit: true });
   console.log(JSON.stringify(result));

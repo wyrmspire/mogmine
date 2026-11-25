@@ -3,6 +3,8 @@ import type { CanvasRenderingTarget2D } from "fancy-canvas";
 import type {
   AutoscaleInfo, IPrimitivePaneView, ISeriesPrimitive, PrimitiveHoveredItem, SeriesAttachedParameter, Time, UTCTimestamp,
 } from "lightweight-charts";
+import { CHART_TOKENS, DASH, chipWidth, crisp, dashFor, drawChip, subtractRects, withAlpha, zoneAlpha, zoneGradient } from "../lib/chart-paint.ts";
+import type { PaintRect } from "../lib/chart-paint.ts";
 import { separateLabels } from "../lib/label-stack.ts";
 import type { ChartTheme } from "../lib/theme.ts";
 import type { FlagMark, Mark, SegmentMark } from "../lib/trade-marks.ts";
@@ -50,11 +52,13 @@ export function hitTestArchivedBoxes(
 
 export const hitTestArchivedMark = hitTestArchivedBoxes;
 
-const PLAN_FILL_RATIO = 0.28;
 const EDGE_INSET = 4;
-/** Line height for chart labels (10–11 px monospace); labels closer than this are stacked apart. */
-const LABEL_HEIGHT = 12;
-type Area = { x: number; y: number; width: number; height: number };
+/** Chip height plus a 2 px gap: labels closer than this are stacked apart (08 §4.3). */
+const LABEL_HEIGHT = CHART_TOKENS.chip.height + 2;
+const CHIP_HALF = CHART_TOKENS.chip.height / 2;
+type Area = PaintRect;
+type Tone = FlagMark["tone"];
+type Chip = { bg: string; fg: string };
 
 function markPrices(mark: Mark): number[] {
   switch (mark.kind) {
@@ -66,8 +70,10 @@ function markPrices(mark: Mark): number[] {
   }
 }
 
+/** Solid, planned dashes (6 4) or round-capped inferred dots (2 3). Dots are only for inferred values (08 §3.5). */
 function setDash(ctx: CanvasRenderingContext2D, dash: SegmentMark["dash"]) {
-  ctx.setLineDash(dash === "solid" ? [] : dash === "dashed" ? [4, 3] : [1, 3]);
+  ctx.setLineDash(dashFor(dash));
+  ctx.lineCap = dash === "dotted" ? "round" : "butt";
 }
 
 function strokeLine(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
@@ -77,10 +83,11 @@ function strokeLine(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: n
   ctx.stroke();
 }
 
-function drawFlag(ctx: CanvasRenderingContext2D, mark: FlagMark, x: number, y: number) {
+/** Draws the flag outline or fill. `stroke` forces an outline, used for the chartBg halo pass (08 §4.2). */
+function drawFlag(ctx: CanvasRenderingContext2D, mark: FlagMark, x: number, y: number, stroke: boolean) {
   ctx.beginPath();
   if (mark.shape === "dot") {
-    ctx.arc(x, y, mark.hollow ? 3 : 4, 0, 2 * Math.PI);
+    ctx.arc(x, y, mark.hollow ? 3 : 3.5, 0, 2 * Math.PI);
     ctx.stroke();
   } else if (mark.shape === "cross") {
     ctx.moveTo(x - 4, y - 4);
@@ -89,12 +96,13 @@ function drawFlag(ctx: CanvasRenderingContext2D, mark: FlagMark, x: number, y: n
     ctx.lineTo(x - 4, y + 4);
     ctx.stroke();
   } else {
+    // 8 × 7 px triangle (08 §4.2).
     const direction = mark.shape.endsWith("_up") ? -1 : 1;
-    ctx.moveTo(x, y + direction * 6);
-    ctx.lineTo(x + 4, y - direction * 3);
-    ctx.lineTo(x - 4, y - direction * 3);
+    ctx.moveTo(x, y + direction * 3.5);
+    ctx.lineTo(x + 4, y - direction * 3.5);
+    ctx.lineTo(x - 4, y - direction * 3.5);
     ctx.closePath();
-    if (mark.hollow || mark.basis === "inferred") ctx.stroke();
+    if (stroke || mark.hollow || mark.basis === "inferred") ctx.stroke();
     else ctx.fill();
   }
 }
@@ -195,23 +203,29 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
     const x = (t: number) => scale.timeToCoordinate(Math.floor(t / 1000) as UTCTimestamp);
     const y = (p: number) => attachment.series.priceToCoordinate(p);
     const halfBar = Math.max(3, scale.options().barSpacing / 2);
-    const color = (tone: FlagMark["tone"], text = false) =>
-      tone === "profit" ? (text ? theme.profitText : theme.profit)
-        : tone === "risk" ? (text ? theme.lossText : theme.risk)
-          : tone === "entry" ? theme.textPrimary : theme.textMuted;
+    const zoneColor = (tone: Tone) => tone === "profit" ? theme.zoneReward
+      : tone === "risk" ? theme.zoneRisk : tone === "entry" ? theme.entryLine : theme.labelMuted;
+    const chipFor = (tone: Tone | "ghost"): Chip => (tone === "ghost" ? { bg: theme.chipGhost, fg: CHART_TOKENS.chip.ghostText }
+      : tone === "profit" ? { bg: theme.chipReward, fg: CHART_TOKENS.chip.text }
+        : tone === "risk" ? { bg: theme.chipRisk, fg: CHART_TOKENS.chip.text }
+          : { bg: theme.chipNeutral, fg: CHART_TOKENS.chip.neutralText });
+    // Words use the sans face, numbers the mono face (08 §4.3). Both come from --font-* via lib/theme.ts.
+    const chipFont = (label: string) => (/\d/.test(label) ? `500 10.5px ${theme.fontMono}` : `600 10.5px ${theme.fontSans}`);
+    const dpr = target.useBitmapCoordinateSpace(({ verticalPixelRatio }) => verticalPixelRatio);
 
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize: pane }) => {
       const recordedArchived: ArchivedBoxRect[] = [];
+      const measureChip = (label: string) => { ctx.font = chipFont(label); return chipWidth(ctx.measureText(label).width); };
       // Labels are queued with the style they were asked for and drawn last, after overlapping ones
-      // are stacked apart (UX-a), so a flag's text never prints on top of a bracket's.
-      const queued: { label: string; x: number; y: number; width: number; fill: CanvasRenderingContext2D["fillStyle"]; font: string; alpha: number }[] = [];
-      const text = (label: string, atX: number, atY: number) => {
+      // are stacked apart (UX-a), so a flag's text never prints on top of a bracket's. Every label is a chip (08 §3.4).
+      const queued: { label: string; x: number; y: number; width: number; chip: Chip; font: string; alpha: number }[] = [];
+      const text = (label: string, atX: number, atY: number, chip: Chip) => {
         if (!label) return;
-        const width = ctx.measureText(label).width;
+        const width = measureChip(label);
         queued.push({
-          label, width, fill: ctx.fillStyle, font: ctx.font, alpha: ctx.globalAlpha,
+          label, width, chip, font: chipFont(label), alpha: ctx.globalAlpha,
           x: Math.max(2, Math.min(atX, pane.width - width - 2)),
-          y: Math.min(pane.height - 7, Math.max(7, atY)),
+          y: Math.min(pane.height - CHIP_HALF, Math.max(CHIP_HALF, atY)),
         });
       };
       const bounds = (xa: number, xb: number, ya: number, yb: number): Area | null => {
@@ -222,6 +236,16 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         return right > left && bottom > top && Math.max(ya, yb) >= 0
           ? { x: left, y: top, width: right - left, height: bottom - top } : null;
       };
+      // Actual zones are collected first, so plan fills can be cut around them (08 §4.4).
+      const actualRects: Area[] = [];
+      if (fills) {
+        for (const mark of this.marks) {
+          if (mark.kind !== "zone" || mark.layer !== "actual") continue;
+          const [xa, xb, ya, yb] = [x(mark.t0), x(mark.t1), y(mark.p0), y(mark.p1)];
+          const area = xa == null || xb == null || ya == null || yb == null ? null : bounds(xa, xb, ya, yb);
+          if (area) actualRects.push(area);
+        }
+      }
 
       const paint = (mark: Mark) => {
         if (mark.kind === "flag" || mark.kind === "label" || mark.kind === "bracket") {
@@ -233,34 +257,38 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
             const high = y(mark.pHigh);
             if (low == null || high == null) return;
             const bx = Math.min(pane.width - 5, atX + halfBar + 5);
-            ctx.strokeStyle = theme.textMuted;
-            ctx.fillStyle = theme.textPrimary;
-            ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, monospace";
-            setDash(ctx, "dotted");
-            strokeLine(ctx, bx, low, bx, high);
+            ctx.save();
+            ctx.globalAlpha *= CHART_TOKENS.line.bracketAlpha;
             setDash(ctx, "solid");
+            strokeLine(ctx, bx, low, bx, high);
             for (const cap of [low, atY, high]) strokeLine(ctx, bx - 3, cap, bx + 3, cap);
-            const width = Math.max(ctx.measureText(mark.labels.low).width, ctx.measureText(mark.labels.high).width);
+            ctx.restore();
+            const width = Math.max(measureChip(mark.labels.low), measureChip(mark.labels.high));
             const labelX = bx + width + 7 <= pane.width ? bx + 6 : bx - width - 6;
-            text(mark.labels.low, labelX, low + (low - high < 13 ? 7 : 0));
-            text(mark.labels.high, labelX, high - (low - high < 13 ? 7 : 0));
+            text(mark.labels.low, labelX, low + (low - high < 13 ? 7 : 0), chipFor("ghost"));
+            text(mark.labels.high, labelX, high - (low - high < 13 ? 7 : 0), chipFor("ghost"));
             return;
           }
           if (atY < 0 || atY > pane.height) return;
           if (mark.kind === "label") {
-            text(mark.text, atX + 5, atY - 8);
+            text(mark.text, atX + 5, atY - 8, chipFor(mark.tone));
             return;
           }
-          ctx.fillStyle = ctx.strokeStyle = color(mark.tone, !!mark.finding);
+          // Chartbg halo first, so the flag separates from the candle behind it (08 §4.2).
+          ctx.save();
+          ctx.strokeStyle = theme.chartBg;
+          ctx.lineWidth = 3;
+          drawFlag(ctx, mark, atX, atY, true);
+          ctx.restore();
+          ctx.fillStyle = ctx.strokeStyle = zoneColor(mark.tone);
           ctx.lineWidth = 1.25;
           if (mark.basis === "inferred") setDash(ctx, "dotted");
-          drawFlag(ctx, mark, atX, atY);
-          ctx.fillStyle = theme.textPrimary;
+          drawFlag(ctx, mark, atX, atY, false);
           const flagText = mark.shape === "cross" && mark.text === "✕" ? "" : mark.text;
           const approximate = mark.approximate || (mark.basis === "inferred" && !!mark.text);
           const label = approximate && !flagText.startsWith("≈") ? `≈ ${flagText}`.trimEnd() : flagText;
-          const width = ctx.measureText(label).width;
-          text(label, atX + width + 8 <= pane.width ? atX + 7 : atX - width - 7, atY < 14 ? atY + 10 : atY - 8);
+          const width = measureChip(label);
+          text(label, atX + width + 8 <= pane.width ? atX + 7 : atX - width - 7, atY < 14 ? atY + 10 : atY - 8, chipFor(mark.tone));
           return;
         }
 
@@ -273,10 +301,13 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         if (mark.kind === "segment") {
           if (edge && (x1 - x0 < 6 || y0 < 0 || y0 > pane.height)) return;
           if (mark.faint) ctx.globalAlpha *= edge === "both" ? 0.4 : 0.5;
-          ctx.lineWidth = mark.width ?? 1;
+          // Hairlines are 1 px at most (08 §4.2). Flat lines snap to the device pixel grid.
+          ctx.lineWidth = Math.min(mark.width ?? 1, 1.25);
           setDash(ctx, mark.basis === "inferred" ? "dotted" : mark.dash);
-          if (x0 === x1 && y0 === y1) strokeLine(ctx, x0 - halfBar, y0, x1 + halfBar, y1);
-          else strokeLine(ctx, x0, y0, x1, y1);
+          const flat = y0 === y1;
+          const ya = flat ? crisp(y0, dpr, ctx.lineWidth) : y0;
+          if (x0 === x1 && flat) strokeLine(ctx, x0 - halfBar, ya, x1 + halfBar, ya);
+          else strokeLine(ctx, x0, ya, x1, flat ? ya : y1);
           if (!fills && mark.layer === "archived") {
             const tradeId = this.resolveNeighbourTradeId(mark);
             if (tradeId) {
@@ -312,47 +343,75 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
           ctx.beginPath();
           ctx.rect(left, top, width, height);
           ctx.clip();
-          ctx.globalAlpha *= mark.faint ? 0.25 : 0.55;
+          ctx.globalAlpha *= mark.faint ? 0.15 : 0.3;
           setDash(ctx, mark.basis === "inferred" ? "dotted" : "solid");
-          for (let dx = -height; dx < width; dx += 6) {
+          for (let dx = -height; dx < width; dx += 5) {
             strokeLine(ctx, left + dx, top + height, left + dx + height, top);
           }
           ctx.restore();
-          if (mark.label) {
-            ctx.fillStyle = theme.lossText;
-            text(mark.label, left + 5, top + height / 2);
-          }
+          // A 1 px top and bottom edge stops the hatch reading as a loose pattern (08 §4.2).
+          ctx.save();
+          ctx.globalAlpha *= 0.6;
+          for (const edgeY of [top, top + height]) strokeLine(ctx, left, crisp(edgeY, dpr), left + width, crisp(edgeY, dpr));
+          ctx.restore();
+          if (mark.label) text(mark.label, left + 5, top + height / 2, chipFor(mark.tone));
         } else if (!fills) {
-          ctx.fillStyle = theme.textMuted;
-          if (mark.label && width >= ctx.measureText(mark.label).width + 8 && height >= 13) {
-            text(mark.label, left + width - ctx.measureText(mark.label).width - 4, top + height / 2);
+          // The far price (target, stop or exit) gets a 1 px edge rule: solid for actual, planned dashes for plan.
+          if (mark.layer === "plan" && mark.style === "dotted") {
+            ctx.save();
+            ctx.globalAlpha *= 0.5;
+            ctx.setLineDash([...DASH.cancelled]);
+            ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
+            ctx.restore();
+          } else if (mark.layer !== "archived") {
+            const actual = mark.layer === "actual";
+            ctx.save();
+            ctx.globalAlpha *= actual ? CHART_TOKENS.zone.edgeActual : CHART_TOKENS.zone.edgePlan;
+            setDash(ctx, actual ? "solid" : "dashed");
+            const edgeY = crisp(y1, dpr);
+            strokeLine(ctx, left, edgeY, left + width, edgeY);
+            ctx.restore();
+          }
+          // Zone chips sit just outside the zone's right edge, flipping inside only at the price axis (08 §4.3).
+          if (mark.label && height >= 13) {
+            const outside = left + width + 4;
+            const chipX = outside + measureChip(mark.label) <= pane.width ? outside : left + width - measureChip(mark.label) - 4;
+            text(mark.label, chipX, top + height / 2, chipFor(mark.tone));
           }
         } else {
-          ctx.globalAlpha *= theme.boxOpacity * (mark.opacityMultiplier ?? 1);
-          if (mark.layer === "plan") ctx.globalAlpha *= PLAN_FILL_RATIO;
-          if (mark.layer === "archived") ctx.globalAlpha = Math.min(ctx.globalAlpha, 0.1);
-          if (mark.layer === "plan" && mark.style === "dotted") {
-            setDash(ctx, "dotted");
-            for (let dy = 0.5; dy < height; dy += 3) strokeLine(ctx, left, top + dy, left + width, top + dy);
-          } else {
-            ctx.fillRect(left, top, width, height);
-          }
+          // Zone fills: one tier per area. Actual zones fade from entry to far price; plan fills are flat and
+          // are cut out wherever an actual zone sits, so no two translucent fills stack (08 §3.3).
+          const strength = theme.boxOpacity * (mark.opacityMultiplier ?? 1) * ctx.globalAlpha;
+          const color = zoneColor(mark.tone);
+          ctx.globalAlpha = 1;
           if (mark.layer === "archived") {
-            ctx.globalAlpha = 0.65;
-            ctx.strokeStyle = theme.textMuted;
-            setDash(ctx, "dotted");
-            ctx.strokeRect(left, top, width, height);
+            ctx.fillStyle = withAlpha(color, Math.min(strength, CHART_TOKENS.zone.archivedMaxAlpha));
+            ctx.fillRect(left, top, width, height);
+            ctx.save();
+            ctx.globalAlpha = 0.45;
+            ctx.strokeStyle = theme.labelMuted;
+            ctx.setLineDash([...DASH.archived]);
+            ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
+            ctx.restore();
+          } else if (mark.layer === "plan") {
+            const factor = mark.style === "dotted" ? CHART_TOKENS.zone.cancelledFactor : CHART_TOKENS.zone.planFactor;
+            ctx.fillStyle = withAlpha(color, zoneAlpha(factor, strength));
+            for (const piece of subtractRects({ x: left, y: top, width, height }, actualRects)) {
+              ctx.fillRect(piece.x, piece.y, piece.width, piece.height);
+            }
+          } else {
+            ctx.fillStyle = zoneGradient(ctx, y0, y1, color,
+              zoneAlpha(CHART_TOKENS.zone.nearFactor, strength), zoneAlpha(CHART_TOKENS.zone.farFactor, strength));
+            ctx.fillRect(left, top, width, height);
           }
         }
       };
 
       for (const mark of this.marks) {
         if (fills && mark.kind !== "zone") continue;
-        if (!fills && mark.kind === "zone" && !mark.label) continue;
         ctx.save();
         ctx.lineWidth = 1;
-        ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
-        if ("tone" in mark) ctx.fillStyle = ctx.strokeStyle = color(mark.tone);
+        if ("tone" in mark) ctx.fillStyle = ctx.strokeStyle = zoneColor(mark.tone);
         if (mark.approximate) ctx.globalAlpha = 0.72;
         paint(mark);
         ctx.restore();
@@ -366,12 +425,13 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
       const ys = separateLabels(queued, LABEL_HEIGHT, 0, pane.height);
       queued.forEach((item, index) => {
         ctx.save();
+        ctx.globalAlpha = item.alpha;
+        drawChip(ctx, item.x, ys[index] - CHIP_HALF, item.width, CHART_TOKENS.chip.height, CHART_TOKENS.chip.radius, item.chip.bg);
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.font = item.font;
-        ctx.fillStyle = item.fill;
-        ctx.globalAlpha = item.alpha;
-        ctx.fillText(item.label, item.x, ys[index]);
+        ctx.fillStyle = item.chip.fg;
+        ctx.fillText(item.label, item.x + CHART_TOKENS.chip.padX, ys[index]);
         ctx.restore();
       });
     });
