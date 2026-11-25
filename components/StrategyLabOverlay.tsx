@@ -12,6 +12,8 @@ export interface StrategyLabOverlayProps {
   summary: OverlaySummary | null;
   includeSamples: boolean;
   onIncludeSamplesChange: (next: boolean) => void;
+  /** True when the parent Results screen already shows the R basis line once on screen (§6.4). */
+  hideBasis?: boolean;
 }
 
 const ET_TIME = new Intl.DateTimeFormat("en-US", {
@@ -41,7 +43,7 @@ function GroupRow({ title, group }: { title: string; group: OverlayGroup }): Rea
   );
 }
 
-export function StrategyLabOverlay({ summary, includeSamples, onIncludeSamplesChange }: StrategyLabOverlayProps) {
+export function StrategyLabOverlay({ summary, includeSamples, onIncludeSamplesChange, hideBasis }: StrategyLabOverlayProps) {
   const toggle = (
     <label className="sl-overlay__toggle">
       <input
@@ -55,10 +57,10 @@ export function StrategyLabOverlay({ summary, includeSamples, onIncludeSamplesCh
 
   if (!summary) {
     return (
-      <section className="sl-overlay" aria-label="Your real trades">
-        <h3>Your real trades</h3>
+      <section className="sl-card sl-overlay" aria-label="Your real trades">
+        <h3 className="sl-card-title">Your real trades</h3>
         {toggle}
-        <p className="sl-overlay__state">Loading your trades and bars…</p>
+        <p className="sl-overlay__state sl-hint">Loading your trades and bars…</p>
       </section>
     );
   }
@@ -67,9 +69,9 @@ export function StrategyLabOverlay({ summary, includeSamples, onIncludeSamplesCh
   const older = summary.olderThanHistory;
 
   return (
-    <section className="sl-overlay" aria-label="Your real trades">
-      <h3>Your real trades</h3>
-      <p className="sl-overlay__basis">{summary.basis}</p>
+    <section className="sl-card sl-overlay" aria-label="Your real trades">
+      <h3 className="sl-card-title">Your real trades</h3>
+      {!hideBasis ? <p className="sl-overlay__basis sl-basis">{summary.basis}</p> : null}
       {toggle}
       {summary.samplesExcluded > 0 ? (
         <p className="sl-overlay__note">{summary.samplesExcluded} sample {summary.samplesExcluded === 1 ? "trade" : "trades"} excluded.</p>
@@ -109,7 +111,9 @@ export function StrategyLabOverlay({ summary, includeSamples, onIncludeSamplesCh
         {summary.rows.map((row) => (
           <li key={row.tradeId} className={row.fits ? "sl-overlay__row sl-overlay__row--fit" : "sl-overlay__row"}>
             <div className="sl-overlay__row-head">
-              <span className="tabular-nums">{ET_TIME.format(new Date(row.time))} ET</span>
+              <a href={`/trades/${encodeURIComponent(row.tradeId)}`} className="sl-overlay__link tabular-nums">
+                {ET_TIME.format(new Date(row.time))} ET →
+              </a>
               <span>{row.fits ? "Fits" : "Doesn't fit"}</span>
               <span className="tabular-nums">{signedR(row.realResultR)}</span>
             </div>

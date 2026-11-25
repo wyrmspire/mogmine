@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { TradeRecord } from "../trades.ts";
 import { buildBarSeries } from "../strategy-lab/series.ts";
 import { validateRecipe } from "../strategy-lab/recipe.ts";
+import { runRecipe } from "../strategy-lab/runner.ts";
 import { decisionIndexAt, overlayHeadline, overlayRecipe } from "../strategy-lab/overlay.ts";
 import type { Match, Outcome, Recipe, RunResult, SourceBar } from "../strategy-lab/types.ts";
 
@@ -215,4 +216,16 @@ test("headline and legend read in plain words", () => {
   assert.equal(summary.legend[1].label, "Side is long");
   assert.equal(summary.legend[2].path, "trigger.all[0]");
   assert.match(summary.legend[2].label, /≤ 20$/);
+});
+
+test("Shield omits dollars from basis and runRecipe populates overlays when trades are supplied", () => {
+  const shielded = overlayRecipe({
+    recipe: recipe(), series: seriesFor(), trades: fixtureTrades(), rSize: R300, accountName: "SIM Eval 50K", shield: true,
+  });
+  assert.equal(shielded.basis, "R · SIM Eval 50K");
+  assert.equal(shielded.basis.includes("$"), false);
+
+  const result = runRecipe(recipe(), seriesFor(), { rSizeUsd: 300, rSizeSource: "account", trades: fixtureTrades() });
+  assert.equal(result.overlays.length, 3);
+  assert.equal(result.overlays.filter((row) => row.fits).length, 1);
 });

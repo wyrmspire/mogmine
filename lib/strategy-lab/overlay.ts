@@ -9,7 +9,8 @@
 import { tradePnl, type TradeRecord } from "../trades.ts";
 import { featureKey } from "./attribution.ts";
 import { evaluateCondition } from "./conditions.ts";
-import { rBasisLabel, type LabRSize } from "./r.ts";
+import { rSizeBasis } from "./context-card.ts";
+import type { LabRSize } from "./r.ts";
 import { createLevelIndex, levelBookAt, withLevels } from "./levels.ts";
 import { formatEtMinute, inEtWindow, majorOfVersion, outputSpecOf } from "./recipe.ts";
 import { getSkill, SKILLS, type SkillRegistry } from "./registry.ts";
@@ -35,6 +36,8 @@ export interface OverlayOptions {
   run?: Pick<RunResult, "matches"> | null;
   /** Sample trades are excluded unless this is true (§8.6). Default false. */
   includeSamples?: boolean;
+  /** True hides dollar amounts in the R basis line while keeping R (UX-64). */
+  shield?: boolean;
   registry?: SkillRegistry;
 }
 
@@ -188,7 +191,7 @@ export function overlayRecipe(options: OverlayOptions): OverlaySummary {
 
   const leaves = leavesOf(recipe.trigger, "trigger");
   const summary: OverlaySummary = {
-    basis: rBasisLabel(options.rSize, options.accountName ?? null),
+    basis: rSizeBasis({ usd: rSizeUsd, source: options.rSize.source, accountName: options.accountName ?? null }, Boolean(options.shield)),
     tagged: 0,
     inRange: 0,
     samplesExcluded: 0,
