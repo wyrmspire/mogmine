@@ -160,3 +160,15 @@ test("spec: vocabulary is a read operation, and include=derived is documented on
   const sessionDate = (list.parameters ?? []).find((p) => p.name === "session_date") as unknown as { schema?: { format?: string } } | undefined;
   assert.equal(sessionDate?.schema?.format, "date");
 });
+
+test("spec: trade writes document the 422 refusals and the non-blocking warnings (#API-2b)", () => {
+  const ok = spec.components as unknown as { schemas: { Ok: { properties: { warnings: { type: string; items: { required: string[] } } } } } };
+  const warnings = ok.schemas.Ok.properties.warnings;
+  assert.equal(warnings.type, "array");
+  assert.deepEqual(warnings.items.required, ["code", "message"]);
+  const create = spec.paths["/records/{type}"].post as unknown as { description: string; responses: Record<string, unknown> };
+  assert.match(create.description, /quick_tags value is not in the vocabulary/);
+  assert.match(create.description, /more than 5 minutes in the future/);
+  assert.match(create.description, /warnings/);
+  assert.ok(Object.keys(create.responses).includes("422"));
+});

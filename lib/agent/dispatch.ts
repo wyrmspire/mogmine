@@ -10,10 +10,14 @@ import { buildVocabulary } from "./vocabulary.ts";
 import { accountSummary, pnlCents } from "../accounts.ts";
 import type { BalanceCheck, TradingAccount } from "../accounts.ts";
 import { resolveRSize, resultR, riskCents, riskR } from "../r-size.ts";
-import { holdSeconds, isOpen } from "../trades.ts";
+import { holdSeconds, isOpen, normalizeTrade } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 import { sessionDate } from "../session.ts";
 import type { Prefs } from "../prefs-sanitize.ts";
+import { EXECUTION_TAGS, PLAYBOOK_SEEDS, SETUP_TAGS } from "../playbooks.ts";
+import { isValidRSizeCents } from "../r-size.ts";
+import { checkTradeWrite } from "./write-checks.ts";
+import type { AgentWriteWarning, TradeWriteCheckResult, WriteCheckContext } from "./write-checks.ts";
 
 export type AgentRoute =
   | { kind: "me" }
@@ -25,6 +29,17 @@ export type AgentRoute =
   | { kind: "update"; type: CollectionKey; id: string; body: unknown }
   | { kind: "readSingleton"; key: SingletonKey }
   | { kind: "writeSingleton"; key: SingletonKey; body: unknown };
+
+/**
+ * Optional inputs to the trade write checks (#API-2b). Neither is set by the route handler today, so the defaults apply:
+ * no day range (the write path never fetches bars) and the real clock.
+ */
+export interface AgentDispatchOptions {
+  /** The cached bars' day range for a trade, when the caller has them. Null or absent: no `price_out_of_range` check. */
+  dayPriceRange?: (trade: TradeRecord) => { low: number; high: number } | null;
+  /** The clock for the future-time refusal. Defaults to Date.now(). */
+  nowMs?: number;
+}
 
 export interface AgentWho {
   userId: string;
@@ -86,6 +101,68 @@ function settle<T>(
   if (!result.ok) return failure(result.error, recordType, recordId);
   const { body } = agentOk(shape(result.value), status);
   return { status, body, recordType, recordId, outcome: "ok" };
+}
+
+/** The owner's playbooks, accounts and prefs, in the shape the write checks read. Playbooks fall back to the seeds, as the vocabulary does. */
+async function writeVocabulary(commands: JournalCommands): Promise<PersistResult<Omit<WriteCheckContext, "isCreate" | "writtenFields" | "dayPriceRange" | "nowMs">>> {
+  const playbooks = await commands.list("playbooks", { includeArchived: true, includeSamples: false });
+  if (!playbooks.ok) return playbooks;
+  const accounts = await commands.list("accounts", { includeArchived: true, includeSamples: false });
+  if (!accounts.ok) return accounts;
+  const stored = await commands.readSingleton("prefs");
+  if (!stored.ok) return stored;
+  const prefs = stored.value?.record ?? null;
+  const seeds = playbooks.value.length > 0 ? playbooks.value : PLAYBOOK_SEEDS;
+  return {
+    ok: true,
+    value: {
+      playbooks: seeds.map((playbook) => ({ id: playbook.id, name: playbook.name, archived: playbook.archived === true })),
+      accounts: accounts.value.map((account) => ({
+        id: account.id,
+        name: account.name,
+        r_size_cents: isValidRSizeCents(account.r_size_cents) ? account.r_size_cents as number : null,
+        archived: account.archived === true,
+      })),
+      setupTags: [...SETUP_TAGS],
+      executionTags: [...EXECUTION_TAGS],
+      defaultRSizeCents: resolveRSize({ account_id: null }, [], prefs).cents,
+    },
+  };
+}
+
+/**
+ * The write checks for one trade body (#API-2b). `current` is the stored trade on an update, null on a create. The
+ * candidate is the record as it would be stored. When it cannot be built, the checks are skipped and the command layer
+ * refuses the write on its own rules.
+ */
+async function checkTradeBody(
+  body: Record<string, unknown>,
+  current: TradeRecord | null,
+  commands: JournalCommands,
+  options: AgentDispatchOptions,
+): Promise<PersistResult<TradeWriteCheckResult | null>> {
+  let candidate: TradeRecord;
+  try {
+    candidate = normalizeTrade({ ...(current ?? {}), ...body } as Parameters<typeof normalizeTrade>[0]);
+  } catch {
+    return { ok: true, value: null };
+  }
+  const vocabulary = await writeVocabulary(commands);
+  if (!vocabulary.ok) return vocabulary;
+  const result = checkTradeWrite(candidate, body, {
+    ...vocabulary.value,
+    dayPriceRange: options.dayPriceRange?.(candidate) ?? null,
+    nowMs: options.nowMs,
+    isCreate: current === null,
+    writtenFields: new Set(Object.keys(body)),
+  });
+  return { ok: true, value: result };
+}
+
+/** A saved trade, with the write-time warnings beside it. Warnings are always present, possibly empty. */
+function settleTrade<T>(result: PersistResult<T>, recordId: string | undefined, warnings: AgentWriteWarning[], status: number): AgentDispatch {
+  if (!result.ok) return failure(result.error, "trades", recordId);
+  return { status, body: { ok: true, data: result.value, warnings }, recordType: "trades", recordId, outcome: "ok" };
 }
 
 function invalidBody(recordType: string, recordId: string | undefined, message: string): AgentDispatch {
@@ -150,7 +227,12 @@ function deriveOne(type: "trades" | "accounts", record: unknown, context: Derive
   return type === "trades" ? tradeDerived(record as TradeRecord, context) : accountDerived(record as TradingAccount, context);
 }
 
-export async function dispatchAgentRoute(route: AgentRoute, commands: JournalCommands, who: AgentWho): Promise<AgentDispatch> {
+export async function dispatchAgentRoute(
+  route: AgentRoute,
+  commands: JournalCommands,
+  who: AgentWho,
+  options: AgentDispatchOptions = {},
+): Promise<AgentDispatch> {
   switch (route.kind) {
     case "me": {
       const { body } = agentOk({ user_id: who.userId, token: { id: who.tokenId, scopes: who.scopes } });
@@ -177,7 +259,13 @@ export async function dispatchAgentRoute(route: AgentRoute, commands: JournalCom
 
     case "create": {
       const id = isPlainObject(route.body) && typeof route.body.id === "string" ? route.body.id : undefined;
-      return settle(await commands.create(route.type, route.body), route.type, id, (stored) => stored, 201);
+      if (route.type !== "trades" || !isPlainObject(route.body)) {
+        return settle(await commands.create(route.type, route.body), route.type, id, (stored) => stored, 201);
+      }
+      const checked = await checkTradeBody(route.body, null, commands, options);
+      if (!checked.ok) return failure(checked.error, "trades", id);
+      if (checked.value && !checked.value.ok) return invalidBody("trades", id, checked.value.message);
+      return settleTrade(await commands.create("trades", route.body), id, checked.value?.warnings ?? [], 201);
     }
 
     case "read": {
@@ -191,9 +279,16 @@ export async function dispatchAgentRoute(route: AgentRoute, commands: JournalCom
       return settle({ ok: true, value: { ...stored.value, derived } }, route.type, route.id, (value) => value);
     }
 
-    case "update":
+    case "update": {
       if (!isPlainObject(route.body)) return invalidBody(route.type, route.id, "Body must be a JSON object of fields to change.");
-      return settle(await commands.update(route.type, route.id, route.body), route.type, route.id, (stored) => stored);
+      if (route.type !== "trades") return settle(await commands.update(route.type, route.id, route.body), route.type, route.id, (stored) => stored);
+      const current = await commands.read("trades", route.id);
+      if (!current.ok) return failure(current.error, "trades", route.id);
+      const checked = await checkTradeBody(route.body, current.value.record, commands, options);
+      if (!checked.ok) return failure(checked.error, "trades", route.id);
+      if (checked.value && !checked.value.ok) return invalidBody("trades", route.id, checked.value.message);
+      return settleTrade(await commands.update("trades", route.id, route.body), route.id, checked.value?.warnings ?? [], 200);
+    }
 
     case "remove": {
       const result = await commands.remove(route.type, route.id);
