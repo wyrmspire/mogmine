@@ -1,11 +1,13 @@
 // Local device store for daily reviews (docs/06 §2.1, Q-3). Mirrors lib/plans-store.ts:
 // localStorage key `mogmine-daily-reviews-v1`, in-memory cache, React useSyncExternalStore hook, backup support.
-// Remote sync (`createCollectionSync`, "daily_reviews") is NOT wired here; DR-1b adds it.
+// Remote sync: `createCollectionSync` ("daily_reviews") copies the list to Supabase in the background (DR-1b, #192 pattern).
 // Invariant 7: every review carries `user_id` (DEFAULT_OWNER_USER_ID).
 
 import { useSyncExternalStore } from "react";
 import type { DailyReview, DailyReviewStatus, ReviewPoint } from "./daily-review.ts";
 import { sanitizeDailyReview, sanitizeDailyReviews, sanitizeDailyReviewsBackup } from "./daily-review-sanitize.ts";
+import { createCollectionSync } from "./persistence/store-sync.ts";
+import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 
 export { sanitizeDailyReview, sanitizeDailyReviews, sanitizeDailyReviewsBackup, sanitizeReviewPoint } from "./daily-review-sanitize.ts";
 
@@ -46,6 +48,25 @@ function persist() {
   }
 }
 
+// Remote sync: the device cache is written first; the list is copied to Supabase in the background when
+// NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase. Reviews are hard-deleted (deletePolicy "hard"). Without the migration
+// applied, the server answers unavailable and the device keeps working.
+function applyRemote(next: DailyReview[]) {
+  set({ reviews: sanitizeDailyReviews(next) });
+  persist();
+}
+
+function createDailyReviewsSync(overrides: Partial<CollectionSyncOptions<DailyReview>> = {}): CollectionSync {
+  return createCollectionSync<DailyReview>({
+    key: "daily_reviews",
+    getLocal: () => state.reviews,
+    apply: applyRemote,
+    ...overrides,
+  });
+}
+
+let dailyReviewsSync: CollectionSync = createDailyReviewsSync();
+
 export function hydrateDailyReviews() {
   if (state.hydrated || typeof window === "undefined") return;
   let reviews: DailyReview[] = [];
@@ -57,6 +78,7 @@ export function hydrateDailyReviews() {
     saved = false;
   }
   set({ reviews, hydrated: true, saved });
+  dailyReviewsSync.start();
 }
 
 export function getDailyReviewsState(): DailyReviewsState {
@@ -89,6 +111,7 @@ export function upsertDailyReview(review: DailyReview): DailyReview | null {
   if (!existing) {
     set({ reviews: [...state.reviews, incoming] });
     persist();
+    dailyReviewsSync.changed();
     return incoming;
   }
 
@@ -102,6 +125,7 @@ export function upsertDailyReview(review: DailyReview): DailyReview | null {
   };
   set({ reviews: state.reviews.map((item) => (item === existing ? merged : item)) });
   persist();
+  dailyReviewsSync.changed();
   return merged;
 }
 
@@ -123,6 +147,7 @@ export function updateDailyReview(id: string, patch: DailyReviewPatch): DailyRev
   const updated: DailyReview = { ...next, id: current.id, recorded_at: current.recorded_at, session_date: current.session_date, account_id: current.account_id, user_id: current.user_id };
   set({ reviews: state.reviews.map((item) => (item.id === id ? updated : item)) });
   persist();
+  dailyReviewsSync.changed();
   return updated;
 }
 
@@ -130,6 +155,7 @@ export function removeDailyReview(id: string) {
   hydrateDailyReviews();
   set({ reviews: state.reviews.filter((item) => item.id !== id) });
   persist();
+  dailyReviewsSync.changed();
 }
 
 /**
@@ -145,11 +171,21 @@ export function restoreDailyReviews(reviews: readonly DailyReview[] | null | und
   const kept = state.reviews.filter((review) => !incomingScopes.has(`${review.session_date}|${review.account_id ?? "*"}`) && !incomingIds.has(review.id));
   set({ reviews: [...kept, ...incoming] });
   persist();
+  dailyReviewsSync.changed();
 }
 
-/** Test hook: back to unhydrated and empty. */
+/** Test hook: back to unhydrated and empty, and the default (disabled) syncer. */
 export function resetDailyReviewsForTests() {
   state = empty();
+  dailyReviewsSync.dispose();
+  dailyReviewsSync = createDailyReviewsSync();
+}
+
+/** Test hook: swap the review syncer's adapter, storage or timers. Returns the syncer under test. */
+export function configureDailyReviewsSyncForTests(overrides: Partial<CollectionSyncOptions<DailyReview>>): CollectionSync {
+  dailyReviewsSync.dispose();
+  dailyReviewsSync = createDailyReviewsSync(overrides);
+  return dailyReviewsSync;
 }
 
 export function useDailyReviewsStore(): DailyReviewsState {

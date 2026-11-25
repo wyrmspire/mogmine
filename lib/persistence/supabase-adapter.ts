@@ -60,6 +60,7 @@ const COLLECTION_COLUMNS: Record<CollectionKey, { parent?: string; sample?: bool
   challenges: {},
   playbooks: { archived: true },
   plans: {},
+  daily_reviews: {},
   drills: { parent: "trade_id" },
   calls: {},
   prompt_dismissals: { parent: "trade_id" },
@@ -91,6 +92,8 @@ export function mapDbError(error: DbError, recordType?: RecordTypeKey, id?: stri
   if (code === "42501") return fail("forbidden", "You do not have access to this record.", recordType, id, cause);
   if (code === "PGRST301" || code === "PGRST302" || /jwt/i.test(error.message)) return fail("unauthenticated", "Sign in to sync your journal.", recordType, id, cause);
   if (code === "23505") return fail("conflict", "This record already exists.", recordType, id, cause);
+  // Migration not applied yet (42P01 / PGRST205): the device keeps working, the server is simply unavailable.
+  if (code === "42P01" || code === "PGRST205") return fail("unavailable", "Could not reach the journal server. Try again.", recordType, id, cause);
   if (["23502", "23514", "22023", "22P02"].includes(code)) return fail("invalid", "This record did not pass validation.", recordType, id, cause);
   if (!code || /fetch|network|timeout/i.test(error.message)) return fail("unavailable", "Could not reach the journal server. Try again.", recordType, id, cause);
   return fail("unknown", "Something went wrong saving to the journal server.", recordType, id, cause);
@@ -302,6 +305,7 @@ export function createSupabaseAdapter(options: SupabaseAdapterOptions): Persiste
     challenges: collection("challenges"),
     playbooks: collection("playbooks"),
     plans: collection("plans"),
+    daily_reviews: collection("daily_reviews"),
     drills: collection("drills"),
     calls: collection("calls"),
     prompt_dismissals: collection("prompt_dismissals"),
