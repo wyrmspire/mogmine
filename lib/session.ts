@@ -79,6 +79,22 @@ export function expectedInsideBarTimes(entry: number, exit: number, barMs: numbe
   return times;
 }
 
+/**
+ * Open times of bars strictly after the entry bar and fully before/at the exit.
+ * Unlike `expectedInsideBarTimes` (kept unchanged for market-data coverage), the bar containing `entry`
+ * (`floor(entry / barMs) * barMs`) is NEVER included, even when `entry` has `:00` seconds (R-POST-1, R-POST-5).
+ */
+export function insideBarTimes(entry: number, exit: number, barMs: number, symbol?: string): number[] {
+  if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMs <= 0) return [];
+  const times: number[] = [];
+  let time = Math.floor(entry / barMs) * barMs + barMs;
+  while (time + barMs <= exit) {
+    if (isRegularTradingBarInterval(symbol, time, barMs)) times.push(time);
+    time += barMs;
+  }
+  return times;
+}
+
 function zonedTimeUtc(date: string, hour: number, minute = 0): number {
   const [year, month, day] = date.split("-").map(Number);
   const utcGuess = Date.UTC(year, month - 1, day, hour, minute);

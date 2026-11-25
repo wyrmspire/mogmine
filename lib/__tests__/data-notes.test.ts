@@ -113,3 +113,20 @@ test("hindsight is never a data note, even with a later touch on the trade", () 
   const notes = collectDataNotes({ ...clean, findings: [stop] });
   assert.ok(notes.every((note) => !/after the exit|hindsight|held to plan/i.test(note.text)));
 });
+
+test("D-H: an entry bar that passed the stop adds one quiet note, never an amber chip or a chart finding", () => {
+  // SM-1 R-POST-4: the note explains why the bar looks alarming. It is not a stop touch.
+  const notes = collectDataNotes({ ...clean, entryBarPassedStop: true });
+  const passed = notes.filter((note) => note.id === "entry_bar_passed_stop");
+  assert.deepEqual(passed, [{
+    id: "entry_bar_passed_stop",
+    text: "The entry bar traded past the stop before your fill. That is not counted as a stop touch.",
+    tone: "quiet",
+  }]);
+  assert.equal(hasUntrustedDataNote(notes), false);
+});
+
+test("D-H: no note when the entry bar did not pass the stop, or the flag is absent", () => {
+  assert.equal(collectDataNotes({ ...clean, entryBarPassedStop: false }).some((note) => note.id === "entry_bar_passed_stop"), false);
+  assert.equal(collectDataNotes(clean).some((note) => note.id === "entry_bar_passed_stop"), false);
+});

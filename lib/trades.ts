@@ -1,7 +1,7 @@
 // Core trade types and money math. Pure: no I/O, no DOM.
 // Names follow docs/06 (interim canonical under OD-1).
 
-import { expectedInsideBarTimes } from "./session.ts";
+import { insideBarTimes } from "./session.ts";
 import { isValidRSizeCents, isValidStatedRiskR, riskCents } from "./r-size.ts";
 export { expectedInsideBarTimes } from "./session.ts";
 
@@ -815,11 +815,12 @@ export function excursions(
   const exit = Date.parse(trade.exit_time);
   if (!Number.isFinite(entry) || !Number.isFinite(exit) || exit <= entry || barMinutes <= 0) return null;
   const barMs = barMinutes * 60_000;
-  const expected = expectedInsideBarTimes(entry, exit, barMs, trade.symbol);
+  const expected = insideBarTimes(entry, exit, barMs, trade.symbol);
+  const entryBarTime = Math.floor(entry / barMs) * barMs;
 
   const byTime = new Map<number, Candle>();
   for (const bar of candles) {
-    if (bar.time >= entry && bar.time + barMs <= exit && !byTime.has(bar.time)) byTime.set(bar.time, bar);
+    if (bar.time > entryBarTime && bar.time + barMs <= exit && !byTime.has(bar.time)) byTime.set(bar.time, bar);
   }
   const complete = expected.flatMap((time) => {
     const bar = byTime.get(time);
