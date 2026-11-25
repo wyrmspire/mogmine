@@ -92,6 +92,7 @@ const newId = () =>
 export function startChallenge(
   rules: ChallengeRules,
   started_at = new Date().toISOString(),
+  account_id: string | null = null,
 ): { ok: true; challenge: ChallengeDefinition } | { ok: false; error: string } {
   hydrateChallenges();
   const frozenRules = sanitizeChallengeRules(rules);
@@ -107,6 +108,7 @@ export function startChallenge(
   const challenge: ChallengeDefinition = {
     id: newId(),
     user_id: DEFAULT_OWNER_USER_ID,
+    account_id: account_id && account_id.trim() ? account_id : null,
     rules: frozenRules,
     started_at,
     ended_at: null,

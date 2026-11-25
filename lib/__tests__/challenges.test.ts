@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   CHALLENGE_CALC_VERSION,
   evaluateChallenge,
+  formatChallengeRoomLabel,
 } from "../challenges.ts";
 import type { ChallengeDefinition } from "../challenges.ts";
 import type { TradeRecord } from "../trades.ts";
@@ -52,7 +53,7 @@ test("an undated trade keeps both challenge paths provisional (OD-47)", () => {
   ];
   for (const rule of rules) {
     const def: ChallengeDefinition = {
-      id: "undated-case", user_id: "test-user", rules: rule,
+      id: "undated-case", user_id: "test-user", account_id: null, rules: rule,
       started_at: "2026-11-17T14:00:00Z", ended_at: null, calc_version: CHALLENGE_CALC_VERSION,
     };
     const known = makeTrade({ id: "dated", exit_price: 5990 });
@@ -71,6 +72,7 @@ test("Drawdown Defender golden cases (docs/17 §3)", () => {
   const def: ChallengeDefinition = {
     id: "dd-test",
     user_id: "test-user",
+    account_id: null,
     rules: {
       kind: "drawdown",
       sessions: 20,
@@ -165,6 +167,7 @@ test("Clean Run golden cases (docs/17 §4)", () => {
   const def: ChallengeDefinition = {
     id: "cr-test",
     user_id: "test-user",
+    account_id: null,
     rules: {
       kind: "clean_run",
       target_trades: 5,
@@ -359,6 +362,7 @@ test("R-09a acceptance criteria edge cases (docs/17 §7)", () => {
   const def: ChallengeDefinition = {
     id: "dd-edge",
     user_id: "test-user",
+    account_id: null,
     rules: {
       kind: "drawdown",
       sessions: 2,
@@ -445,6 +449,7 @@ test("R-09a acceptance criteria edge cases (docs/17 §7)", () => {
   const crDef: ChallengeDefinition = {
     id: "cr-pnl-flip",
     user_id: "test-user",
+    account_id: null,
     rules: {
       kind: "clean_run",
       target_trades: 3,
@@ -474,6 +479,7 @@ test("Drawdown Defender passed conditions (active sessions and sessionCloseUtc)"
   const def: ChallengeDefinition = {
     id: "dd-pass",
     user_id: "test-user",
+    account_id: null,
     rules: {
       kind: "drawdown",
       sessions: 2,
@@ -523,6 +529,7 @@ test("Drawdown Defender keeps a breach provisional while any closed trade needs 
   const def: ChallengeDefinition = {
     id: "estimate",
     user_id: "test-user",
+    account_id: null,
     rules: { kind: "drawdown", sessions: 1, max_drawdown_cents: 30000 },
     started_at: "2026-11-17T14:00:00Z",
     ended_at: null,
@@ -548,6 +555,7 @@ test("Clean Run credits the qualifying trade in the current run after a reset", 
   const def: ChallengeDefinition = {
     id: "reset",
     user_id: "test-user",
+    account_id: null,
     rules: { kind: "clean_run", target_trades: 3, playbook_ids: ["pb-trend"] },
     started_at: "2026-11-17T14:00:00Z",
     ended_at: null,
@@ -569,6 +577,7 @@ test("Drawdown Defender waits for the Monday close after the DST change", () => 
   const def: ChallengeDefinition = {
     id: "dst",
     user_id: "test-user",
+    account_id: null,
     rules: { kind: "drawdown", sessions: 2, max_drawdown_cents: 30000 },
     started_at: "2026-10-30T13:00:00Z",
     ended_at: null,
@@ -581,4 +590,73 @@ test("Drawdown Defender waits for the Monday close after the DST change", () => 
   assert.deepEqual(atClose.points.map((point) => point.session), ["2026-10-30", "2026-11-02"]);
   assert.equal(atClose.state, "active");
   assert.equal(evaluateChallenge(def, [sunday, friday], close + 1).state, "passed");
+});
+
+test("UX-08: account-scoped Drawdown Defender ignores other accounts and unassigned trades", () => {
+  const now = Date.parse("2026-11-17T22:00:01Z");
+  const base = {
+    user_id: "test-user",
+    rules: { kind: "drawdown" as const, sessions: 1, max_drawdown_cents: 10000 },
+    started_at: "2026-11-17T14:00:00Z",
+    ended_at: null,
+    calc_version: CHALLENGE_CALC_VERSION,
+  };
+  const trades = [
+    makeTrade({ id: "eval-win", account_id: "sim-acct-eval-50k", exit_time: "2026-11-17T14:40:00Z", exit_price: 6010 }),
+    makeTrade({ id: "sim2-loss", account_id: "sim-acct-sim-2", exit_time: "2026-11-17T14:41:00Z", exit_price: 5960 }),
+    makeTrade({ id: "qa-loss", account_id: null, exit_time: "2026-11-17T14:42:00Z", exit_price: 5960 }),
+  ];
+
+  const scoped = evaluateChallenge({ ...base, id: "scoped", account_id: "sim-acct-eval-50k" }, trades, now);
+  assert.equal(scoped.state, "passed");
+  assert.equal(scoped.drawdown_cents, 0);
+  assert.equal(scoped.max_drawdown_cents, 0);
+  assert.deepEqual(scoped.points.map((point) => point.trade_id), ["eval-win"]);
+
+  // The same trades, all accounts: the losses count and the limit is breached (unchanged behaviour for null).
+  const all = evaluateChallenge({ ...base, id: "all", account_id: null }, trades, now);
+  assert.equal(all.state, "failed");
+  assert.equal(all.decided_by, "sim2-loss");
+});
+
+test("UX-08: account-scoped Clean Run ignores other accounts and ungraded unassigned trades", () => {
+  const base = {
+    user_id: "test-user",
+    rules: { kind: "clean_run" as const, target_trades: 3, playbook_ids: ["pb-trend"] },
+    started_at: "2026-11-17T14:00:00Z",
+    ended_at: null,
+    calc_version: CHALLENGE_CALC_VERSION,
+  };
+  const trades = [
+    makeTrade({ id: "e1", account_id: "sim-acct-eval-50k", exit_time: "2026-11-17T14:40:00Z" }),
+    makeTrade({ id: "sim2-broken", account_id: "sim-acct-sim-2", exit_time: "2026-11-17T14:41:00Z", playbook_id: "no-setup" }),
+    makeTrade({ id: "e2", account_id: "sim-acct-eval-50k", exit_time: "2026-11-17T14:42:00Z" }),
+    makeTrade({ id: "qa-ungraded", account_id: null, exit_time: "2026-11-17T14:43:00Z", playbook_id: null }),
+    makeTrade({ id: "e3", account_id: "sim-acct-eval-50k", exit_time: "2026-11-17T14:44:00Z" }),
+  ];
+  const now = Date.parse("2026-11-17T22:00:01Z");
+
+  const scoped = evaluateChallenge({ ...base, id: "scoped", account_id: "sim-acct-eval-50k" }, trades, now);
+  assert.equal(scoped.state, "passed");
+  assert.equal(scoped.run, 3);
+  assert.equal(scoped.decided_by, "e3");
+  assert.equal(scoped.provisional, false);
+
+  // All accounts: the broken trade resets the run and the ungraded trade blocks the pass.
+  const all = evaluateChallenge({ ...base, id: "all", account_id: null }, trades, now);
+  assert.equal(all.state, "active");
+  assert.equal(all.provisional, true);
+});
+
+test("UX-08: formatChallengeRoomLabel states the room's basis, and Shield shows a share with no dollar sign", () => {
+  assert.equal(
+    formatChallengeRoomLabel(5000, 200000, false),
+    "Room before the challenge limit: $50 (from your high point)",
+  );
+  const shield = formatChallengeRoomLabel(5000, 200000, true);
+  assert.equal(shield, "Room: 3% of the limit");
+  assert.equal(shield.includes("$"), false);
+  assert.equal(formatChallengeRoomLabel(-100, 200000, true), "Room: 0% of the limit");
+  assert.equal(formatChallengeRoomLabel(-100, 200000, false), "Room before the challenge limit: $0 (from your high point)");
+  assert.equal(formatChallengeRoomLabel(5000, 0, true), "Room: 0% of the limit");
 });

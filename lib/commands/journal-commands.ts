@@ -20,6 +20,7 @@ import { sanitizePlannedLevel, sanitizePlanningSession, sanitizePlanRevision } f
 import { sanitizeDrillRecord } from "../drills-sanitize.ts";
 import { sanitizeCall, sanitizeDismissal } from "../calls-sanitize.ts";
 import { sanitizeChallenge } from "../challenge-sanitize.ts";
+import type { ChallengeDefinition } from "../challenges.ts";
 import { sanitizePrefs } from "../prefs-sanitize.ts";
 import { sessionDate } from "../session.ts";
 import { DAILY_REVIEW_LIMITS } from "../daily-review.ts";
@@ -176,6 +177,15 @@ const dailyReviewParser: Parser<DailyReview> = (raw) => {
   return one(sanitizeDailyReview, "This daily review is not valid.")(raw);
 };
 
+/** A challenge: `account_id` is optional (undefined or null = all accounts), and when given it must be a non-empty string (UX-08). */
+export const parseChallengeRecord: Parser<ChallengeDefinition> = (raw) => {
+  if (isObject(raw) && raw.account_id !== undefined && raw.account_id !== null
+    && (typeof raw.account_id !== "string" || raw.account_id.trim() === "")) {
+    return bad("A challenge's account must be a trading account id, or left out for all accounts.");
+  }
+  return one(sanitizeChallenge, "This challenge definition is not valid.")(raw);
+};
+
 /** Validation for every collection type. Each entry is the existing sanitizer for that record. */
 const COLLECTION_PARSERS: { [K in CollectionKey]: Parser<CollectionRecordTypes[K]> } = {
   trades: parseTrade,
@@ -183,7 +193,7 @@ const COLLECTION_PARSERS: { [K in CollectionKey]: Parser<CollectionRecordTypes[K
   mood_candidates: oneOfList(sanitizeCandidates, "This spoke candidate needs a label and trade ids."),
   accounts: accountParser,
   balance_checks: balanceCheckParser,
-  challenges: one(sanitizeChallenge, "This challenge definition is not valid."),
+  challenges: parseChallengeRecord,
   playbooks: one(sanitizePlaybook, "A playbook needs an id, a name and a list of rules."),
   plans: planParser,
   drills: one(sanitizeDrillRecord, "A drill record needs a trade, a kind, an answer and a time."),
