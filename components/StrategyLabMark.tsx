@@ -3,7 +3,7 @@
 // Mark a point, then build its Context Card (docs/design-2026-11-24/09 §1, §10.1 step 1–2, §12.1).
 // Loads the recent 1m sessions through lib/strategy-lab/bars.ts, builds the card with the pure model, and
 // hands the result to StrategyLabContextCard. The R size comes from labRSize, never from a stop width.
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { StrategyLabContextCard, type ExcludedSession } from "@/components/StrategyLabContextCard";
 import { useAccounts } from "@/lib/accounts-store";
 import { sessionDate } from "@/lib/session";
@@ -51,33 +51,41 @@ type RunState =
   | { status: "error"; mark: CardMark; message: string }
   | { status: "done"; mark: CardMark; card: ContextCard; excluded: ExcludedSession[] };
 
+const noSub = () => () => {};
+let clientDefaultClock = "";
+function getDefaultClock(): string {
+  if (!clientDefaultClock) {
+    const now = new Date();
+    clientDefaultClock = `${etDay.format(now)}|${etClock.format(now)}`;
+  }
+  return clientDefaultClock;
+}
+
+function subscribeOnline(listener: () => void) {
+  window.addEventListener("online", listener);
+  window.addEventListener("offline", listener);
+  return () => {
+    window.removeEventListener("online", listener);
+    window.removeEventListener("offline", listener);
+  };
+}
+
 export function StrategyLabMark() {
   const accountStore = useAccounts();
   const prefs = usePrefs();
   const accounts = accountStore.accounts.filter((account) => !account.archived);
 
-  // Set after mount, so the server and the first client render match.
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
+  // Empty on server render so SSR and hydration match; defaults populate from the client snapshot.
+  const [defaultDate, defaultTime] = useSyncExternalStore(noSub, getDefaultClock, () => "|").split("|");
+  const offline = useSyncExternalStore(subscribeOnline, () => !navigator.onLine, () => false);
+  const [userDate, setDate] = useState<string | null>(null);
+  const [userTime, setTime] = useState<string | null>(null);
+  const date = userDate ?? defaultDate;
+  const time = userTime ?? defaultTime;
   const [priceText, setPriceText] = useState("");
   const [side, setSide] = useState<CardSide>("long");
   const [accountId, setAccountId] = useState("");
-  const [offline, setOffline] = useState(false);
   const [run, setRun] = useState<RunState>({ status: "idle" });
-
-  useEffect(() => {
-    const now = Date.now();
-    setDate(etDay.format(new Date(now)));
-    setTime(etClock.format(new Date(now)));
-    const sync = () => setOffline(!navigator.onLine);
-    sync();
-    window.addEventListener("online", sync);
-    window.addEventListener("offline", sync);
-    return () => {
-      window.removeEventListener("online", sync);
-      window.removeEventListener("offline", sync);
-    };
-  }, []);
 
   const minuteOfDay = parseTime(time);
   const price = Number(priceText);

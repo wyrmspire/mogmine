@@ -7,7 +7,7 @@ import { clockText } from "./et-clock.ts";
 import { LEVEL_KEYS, LEVEL_LABELS } from "./levels.ts";
 import { getSkill, SKILLS } from "./registry.ts";
 import type {
-  BarSeries, LabLevel, LevelBook, LevelKey, SkillContext, SkillMeta, SkillResult, SkipReason, Value,
+  LabLevel, LevelBook, LevelKey, SkillContext, SkillMeta, SkillResult, SkipReason, Value,
 } from "./types.ts";
 
 export type CardSide = "long" | "short";
