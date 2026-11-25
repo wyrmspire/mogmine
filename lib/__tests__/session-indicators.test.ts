@@ -44,7 +44,9 @@ test("RTH VWAP weights HLC3 from the anchor through the last completed bar", () 
   assert.deepEqual(result.vwap, [
     { time: rth + 2 * minute, value: 101 }, { time: rth + 3 * minute, value: 102 }, { time: rth + 4 * minute, value: 102 },
   ]);
-  assert.deepEqual(result.coverage.anchored, { from: rth, to: asOf, expectedBars: 4, presentBars: 4, complete: true });
+  assert.deepEqual(result.coverage.anchored, {
+    from: rth, to: asOf, expectedBars: 4, presentBars: 4, complete: true, missingBars: 0, longestGapMin: 0, rthMissingBars: 0, approximate: false,
+  });
   assert.deepEqual(prices(result), { poc: 101, val: 101, vah: 104 }); // 2 / 3 alone falls short of 70%.
   assert.equal(candles[0].time, rth + 4 * minute, "input order is unchanged");
 });
@@ -226,4 +228,79 @@ test("the existing MES draft can supply point and range distances at its referen
   assert.deepEqual(position.nearestAbove, { key: "tue_high", points: 4.75 }); // 7598.75 − 7594.
   assert.deepEqual(position.nearestBelow, { key: "adr_inner_low", points: -1 }); // 7593 − 7594.
   assert.deepEqual(position.distances.find(({ key }) => key === "nov3_4h"), { key: "nov3_4h", points: 29.75 });
+});
+
+// VW-1 / VW-2 (docs/design-2026-11-24/03 §5, decision D-F): Globex VWAP may skip small overnight gaps.
+const globexOpen = equityIndexSessionBounds("2026-11-24").open; // 18:00 ET on 11/23
+const globexEnd = equityIndexSessionBounds("2026-11-24").close; // 17:00 ET on 11/24
+
+/** The 1,380 one-minute bars of the 11/24 Globex session, minus each offset (minutes after 18:00 ET) that `drop` names. */
+function globexBars(drop: (offset: number) => boolean): Candle[] {
+  return Array.from({ length: 1380 }, (_, offset) => offset).filter((offset) => !drop(offset))
+    .map((offset) => bar(globexOpen + offset * minute, 100));
+}
+
+const elevenTwentyThree = (offset: number) => offset < 10 || (offset >= 77 && offset < 89) || offset === 359;
+const globexCalc = (candles: readonly Candle[], gapPolicy?: SessionIndicatorOptions["gapPolicy"]) =>
+  calculate(candles, globexEnd, { anchor: "globex", ...(gapPolicy ? { gapPolicy } : {}) });
+
+test("11/23 Globex gaps (23 of 1,380, longest 12 min) draw only under globex-tolerant", () => {
+  const candles = globexBars(elevenTwentyThree);
+  const strict = globexCalc(candles);
+  assert.deepEqual(strict.vwap, []);
+  assert.equal(strict.coverage.anchored.approximate, false);
+  assert.equal(strict.coverage.anchored.missingBars, 23);
+
+  const tolerant = globexCalc(candles, "globex-tolerant");
+  assert.ok(tolerant.vwap.length > 0);
+  assert.equal(tolerant.coverage.anchored.approximate, true);
+  assert.equal(tolerant.coverage.anchored.missingBars, 23);
+  assert.equal(tolerant.coverage.anchored.longestGapMin, 12);
+  assert.equal(tolerant.coverage.anchored.rthMissingBars, 0);
+  assert.equal(tolerant.vwap.at(-1)!.value, 100, "VWAP uses only the bars that exist");
+  // Levels stay strict under either policy: no POC, VAH or VAL from an incomplete session.
+  assert.deepEqual(prices(tolerant), prices(strict));
+  assert.equal(prices(tolerant).poc, undefined);
+});
+
+test("a longest overnight gap of 16 min withholds Globex VWAP, and 15 min still draws", () => {
+  assert.deepEqual(globexCalc(globexBars((offset) => offset >= 100 && offset < 116), "globex-tolerant").vwap, []);
+  const fifteen = globexCalc(globexBars((offset) => offset >= 100 && offset < 115), "globex-tolerant");
+  assert.ok(fifteen.vwap.length > 0);
+  assert.equal(fifteen.coverage.anchored.longestGapMin, 15);
+});
+
+test("missing bars above 3% of the expected overnight bars withhold Globex VWAP", () => {
+  // 41 isolated gaps are 2.97% of 1,380 and draw. 45 gaps are 3.26% and do not.
+  const isolated = (count: number) => (offset: number) => offset % 20 === 0 && offset / 20 < count;
+  assert.ok(globexCalc(globexBars(isolated(41)), "globex-tolerant").vwap.length > 0);
+  const over = globexCalc(globexBars(isolated(45)), "globex-tolerant");
+  assert.deepEqual(over.vwap, []);
+  assert.equal(over.coverage.anchored.missingBars, 45);
+});
+
+test("one missing RTH bar at 09:45 ET withholds VWAP for both anchors", () => {
+  const rthBars = Array.from({ length: 390 }, (_, i) => bar(rth + i * minute, 100)).filter((_, i) => i !== 15);
+  assert.deepEqual(calculate(rthBars, equityIndexSessionBounds("2026-11-09").rthClose, { anchor: "rth" }).vwap, []);
+
+  const globex = globexCalc(globexBars((offset) => offset === 945), "globex-tolerant");
+  assert.deepEqual(globex.vwap, []);
+  assert.equal(globex.coverage.anchored.rthMissingBars, 1);
+});
+
+test("zero missing bars is an exact Globex VWAP with approximate false", () => {
+  const result = globexCalc(globexBars(() => false), "globex-tolerant");
+  assert.equal(result.vwap.length, 1380);
+  assert.equal(result.coverage.anchored.complete, true);
+  assert.equal(result.coverage.anchored.missingBars, 0);
+  assert.equal(result.coverage.anchored.approximate, false);
+});
+
+test("bars after the cutoff never move levels or VWAP", () => {
+  const candles = globexBars(() => false);
+  const later = [bar(globexEnd + minute, 9000, 500), bar(globexEnd + 2 * minute, 1, 500)];
+  const clean = globexCalc(candles, "globex-tolerant");
+  const withLater = globexCalc([...candles, ...later], "globex-tolerant");
+  assert.deepEqual(prices(withLater), prices(clean));
+  assert.deepEqual(withLater.vwap, clean.vwap);
 });
