@@ -2,8 +2,8 @@
 // A voice- or API-logged fill that is a minute or two off is matched to the nearby bar whose range
 // really holds its price. This only says which bar a fill traded in. It never changes the stored
 // entry_time or exit_time (AGENTS §6.5: the stored time is the trader's history, the match is computed).
-import { DEFAULT_TICK_TOLERANCE_TICKS, alignToBar, fillInsideBar } from "./trades.ts";
-import type { Candle, Timeframe } from "./trades.ts";
+import { DEFAULT_TICK_TOLERANCE_TICKS, alignToBar, classifyTrade, fillInsideBar } from "./trades.ts";
+import type { Candle, TradeRecord, Timeframe } from "./trades.ts";
 
 export type FillMatch =
   | { kind: "stated"; barTime: number }
@@ -110,4 +110,55 @@ export function matchTradeFills(
     exit = matchExit(boundOf(entry));
   }
   return { entry, exit };
+}
+
+// FB-2 (docs/design-2026-11-24/05 §4.3): the one-tap "Use HH:MM" write. The matched UTC bar time goes to the stored
+// entry_time or exit_time, and trade_style is recomputed from the new hold. Nothing is written here: the caller applies
+// `patch` on the tap and `undoPatch` on Undo.
+export type MatchedFillPatch = Partial<Pick<TradeRecord, "entry_time" | "exit_time" | "trade_style">>;
+
+export function buildMatchedFillPatch(
+  trade: Pick<TradeRecord, "entry_time" | "exit_time" | "trade_style">,
+  role: "entry" | "exit",
+  matchedBarTimeMs: number,
+): { patch: MatchedFillPatch; undoPatch: MatchedFillPatch } | null {
+  if (!Number.isFinite(matchedBarTimeMs)) return null;
+  // An exit can only be moved on a closed trade.
+  if (role === "exit" && trade.exit_time == null) return null;
+  const next = new Date(matchedBarTimeMs).toISOString();
+  const entry = role === "entry" ? next : trade.entry_time;
+  const exit = role === "exit" ? next : trade.exit_time;
+  // Ordering guard: a closed trade keeps entry strictly before exit.
+  if (exit != null && Date.parse(entry) >= Date.parse(exit)) return null;
+  const style = classifyTrade(entry, exit);
+  if (role === "entry") {
+    return {
+      patch: { entry_time: next, trade_style: style },
+      undoPatch: { entry_time: trade.entry_time, trade_style: trade.trade_style },
+    };
+  }
+  return {
+    patch: { exit_time: next, trade_style: style },
+    undoPatch: { exit_time: trade.exit_time, trade_style: trade.trade_style },
+  };
+}
+
+// FB-2: a data note's "Add time" tap asks the stop-moves editor on the page to pre-fill a new move's price.
+// Nothing is saved until the trader submits the editor's own "Record Stop Move".
+export interface StopMovePrefill {
+  tradeId: string;
+  price: number;
+}
+
+const prefillListeners = new Set<(request: StopMovePrefill) => void>();
+
+export function requestStopMovePrefill(tradeId: string, price: number): void {
+  for (const listener of prefillListeners) listener({ tradeId, price });
+}
+
+export function subscribeStopMovePrefill(listener: (request: StopMovePrefill) => void): () => void {
+  prefillListeners.add(listener);
+  return () => {
+    prefillListeners.delete(listener);
+  };
 }
