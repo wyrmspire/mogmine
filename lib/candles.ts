@@ -57,7 +57,8 @@ export interface CandleLoadDependencies {
   refresh?: boolean;
 }
 
-type RawBar = [number, number, number, number, number];
+/** [time, open, high, low, close] with an optional sixth column: traded volume, when a fixture carries it. */
+type RawBar = [number, number, number, number, number, number?];
 
 export interface SampleBarsPayload {
   source?: string;
@@ -82,13 +83,15 @@ export function loadSampleBarsPayload(): Promise<SampleBarsPayload> {
 
 function asCandles(rawBars: RawBar[] | undefined): Candle[] | null {
   if (!Array.isArray(rawBars) || rawBars.length === 0) return null;
-  return rawBars.map(([time, open, high, low, close]) => ({
+  // VOL-1: no placeholder volume. A bar without a real sixth column carries 0, which hasRealVolume
+  // reads as "not real": the volume pane is hidden and VWAP is withheld for that trade.
+  return rawBars.map(([time, open, high, low, close, volume]) => ({
     time,
     open,
     high,
     low,
     close,
-    volume: 1,
+    volume: typeof volume === "number" && Number.isFinite(volume) && volume >= 0 ? volume : 0,
   }));
 }
 

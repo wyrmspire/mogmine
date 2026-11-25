@@ -10,6 +10,9 @@ export interface ChartTheme {
   crosshair: string;
   candleUp: string;
   candleDown: string;
+  /** Volume pane bars (`--chart-volume-up`/`-down`, VOL-1): candle colours at alpha 0.35. Optional: literal themes omit them. */
+  volumeUp?: string;
+  volumeDown?: string;
   profit: string;
   risk: string;
   profitText: string;
@@ -66,6 +69,8 @@ function read(): ChartTheme {
     crosshair: value("--chart-crosshair"),
     candleUp: value("--candle-up"),
     candleDown: value("--candle-down"),
+    volumeUp: value("--chart-volume-up"),
+    volumeDown: value("--chart-volume-down"),
     profit: value("--profit-emerald"),
     risk: value("--risk-crimson"),
     profitText: value("--profit-text"),

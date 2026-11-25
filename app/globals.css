@@ -30,6 +30,8 @@
   --chart-crosshair-label: #232838;
   --candle-up: #22b88f;
   --candle-down: #ec5664;
+  --chart-volume-up: rgba(34, 184, 143, 0.35);
+  --chart-volume-down: rgba(236, 86, 100, 0.35);
   /* Position zones and chips (docs/design-2026-11-24/08 §4.1). Hex only, so lib/chart-paint.ts can add alpha. */
   --zone-reward: #22c39a;
   --zone-risk: #f0545f;
@@ -94,6 +96,8 @@
   --loss-text: #ffa25c;
   --candle-up: #4c8dff;
   --candle-down: #f98a3c;
+  --chart-volume-up: rgba(76, 141, 255, 0.35);
+  --chart-volume-down: rgba(249, 138, 60, 0.35);
   --zone-reward: #4d8dff;
   --zone-risk: #f5873a;
   --chip-reward-bg: #1f5fcf;
