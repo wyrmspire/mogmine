@@ -58,6 +58,7 @@
   --level-label-bg-alpha: 0.95;
   /* Session VWAP line (IND-1). Not gold, not profit or loss. */
   --indicator-vwap: #e879c6;
+  --ind-ema200: #38bdf8;
   --level-zone-opacity: 0.14;
 
   --gold-intensity: 0.76;
@@ -86,6 +87,7 @@
 
 /* Colour-blind safe pair: blue for profit, orange for risk (UX-80). */
 [data-palette="blue-orange"] {
+  --ind-ema200: #a78bfa;
   --profit-emerald: #3b82f6;
   --risk-crimson: #f97316;
   --profit-text: #7fb2ff;
