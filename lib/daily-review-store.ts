@@ -1,0 +1,164 @@
+// Local device store for daily reviews (docs/06 §2.1, Q-3). Mirrors lib/plans-store.ts:
+// localStorage key `mogmine-daily-reviews-v1`, in-memory cache, React useSyncExternalStore hook, backup support.
+// Remote sync (`createCollectionSync`, "daily_reviews") is NOT wired here; DR-1b adds it.
+// Invariant 7: every review carries `user_id` (DEFAULT_OWNER_USER_ID).
+
+import { useSyncExternalStore } from "react";
+import type { DailyReview, DailyReviewStatus, ReviewPoint } from "./daily-review.ts";
+import { sanitizeDailyReview, sanitizeDailyReviews, sanitizeDailyReviewsBackup } from "./daily-review-sanitize.ts";
+
+export { sanitizeDailyReview, sanitizeDailyReviews, sanitizeDailyReviewsBackup, sanitizeReviewPoint } from "./daily-review-sanitize.ts";
+
+export const DAILY_REVIEWS_STORAGE_KEY = "mogmine-daily-reviews-v1";
+
+export interface DailyReviewsState {
+  hydrated: boolean;
+  saved: boolean;
+  reviews: readonly DailyReview[];
+}
+
+/** Fields a patch may change. Identity and `recorded_at` are never patched (AGENTS §6.5). */
+export interface DailyReviewPatch {
+  trade_ids?: readonly string[];
+  plan_ids?: readonly string[];
+  points?: readonly ReviewPoint[];
+  lesson?: string;
+  status?: DailyReviewStatus;
+}
+
+const empty = (): DailyReviewsState => ({ hydrated: false, saved: true, reviews: [] });
+let state: DailyReviewsState = empty();
+const serverState: DailyReviewsState = empty();
+const listeners = new Set<() => void>();
+
+function set(patch: Partial<DailyReviewsState>) {
+  state = { ...state, ...patch };
+  listeners.forEach((listener) => listener());
+}
+
+function persist() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DAILY_REVIEWS_STORAGE_KEY, JSON.stringify(state.reviews));
+    if (!state.saved) set({ saved: true });
+  } catch {
+    if (state.saved) set({ saved: false });
+  }
+}
+
+export function hydrateDailyReviews() {
+  if (state.hydrated || typeof window === "undefined") return;
+  let reviews: DailyReview[] = [];
+  let saved = true;
+  try {
+    const raw = localStorage.getItem(DAILY_REVIEWS_STORAGE_KEY);
+    if (raw) reviews = sanitizeDailyReviews(JSON.parse(raw));
+  } catch {
+    saved = false;
+  }
+  set({ reviews, hydrated: true, saved });
+}
+
+export function getDailyReviewsState(): DailyReviewsState {
+  return state;
+}
+
+export function getDailyReviews(): readonly DailyReview[] {
+  hydrateDailyReviews();
+  return state.reviews;
+}
+
+export function getDailyReviewsBackup(): DailyReview[] {
+  hydrateDailyReviews();
+  return sanitizeDailyReviews(state.reviews);
+}
+
+/**
+ * Create or update the review for this review's (session_date, account_id) scope. Rule 5: a second create for the same
+ * scope returns the existing review (its id and recorded_at are kept) with the incoming content applied.
+ */
+export function upsertDailyReview(review: DailyReview): DailyReview | null {
+  hydrateDailyReviews();
+  const incoming = sanitizeDailyReview(review);
+  if (!incoming) return null;
+  const nowIso = new Date().toISOString();
+  const existing =
+    state.reviews.find((item) => item.session_date === incoming.session_date && (item.account_id ?? null) === incoming.account_id) ??
+    state.reviews.find((item) => item.id === incoming.id);
+
+  if (!existing) {
+    set({ reviews: [...state.reviews, incoming] });
+    persist();
+    return incoming;
+  }
+
+  const merged: DailyReview = {
+    ...incoming,
+    id: existing.id,
+    session_date: existing.session_date,
+    account_id: existing.account_id,
+    recorded_at: existing.recorded_at,
+    updated_at: nowIso,
+  };
+  set({ reviews: state.reviews.map((item) => (item === existing ? merged : item)) });
+  persist();
+  return merged;
+}
+
+/** Patch one review. `recorded_at`, `id`, `user_id` and the scope are kept as they were. */
+export function updateDailyReview(id: string, patch: DailyReviewPatch): DailyReview | null {
+  hydrateDailyReviews();
+  const current = state.reviews.find((item) => item.id === id);
+  if (!current) return null;
+  const next = sanitizeDailyReview({
+    ...current,
+    ...(patch.trade_ids !== undefined ? { trade_ids: [...patch.trade_ids] } : {}),
+    ...(patch.plan_ids !== undefined ? { plan_ids: [...patch.plan_ids] } : {}),
+    ...(patch.points !== undefined ? { points: [...patch.points] } : {}),
+    ...(patch.lesson !== undefined ? { lesson: patch.lesson } : {}),
+    ...(patch.status !== undefined ? { status: patch.status } : {}),
+    updated_at: new Date().toISOString(),
+  });
+  if (!next) return null;
+  const updated: DailyReview = { ...next, id: current.id, recorded_at: current.recorded_at, session_date: current.session_date, account_id: current.account_id, user_id: current.user_id };
+  set({ reviews: state.reviews.map((item) => (item.id === id ? updated : item)) });
+  persist();
+  return updated;
+}
+
+export function removeDailyReview(id: string) {
+  hydrateDailyReviews();
+  set({ reviews: state.reviews.filter((item) => item.id !== id) });
+  persist();
+}
+
+/**
+ * Restore from a backup. An older backup has no `daily_reviews` (null or undefined): nothing changes.
+ * Otherwise records merge by (session_date, account_id) and the backup's copy wins; device-only reviews stay.
+ */
+export function restoreDailyReviews(reviews: readonly DailyReview[] | null | undefined) {
+  const incoming = sanitizeDailyReviewsBackup(reviews);
+  if (!incoming) return;
+  hydrateDailyReviews();
+  const incomingScopes = new Set(incoming.map((review) => `${review.session_date}|${review.account_id ?? "*"}`));
+  const incomingIds = new Set(incoming.map((review) => review.id));
+  const kept = state.reviews.filter((review) => !incomingScopes.has(`${review.session_date}|${review.account_id ?? "*"}`) && !incomingIds.has(review.id));
+  set({ reviews: [...kept, ...incoming] });
+  persist();
+}
+
+/** Test hook: back to unhydrated and empty. */
+export function resetDailyReviewsForTests() {
+  state = empty();
+}
+
+export function useDailyReviewsStore(): DailyReviewsState {
+  return useSyncExternalStore(
+    (callback) => {
+      listeners.add(callback);
+      return () => listeners.delete(callback);
+    },
+    () => state,
+    () => serverState
+  );
+}

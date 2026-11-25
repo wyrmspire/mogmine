@@ -10,6 +10,8 @@ import { sanitizeMoodBackup } from "./mood-store.ts";
 import type { MoodBackup } from "./mood-store.ts";
 import { sanitizePlansBackup } from "./plans-store.ts";
 import { sanitizeDrillsBackup } from "./drills-store.ts";
+import { sanitizeDailyReviewsBackup } from "./daily-review-sanitize.ts";
+import type { DailyReview } from "./daily-review.ts";
 import { sanitizeCallsBackup } from "./calls-store.ts";
 import type { CallsBackup } from "./calls-store.ts";
 import type { DrillRecord } from "./drills.ts";
@@ -47,10 +49,12 @@ export interface JournalBackup {
   drills?: DrillRecord[];
   /** Discretionary calls and prompt dismissals (DC-2). Absent in older backups. */
   calls?: CallsBackup;
+  /** Daily reviews (docs/06 §2.1). Absent in older backups, which leave the device's reviews untouched. */
+  daily_reviews?: DailyReview[];
 }
 
 export type ParseBackupResult =
-  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; mood?: MoodBackup; accounts?: AccountsBackup; challenges?: ChallengeDefinition[]; playbooks?: Playbook[]; plans?: PlanningSession[]; drills?: DrillRecord[]; calls?: CallsBackup; realCount: number; sampleCount: number; exportedAt: string | null }
+  | { ok: true; trades: TradeRecord[]; prefs?: Partial<Prefs>; mood?: MoodBackup; accounts?: AccountsBackup; challenges?: ChallengeDefinition[]; playbooks?: Playbook[]; plans?: PlanningSession[]; drills?: DrillRecord[]; calls?: CallsBackup; daily_reviews?: DailyReview[]; realCount: number; sampleCount: number; exportedAt: string | null }
   | { ok: false; error: string };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -137,7 +141,7 @@ function parseTradeItem(raw: unknown): TradeRecord | null {
 }
 
 /** Build a local backup payload of the trade journal and device preferences (no candles, no secrets). */
-export function buildBackup(trades: TradeRecord[], prefs?: Prefs, mood?: MoodBackup, accounts?: AccountsBackup, challenges?: ChallengeDefinition[], playbooks?: Playbook[], plans?: PlanningSession[], drills?: DrillRecord[], calls?: CallsBackup): JournalBackup {
+export function buildBackup(trades: TradeRecord[], prefs?: Prefs, mood?: MoodBackup, accounts?: AccountsBackup, challenges?: ChallengeDefinition[], playbooks?: Playbook[], plans?: PlanningSession[], drills?: DrillRecord[], calls?: CallsBackup, dailyReviews?: DailyReview[]): JournalBackup {
   const cleanTrades = trades.map((trade) => {
     const rest: TradeRecord & { candles?: Candle[] } = { ...trade };
     delete rest.candles;
@@ -157,6 +161,7 @@ export function buildBackup(trades: TradeRecord[], prefs?: Prefs, mood?: MoodBac
     ...(plans ? { plans } : {}),
     ...(drills ? { drills } : {}),
     ...(calls && (calls.calls.length || calls.dismissals.length) ? { calls } : {}),
+    ...(dailyReviews && dailyReviews.length ? { daily_reviews: dailyReviews } : {}),
   };
 }
 
@@ -181,6 +186,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
   let plans: PlanningSession[] | undefined;
   let drills: DrillRecord[] | undefined;
   let calls: CallsBackup | undefined;
+  let dailyReviews: DailyReview[] | undefined;
   let exportedAt: string | null = null;
 
   if (Array.isArray(parsed)) {
@@ -204,6 +210,7 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
     plans = sanitizePlansBackup(obj.plans) ?? undefined;
     drills = sanitizeDrillsBackup(obj.drills) ?? undefined;
     calls = sanitizeCallsBackup(obj.calls) ?? undefined;
+    dailyReviews = sanitizeDailyReviewsBackup(obj.daily_reviews) ?? undefined;
     if (typeof obj.exportedAt === "string" && Number.isFinite(Date.parse(obj.exportedAt))) {
       exportedAt = obj.exportedAt;
     }
@@ -211,8 +218,8 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
     return { ok: false, error: "Not a recognized MogMine backup format." };
   }
 
-  // Seeds alone are not worth restoring; a custom or edited playbook list, challenges, plans, drill answers or calls are.
-  if (rawTrades.length === 0 && !challenges?.length && !plans?.length && !drills?.length && !calls && !(playbooks && playbooksDifferFromSeeds(playbooks))) {
+  // Seeds alone are not worth restoring; a custom or edited playbook list, challenges, plans, drill answers, calls or daily reviews are.
+  if (rawTrades.length === 0 && !challenges?.length && !plans?.length && !drills?.length && !calls && !dailyReviews?.length && !(playbooks && playbooksDifferFromSeeds(playbooks))) {
     return { ok: false, error: "This backup file has no trades to restore." };
   }
 
@@ -233,5 +240,5 @@ export function parseBackupFile(rawText: string): ParseBackupResult {
   const sampleCount = trades.filter((t) => t.is_sample).length;
   const realCount = trades.length - sampleCount;
 
-  return { ok: true, trades, prefs: rawPrefs, ...(mood ? { mood } : {}), ...(accounts ? { accounts } : {}), ...(challenges ? { challenges } : {}), ...(playbooks ? { playbooks } : {}), ...(plans ? { plans } : {}), ...(drills ? { drills } : {}), ...(calls ? { calls } : {}), realCount, sampleCount, exportedAt };
+  return { ok: true, trades, prefs: rawPrefs, ...(mood ? { mood } : {}), ...(accounts ? { accounts } : {}), ...(challenges ? { challenges } : {}), ...(playbooks ? { playbooks } : {}), ...(plans ? { plans } : {}), ...(drills ? { drills } : {}), ...(calls ? { calls } : {}), ...(dailyReviews ? { daily_reviews: dailyReviews } : {}), realCount, sampleCount, exportedAt };
 }
