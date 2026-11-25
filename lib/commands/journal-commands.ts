@@ -10,6 +10,7 @@ import type {
 import { RECORD_CONTRACTS, contractFor } from "../persistence/registry.ts";
 import { DEFAULT_OWNER_USER_ID, isStopMove, normalizeTrade, toTicks, validateTradeInput } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
+import { validateFutureTimes } from "../entry-form.ts";
 import { sanitizeAccounts, sanitizeBalanceChecks } from "../accounts.ts";
 import type { BalanceCheck, TradingAccount } from "../accounts.ts";
 import { isValidRSizeCents, isValidStatedRiskR, resolveRSize, riskCents } from "../r-size.ts";
@@ -63,7 +64,7 @@ function withoutDerived<T>(key: RecordTypeKey, record: T): T {
   return clean as T;
 }
 
-function parseTrade(raw: unknown): Parsed<TradeRecord> {
+function parseTrade(raw: unknown, nowMs = Date.now()): Parsed<TradeRecord> {
   if (!isObject(raw) || typeof raw.id !== "string" || !raw.id.trim()) return bad("A trade needs an id.");
   if (raw.direction !== "LONG" && raw.direction !== "SHORT") return bad("A trade direction is LONG or SHORT.");
   // The sanitizer drops a bad stop move silently. Here a bad one rejects the whole trade, so nothing is lost unnoticed.
@@ -83,6 +84,9 @@ function parseTrade(raw: unknown): Parsed<TradeRecord> {
   if (!Number.isFinite(entryAt)) return bad("Entry time must be a valid date and time.");
   if (trade.status === "closed" && !Number.isFinite(exitAt)) return bad("Exit time must be a valid date and time.");
   if (trade.status === "closed" && exitAt <= entryAt) return bad("Exit time must be after entry time.");
+  const future = validateFutureTimes(entryAt, trade.status === "open" ? null : exitAt, nowMs); // UX-09: a typo'd future date
+  const futureError = future.entry ?? future.exit;
+  if (futureError) return bad(futureError);
   if (trade.initial_stop_price != null && trade.initial_stop_set_at == null) trade.initial_stop_set_at = trade.entry_time; // UX-19
   const hasInitialStop = trade.initial_stop_price != null;
   const hasInitialStopTime = trade.initial_stop_set_at != null;
@@ -94,14 +98,9 @@ function parseTrade(raw: unknown): Parsed<TradeRecord> {
   // movement history may legitimately lock profit on the other side of entry, so it gets only the tick check below.
   const stopAtEntry = trade.initial_stop_price ?? (trade.stop_moves?.length ? null : trade.stop_loss_price);
   const errors = validateTradeInput({
-    symbol: trade.symbol,
-    direction: trade.direction,
-    quantity: trade.quantity,
-    entry_price: trade.entry_price,
-    exit_price: trade.status === "open" ? null : trade.exit_price,
-    stop_loss_price: stopAtEntry,
-    planned_target_price: trade.planned_target_price,
-    key_level_price: trade.key_level_price,
+    symbol: trade.symbol, direction: trade.direction, quantity: trade.quantity,
+    entry_price: trade.entry_price, exit_price: trade.status === "open" ? null : trade.exit_price,
+    stop_loss_price: stopAtEntry, planned_target_price: trade.planned_target_price, key_level_price: trade.key_level_price,
   });
   const firstError = Object.values(errors)[0];
   if (firstError) return bad(firstError);
@@ -279,11 +278,12 @@ export interface JournalCommands {
  * Build the command set over one owner's repositories. `owner` is `DEFAULT_OWNER_USER_ID` on this device and the
  * signed-in `auth.uid()` on Supabase. Records may carry that same owner or the device default, never a foreign one.
  */
-export function createJournalCommands(repos: JournalRepositories, owner: UserId = DEFAULT_OWNER_USER_ID): JournalCommands {
-  const fail = <T>(code: PersistErrorCode, message: string, recordType?: RecordTypeKey, id?: RecordId): PersistResult<T> => ({
-    ok: false,
-    error: { code, message, recordType, id },
-  });
+export function createJournalCommands(repos: JournalRepositories, owner: UserId = DEFAULT_OWNER_USER_ID, opts: { now?: () => number } = {}): JournalCommands {
+  const now = opts.now ?? Date.now;
+  /** Create and update check trade times against the clock (UX-09). Archive only reads and keeps the stored times. */
+  const parseAt = <K extends CollectionKey>(key: K, raw: unknown): Parsed<CollectionRecordTypes[K]> =>
+    key === "trades" ? (parseTrade(raw, now()) as Parsed<CollectionRecordTypes[K]>) : COLLECTION_PARSERS[key](raw);
+  const fail = <T>(code: PersistErrorCode, message: string, recordType?: RecordTypeKey, id?: RecordId): PersistResult<T> => ({ ok: false, error: { code, message, recordType, id } });
   const repoFor = <K extends CollectionKey>(key: K) => repos[key] as CollectionRepository<CollectionRecordTypes[K]>;
   const idOf = (record: unknown): RecordId => (isObject(record) && typeof record.id === "string" ? record.id : "");
 
@@ -325,7 +325,7 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
     async create(key, raw) {
       const derived = derivedFieldIn(key, raw);
       if (derived) return fail("forbidden", `${derived} is derived and cannot be stored.`, key, idOf(raw));
-      const parsed = COLLECTION_PARSERS[key](raw);
+      const parsed = parseAt(key, raw);
       if (!parsed.ok) return fail("invalid", parsed.message, key, idOf(raw));
       const existing = await repoFor(key).get(owner, idOf(parsed.value));
       if (existing.ok) return fail("conflict", `A ${key} record with this id already exists.`, key, idOf(parsed.value));
@@ -386,7 +386,7 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
       // the recomputed value is checked instead of the old one.
       const base = key === "trades" && !("risk_cents" in patch) ? { ...current.value.record, risk_cents: undefined } : current.value.record;
       const candidate = withoutDerived(key, { ...base, ...patch, id });
-      const parsed = COLLECTION_PARSERS[key](candidate);
+      const parsed = parseAt(key, candidate);
       if (!parsed.ok) return fail("invalid", parsed.message, key, id);
       if (key === "daily_reviews") {
         const before = current.value.record as DailyReview;

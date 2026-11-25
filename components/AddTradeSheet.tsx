@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { dayWindow, entryDraftAfterSave, entryTimes, priceOrNull, statedRiskError, statedRiskRFrom, stepPriceText, suggestionPatch, upgradeDraft, zonedParts } from "@/lib/entry-form";
+import { checkPriceAgainstDayRange, dayWindow, entryDraftAfterSave, entryTimes, priceOrNull, statedRiskError, statedRiskRFrom, stepPriceText, suggestionPatch, upgradeDraft, validateFutureTimes, zonedParts } from "@/lib/entry-form";
 import { RiskRow } from "./RiskRow";
 import { loadDayCandles } from "@/lib/candles";
 import { inferTradeTimes } from "@/lib/infer-times";
@@ -21,7 +21,7 @@ import { addTradeAndFlush, useJournal } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { EXIT_REASONS, FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedRewardRisk, specFor, stopPatch, tickDecimals, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
-import type { TradeStatus } from "@/lib/trades";
+import type { Candle, TradeStatus } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft, useOnline } from "@/lib/ui";
 
 /** Wait this long after the last price keystroke before searching the bars. */
@@ -71,10 +71,12 @@ export function AddTradeSheet() {
   const [draft, setDraft] = useState<EntryDraft>(() => upgradeDraft(readDraft<unknown>(DRAFT_KEY), new Date(), zone));
   const [submitted, setSubmitted] = useState(false);
   const [finder, setFinder] = useState<Finder>({ state: "idle" });
+  /** The day bars the finder loaded, keyed by the day window they cover (UX-09 price-range warning). */
+  const [dayBars, setDayBars] = useState<{ from: number; candles: Candle[] } | null>(null);
   const [finderNonce, setFinderNonce] = useState(0);
   const online = useOnline();
-  // A date that starts after the sheet opened has no bars yet.
-  const [openedAt] = useState(() => Date.now());
+  // Captured at mount and refreshed in event handlers so render stays pure (`react-hooks/purity`).
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const dialogRef = useRef<HTMLElement>(null);
   const firstField = useRef<HTMLButtonElement>(null);
   const accounts = useAccounts();
@@ -103,7 +105,7 @@ export function AddTradeSheet() {
     return () => { window.removeEventListener("keydown", onKey); previousFocus?.focus(); };
   }, []);
 
-  const change = (patch: Partial<EntryDraft>) => setDraft((current) => keepDraft(DRAFT_KEY, { ...current, ...patch }));
+  const change = (patch: Partial<EntryDraft>) => { setNowMs(new Date().getTime()); setDraft((current) => keepDraft(DRAFT_KEY, { ...current, ...patch })); };
   const isOpenDraft = draft.status === "open";
   // Still open: the entry defaults to now unless the trader already set a time (R-03b).
   const setStatus = (status: TradeStatus) => {
@@ -156,6 +158,10 @@ export function AddTradeSheet() {
     if (Number.isNaN(exit.getTime())) errors.exitClock = "Pick the exit time";
     else if (!errors.entryClock && !errors.date && exit <= entry) errors.exitClock = "The exit must be after the entry";
   }
+  // UX-09: a trade dated in the future (beyond the 5-minute clock allowance) is refused, not just warned.
+  const future = validateFutureTimes(entry.getTime(), isOpenDraft || !exit ? null : exit.getTime(), nowMs, zone);
+  errors.entryClock = errors.entryClock ?? future.entry;
+  if (!isOpenDraft) errors.exitClock = errors.exitClock ?? future.exit;
   const hasErrors = Object.values(errors).some(Boolean) || statedRiskError(draft.statedRiskR) != null;
   const show = (key: ErrorKey) => (submitted ? errors[key] : undefined);
   // A price error shows as soon as the price is typed (wrong-side stop, off-tick), not only on save.
@@ -177,7 +183,7 @@ export function AddTradeSheet() {
   const dayRange = dayWindow(draft.date, zone);
   const entryReady = entryPrice != null && entryPrice > 0 && !errors.entryPrice;
   const hint = draft.entryEdited && !Number.isNaN(entry.getTime()) ? entry.getTime() : null;
-  const finderInput = entryPrice != null && entryReady && dayRange && dayRange.from < openedAt
+  const finderInput = entryPrice != null && entryReady && dayRange && dayRange.from < nowMs
     ? {
       symbol: draft.symbol, direction: draft.direction, entryPrice,
       exitPrice: !isOpenDraft && exitPrice != null && exitPrice > 0 && !errors.exitPrice ? exitPrice : null,
@@ -196,6 +202,7 @@ export function AddTradeSheet() {
         .then((day) => {
           if (run !== finderRun.current) return;
           const result = inferTradeTimes({ ...finderInput, candles: day.candles, timeframe: day.baseTimeframe });
+          setDayBars({ from: finderInput.window.from, candles: day.candles });
           setFinder({ state: "done", key: finderKey, result, message: finderMessage(result, { symbol: finderInput.symbol, entryPrice: finderInput.entryPrice, exitPrice: finderInput.exitPrice, dateLabel }, zone) });
           setDraft((current) => keepDraft(DRAFT_KEY, { ...current, ...suggestionPatch(current, result, zone) }));
         })
@@ -226,8 +233,11 @@ export function AddTradeSheet() {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    const submitNow = new Date().getTime();
+    setNowMs(submitNow);
     setSubmitted(true);
-    if (hasErrors || entryPrice == null) return;
+    const submitFuture = validateFutureTimes(entry.getTime(), isOpenDraft || !exit ? null : exit.getTime(), submitNow, zone);
+    if (hasErrors || submitFuture.entry || (!isOpenDraft && submitFuture.exit) || entryPrice == null) return;
     // Missing is null, never 0 or the entry price (R-03).
     const exitFields = isOpenDraft
       ? { status: "open" as const, exit_time: null, exit_price: null }
@@ -251,13 +261,7 @@ export function AddTradeSheet() {
     const saved = addTradeAndFlush(trade);
     if (draft.entryMoodSpoke) {
       const nowIso = new Date().toISOString();
-      recordUserMood(
-        trade.id,
-        { [draft.entryMoodSpoke]: ONE_TAP_MOOD_SCORE },
-        nowIso,
-        entry.toISOString(),
-        nowIso,
-      );
+      recordUserMood(trade.id, { [draft.entryMoodSpoke]: ONE_TAP_MOOD_SCORE }, nowIso, entry.toISOString(), nowIso);
     }
     const nextDraft = entryDraftAfterSave(draft, trade.id, saved);
     keepDraft(DRAFT_KEY, nextDraft);
@@ -269,6 +273,9 @@ export function AddTradeSheet() {
     router.push(`/trades/${trade.id}`);
   };
 
+  // Warning only (Q-10): a typed price far outside the loaded day's bars never blocks the save.
+  const barsForDay = dayBars && dayRange && dayBars.from === dayRange.from ? dayBars.candles : [];
+  const priceWarning = checkPriceAgainstDayRange(entryPrice, draft.symbol, barsForDay) ?? checkPriceAgainstDayRange(exitPrice, draft.symbol, barsForDay);
   const zoneName = Number.isNaN(entry.getTime()) ? "" : zoneLabel(entry, zone);
   const step = spec?.tickSize;
   const nextDayLabel = times.exitNextDay && exit && !Number.isNaN(exit.getTime())
@@ -305,6 +312,7 @@ export function AddTradeSheet() {
             <PriceRow id="stop-price" label="Stop" optional value={draft.stopPrice} placeholder={draft.direction === "LONG" ? "below entry" : "above entry"} step={step} error={showPrice("stopPrice")} onChange={(value) => change({ stopPrice: value })} onStep={(ticks) => stepPrice("stopPrice", ticks)} />
             <PriceRow id="target-price" label="Target" optional value={draft.targetPrice} placeholder={draft.direction === "LONG" ? "above entry" : "below entry"} step={step} error={showPrice("targetPrice")} onChange={(value) => change({ targetPrice: value })} onStep={(ticks) => stepPrice("targetPrice", ticks)} />
           </fieldset>
+          {priceWarning && <p className="banner warn" role="status">{priceWarning}</p>}
 
           <RiskRow
             statedRiskR={draft.statedRiskR ?? ""} stopPrice={draft.stopPrice} entryPrice={entryPrice} direction={draft.direction} symbol={draft.symbol}

@@ -2,10 +2,11 @@
 // The form leads with side and prices; times come pre-filled and are set with native date and
 // time pickers. This module owns the draft shape, its defaults, the time maths and the tick steppers.
 
-import { fromZonedInput, toZonedInput } from "./time.ts";
+import { DEFAULT_TIME_ZONE, formatDateTime, fromZonedInput, toZonedInput } from "./time.ts";
+import { formatPrice } from "./format.ts";
 import { isValidStatedRiskR } from "./r-size.ts";
-import { isExitReason, isWholeQuantity, snapToTick, specFor, tickDecimals, toTicks } from "./trades.ts";
-import type { TradeDirection, TradeExitReason, TradeStatus } from "./trades.ts";
+import { canonicalSymbol, isExitReason, isWholeQuantity, snapToTick, specFor, tickDecimals, toTicks } from "./trades.ts";
+import type { Candle, TradeDirection, TradeExitReason, TradeStatus } from "./trades.ts";
 
 export interface EntryDraft {
   /** Reused when a blocked-storage save is retried, so recovery cannot create a duplicate trade. */
@@ -42,6 +43,26 @@ export interface EntryDraft {
   exitClock: string;
   /** Optional. One-tap feeling at entry (docs/19 §4, OD-39 c). */
   entryMoodSpoke?: string | null;
+}
+
+/** Clock drift allowed before a trade time counts as in the future (Q-11, 02 §2.3). */
+export const FUTURE_ALLOWANCE_MS = 5 * 60_000;
+
+/** UX-09: a typo'd date (tomorrow) is refused. Pure: the caller passes `now`. Open trades have no exit to check. */
+export function validateFutureTimes(entryMs: number, exitMs: number | null, nowMs = Date.now(), zone = DEFAULT_TIME_ZONE): { entry?: string; exit?: string } {
+  const errors: { entry?: string; exit?: string } = {};
+  if (Number.isFinite(entryMs) && entryMs > nowMs + FUTURE_ALLOWANCE_MS) errors.entry = `This entry is in the future (${formatDateTime(entryMs, zone)}). Check the date.`;
+  if (exitMs != null && Number.isFinite(exitMs) && exitMs > nowMs + FUTURE_ALLOWANCE_MS) errors.exit = `This exit is in the future (${formatDateTime(exitMs, zone)}). Check the date.`;
+  return errors;
+}
+
+/** UX-09 warning (Q-10): a typed price more than 1% outside the day's bar range. A warning only: saving is never blocked. */
+export function checkPriceAgainstDayRange(price: number | null, symbol: string, dayBars: readonly Pick<Candle, "low" | "high">[]): string | null {
+  if (price == null || !Number.isFinite(price) || dayBars.length === 0) return null;
+  const dayLow = Math.min(...dayBars.map((bar) => bar.low));
+  const dayHigh = Math.max(...dayBars.map((bar) => bar.high));
+  if (price >= dayLow * 0.99 && price <= dayHigh * 1.01) return null;
+  return `${formatPrice(price, symbol)} is far from where ${canonicalSymbol(symbol) ?? symbol} traded that day (${formatPrice(dayLow, symbol)}–${formatPrice(dayHigh, symbol)}). Typo?`;
 }
 
 /** Minutes the default entry sits before the default exit for a closed trade. */
