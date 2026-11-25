@@ -66,7 +66,7 @@ test("classification compares raw elapsed milliseconds at thresholds", () => {
 test("feed ignores the removed style query and filters only by review status", () => {
   const params = new URLSearchParams("style=scalp&status=unreviewed");
   const filters = parseFilters(params);
-  assert.deepEqual(filters, { status: "unreviewed" });
+  assert.deepEqual(filters, { status: "unreviewed", date: null, account: null, playbook: null, tag: null });
   assert.equal(filtersToQuery(filters), "?status=unreviewed");
 
   const scalp = normalizeTrade({ ...base, id: "scalp", symbol: "MES", direction: "LONG", entry_price: 1, exit_price: 2 });

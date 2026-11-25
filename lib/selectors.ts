@@ -1,6 +1,7 @@
 // Pure list logic: grouping, filtering, day statistics, and running statistics across days (R-08a).
 // Lists never see candles (B-42).
-import { sessionDate, sessionWeekMonday } from "./session.ts";
+import { formatSessionDate, offsetSessionDate, sessionDate, sessionWeekMonday } from "./session.ts";
+import { SETUP_TAGS, playbookName } from "./playbooks.ts";
 import { adherence, isOpen, rMultiple, tradePnl } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
 
@@ -90,34 +91,142 @@ export function groupByDay(trades: TradeRecord[]): DayGroup[] {
 
 export type StatusFilter = "all" | "unreviewed" | "flagged";
 
+/** Feed URL values that stand for "no playbook", "no account" and "no setup tag" (the Lab's Gaps links use them). */
+export const NO_PLAYBOOK_FILTER = "none";
+export const UNASSIGNED_ACCOUNT_FILTER = "unassigned";
+export const NO_SETUP_TAG_FILTER = "no-setup-tag";
+
 export interface FeedFilters {
   status: StatusFilter;
+  /** `YYYY-MM-DD` session date of the trade's entry. */
+  date?: string | null;
+  /** An account id, or `unassigned` for trades with no account. */
+  account?: string | null;
+  /** A playbook id, or `none` for trades with no playbook. */
+  playbook?: string | null;
+  /** An exact quick tag, or `no-setup-tag` for trades with no setup tag. */
+  tag?: string | null;
+}
+
+const SESSION_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A `YYYY-MM-DD` label that is a real calendar date, otherwise null (`2026-02-30` is rejected). */
+export function parseSessionDateParam(value: string | null | undefined): string | null {
+  if (!value || !SESSION_DATE_PATTERN.test(value)) return null;
+  return offsetSessionDate(value, 0) === value ? value : null;
+}
+
+/** The day Today shows: the `?date=` value when it is a real day on or before today, otherwise today. */
+export function resolveViewedDate(param: string | null | undefined, todayDate: string): string {
+  const parsed = parseSessionDateParam(param);
+  return parsed && parsed <= todayDate ? parsed : todayDate;
+}
+
+function isWeekendLabel(date: string) {
+  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+
+/** The next or previous regular trading date. Saturday and Sunday are skipped (exchange holidays are OD-35). */
+export function stepRegularSessionDate(date: string, delta: -1 | 1): string {
+  let next = date;
+  do {
+    next = offsetSessionDate(next, delta);
+  } while (isWeekendLabel(next));
+  return next;
 }
 
 export function parseFilters(params: { get(name: string): string | null }): FeedFilters {
   const status = params.get("status");
   return {
     status: status === "unreviewed" || status === "flagged" ? status : "all",
+    date: parseSessionDateParam(params.get("date")),
+    account: params.get("account") || null,
+    playbook: params.get("playbook") || null,
+    tag: params.get("tag") || null,
   };
 }
 
-export function filtersToQuery(filters: FeedFilters) {
+export function filtersToQuery(filters: Partial<FeedFilters>) {
   const params = new URLSearchParams();
-  if (filters.status !== "all") params.set("status", filters.status);
+  if (filters.status && filters.status !== "all") params.set("status", filters.status);
+  if (filters.date) params.set("date", filters.date);
+  if (filters.account) params.set("account", filters.account);
+  if (filters.playbook) params.set("playbook", filters.playbook);
+  if (filters.tag) params.set("tag", filters.tag);
   const query = params.toString();
   return query ? `?${query}` : "";
 }
 
+/** True when any Feed filter narrows the list, including the status pills. */
+export function hasActiveFilters(filters: FeedFilters) {
+  return filters.status !== "all" || Boolean(filters.date || filters.account || filters.playbook || filters.tag);
+}
+
+export function matchesFeedFilters(trade: TradeRecord, filters: FeedFilters): boolean {
+  if (filters.status === "flagged" && !trade.flagged) return false;
+  if (filters.status === "unreviewed" && trade.review_status === "reviewed") return false;
+  if (filters.date && sessionDate(trade.entry_time) !== filters.date) return false;
+  if (filters.account) {
+    const match = filters.account === UNASSIGNED_ACCOUNT_FILTER ? trade.account_id == null : trade.account_id === filters.account;
+    if (!match) return false;
+  }
+  if (filters.playbook) {
+    const match = filters.playbook === NO_PLAYBOOK_FILTER ? trade.playbook_id == null : trade.playbook_id === filters.playbook;
+    if (!match) return false;
+  }
+  if (filters.tag) {
+    const match = filters.tag === NO_SETUP_TAG_FILTER
+      ? !trade.quick_tags.some((tag) => SETUP_TAGS.includes(tag))
+      : trade.quick_tags.includes(filters.tag);
+    if (!match) return false;
+  }
+  return true;
+}
+
 export function applyFilters(trades: TradeRecord[], filters: FeedFilters) {
-  return trades.filter((trade) =>
-    (filters.status === "all" || (filters.status === "flagged" ? trade.flagged : trade.review_status !== "reviewed")));
+  return trades.filter((trade) => matchesFeedFilters(trade, filters));
 }
 
 const STATUS_NAMES: Record<StatusFilter, string> = { all: "Any status", unreviewed: "Needs review", flagged: "Flagged" };
 
+export interface FilterLookup {
+  /** Account name for an id. Falls back to the id when not supplied. */
+  accountName?: (id: string) => string | null;
+  /** Playbook name for an id. Falls back to the seeded or registered playbook name, then the id. */
+  playbookName?: (id: string) => string | null;
+}
+
+export interface FilterPart {
+  key: keyof FeedFilters;
+  label: string;
+}
+
+/** Each active filter as a readable part, in display order. The status part is only present when status is narrowed. */
+export function describeFilterParts(filters: FeedFilters, lookup: FilterLookup = {}): FilterPart[] {
+  const parts: FilterPart[] = [];
+  if (filters.status !== "all") parts.push({ key: "status", label: STATUS_NAMES[filters.status] });
+  if (filters.date) parts.push({ key: "date", label: formatSessionDate(filters.date) });
+  if (filters.account) {
+    const label = filters.account === UNASSIGNED_ACCOUNT_FILTER
+      ? "Unassigned"
+      : lookup.accountName?.(filters.account) ?? filters.account;
+    parts.push({ key: "account", label });
+  }
+  if (filters.playbook) {
+    const label = filters.playbook === NO_PLAYBOOK_FILTER
+      ? "No playbook"
+      : lookup.playbookName?.(filters.playbook) ?? playbookName(filters.playbook) ?? filters.playbook;
+    parts.push({ key: "playbook", label });
+  }
+  if (filters.tag) parts.push({ key: "tag", label: filters.tag === NO_SETUP_TAG_FILTER ? "No setup tag" : filters.tag });
+  return parts;
+}
+
 /** Plain-language name of the active filters, for the empty state and the pager. */
-export function describeFilters(filters: FeedFilters) {
-  return filters.status !== "all" ? STATUS_NAMES[filters.status] : "All trades";
+export function describeFilters(filters: FeedFilters, lookup: FilterLookup = {}) {
+  const parts = describeFilterParts(filters, lookup).map((part) => part.label);
+  return parts.length ? parts.join(" · ") : "All trades";
 }
 
 export function withSamples(trades: TradeRecord[], showSamples: boolean) {

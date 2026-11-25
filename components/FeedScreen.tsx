@@ -5,8 +5,9 @@ import { DayHeader } from "./DayHeader";
 import { MoodStatsCard } from "./MoodCard";
 import { TradeRow } from "./TradeRow";
 import { usePrefs } from "@/lib/prefs";
-import { applyFilters, describeFilters, filtersToQuery, groupByDay, parseFilters, withSamples } from "@/lib/selectors";
-import type { FeedFilters, StatusFilter } from "@/lib/selectors";
+import { useAccounts } from "@/lib/accounts-store";
+import { applyFilters, describeFilterParts, describeFilters, filtersToQuery, groupByDay, hasActiveFilters, parseFilters, withSamples } from "@/lib/selectors";
+import type { FeedFilters, FilterLookup, StatusFilter } from "@/lib/selectors";
 import { useJournal } from "@/lib/store";
 import { openAddTrade, rememberList } from "@/lib/ui";
 
@@ -20,10 +21,12 @@ export function FeedScreen() {
   const prefs = usePrefs();
   const router = useRouter();
   const pathname = usePathname();
+  const accounts = useAccounts();
   const filters = parseFilters(useSearchParams());
 
   // Filters live in the URL, so back, reload and a deep link all restore the same list (UX-10).
   const setFilters = (patch: Partial<FeedFilters>) => router.replace(`${pathname}${filtersToQuery({ ...filters, ...patch })}`, { scroll: false });
+  const clearFilters = () => router.replace(pathname, { scroll: false });
 
   if (!journal.hydrated) {
     return <div className="page" role="status" aria-label="Loading your journal…"><div className="page-head"><div><span className="eyebrow">Feed</span><h1>Loading your journal…</h1></div></div>{[0, 1, 2].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>;
@@ -32,9 +35,11 @@ export function FeedScreen() {
   const all = withSamples(journal.trades, prefs.showSamples);
   const shown = applyFilters(all, filters);
   const groups = groupByDay(shown);
-  const filtered = filters.status !== "all";
+  const filtered = hasActiveFilters(filters);
+  const lookup: FilterLookup = { accountName: (id) => accounts.accounts.find((account) => account.id === id)?.name ?? null };
+  const chips = describeFilterParts(filters, lookup).filter((part) => part.key !== "status");
   const count = (patch: Partial<FeedFilters>) => applyFilters(all, { ...filters, ...patch }).length;
-  const open = () => rememberList({ ids: shown.map((trade) => trade.id), label: describeFilters(filters), href: `/feed${filtersToQuery(filters)}` });
+  const open = () => rememberList({ ids: shown.map((trade) => trade.id), label: describeFilters(filters, lookup), href: `/feed${filtersToQuery(filters)}` });
 
   return (
     <div className="page">
@@ -55,15 +60,34 @@ export function FeedScreen() {
         ))}
       </div>
 
+      {chips.length > 0 && (
+        <div className="filter-bar" role="group" aria-label="Active filters">
+          {chips.map((part) => (
+            <button
+              key={part.key}
+              type="button"
+              className="pill"
+              style={{ minHeight: 44, minWidth: 44 }}
+              aria-pressed="true"
+              aria-label={`Remove filter ${part.label}`}
+              onClick={() => setFilters({ [part.key]: null } as Partial<FeedFilters>)}
+            >
+              {part.label}<span aria-hidden="true"> ×</span>
+            </button>
+          ))}
+          <button type="button" className="pill" style={{ minHeight: 44, minWidth: 44 }} onClick={clearFilters}>Clear filters</button>
+        </div>
+      )}
+
       {!journal.hydrated ? (
         <div role="status" aria-label="Loading trades…">{[0, 1, 2, 3].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>
       ) : groups.length === 0 ? (
         <div className="specular-card empty-state">
           {filtered ? (
             <>
-              <h3>Nothing matches “{describeFilters(filters)}”</h3>
+              <h3>Nothing matches “{describeFilters(filters, lookup)}”</h3>
               <p>{filters.status === "unreviewed" ? "Every trade in this view is reviewed." : "No trades fit these filters yet."}</p>
-              <div className="actions"><button className="btn-secondary" style={{ minHeight: 44, minWidth: 44 }} onClick={() => setFilters({ status: "all" })}>Clear filters</button></div>
+              <div className="actions"><button className="btn-secondary" style={{ minHeight: 44, minWidth: 44 }} onClick={clearFilters}>Clear filters</button></div>
             </>
           ) : (
             <>

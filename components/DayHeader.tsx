@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import type { DayGroup } from "@/lib/selectors";
 import { formatSessionDate } from "@/lib/session";
@@ -13,7 +14,10 @@ export function DayHeader({ group, shield, sticky = true }: { group: DayGroup; s
     : "— won";
   return (
     <div className="day-head" style={sticky ? undefined : { position: "static" }}>
-      <h2>{formatSessionDate(group.date)}{group.sampleOnly && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}</h2>
+      <h2>
+        {/* Opens this day on Today via ?date=, so the back button returns here. */}
+        <Link href={`/?date=${group.date}`} style={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", minHeight: 44 }}>{formatSessionDate(group.date)}</Link>
+        {group.sampleOnly && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}</h2>
       <b className={`net num ${grossValue > 0 ? "positive" : grossValue < 0 ? "negative" : ""}`} title="Gross P&L, before fees and commissions">{gross}{!shield && <span className="gross-label"> gross</span>}</b>
       <p className="day-sub">
         {stats.count} {stats.count === 1 ? "trade" : "trades"}

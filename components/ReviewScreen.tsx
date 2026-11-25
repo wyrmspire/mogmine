@@ -28,17 +28,55 @@ export function ReviewScreen() {
   return <Queue />;
 }
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_CHIP_LIMIT = 14;
+
+/** Short day chip label, `Mon 23`. Session dates are labels, so UTC is the calendar. */
+function dayChipLabel(date: string) {
+  const day = new Date(`${date}T00:00:00Z`);
+  return `${WEEKDAYS[day.getUTCDay()]} ${day.getUTCDate()}`;
+}
+
 /** One trade at a time, untagged first, so a session's tagging is finished in about a minute (docs/05 §2C). */
 function Queue() {
   const journal = useJournal();
   const prefs = usePrefs();
-  // The queue is fixed when the screen opens: tagging a trade must not make the card jump away.
-  const [ids] = useState(() => {
-    const open = withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status !== "reviewed");
+  const pending = withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status !== "reviewed");
+  // Queue and day chips are fixed when the screen opens: tagging a trade must not make the card or the chips jump away.
+  const [dayOptions] = useState(() => [...new Set(pending.map((trade) => sessionDate(trade.entry_time)))].sort((a, b) => (a < b ? 1 : -1)).slice(0, DAY_CHIP_LIMIT));
+  const queueFor = (day: string | null) => {
+    const open = day ? pending.filter((trade) => sessionDate(trade.entry_time) === day) : pending;
     return [...open.filter((trade) => trade.review_status === "new"), ...open.filter((trade) => trade.review_status !== "new")].map((trade) => trade.id);
-  });
+  };
+  const [day, setDay] = useState<string | null>(null);
+  const [ids, setIds] = useState(() => queueFor(null));
   const [position, setPosition] = useState(0);
   const [revealed, setRevealed] = useState<string | null>(null);
+  // Only a different day chip rebuilds the queue; tagging alone never does.
+  const chooseDay = (next: string | null) => {
+    if (next === day) return;
+    setDay(next);
+    setIds(queueFor(next));
+    setPosition(0);
+    setRevealed(null);
+  };
+
+  const dayChips = dayOptions.length > 0 && (
+    <div className="filter-bar" role="group" aria-label="Review by trading day" style={{ margin: "0 0 14px" }}>
+      {[null, ...dayOptions].map((option) => (
+        <button
+          key={option ?? "all"}
+          type="button"
+          className="pill"
+          style={{ minHeight: 44, minWidth: 44 }}
+          aria-pressed={day === option}
+          onClick={() => chooseDay(option)}
+        >
+          {option ? dayChipLabel(option) : "All days"}
+        </button>
+      ))}
+    </div>
+  );
 
   const trade = journal.trades.find((item) => item.id === ids[position]);
   const done = ids.filter((id) => journal.trades.find((item) => item.id === id)?.review_status === "reviewed").length;
@@ -47,6 +85,7 @@ function Queue() {
     return (
       <div className="page" style={{ maxWidth: 720 }}>
         <div className="page-head"><div><span className="eyebrow">Review queue</span><h1>All caught up</h1></div></div>
+        {dayChips}
         <div className="specular-card empty-state">
           <h3>{ids.length ? `${done} of ${ids.length} reviewed this pass` : "Nothing is waiting"}</h3>
           <p>{ids.length && done < ids.length ? "Skipped trades stay in the queue for next time." : "Every trade has been reviewed."}</p>
@@ -79,6 +118,7 @@ function Queue() {
         <div><span className="eyebrow">Review queue</span><h1>{position + 1} of {ids.length}</h1><p>Playbook, tags, one line. Then mark it reviewed.</p></div>
         <Link className="btn-secondary drill-link" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills</Link>
       </div>
+      {dayChips}
 
       <section className="specular-card queue-card" aria-label={`Trade ${position + 1} of ${ids.length}`}>
         <div className="queue-progress" role="progressbar" aria-valuenow={position + 1} aria-valuemin={1} aria-valuemax={ids.length} aria-label={`Review progress, trade ${position + 1} of ${ids.length}`}><i style={{ width: `${(position / ids.length) * 100}%` }} /></div>
