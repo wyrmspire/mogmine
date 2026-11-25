@@ -13,6 +13,7 @@ import type { TradeRecord } from "../trades.ts";
 import { sanitizeAccounts, sanitizeBalanceChecks } from "../accounts.ts";
 import type { BalanceCheck, TradingAccount } from "../accounts.ts";
 import { isValidRSizeCents, isValidStatedRiskR, resolveRSize, riskCents } from "../r-size.ts";
+import { stopMoveError } from "../stop-facts.ts";
 import { sanitizeMoodRecords, sanitizeRegistry } from "../mood.ts";
 import { sanitizeCandidates } from "../mood-store-sanitize.ts";
 import { sanitizePlaybook } from "../playbooks-sanitize.ts";
@@ -82,6 +83,7 @@ function parseTrade(raw: unknown): Parsed<TradeRecord> {
   if (!Number.isFinite(entryAt)) return bad("Entry time must be a valid date and time.");
   if (trade.status === "closed" && !Number.isFinite(exitAt)) return bad("Exit time must be a valid date and time.");
   if (trade.status === "closed" && exitAt <= entryAt) return bad("Exit time must be after entry time.");
+  if (trade.initial_stop_price != null && trade.initial_stop_set_at == null) trade.initial_stop_set_at = trade.entry_time; // UX-19
   const hasInitialStop = trade.initial_stop_price != null;
   const hasInitialStopTime = trade.initial_stop_set_at != null;
   if (hasInitialStop !== hasInitialStopTime) return bad("Initial stop price and set time go together.");
@@ -109,6 +111,7 @@ function parseTrade(raw: unknown): Parsed<TradeRecord> {
   if (trade.stop_moves?.some((move) => toTicks(move.price, trade.symbol) == null)) {
     return bad("Every stop move price must sit on the contract's tick grid.");
   }
+  const moveError = stopMoveError(trade, entryAt, exitAt); if (moveError) return bad(moveError); // 05 §3.1
   // risk_cents is computed, never accepted as given. A client value must match the computed one (null matches null).
   if (raw.risk_cents !== undefined && raw.risk_cents !== riskCents(trade)) {
     return bad("risk_cents is computed from entry, initial stop and quantity and did not match.");

@@ -85,7 +85,7 @@ const trade = (over: Record<string, unknown> = {}) => ({
 test("creates a trade, reads it back with its stop moves, and lists it", async () => {
   const commands = createJournalCommands(memoryRepos());
   const stopMoves = [{ price: 7600.25, time: "2026-11-20T15:10:00Z" }];
-  const created = await commands.create("trades", trade({ stop_moves: stopMoves }));
+  const created = await commands.create("trades", trade({ stop_moves: stopMoves, stop_loss_price: 7600.25 }));
   assert.equal(created.ok, true);
   if (!created.ok) return;
   assert.equal(created.value.record.user_id, DEFAULT_OWNER_USER_ID);
@@ -255,4 +255,60 @@ test("singletons: null before the first write, then sanitized; a bad prompt libr
 
   const library = await commands.writeSingleton("prompt_library", { schema: "something-else", prompts: [] } as unknown);
   assert.equal(!library.ok && library.error.code, "invalid");
+});
+
+test("a stop move before entry or after exit is invalid (05 §3.1)", async () => {
+  const commands = createJournalCommands(memoryRepos());
+  const early = await commands.create("trades", trade({ stop_moves: [{ price: 7598.25, time: "2026-11-20T14:59:00Z" }], stop_loss_price: 7598.25 }));
+  assert.equal(early.ok, false);
+  assert.equal(early.ok ? "" : early.error.code, "invalid");
+  assert.equal(early.ok ? "" : early.error.message, "A stop move must fall between entry and exit.");
+
+  const late = await commands.create("trades", trade({ id: "t-late", stop_moves: [{ price: 7598.25, time: "2026-11-20T15:31:00Z" }], stop_loss_price: 7598.25 }));
+  assert.equal(late.ok, false);
+  assert.equal(late.ok ? "" : late.error.message, "A stop move must fall between entry and exit.");
+});
+
+test("the working stop must equal the last stop move (05 §3.1)", async () => {
+  const commands = createJournalCommands(memoryRepos());
+  const mismatch = await commands.create("trades", trade({
+    entry_price: 7255, exit_price: 7258, stop_loss_price: 7250,
+    stop_moves: [{ price: 7260, time: "2026-11-20T15:10:00Z" }],
+  }));
+  assert.equal(mismatch.ok, false);
+  assert.equal(mismatch.ok ? "" : mismatch.error.code, "invalid");
+  assert.equal(mismatch.ok ? "" : mismatch.error.message, "The working stop must equal the last stop move (7260.00).");
+});
+
+test("two stop moves at the same minute keep input order, so the later one in the input is the working stop", async () => {
+  const commands = createJournalCommands(memoryRepos());
+  const moves = [
+    { price: 7601.25, time: "2026-11-20T15:10:00Z" },
+    { price: 7601.5, time: "2026-11-20T15:10:00Z" },
+  ];
+  const kept = await commands.create("trades", trade({ stop_moves: moves, stop_loss_price: 7601.5 }));
+  assert.equal(kept.ok, true);
+  assert.deepEqual(kept.ok && kept.value.record.stop_moves, moves);
+
+  const reversed = await commands.create("trades", trade({
+    id: "t-rev",
+    stop_moves: [moves[1], moves[0]],
+    stop_loss_price: 7601.5,
+  }));
+  assert.equal(reversed.ok, false);
+  assert.equal(reversed.ok ? "" : reversed.error.message, "The working stop must equal the last stop move (7601.25).");
+});
+
+test("an initial stop sent without its set time defaults the time to entry (02 §2.6)", async () => {
+  const commands = createJournalCommands(memoryRepos());
+  const created = await commands.create("trades", trade({ initial_stop_price: 7598.25 }));
+  assert.equal(created.ok, true);
+  assert.equal(created.ok && created.value.record.initial_stop_set_at, "2026-11-20T15:00:00Z");
+});
+
+test("a set time without an initial stop price is still refused", async () => {
+  const commands = createJournalCommands(memoryRepos());
+  const result = await commands.create("trades", trade({ initial_stop_set_at: "2026-11-20T15:05:00Z" }));
+  assert.equal(result.ok, false);
+  assert.equal(result.ok ? "" : result.error.message, "Initial stop price and set time go together.");
 });
