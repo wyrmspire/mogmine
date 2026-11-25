@@ -14,6 +14,9 @@ import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
 import type { NeighbourTradeProjection } from "@/lib/neighbour-trades";
 import { levelPills, tradeAnchors, type LevelLine } from "@/lib/chart-levels";
+import { resolveTapAction, type LevelHit } from "@/lib/level-hit-test";
+import { usePrefs } from "@/lib/prefs";
+import type { LevelLabelsMode } from "@/lib/prefs-sanitize";
 import type { VwapPoint } from "@/lib/chart-indicators";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
@@ -70,6 +73,10 @@ interface Props {
   onSelectNeighbour?: (tradeId: string) => void;
   /** K (#40): Optional neighbour trade projections to associate archived marks with tradeIds */
   neighbourTrades?: readonly NeighbourTradeProjection[];
+  /** LB-5: label mode. Defaults to the `levelLabels` pref (`"tap"` out of the box). */
+  levelLabelsMode?: LevelLabelsMode;
+  /** LB-6: a tap on a level opens its card (`hit`); a tap elsewhere, a pan or a zoom sends `null`. */
+  onSelectLevel?: (hit: LevelHit | null) => void;
 }
 
 interface Live {
@@ -182,16 +189,18 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
 const NO_LEVELS: readonly LevelLine[] = [];
 const NO_VWAP: readonly VwapPoint[] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades });
+  const prefs = usePrefs();
+  const levelMode: LevelLabelsMode = levelLabelsMode ?? prefs.levelLabels;
+  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -302,8 +311,11 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t, p.neighbourTrades);
     const pills = p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : [];
-    l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000, pills, { lastBarTime: bars[bars.length - 1].time });
-    l.levelLabels = pills.map((pill) => pill.label);
+    l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000, pills, {
+      lastBarTime: bars[bars.length - 1].time, mode: p.levelMode, symbol: tr.symbol, entryPrice: tr.entry_price,
+    });
+    // Tap mode draws no pills, so no right-edge reserve either (LB-6): rightOffset stays 0.
+    l.levelLabels = p.levelMode === "tap" ? [] : pills.map((pill) => pill.label);
     applyLevelRightOffset(l);
     l.vwapSeries.applyOptions({ color: t.vwap, visible: p.vwap.length > 0 });
     if (l.renderedVwap !== p.vwap) {
@@ -399,14 +411,15 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         }
       });
 
+      // Priority (docs/03 §3): neighbour trade box, then level ray or zone, then dismiss an open card.
       const onChartClick = (param: import("lightweight-charts").MouseEventParams<Time>) => {
         if (!param.point) return;
         const hitTradeId = state.primitive.hitTestTradeId(param.point.x, param.point.y)
           ?? state.primitive.hitTest(param.point.x, param.point.y)?.externalId
           ?? (param.hoveredObjectId as string | undefined);
-        if (hitTradeId) {
-          latest.current.onSelectNeighbour?.(hitTradeId);
-        }
+        const action = resolveTapAction(hitTradeId ?? null, state.levelsPrimitive.hitTestLevel(param.point.x, param.point.y));
+        if (action.kind === "neighbour") latest.current.onSelectNeighbour?.(action.tradeId);
+        latest.current.onSelectLevel?.(action.kind === "level" ? action.hit : null);
       };
       chart.subscribeClick(onChartClick);
 
@@ -433,6 +446,8 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         // issue #87) rebuild from it once the drag or pinch stops moving. Programmatic echoes
         // from setData / fit are not view changes.
         if (!state.programmaticRangeChange) {
+          // A user zoom or pan closes an open level card (LB-6).
+          latest.current.onSelectLevel?.(null);
           window.clearTimeout(state.viewSettleTimer);
           state.viewSettleTimer = window.setTimeout(() => latest.current.onRendered?.(), 300);
         }
@@ -445,6 +460,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       const markUserPan = () => {
         state.userPanned = true;
         state.heldDefaultRange = null;
+        latest.current.onSelectLevel?.(null);
       };
       // A tap is not a pan: only an actual drag (or a wheel / pinch, which move the range) marks
       // one, so tapping the chart never drops the fitted default window (review follow-up to #82).
@@ -593,7 +609,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, neighbourTrades]);
+  }, [trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, neighbourTrades, levelMode]);
 
   return <><div
     ref={hostRef}
