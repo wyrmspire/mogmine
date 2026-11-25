@@ -3,7 +3,7 @@
 import { useEffect, useImperativeHandle, useRef, useSyncExternalStore } from "react";
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
-import { SessionLevelsPrimitive } from "./SessionLevelsPrimitive";
+import { SessionLevelsPrimitive, computeLevelRightOffsetBars, levelPillColumnPx } from "./SessionLevelsPrimitive";
 import { describeTrade } from "@/lib/describe";
 import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
@@ -79,6 +79,9 @@ interface Live {
   series: CandleSeries;
   primitive: PositionBoxPrimitive;
   levelsPrimitive: SessionLevelsPrimitive;
+  /** Labels of the pills drawn this frame: they size the `rightOffset` reserve (OD-55a). */
+  levelLabels: string[];
+  levelRightOffset: number;
   vwapSeries: LineSeries;
   renderedVwap: readonly VwapPoint[] | null;
   fitRange: { from: number; to: number } | null;
@@ -97,6 +100,25 @@ interface Live {
 }
 
 const toTime = (ms: number) => Math.floor(ms / 1000) as UTCTimestamp;
+
+/**
+ * OD-55a: reserve the bars the pill column needs past the last bar, so pills never sit on candles.
+ * Changes only the right edge: the visible logical range is put back, so fitted bars do not move.
+ * Memoised on the offset, so a range echo from this call cannot start another.
+ */
+function applyLevelRightOffset(state: Live) {
+  const timeScale = state.chart.timeScale();
+  const range = timeScale.getVisibleLogicalRange();
+  const bars = range ? visibleLogicalBars(range) : 0;
+  const barSpacing = bars > 0 ? timeScale.width() / bars : 0;
+  const offset = computeLevelRightOffsetBars(state.levelLabels.length, levelPillColumnPx(state.levelLabels), barSpacing);
+  if (offset === state.levelRightOffset) return;
+  state.levelRightOffset = offset;
+  setProgrammaticRange(state, () => {
+    timeScale.applyOptions({ rightOffset: offset });
+    if (range) timeScale.setVisibleLogicalRange(range);
+  });
+}
 
 /** Where the box ends: the exit, or for an open trade the last loaded bar (R-03c). Never "now" or a guess. */
 function boxEnd(trade: Pick<TradeRecord, "entry_time" | "exit_time">, bars: Candle[]): string {
@@ -279,7 +301,10 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t, p.neighbourTrades);
-    l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000, p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : []);
+    const pills = p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : [];
+    l.levelsPrimitive.update(p.levels, t, TIMEFRAME_MINUTES[barTimeframe] * 60_000, pills, { lastBarTime: bars[bars.length - 1].time });
+    l.levelLabels = pills.map((pill) => pill.label);
+    applyLevelRightOffset(l);
     l.vwapSeries.applyOptions({ color: t.vwap, visible: p.vwap.length > 0 });
     if (l.renderedVwap !== p.vwap) {
       // Points sit on displayed bar times only, so the time scale gains no new indices.
@@ -352,7 +377,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
       });
       const state: Live = {
-        lwc, host, chart, series, primitive, levelsPrimitive, vwapSeries, renderedVwap: null,
+        lwc, host, chart, series, primitive, levelsPrimitive, levelLabels: [], levelRightOffset: 0, vwapSeries, renderedVwap: null,
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
         userPanned: false, programmaticRangeChange: false,
@@ -522,10 +547,15 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       host.dataset.priceScale = "auto";
       placeGrip();
       requestAnimationFrame(placeGrip);
-      chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(placeGrip));
+      // A separate listener, after the user-pan logic above: zoom changes bar spacing, so the pill reserve follows.
+      chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+        applyLevelRightOffset(state);
+        requestAnimationFrame(placeGrip);
+      });
 
       const resize = new ResizeObserver(() => {
         chart.applyOptions({ width: host.clientWidth, height: host.clientHeight });
+        applyLevelRightOffset(state);
         requestAnimationFrame(placeGrip);
         if (!state.userPanned && state.heldDefaultRange) {
           setProgrammaticRange(state, () => { state.chart.timeScale().setVisibleLogicalRange(state.heldDefaultRange!); });

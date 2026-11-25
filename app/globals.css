@@ -55,6 +55,7 @@
   --level-adr: #f5b544;
   --level-neutral: #9ca3af;
   --level-label-text: #ffffff;
+  --level-label-bg-alpha: 0.95;
   /* Session VWAP line (IND-1). Not gold, not profit or loss. */
   --indicator-vwap: #e879c6;
   --level-zone-opacity: 0.14;

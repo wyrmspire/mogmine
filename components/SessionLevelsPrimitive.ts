@@ -15,6 +15,29 @@ const FONT = "500 11px ui-monospace, SFMono-Regular, Menlo, monospace";
 const PILL_HEIGHT = 16;
 const PILL_PAD = 5;
 const RIGHT_INSET = 2;
+// 11px ui-monospace advances about 0.6em per glyph. Used to reserve the pill column before it paints.
+const PILL_CHAR_PX = 6.6;
+// Gap kept between the last bar and the pill column (OD-55a).
+const PILL_GAP_PX = 8;
+// Rays end this far past the last bar (LB-4).
+const RAY_OVERSHOOT_PX = 4;
+// Pill background opacity when the theme does not carry `--level-label-bg-alpha` (LB-2).
+const PILL_BG_ALPHA = 0.95;
+
+/** Width of one pill as `draw` lays it out, for a label of `label` text. */
+export function levelPillWidthPx(label: string) {
+  return Math.ceil(label.length * PILL_CHAR_PX) + PILL_PAD * 2 + 3;
+}
+
+/** Width of the widest pill in the column, so `rightOffset` can reserve it before anything paints. */
+export function levelPillColumnPx(labels: readonly string[]) {
+  return labels.reduce((widest, label) => Math.max(widest, levelPillWidthPx(label)), 0);
+}
+
+/** OD-55a: bars of `rightOffset` that keep the pill column clear of the last bar. Zero when no pill shows. */
+export function computeLevelRightOffsetBars(pillCount: number, pillWidthPx: number, barSpacing: number) {
+  return pillCount > 0 && barSpacing > 0 ? Math.ceil((pillWidthPx + PILL_GAP_PX) / barSpacing) : 0;
+}
 
 function pillColor(theme: ChartTheme, pill: Pick<LevelPill, "role" | "tone">) {
   if (pill.tone) return pill.tone === "risk" ? theme.risk : pill.tone === "profit" ? theme.profit : pill.tone === "entry" ? theme.textPrimary : theme.textMuted;
@@ -33,9 +56,11 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
   private pills: readonly LevelPill[] = [];
   private theme?: ChartTheme;
   private barMs = 60_000;
+  private lastBarTime: number | null = null;
+  // Both layers sit under candles and wicks (LB-1): the pills never cover a bar.
   private readonly views: readonly IPrimitivePaneView[] = [
     { zOrder: () => "bottom", renderer: () => ({ draw: (target) => this.draw(target, "rays") }) },
-    { zOrder: () => "top", renderer: () => ({ draw: (target) => this.draw(target, "labels") }) },
+    { zOrder: () => "bottom", renderer: () => ({ draw: (target) => this.draw(target, "labels") }) },
   ];
 
   attached(param: SeriesAttachedParameter<Time>) { this.attachment = param; }
@@ -48,8 +73,10 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
    * `barMs` is the displayed bar size: a level's start time snaps to the bar that holds it (B-23).
    * `pills` defaults to one pill per line, in order.
    */
-  update(lines: readonly LevelLine[], theme: ChartTheme, barMs: number, pills?: readonly LevelPill[]) {
+  update(lines: readonly LevelLine[], theme: ChartTheme, barMs: number, pills?: readonly LevelPill[], options: { lastBarTime?: number | null } = {}) {
     this.lines = lines;
+    // Rays stop at the last bar (LB-4). Null keeps the full-width ray.
+    this.lastBarTime = options.lastBarTime ?? null;
     this.pills = pills ?? lines.map((line, rank) => ({
       price: line.price, label: line.label, role: line.role, tone: null, rank, lineTicks: [line.price_ticks],
     }));
@@ -74,6 +101,8 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
       ctx.font = FONT;
       if (layer === "rays") {
         ctx.lineWidth = 1;
+        const lastBarX = this.lastBarTime != null ? scale.timeToCoordinate(Math.floor(this.lastBarTime / 1000) as UTCTimestamp) : null;
+        const rayRight = lastBarX != null ? Math.min(pane.width, Math.round(lastBarX + RAY_OVERSHOOT_PX)) : pane.width;
         for (const line of this.lines) {
           const raw = attachment.series.priceToCoordinate(line.price);
           if (raw == null || raw < 0 || raw > pane.height) continue;
@@ -85,12 +114,16 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
             // The forming bar is off the loaded data: draw from the edge rather than guess (B-23).
             if (x != null) x0 = Math.max(0, Math.min(pane.width, x));
           }
-          ctx.globalAlpha = faint.has(line.price_ticks) ? 0.3 : 0.8;
-          ctx.strokeStyle = roleColor(theme, line.role);
-          ctx.setLineDash(line.proxy ? [4, 4] : []);
+          if (rayRight <= x0) continue;
+          const faded = faint.has(line.price_ticks);
+          // Settlement levels (PDC, 3 PM close, settle) are quiet dotted neutral rays (Q-7).
+          const settlement = line.settlement === true;
+          ctx.globalAlpha = faded ? 0.3 : settlement ? 0.6 : 0.8;
+          ctx.strokeStyle = settlement ? theme.levelNeutral : roleColor(theme, line.role);
+          ctx.setLineDash(settlement ? [1, 3] : line.proxy ? [4, 4] : []);
           ctx.beginPath();
           ctx.moveTo(x0, y);
-          ctx.lineTo(pane.width, y);
+          ctx.lineTo(rayRight, y);
           ctx.stroke();
         }
       } else {
@@ -112,7 +145,7 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
             ctx.lineTo(left, at);
             ctx.stroke();
           }
-          ctx.globalAlpha = 0.82;
+          ctx.globalAlpha = theme.levelLabelBgAlpha ?? PILL_BG_ALPHA;
           ctx.fillStyle = theme.surface;
           ctx.fillRect(left, top, width, PILL_HEIGHT);
           ctx.globalAlpha = 1;
