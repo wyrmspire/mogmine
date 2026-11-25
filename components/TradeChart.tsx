@@ -54,6 +54,8 @@ interface Props {
   levels?: readonly LevelLine[];
   /** IND-1: session VWAP on the displayed bars. Empty hides it. */
   vwap?: readonly VwapPoint[];
+  /** IN-2: true when Globex VWAP includes tolerated overnight gaps (HUD prefixes ≈). */
+  vwapApproximate?: boolean;
   zone: string;
   /** Shield / privacy: the on-chart pill shows R and points, never dollars (UX-71). */
   privacy: boolean;
@@ -158,16 +160,16 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
 const NO_LEVELS: readonly LevelLine[] = [];
 const NO_VWAP: readonly VwapPoint[] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades }; });
 
   useImperativeHandle(ref, () => ({
     fit: () => {
@@ -366,7 +368,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         if (target) {
           const symbol = latest.current.trade.symbol;
           const vwapAt = bar ? param.seriesData.get(vwapSeries) as { value?: number } | undefined : undefined;
-          const vwapText = vwapAt?.value != null ? `  ·  VWAP ${formatPrice(vwapAt.value, symbol)}` : "";
+          const vwapText = vwapAt?.value != null ? `  ·  VWAP ${latest.current.vwapApproximate ? "≈ " : ""}${formatPrice(vwapAt.value, symbol)}` : "";
           target.textContent = bar ? `O ${formatPrice(bar.open, symbol)}  H ${formatPrice(bar.high, symbol)}  L ${formatPrice(bar.low, symbol)}  C ${formatPrice(bar.close, symbol)}  ·  ${formatPoints(bar.close - latest.current.trade.entry_price, symbol)} vs entry${vwapText}` : "";
           target.parentElement?.toggleAttribute("data-tracking", !!bar);
         }

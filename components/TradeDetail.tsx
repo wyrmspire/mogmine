@@ -368,6 +368,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     chronologyUnresolved: observation?.coverage === "complete" && observation.chronology === "unresolved",
     findings: observation?.findings ?? [],
     entryBarPassedStop: observation?.entryBarPassedStop,
+    untimedStopMovePrice: !trade.stop_moves?.length && trade.initial_stop_price != null && trade.stop_loss_price != null && trade.stop_loss_price !== trade.initial_stop_price ? trade.stop_loss_price : null,
     symbol: trade.symbol,
     zone,
   });
@@ -565,7 +566,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} vwap={vwapLine} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} vwap={vwapLine} vwapApproximate={sessionVwapReport?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>
