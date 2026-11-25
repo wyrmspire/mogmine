@@ -92,8 +92,9 @@ export function groupByDay(trades: TradeRecord[]): DayGroup[] {
 
 export type StatusFilter = "all" | "unreviewed" | "flagged";
 
-/** Feed URL values that stand for "no playbook", "no account" and "no setup tag" (the Lab's Gaps links use them). */
+/** Feed URL values that stand for "no playbook", "with any playbook", "no account" and "no setup tag" (the Lab's Gaps links use them). */
 export const NO_PLAYBOOK_FILTER = "none";
+export const HAS_PLAYBOOK_FILTER = "assigned";
 export const UNASSIGNED_ACCOUNT_FILTER = "unassigned";
 export const NO_SETUP_TAG_FILTER = "no-setup-tag";
 
@@ -103,7 +104,7 @@ export interface FeedFilters {
   date?: string | null;
   /** An account id, or `unassigned` for trades with no account. */
   account?: string | null;
-  /** A playbook id, or `none` for trades with no playbook. */
+  /** A playbook id, `assigned` for trades with any playbook, or `none` for trades with no playbook. */
   playbook?: string | null;
   /** An exact quick tag, or `no-setup-tag` for trades with no setup tag. */
   tag?: string | null;
@@ -173,7 +174,11 @@ export function matchesFeedFilters(trade: TradeRecord, filters: FeedFilters): bo
     if (!match) return false;
   }
   if (filters.playbook) {
-    const match = filters.playbook === NO_PLAYBOOK_FILTER ? trade.playbook_id == null : trade.playbook_id === filters.playbook;
+    const match = filters.playbook === NO_PLAYBOOK_FILTER
+      ? trade.playbook_id == null
+      : filters.playbook === HAS_PLAYBOOK_FILTER
+        ? trade.playbook_id != null
+        : trade.playbook_id === filters.playbook;
     if (!match) return false;
   }
   if (filters.tag) {
@@ -217,7 +222,9 @@ export function describeFilterParts(filters: FeedFilters, lookup: FilterLookup =
   if (filters.playbook) {
     const label = filters.playbook === NO_PLAYBOOK_FILTER
       ? "No playbook"
-      : lookup.playbookName?.(filters.playbook) ?? playbookName(filters.playbook) ?? filters.playbook;
+      : filters.playbook === HAS_PLAYBOOK_FILTER
+        ? "With playbook"
+        : lookup.playbookName?.(filters.playbook) ?? playbookName(filters.playbook) ?? filters.playbook;
     parts.push({ key: "playbook", label });
   }
   if (filters.tag) parts.push({ key: "tag", label: filters.tag === NO_SETUP_TAG_FILTER ? "No setup tag" : filters.tag });

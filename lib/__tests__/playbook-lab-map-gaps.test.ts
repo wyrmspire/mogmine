@@ -167,7 +167,7 @@ test("PL-2b: Gaps count links return exactly the displayed count (no playbook, i
   assert.ok(v.gaps.noPlaybook.length > 0 && v.gaps.impulseCount > 0, "fixture has both kinds");
 });
 
-test("PL-2b: Gaps no-setup-tag link returns exactly the displayed count", { todo: "PL-2b blocker: gaps.noSetupTagHref (/feed?tag=no-setup-tag) also matches trades with no playbook; see handoff" }, () => {
+test("PL-2b: Gaps no-setup-tag link returns exactly the displayed count", () => {
   const v = view(SETUP_8);
   assert.equal(feedCount(v.gaps.noSetupTagHref), v.gaps.noSetupTag.length);
 });

@@ -87,9 +87,11 @@ test("playbook=none and account=unassigned match trades with a null id", () => {
   assert.deepEqual(applyFilters(fixtures, { ...EMPTY, account: "acct-main" }).map((item) => item.id), ["scalp-sweep", "chased"]);
 });
 
-test("tag=no-setup-tag matches trades with no SETUP_TAGS, so it lines up with the Lab's gap count", () => {
+test("tag=no-setup-tag matches trades with no SETUP_TAGS, and playbook=assigned narrows to trades with a playbook", () => {
   // "Chased Entry" and "A+ Patience" are execution tags; "Level Sweep" is a setup tag.
   assert.deepEqual(applyFilters(fixtures, { ...EMPTY, tag: "no-setup-tag" }).map((item) => item.id), ["chased", "no-playbook"]);
+  assert.deepEqual(applyFilters(fixtures, { ...EMPTY, playbook: "assigned", tag: "no-setup-tag" }).map((item) => item.id), ["chased"]);
+  assert.equal(describeFilters({ ...EMPTY, playbook: "assigned", tag: "no-setup-tag" }), "With playbook · No setup tag");
 });
 
 test("stepRegularSessionDate skips weekends in both directions", () => {
