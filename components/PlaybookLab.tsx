@@ -256,6 +256,7 @@ function PlaybookDetail({ facet, byId }: { facet: PlaybookFacet; byId: Map<strin
         <Link href="/playbooks" style={{ minHeight: 44 }}>Open card</Link>
         <Link href="/tune#playbooks" style={{ minHeight: 44 }}>Edit</Link>
         <Link href={facet.feedHref} style={{ minHeight: 44 }}>All {facet.n} trades</Link>
+        <Link href={`/strategy-lab?playbook=${encodeURIComponent(facet.playbookId)}`} style={{ minHeight: 44 }}>Recipes · Open in Strategy Lab →</Link>
       </div>
     </section>
   );
