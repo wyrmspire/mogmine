@@ -387,8 +387,9 @@ const SCAN_RECIPE = {
 } as unknown as Recipe;
 
 function stripTiming<T extends { ms: number }>(result: T): Omit<T, "ms"> {
-  const { ms: _ms, ...rest } = result;
-  return rest;
+  const copy = { ...result } as Partial<T>;
+  delete copy.ms;
+  return copy as Omit<T, "ms">;
 }
 
 test("a 22-session fixture run is deterministic, and its matches obey the dedupe rules", () => {
@@ -426,6 +427,8 @@ test("a 22-session fixture run is deterministic, and its matches obey the dedupe
   }
   // Volume 0 is missing, so a session that starts with the artifact bar reports it.
   assert.ok(first.data.volumeMissing >= 22);
+  // VWAP levels are merged into the runner's LevelBook, so vwap_globex levelReach populates on matches.
+  assert.ok(first.matches.some((m) => Object.hasOwn(m.features, "levelReach@1:levelPrice(level=vwap_globex)")));
 });
 
 test("disabling oneAtATime and raising maxPerSession allows more matches, still deterministic", () => {

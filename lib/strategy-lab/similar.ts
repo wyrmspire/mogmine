@@ -2,7 +2,8 @@
 // Deterministic. Same mark and same bars give the same recipe. The trader can drop or change any condition after.
 // The readings come from the same skills the Card shows (S1–S9, V1–V5), evaluated at the mark's decision bar.
 
-import { createLevelIndex, levelBookAt, LEVEL_LABELS, type LevelIndex } from "./levels.ts";
+import { createLevelIndex, levelBookAt, LEVEL_LABELS, withLevels, type LevelIndex } from "./levels.ts";
+import { vwapLevelsAt } from "./vwap.ts";
 import { featureKey } from "./attribution.ts";
 import { formatEtMinute, validateRecipe } from "./recipe.ts";
 import { SKILLS, type SkillRegistry } from "./registry.ts";
@@ -91,7 +92,7 @@ export function findSimilarRecipe(series: BarSeries, mark: SimilarMark, options:
   const levelIndex = options.levelIndex ?? createLevelIndex(series);
   const ctx: SkillContext = {
     series, i, params: {}, spec: { ...MES_SPEC }, rSizeUsd: options.rSizeUsd,
-    levels: levelBookAt(levelIndex, i), mark: { price: mark.price, side: mark.side },
+    levels: withLevels(levelBookAt(levelIndex, i), vwapLevelsAt(series, i)), mark: { price: mark.price, side: mark.side },
   };
   const side = mark.side;
   const read = (skill: string, params: Record<string, Value> = {}) => {

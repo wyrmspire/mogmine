@@ -8,8 +8,9 @@
 
 import { attribute, featureKey } from "./attribution.ts";
 import { evaluateCondition } from "./conditions.ts";
-import { createLevelIndex, levelBookAt } from "./levels.ts";
+import { createLevelIndex, levelBookAt, withLevels } from "./levels.ts";
 import type { LevelBook } from "./types.ts";
+import { vwapLevelsAt } from "./vwap.ts";
 import { parseEtMinute, validateRecipe, majorOfVersion, inEtWindow, outputSpecOf } from "./recipe.ts";
 import { getSkill, SKILLS } from "./registry.ts";
 import type { SkillRegistry } from "./registry.ts";
@@ -193,7 +194,8 @@ export function runRecipe(input: Recipe, series: BarSeries, context: RunContext)
     if ((perSession.get(date) ?? 0) >= recipe.dedupe.maxPerSession) continue;
 
     const ctx: SkillContext = {
-      series, i, params: {}, spec: { ...MES_SPEC }, rSizeUsd: rSize, levels: levelBookAt(index, i),
+      series, i, params: {}, spec: { ...MES_SPEC }, rSizeUsd: rSize,
+      levels: withLevels(levelBookAt(index, i), vwapLevelsAt(series, i)),
     };
     const verdict = evaluateCondition(recipe.trigger, ctx, registry);
     mergeSkips(skips, verdict.skips);
