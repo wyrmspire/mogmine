@@ -227,12 +227,12 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     if (!bars.length) return;
 
     l.chart.applyOptions({
-      layout: { background: { type: l.lwc.ColorType.Solid, color: t.chartBg }, textColor: t.chartAxis },
-      grid: { vertLines: { color: t.chartGrid }, horzLines: { color: t.chartGrid } },
+      layout: { background: { type: l.lwc.ColorType.Solid, color: t.chartBg }, textColor: t.chartAxis, fontFamily: t.fontMono },
+      grid: { vertLines: { color: t.gridV }, horzLines: { color: t.gridH } },
       rightPriceScale: { borderColor: t.chartBorder },
       timeScale: { borderColor: t.chartBorder, tickMarkFormatter: (time: Time, type: number) => chartTickLabel(time as number, type, p.zone) },
       localization: { timeFormatter: (time: Time) => chartCrosshairLabel(time as number, p.zone) },
-      crosshair: { vertLine: { color: t.crosshair, labelBackgroundColor: t.elevated }, horzLine: { color: t.crosshair, labelBackgroundColor: t.elevated } },
+      crosshair: { vertLine: { color: t.crosshair, labelBackgroundColor: t.crosshairLabel }, horzLine: { color: t.crosshair, labelBackgroundColor: t.crosshairLabel } },
     });
     l.series.applyOptions({
       upColor: t.candleUp,

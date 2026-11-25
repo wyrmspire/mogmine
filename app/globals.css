@@ -21,12 +21,25 @@
   --loss-text: #ff6f7a;
   --warn-amber: #f5b544;
 
-  --chart-bg: #090b11;
-  --chart-grid: #171b26;
-  --chart-border: #252a36;
-  --chart-crosshair: #676f82;
-  --candle-up: #18b995;
-  --candle-down: #ef5a67;
+  --chart-bg: #0b0e15;
+  --chart-grid-h: rgba(255, 255, 255, 0.045);
+  --chart-grid-v: rgba(255, 255, 255, 0.025);
+  --chart-border: rgba(255, 255, 255, 0.08);
+  --chart-axis-text: #8b93a7;
+  --chart-crosshair: rgba(163, 171, 189, 0.55);
+  --chart-crosshair-label: #232838;
+  --candle-up: #22b88f;
+  --candle-down: #ec5664;
+  /* Position zones and chips (docs/design-2026-11-24/08 §4.1). Hex only, so lib/chart-paint.ts can add alpha. */
+  --zone-reward: #22c39a;
+  --zone-risk: #f0545f;
+  --chip-reward-bg: #0f7a5f;
+  --chip-risk-bg: #b8323f;
+  --chip-neutral-bg: #2a3142;
+  --chip-warn-bg: #8a5a12;
+  --chip-ghost-bg: rgba(18, 22, 33, 0.92);
+  --chart-entry-line: #c9ced8;
+  --chart-label-muted: #a3abbd;
   --box-actual: #2dd4bf;   /* teal frame: a trade built from fills (docs/12 LV-18, OD-23) */
   --box-planned: #a78bfa;  /* purple frame: planned / theoretical */
   /* Discretionary calls (docs/25, OD-52): "me deciding", never gold, profit or loss. */
@@ -43,7 +56,7 @@
   --level-neutral: #9ca3af;
   --level-label-text: #ffffff;
   /* Session VWAP line (IND-1). Not gold, not profit or loss. */
-  --indicator-vwap: #f472b6;
+  --indicator-vwap: #e879c6;
   --level-zone-opacity: 0.14;
 
   --gold-intensity: 0.76;
@@ -78,6 +91,11 @@
   --loss-text: #ffa25c;
   --candle-up: #4c8dff;
   --candle-down: #f98a3c;
+  --zone-reward: #4d8dff;
+  --zone-risk: #f5873a;
+  --chip-reward-bg: #1f5fcf;
+  --chip-risk-bg: #a8480c;
+  --chip-warn-bg: #5b4a8a;
   --box-actual: #60a5fa;
   --call-ink: #e5e7eb; /* blue means profit here, so calls go silver */
   --level-resistance: #f97316;

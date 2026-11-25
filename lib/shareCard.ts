@@ -7,6 +7,7 @@ import { playbookName } from "./playbooks.ts";
 import { sessionDate } from "./session.ts";
 import { getTheme } from "./theme.ts";
 import type { ChartTheme } from "./theme.ts";
+import { CHART_TOKENS } from "./chart-paint.ts";
 import { formatDateTime } from "./time.ts";
 import { adherence, holdSeconds, rMultiple, tradePnl, tradePoints } from "./trades.ts";
 import type { ChecklistItem, TradeRecord } from "./trades.ts";
@@ -275,7 +276,8 @@ function drawMood(
 
 export const DEFAULT_CARD_THEME: ChartTheme = {
   chartBg: "#07080C",
-  chartGrid: "#161922",
+  gridH: "#161922",
+  gridV: "#12141C",
   chartAxis: "#71788B",
   chartBorder: "#1B1E2B",
   crosshair: "#4B5563",
@@ -300,6 +302,18 @@ export const DEFAULT_CARD_THEME: ChartTheme = {
   levelNeutral: "#6B7280",
   levelLabelText: "#F3F4F6",
   vwap: "#F472B6",
+  crosshairLabel: CHART_TOKENS.surface.crosshairLabel,
+  zoneReward: CHART_TOKENS.zone.reward,
+  zoneRisk: CHART_TOKENS.zone.risk,
+  entryLine: CHART_TOKENS.line.entry,
+  labelMuted: CHART_TOKENS.line.labelMuted,
+  chipReward: CHART_TOKENS.chip.reward,
+  chipRisk: CHART_TOKENS.chip.risk,
+  chipNeutral: CHART_TOKENS.chip.neutral,
+  chipWarn: CHART_TOKENS.chip.warn,
+  chipGhost: CHART_TOKENS.chip.ghost,
+  fontMono: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontSans: "ui-sans-serif, system-ui, sans-serif",
 };
 
 export interface RenderCardCanvasOptions {
