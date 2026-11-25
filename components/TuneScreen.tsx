@@ -411,6 +411,7 @@ export function TuneScreen() {
       <div className="section-title" id="playbooks">
         <h2>Playbooks</h2>
         <Link href="/playbooks/lab">Playbooks &amp; Lab</Link>
+        <Link href="/strategy-lab">Strategy Lab</Link>
       </div>
       <PlaybookEditor />
       <TagRegistryEditor />
