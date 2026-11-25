@@ -381,6 +381,8 @@ export function observeTrade(derived: DerivedTrade, candles: Candle[], barMinute
   }
 
   for (const [index, stop] of stops.entries()) {
+    // SM-UT-2: an untimed move has no known time, so it is never checked against the bars during the hold.
+    if (stop.basis === "untimed") continue;
     const from = Date.parse(stop.from);
     const to = stop.to == null ? Infinity : Date.parse(stop.to);
     const hit = inside.find((bar) => bar.time >= from && bar.time + barMs <= to

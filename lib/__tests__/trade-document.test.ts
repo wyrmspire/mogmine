@@ -612,13 +612,14 @@ test("fromLegacy: omits plan when no stop/target, preserves R-10 moved stop, ope
   });
   const movedDoc = fromLegacy(movedStop);
   const modifyEv = movedDoc.events.find((e) => e.type === "modify");
-  assert.equal(modifyEv?.basis, "inferred", "timing of legacy stop move is uncertain, hence inferred basis");
+  assert.equal(modifyEv?.basis, "untimed", "SM-UT-2: an unrecorded stop move has no time, so it is untimed at the exit instant");
+  assert.equal(modifyEv?.t, "2026-11-12T15:45:00Z");
   const movedDerived = deriveTrade(movedDoc);
   assert.equal(movedDerived.initial_stop?.price, 7595);
   assert.equal(movedDerived.r_multiple, 1.2); // measured against frozen initial stop 7595
   assert.equal(movedDerived.stop_path.length, 2);
   assert.equal(movedDerived.stop_path[1].price, 7600);
-  assert.equal(movedDerived.stop_path[1].basis, "inferred");
+  assert.equal(movedDerived.stop_path[1].basis, "untimed");
   assert.equal(movedDoc.annotations?.account_id, "acct-1");
   assert.equal(movedDoc.annotations?.playbook_id, "pb-1");
   assert.equal(movedDoc.annotations?.key_level_price, 7598);
@@ -687,7 +688,7 @@ test("regression (cycle 2): stop in force at entry fill is captured as initialSt
   assert.equal(derived.r_multiple, 2.0); // +6 pts / 3 pts = 2.0R
 });
 
-test("regression (cycle 2): legacy stop move and cancellation preserve inferred basis", () => {
+test("regression (cycle 2): legacy stop move and cancellation preserve untimed basis", () => {
   const modRecord = normalizeTrade({
     id: "leg-r10-mod",
     symbol: "MES",
@@ -702,7 +703,7 @@ test("regression (cycle 2): legacy stop move and cancellation preserve inferred 
   });
   const modDoc = fromLegacy(modRecord);
   const modEv = modDoc.events.find((e) => e.type === "modify");
-  assert.equal(modEv?.type === "modify" ? modEv.basis : null, "inferred");
+  assert.equal(modEv?.type === "modify" ? modEv.basis : null, "untimed");
 
   const cancelRecord = normalizeTrade({
     id: "leg-r10-cancel",
@@ -718,7 +719,7 @@ test("regression (cycle 2): legacy stop move and cancellation preserve inferred 
   });
   const cancelDoc = fromLegacy(cancelRecord);
   const cancelEv = cancelDoc.events.find((e) => e.type === "cancel");
-  assert.equal(cancelEv?.type === "cancel" ? cancelEv.basis : null, "inferred");
+  assert.equal(cancelEv?.type === "cancel" ? cancelEv.basis : null, "untimed");
   const exitAtRemovedStop = fromLegacy({ ...cancelRecord, exit_price: 7595 });
   const exit = exitAtRemovedStop.events.find((event) => event.type === "fill" && event.role === "exit");
   assert.equal(exit?.type === "fill" ? exit.reason : undefined, undefined);
