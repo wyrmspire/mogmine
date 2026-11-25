@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { handleAgentRequest } from "../agent/handle.ts";
 import { __resetAgentSessionCache, authenticateAgent } from "../agent/server-auth.ts";
 import type { AdminLike, AgentQuery, AgentServerDeps, AnonAuthLike, AgentEnv } from "../agent/server-auth.ts";
-import { createRateLimiter, decodeRouteParam, isCollectionKey, isSingletonKey, parseListQuery } from "../agent/http.ts";
+import { createRateLimiter, decodeRouteParam, isCollectionKey, isSingletonKey, parseIncludeDerived, parseListQuery } from "../agent/http.ts";
 import type { RateLimiter } from "../agent/http.ts";
 import type { AgentRoute } from "../agent/dispatch.ts";
 import { generateAgentToken, hashAgentToken } from "../agent/tokens.ts";
@@ -214,7 +214,7 @@ function build(url: URL, method: string, body: unknown): AgentRoute | null {
   const id = decodeRouteParam(second);
   if (id === null) return null;
   if (third === undefined) {
-    if (method === "GET") return { kind: "read", type, id };
+    if (method === "GET") return { kind: "read", type, id, includeDerived: parseIncludeDerived(url.searchParams) };
     if (method === "PATCH") return { kind: "update", type, id, body };
     if (method === "DELETE") return { kind: "remove", type, id };
     return null;
@@ -616,6 +616,12 @@ test("list filters and include=derived over HTTP: filtered rows, derived block, 
   assert.equal(row.derived.pnl_cents, 61_500);
   assert.equal(row.derived.result_r, 2.05);
   assert.equal(row.derived.r_size_cents, 30_000);
+
+  const singlePlain = await call(world, "GET", "/api/v1/records/trades/t-a", { token });
+  assert.equal((singlePlain.json.data as { derived?: unknown }).derived, undefined);
+  const singleDerived = await call(world, "GET", "/api/v1/records/trades/t-a?include=derived", { token });
+  assert.equal((singleDerived.json.data as { derived: { result_r: number; pnl_cents: number } }).derived.result_r, 2.05);
+  assert.equal((singleDerived.json.data as { derived: { result_r: number; pnl_cents: number } }).derived.pnl_cents, 61_500);
 
   const malformed = await call(world, "GET", "/api/v1/records/trades?session_date=2026-02-30", { token });
   assert.equal(malformed.status, 422);
