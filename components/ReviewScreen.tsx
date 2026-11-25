@@ -112,7 +112,8 @@ function Queue() {
   };
 
   const pnl = tradePnl(trade);
-  const r = resultR(trade, resolveRSize(trade, accounts.accounts, prefs));
+  const rSize = resolveRSize(trade, accounts.accounts, prefs);
+  const r = resultR(trade, rSize);
   const points = formatPoints(tradePoints(trade), trade.symbol);
 
   return (
@@ -148,7 +149,7 @@ function Queue() {
             </>
           ) : (
             <>
-              <span><RStrip trade={trade} blind={false} /></span>
+              <span><RStrip trade={trade} blind={false} rSizeCents={rSize.cents} /></span>
               <span className="row-result num" style={{ textAlign: "right" }}>
                 <b className={(pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : ""} style={{ display: "block", fontSize: 16 }}>{prefs.shield ? (r != null ? formatR(r) : points) : formatMoney(pnl)}</b>
                 <span className="muted" style={{ fontSize: 11 }}>{prefs.shield ? (r != null ? points : "") : formatR(r)}</span>

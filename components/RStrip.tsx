@@ -8,6 +8,8 @@ interface Props {
   blind?: boolean;
   /** Wider strip under Trade Detail. */
   size?: "row" | "detail";
+  /** Resolved account R size in cents so legacy trades without frozen `r_size_cents` still use their account's R size. */
+  rSizeCents?: number | null;
 }
 
 function x(position: number, left: number, width: number) {
@@ -18,7 +20,7 @@ function x(position: number, left: number, width: number) {
  * A thin risk-to-reward strip: stop on the left, target on the right, a tick at entry,
  * a marker at exit, faint MAE/MFE. Works in Shield and with no candles (issue #81).
  */
-export function RStrip({ trade, excursions, blind = false, size = "row" }: Props) {
+export function RStrip({ trade, excursions, blind = false, size = "row", rSizeCents }: Props) {
   const input = rStripInputFromTrade(trade, blind ? null : excursions);
   if (blind) {
     input.exit = null;
@@ -36,7 +38,7 @@ export function RStrip({ trade, excursions, blind = false, size = "row" }: Props
     return <svg className={`rstrip ${wide ? "detail" : ""}`} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" />;
   }
 
-  const label = blind ? "Planned stop, entry and target" : rStripCaption(trade, layout);
+  const label = blind ? "Planned stop, entry and target" : rStripCaption(trade, layout, rSizeCents);
   // Colour follows the money, not the classification: a cut-early exit that lost is red (issue #81 review).
   const exitTone = layout.exitOutcome === "favorable" ? "var(--profit-text)" : layout.exitOutcome === "adverse" ? "var(--loss-text)" : "var(--text-primary)";
   const trackFrom = layout.stop ?? Math.min(layout.entry, layout.exit ?? layout.entry, layout.target ?? layout.entry);

@@ -145,15 +145,14 @@ function DrillCard({ trade, stored, answer, showPlaybook, zone, privacy, onAnswe
   const frontBars = useMemo(() => cutAtEntry(stored.candles, trade.entry_time, timeframe), [stored, trade.entry_time, timeframe]);
   const accounts = useAccounts();
   const prefs = usePrefs();
-  const rSize = resolveRSize(trade, accounts.accounts, prefs);
-  const accountRiskR = riskR(trade, rSize);
   const marks = useMemo(() => {
     if (!answer) return [];
     const derived = deriveTrade(fromLegacy(trade));
     const observed = observeTrade(derived, stored.candles, TIMEFRAME_MINUTES[timeframe]);
+    const accountRiskR = riskR(trade, resolveRSize(trade, accounts.accounts, prefs));
     return buildMarks(derived, observed, timeframe, "medium", privacy, { candleTimes: stored.candles.map(({ time }) => time), accountRiskR });
-  }, [answer, trade, stored, timeframe, privacy, accountRiskR]);
-  const r = resultR(trade, rSize);
+  }, [answer, trade, stored, timeframe, privacy, accounts.accounts, prefs]);
+  const r = resultR(trade, resolveRSize(trade, accounts.accounts, prefs));
   const process = processRead(trade);
   const miss = answer ? isMiss(answer, trade) : null;
 

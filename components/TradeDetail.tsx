@@ -96,8 +96,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const zone = prefs.timeZone;
   // R size in dollars for this trade: its frozen size, else its account's, else the Default R size (04 §3.2).
   const accountsState = useAccounts();
-  const rSize = resolveRSize(trade, accountsState.accounts, prefs);
-  const accountRiskR = riskR(trade, rSize);
   const accountName = accountsState.accounts.find((account) => account.id === trade.account_id)?.name ?? null;
   const undatedExit = trade.exit_time != null && !Number.isFinite(Date.parse(trade.exit_time));
   const [chosen, setChosen] = useState<Timeframe>(() => {
@@ -119,9 +117,9 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
   const [closing, setClosing] = useState(false);
-  const closeSheet = useCallback(() => setClosing(false), []);
+  const closeSheet = useCallback(() => setClosing(false), [setClosing]);
   const [moodOpen, setMoodOpen] = useState(false);
-  const closeMood = useCallback(() => setMoodOpen(false), []);
+  const closeMood = useCallback(() => setMoodOpen(false), [setMoodOpen]);
   const mood = useTradeMood(trade);
   const moodState = useMood();
   const candles = useCandles(trade.id);
@@ -271,6 +269,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   };
 
   const pnl = tradePnl(trade);
+  const rSize = resolveRSize(trade, accountsState.accounts, prefs);
   const r = resultR(trade, rSize);
   const stopHistory = stopHistoryText(trade, (iso) => formatListTime(iso, zone));
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
@@ -299,6 +298,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const marks = useMemo(() => {
     if (!displayedBars?.length) return [];
     const candleTimes = displayedBars.map(({ time }) => time);
+    const accountRiskR = riskR(trade, resolveRSize(trade, accountsState.accounts, prefs));
     const marks = buildMarks(derived, observation, timeframe, detailLevel, renderPrivacy, {
       candleTimes, continuationEdges: { before: showEarlier }, showRuler: true, accountRiskR,
     });
@@ -330,7 +330,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       }
     }
     return marks;
-  }, [displayedBars, derived, observation, timeframe, detailLevel, renderPrivacy, showEarlier, keyPrice, neighbours, accountRiskR]);
+  }, [displayedBars, derived, observation, timeframe, detailLevel, renderPrivacy, showEarlier, keyPrice, neighbours, trade, accountsState.accounts, prefs]);
   const ex = useMemo(() => (ready ? excursions(trade, candles.candles, baseMinutes) : null), [ready, candles, trade, baseMinutes]);
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
@@ -611,7 +611,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
         <div className="trade-levels-card specular-card">
           <div className="rstrip-row">
-            <RStrip trade={trade} excursions={ex} size="detail" />
+            <RStrip trade={trade} excursions={ex} size="detail" rSizeCents={rSize.cents} />
             <button type="button" className="mood-mini" onClick={() => setMoodOpen(true)} aria-label="Mood Shape. Tap to edit.">
               <MoodShape vector={mood} size={44} />
             </button>

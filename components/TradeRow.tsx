@@ -36,7 +36,8 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
   const pnl = tradePnl(trade);
   const accounts = useAccounts();
   const prefs = usePrefs();
-  const r = resultR(trade, resolveRSize(trade, accounts.accounts, prefs));
+  const rSize = resolveRSize(trade, accounts.accounts, prefs);
+  const r = resultR(trade, rSize);
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
   const info = context(trade, playbooks);
   const score = adherence(trade);
@@ -60,7 +61,7 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
         <span className={`row-context ${info.todo ? "todo" : ""}`}>{info.text}</span>
       </span>
       <TradeMoodThumb trade={trade} />
-      <RStrip trade={trade} />
+      <RStrip trade={trade} rSizeCents={rSize.cents} />
       <span className="row-result">
         <b className={tone}>{headline}</b>
         <span>{secondary}</span>

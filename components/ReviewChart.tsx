@@ -8,6 +8,9 @@ import { useEffect, useMemo } from "react";
 import { TradeChart } from "./TradeChart";
 import { ensureCandles, useCandles } from "@/lib/candles";
 import { cutAtEntry } from "@/lib/drills";
+import { useAccounts } from "@/lib/accounts-store";
+import { usePrefs } from "@/lib/prefs";
+import { resolveRSize, riskR } from "@/lib/r-size";
 import { observeTrade } from "@/lib/trade-bar-validation";
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
 import { buildMarks } from "@/lib/trade-marks";
@@ -16,6 +19,8 @@ import type { TradeRecord } from "@/lib/trades";
 
 export function ReviewChart({ trade, sealed, zone, privacy }: { trade: TradeRecord; sealed: boolean; zone: string; privacy: boolean }) {
   const candles = useCandles(trade.id);
+  const accounts = useAccounts();
+  const prefs = usePrefs();
   useEffect(() => { ensureCandles(trade); }, [trade]);
 
   const ready = candles?.status === "ready" && candles.candles.length > 0;
@@ -29,8 +34,9 @@ export function ReviewChart({ trade, sealed, zone, privacy }: { trade: TradeReco
     if (sealed || !bars.length) return [];
     const derived = deriveTrade(fromLegacy(trade));
     const observed = observeTrade(derived, bars, TIMEFRAME_MINUTES[timeframe]);
-    return buildMarks(derived, observed, timeframe, "medium", privacy, { candleTimes: bars.map(({ time }) => time) });
-  }, [sealed, bars, trade, timeframe, privacy]);
+    const accountRiskR = riskR(trade, resolveRSize(trade, accounts.accounts, prefs));
+    return buildMarks(derived, observed, timeframe, "medium", privacy, { candleTimes: bars.map(({ time }) => time), accountRiskR });
+  }, [sealed, bars, trade, timeframe, privacy, accounts.accounts, prefs]);
 
   if (!candles || candles.status === "loading") {
     return <div className="chart-frame review-chart" aria-busy="true"><div className="chart-skeleton"><div className="skeleton" /><span>Loading the chart…</span></div></div>;
