@@ -48,10 +48,10 @@ test("entry at bar close does not inherit that bar's earlier high as MFE", () =>
   assert.equal(ex.maePrice, 96);
 });
 
-test("entry at bar open counts that bar's high and low", () => {
+test("entry at bar open excludes that bar's range under R-POST-1", () => {
   const start = Date.parse("2026-11-10T15:00:00Z");
   const candles = [
-    bar(start, 100, 108, 99, 102),          // filled at the open; the whole bar is in the hold
+    bar(start, 100, 108, 99, 102),          // entry bar: R-POST-1 excludes its 108 high even at :00
     bar(start + minute, 102, 103, 101, 102),
     bar(start + 2 * minute, 102, 104, 100, 101),
     bar(start + 3 * minute, 99, 102, 98, 100), // fill at the open; low is not provable
@@ -65,9 +65,9 @@ test("entry at bar open counts that bar's high and low", () => {
   const ex = excursions(trade, candles);
   assert.ok(ex);
   assert.equal(ex.coverage, "complete");
-  assert.equal(ex.mfePrice, 108);
+  assert.equal(ex.mfePrice, 104);
   // Exit bar (15:03) starts at the exit timestamp, so it is not fully inside the hold and 98 is not counted.
-  // Lowest complete bar is the entry bar itself (low 99) and the exit fill is 99.
+  // Inside bars (15:01, 15:02) stay >= 100, so MAE is the 99 exit fill.
   assert.equal(ex.maePrice, 99);
 });
 
@@ -96,7 +96,7 @@ test("a one-bar trade and a hold with fewer than two complete bars show no excur
   assert.equal(excursions(shortHold, candles), null);
 });
 
-test("a fill whose price equals the bar open is not treated as a fill at the open unless the timestamp says so", () => {
+test("a fill whose price equals the bar open excludes the entry bar whether mid-bar or at :00 (R-POST-1)", () => {
   const start = Date.parse("2026-11-10T15:00:00Z");
   const candles = [
     bar(start, 100, 110, 99, 101),            // price revisits the open mid-bar; high 110 is before the fill
@@ -116,7 +116,7 @@ test("a fill whose price equals the bar open is not treated as a fill at the ope
   assert.equal(mid.mfePrice, 103); // later complete bars (15:01-15:03); the 104 wick is on the exit bar
   assert.notEqual(mid.mfePrice, 110);
 
-  // Same prices, but the timestamp is the bar open: the whole bar is inside the hold.
+  // Same prices with a bar-open timestamp: R-POST-1 still excludes the entry bar's 110 high.
   const atOpen = longTrade({
     entry_time: new Date(start).toISOString(),
     exit_time: new Date(start + 3 * minute).toISOString(),
@@ -126,7 +126,7 @@ test("a fill whose price equals the bar open is not treated as a fill at the ope
   const opened = excursions(atOpen, candles);
   assert.ok(opened);
   assert.equal(opened.coverage, "complete");
-  assert.equal(opened.mfePrice, 110);
+  assert.equal(opened.mfePrice, 103);
 });
 
 test("a mid-bar fill omits unknown entry and exit extremes", () => {

@@ -367,6 +367,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     coverage: barCoverage,
     chronologyUnresolved: observation?.coverage === "complete" && observation.chronology === "unresolved",
     findings: observation?.findings ?? [],
+    entryBarPassedStop: observation?.entryBarPassedStop,
     symbol: trade.symbol,
     zone,
   });
