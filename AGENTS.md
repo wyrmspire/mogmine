@@ -158,6 +158,14 @@ Several agents may work on this repo at once. [BOARD.md](BOARD.md) is the work o
 11. **Duplicates lose & release on finish.** Close duplicate PRs, delete claim branches, and unassign on merge.
 12. **File-length target (450 lines, `#177`).** A production file (`app/`, `components/`, `lib/`, `scripts/`; tests excluded) should stay at or under **450 lines**, the top of the slice guidance in item 10. `npm run check:file-length` lists the files over it. Existing over-target files are grandfathered until a dedicated split: `components/StopMovesEditor.tsx` (~841 lines), `lib/partials.ts` (~596 lines), and the other files the script lists. A PR that touches or grows an over-target file must state in its body the file's line count before and after, and either justify why it was not split or split it. Growth without a justification is not done. Drive-by refactors of grandfathered files do not belong in unrelated PRs.
 
+## 6b. Swarm Efficiency Rules (2026-11-24)
+
+- **Worker bots (`claude-haiku-5-5`, max 3–4 concurrent):** run **only** targeted tests (`node --test lib/__tests__/<touched>.test.ts`) + `npm run typecheck` (+ `npm run check:file-length` if touching a >400-line file). **Never** run full `npm test`, `npm run lint`, or `npm run build` — the wave tester (`gemini-3.8-flash`) runs those once per wave.
+- **Dependencies:** never run `npm ci` or `npm install` unless `package-lock.json` changed; reuse the worktree linked `node_modules`.
+- **CPU & output:** prefix heavy commands (`node --test`, `tsc`, `eslint`, `next build`) with `nice -n 10` and cap tests with `--test-concurrency=2`. Keep handoffs, PR bodies, and logs brief; no dumps or secrets.
+- **Roles & retries:** simple/repetitive work stays on Haiku; one retry max, then escalate to the Gemini planner (`gemini-4-carbon-high`), who owns larger packages, cross-file fixes, conflict resolution, and merges (Codex is paused).
+- **Out-of-lane blocks & coordination:** never edit unlisted files to fix unrelated goldens; open a `[WIP]` PR naming the exact line(s) for the planner. Strategy Lab (`sl-orch`) stays stopped until swarm `ALL-DONE`.
+
 ## 7. Repo Dumps for Chat (printcode / gitrdif)
 
 When the owner asks for a dump or a diff dump, run from the repo root (Windows: `.\printcode.cmd` / `.\gitrdif.cmd`; bash: `./printcode.sh` / `./gitrdif.sh`):
