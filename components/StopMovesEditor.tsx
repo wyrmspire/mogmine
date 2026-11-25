@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useId, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { subscribeStopMovePrefill } from "../lib/fill-match.ts";
 import { usePrefs } from "../lib/prefs.ts";
 import { DEFAULT_TIME_ZONE, fromZonedInput, toZonedInput } from "../lib/time.ts";
 import {
@@ -334,6 +335,14 @@ export function StopMovesEditor({
     setNewPriceText(priceNum.toFixed(decimals));
     setNewTimeZoned(toZonedInput(new Date(date.getTime() + 60_000), zone));
   }, [newPriceText, newTimeZoned, trade.symbol, tickSize, decimals, zone, moves, onChange]);
+
+  // FB-2: an "Add time" tap on a data note pre-fills the new move's price and focuses its time. Nothing is saved here.
+  useEffect(() => subscribeStopMovePrefill(({ tradeId, price }) => {
+    if (tradeId !== trade.id) return;
+    setNewPriceText(price.toFixed(decimals));
+    setAddError(null);
+    document.getElementById(timeInputId)?.focus({ preventScroll: true });
+  }), [trade.id, decimals, timeInputId]);
 
   return (
     <div
@@ -748,19 +757,10 @@ export function StopMovesEditor({
             aria-label="New stop loss price"
             placeholder={defaultNewPrice.toFixed(decimals)}
             style={{
-              width: "100%",
-              minHeight: "44px",
-              borderRadius: "8px",
+              width: "100%", minHeight: "44px", borderRadius: "8px", boxSizing: "border-box", outline: "none",
               border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.15))",
-              background: "var(--bg-inset, rgba(0, 0, 0, 0.3))",
-              color: "var(--text-primary, #f1f5f9)",
-              fontSize: "0.9375rem",
-              fontWeight: 700,
-              textAlign: "center",
-              fontVariantNumeric: "tabular-nums",
-              boxSizing: "border-box",
-              padding: "4px 6px",
-              outline: "none",
+              background: "var(--bg-inset, rgba(0, 0, 0, 0.3))", color: "var(--text-primary, #f1f5f9)",
+              fontSize: "0.9375rem", fontWeight: 700, textAlign: "center", fontVariantNumeric: "tabular-nums", padding: "4px 6px",
             }}
           />
 
@@ -784,16 +784,10 @@ export function StopMovesEditor({
             }}
             aria-label="New stop move timestamp"
             style={{
-              minHeight: "44px",
-              borderRadius: "8px",
+              minHeight: "44px", borderRadius: "8px", width: "100%", boxSizing: "border-box", outline: "none",
               border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))",
-              background: "var(--bg-inset, rgba(0, 0, 0, 0.25))",
-              color: "var(--text-primary, #f1f5f9)",
-              fontSize: "0.75rem",
-              padding: "4px 6px",
-              boxSizing: "border-box",
-              width: "100%",
-              outline: "none",
+              background: "var(--bg-inset, rgba(0, 0, 0, 0.25))", color: "var(--text-primary, #f1f5f9)",
+              fontSize: "0.75rem", padding: "4px 6px",
             }}
           />
         </div>
@@ -814,20 +808,11 @@ export function StopMovesEditor({
           type="button"
           onClick={handleAddMove}
           style={{
-            minHeight: "44px",
-            width: "100%",
-            borderRadius: "10px",
+            minHeight: "44px", width: "100%", borderRadius: "10px", cursor: "pointer", gap: "6px",
             border: "1px solid var(--border-strong, rgba(234, 179, 8, 0.4))",
-            background: "var(--bg-elevated, rgba(234, 179, 8, 0.12))",
-            color: "var(--gold-mid, #eab308)",
-            fontSize: "0.8125rem",
-            fontWeight: 750,
-            letterSpacing: "0.02em",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "6px",
+            background: "var(--bg-elevated, rgba(234, 179, 8, 0.12))", color: "var(--gold-mid, #eab308)",
+            fontSize: "0.8125rem", fontWeight: 750, letterSpacing: "0.02em",
+            display: "flex", alignItems: "center", justifyContent: "center",
           }}
           aria-label="Record stop movement"
         >
