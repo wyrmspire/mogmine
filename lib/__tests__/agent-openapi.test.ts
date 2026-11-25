@@ -36,7 +36,7 @@ function routeFiles(dir: string): string[] {
 }
 
 const API = path.join(process.cwd(), "app/api/v1");
-const ROUTE_PAIRS = ["guide", "me", "records", "singletons"]
+const ROUTE_PAIRS = ["guide", "me", "records", "singletons", "vocabulary"]
   .flatMap((group) => routeFiles(path.join(API, group)))
   .flatMap((file) => {
     const rel = path.relative(API, path.dirname(file)).split(path.sep).join("/");
@@ -61,7 +61,7 @@ test("spec: bearer auth is declared and applied to every operation by default", 
 });
 
 test("spec: the (path, method) pairs are exactly the methods the route files export", () => {
-  assert.equal(ROUTE_PAIRS.length, 10, "sanity: the v1 surface has ten operations");
+  assert.equal(ROUTE_PAIRS.length, 11, "sanity: the v1 surface has eleven operations");
   const specPairs = opsOf().map(([method, route]) => `${method} ${route}`).sort();
   assert.deepEqual(specPairs, ROUTE_PAIRS);
 });
@@ -69,7 +69,7 @@ test("spec: the (path, method) pairs are exactly the methods the route files exp
 test("spec: operationIds are unique camelCase and exactly the agreed set", () => {
   const ids = opsOf().map(([, , op]) => op.operationId as string);
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual([...ids].sort(), ["archiveRecord", "createRecord", "deleteRecord", "getGuide", "getMe", "getRecord", "getSingleton", "listRecords", "putSingleton", "updateRecord"]);
+  assert.deepEqual([...ids].sort(), ["archiveRecord", "createRecord", "deleteRecord", "getGuide", "getMe", "getRecord", "getSingleton", "getVocabulary", "listRecords", "putSingleton", "updateRecord"]);
 });
 
 test("spec: path enums come from the registry constants (type excludes candles, key lists the singletons)", () => {
@@ -94,7 +94,9 @@ test("spec: every GET is read scope and every other method is write scope", () =
 test("spec: list query parameters and limit bounds", () => {
   const list = spec.paths["/records/{type}"].get as Op;
   const names = (list.parameters ?? []).map((p) => p.name).sort();
-  assert.deepEqual(names, ["includeArchived", "includeSamples", "limit", "parentId"]);
+  assert.deepEqual(names, [
+    "account_id", "from", "include", "includeArchived", "includeSamples", "limit", "parentId", "playbook_id", "session_date", "to",
+  ]);
   const limit = (list.parameters ?? []).find((p) => p.name === "limit");
   assert.deepEqual(limit?.schema && { minimum: limit.schema.minimum, maximum: limit.schema.maximum }, { minimum: 1, maximum: 500 });
 });
@@ -145,4 +147,16 @@ test("setupBlock: exact text, guide line, base URL and key on their own lines", 
       `Agent key: ${token}`,
     ].join("\n"),
   );
+});
+
+test("spec: vocabulary is a read operation, and include=derived is documented on record reads and lists", () => {
+  const vocabulary = spec.paths["/vocabulary"].get as Op;
+  assert.equal(vocabulary["x-mogmine-scope"], "read");
+  assert.equal(vocabulary.operationId, "getVocabulary");
+  const read = spec.paths["/records/{type}/{id}"].get as Op;
+  const include = (read.parameters ?? []).find((p) => p.name === "include");
+  assert.deepEqual(include?.schema?.enum, ["derived"]);
+  const list = spec.paths["/records/{type}"].get as Op;
+  const sessionDate = (list.parameters ?? []).find((p) => p.name === "session_date") as unknown as { schema?: { format?: string } } | undefined;
+  assert.equal(sessionDate?.schema?.format, "date");
 });

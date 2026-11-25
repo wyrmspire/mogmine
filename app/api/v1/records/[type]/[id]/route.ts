@@ -1,6 +1,6 @@
 // #185a: read, update and delete one record. `id` is URL-decoded once (ids may contain `:`, e.g. `seed:cut`).
 import { handleAgentRequest } from "@/lib/agent/handle";
-import { decodeRouteParam, isCollectionKey } from "@/lib/agent/http";
+import { decodeRouteParam, isCollectionKey, parseIncludeDerived } from "@/lib/agent/http";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,7 +14,9 @@ async function target(ctx: Ctx) {
 
 export async function GET(request: Request, ctx: Ctx) {
   const { type, id } = await target(ctx);
-  return handleAgentRequest(request, () => (isCollectionKey(type) && id !== null ? { kind: "read", type, id } : null));
+  return handleAgentRequest(request, (url) => (
+    isCollectionKey(type) && id !== null ? { kind: "read", type, id, includeDerived: parseIncludeDerived(url.searchParams) } : null
+  ));
 }
 
 export async function PATCH(request: Request, ctx: Ctx) {

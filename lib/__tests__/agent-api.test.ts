@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { handleAgentRequest } from "../agent/handle.ts";
 import { __resetAgentSessionCache, authenticateAgent } from "../agent/server-auth.ts";
 import type { AdminLike, AgentQuery, AgentServerDeps, AnonAuthLike, AgentEnv } from "../agent/server-auth.ts";
-import { createRateLimiter, decodeRouteParam, isCollectionKey, isSingletonKey, parseListQuery } from "../agent/http.ts";
+import { createRateLimiter, decodeRouteParam, isCollectionKey, isSingletonKey, parseIncludeDerived, parseListQuery } from "../agent/http.ts";
 import type { RateLimiter } from "../agent/http.ts";
 import type { AgentRoute } from "../agent/dispatch.ts";
 import { generateAgentToken, hashAgentToken } from "../agent/tokens.ts";
@@ -197,6 +197,7 @@ async function mintKey(world: World, owner: string, scopes: string[] = ["read", 
 function build(url: URL, method: string, body: unknown): AgentRoute | null {
   const [head, first, second, third] = url.pathname.split("/").slice(3);
   if (head === "me") return method === "GET" && first === undefined ? { kind: "me" } : null;
+  if (head === "vocabulary") return method === "GET" && first === undefined ? { kind: "vocabulary" } : null;
   if (head === "singletons") {
     if (!first || !isSingletonKey(first)) return null;
     if (method === "GET") return { kind: "readSingleton", key: first };
@@ -213,7 +214,7 @@ function build(url: URL, method: string, body: unknown): AgentRoute | null {
   const id = decodeRouteParam(second);
   if (id === null) return null;
   if (third === undefined) {
-    if (method === "GET") return { kind: "read", type, id };
+    if (method === "GET") return { kind: "read", type, id, includeDerived: parseIncludeDerived(url.searchParams) };
     if (method === "PATCH") return { kind: "update", type, id, body };
     if (method === "DELETE") return { kind: "remove", type, id };
     return null;
@@ -569,4 +570,69 @@ test("a key with no scopes can do nothing", async () => {
   const token = await mintKey(world, OWNER_A, []);
   const reply = await call(world, "GET", "/api/v1/me", { token });
   assert.equal(reply.status, 403);
+});
+
+// ---- #API-2a: vocabulary, list filters and derived values over HTTP -----------------------------------------------------
+
+const RAW_ACCOUNT = {
+  id: "sim-acct-eval-50k", name: "SIM Eval 50K", starting_balance_cents: 5_000_000, rules: {},
+  created_at: "2026-11-20T00:00:00.000Z", archived: false, r_size_cents: 30_000,
+};
+const RAW_TRADE = {
+  id: "t-a", symbol: "MES", direction: "LONG", quantity: 1, status: "closed",
+  entry_time: "2026-11-23T14:30:00Z", exit_time: "2026-11-23T15:10:00Z",
+  entry_price: 7600, exit_price: 7723, stop_loss_price: 7582.5, initial_stop_price: 7582.5,
+  initial_stop_set_at: "2026-11-23T14:29:00Z", account_id: "sim-acct-eval-50k", playbook_id: "orb-reclaim",
+};
+
+test("vocabulary: GET with a read key is 200 and the tags are never playbooks; a write-only key is 403", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  const reply = await call(world, "GET", "/api/v1/vocabulary", { token });
+  assert.equal(reply.status, 200);
+  const data = reply.json.data as { setup_tags: string[]; playbooks: { name: string }[]; house_rules_version: string };
+  assert.ok(data.setup_tags.includes("VWAP Hold"));
+  assert.ok(!data.playbooks.some((playbook) => playbook.name === "VWAP Hold"));
+  assert.equal(data.house_rules_version, "2026-11-24.1");
+  assert.equal(reply.headers.get("cache-control"), "no-store");
+  const writeOnly = await mintKey(world, OWNER_A, ["write"]);
+  assert.equal((await call(world, "GET", "/api/v1/vocabulary", { token: writeOnly })).status, 403);
+});
+
+test("list filters and include=derived over HTTP: filtered rows, derived block, and 422 for a malformed date", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  assert.equal((await call(world, "POST", "/api/v1/records/accounts", { token, body: RAW_ACCOUNT })).status, 201);
+  assert.equal((await call(world, "POST", "/api/v1/records/trades", { token, body: RAW_TRADE })).status, 201);
+  assert.equal((await call(world, "POST", "/api/v1/records/trades", { token, body: { ...RAW_TRADE, id: "t-b", entry_time: "2026-11-24T14:30:00Z", exit_time: "2026-11-24T14:40:00Z" } })).status, 201);
+
+  const bySession = await call(world, "GET", "/api/v1/records/trades?session_date=2026-11-23", { token });
+  assert.equal(bySession.status, 200);
+  assert.deepEqual((bySession.json.data as { id: string }[]).map((row) => row.id), ["t-a"]);
+
+  const derived = await call(world, "GET", "/api/v1/records/trades?session_date=2026-11-23&include=derived", { token });
+  const row = (derived.json.data as Array<{ id: string; derived: { pnl_cents: number; result_r: number; r_size_cents: number } }>)[0];
+  assert.equal(row.id, "t-a");
+  assert.equal(row.derived.pnl_cents, 61_500);
+  assert.equal(row.derived.result_r, 2.05);
+  assert.equal(row.derived.r_size_cents, 30_000);
+
+  const singlePlain = await call(world, "GET", "/api/v1/records/trades/t-a", { token });
+  assert.equal((singlePlain.json.data as { derived?: unknown }).derived, undefined);
+  const singleDerived = await call(world, "GET", "/api/v1/records/trades/t-a?include=derived", { token });
+  assert.equal((singleDerived.json.data as { derived: { result_r: number; pnl_cents: number } }).derived.result_r, 2.05);
+  assert.equal((singleDerived.json.data as { derived: { result_r: number; pnl_cents: number } }).derived.pnl_cents, 61_500);
+
+  const malformed = await call(world, "GET", "/api/v1/records/trades?session_date=2026-02-30", { token });
+  assert.equal(malformed.status, 422);
+  assert.equal(malformed.json.error?.code, "invalid");
+
+  const unsupported = await call(world, "GET", "/api/v1/records/accounts?playbook_id=orb-reclaim", { token });
+  assert.equal(unsupported.status, 422);
+
+  const account = await call(world, "GET", "/api/v1/records/accounts?include=derived", { token });
+  const accountRow = (account.json.data as Array<{ derived: { from_journal_gross: boolean; realized_cents: number } }>)[0];
+  assert.equal(accountRow.derived.from_journal_gross, true);
+  // Two closed trades on the account, each $615: t-a and t-b (the next day's copy).
+  assert.equal(accountRow.derived.realized_cents, 123_000);
 });
