@@ -3,7 +3,8 @@
 // time pickers. This module owns the draft shape, its defaults, the time maths and the tick steppers.
 
 import { fromZonedInput, toZonedInput } from "./time.ts";
-import { isExitReason, snapToTick, specFor, tickDecimals, toTicks } from "./trades.ts";
+import { isValidStatedRiskR } from "./r-size.ts";
+import { isExitReason, isWholeQuantity, snapToTick, specFor, tickDecimals, toTicks } from "./trades.ts";
 import type { TradeDirection, TradeExitReason, TradeStatus } from "./trades.ts";
 
 export interface EntryDraft {
@@ -29,6 +30,8 @@ export interface EntryDraft {
   stopPrice: string;
   /** Optional. Saved as the planned target. */
   targetPrice: string;
+  /** Optional. What the trader said the trade risked, in R: "0.25", "0.5", "1" or other. "" when unstated (04 §4). */
+  statedRiskR?: string;
   /** The account the trade is logged to (docs/21). Undefined until the trader picks: the account used last. */
   accountId?: string | null;
   /** Entry date, `YYYY-MM-DD`, wall clock in the display zone. */
@@ -61,7 +64,7 @@ export function freshEntryDraft(now: Date, zone: string): EntryDraft {
   const exit = zonedParts(now, zone);
   return {
     status: "closed", symbol: "MES", direction: "LONG", quantity: "1",
-    entryPrice: "", exitPrice: "", exitReason: null, stopPrice: "", targetPrice: "",
+    entryPrice: "", exitPrice: "", exitReason: null, stopPrice: "", targetPrice: "", statedRiskR: "",
     date: entry.date, entryClock: entry.clock, exitClock: exit.clock,
     entryMoodSpoke: null,
   };
@@ -92,6 +95,7 @@ export function upgradeDraft(raw: unknown, now: Date, zone: string): EntryDraft 
     exitReason: isExitReason(old.exitReason) ? old.exitReason : null,
     stopPrice: text(old.stopPrice, ""),
     targetPrice: text(old.targetPrice, ""),
+    statedRiskR: text(old.statedRiskR, ""),
     ...(old.accountId === null || typeof old.accountId === "string" ? { accountId: old.accountId } : {}),
     date: text(old.date, entry?.date || fresh.date),
     entryClock: text(old.entryClock, entry?.clock || fresh.entryClock),
@@ -133,6 +137,39 @@ export function entryTimes(draft: Pick<EntryDraft, "status" | "date" | "entryClo
   const exitNextDay = /^\d{2}:\d{2}$/.test(draft.exitClock) && /^\d{2}:\d{2}$/.test(draft.entryClock) && draft.exitClock < draft.entryClock;
   const exitDate = exitNextDay ? addCalendarDays(draft.date, 1) : draft.date;
   return { entry, exit: fromZonedInput(`${exitDate}T${draft.exitClock}`, zone), exitNextDay };
+}
+
+/** The stated risk text as a number: null when unstated (""), NaN when the text is not a number (see `statedRiskError`). */
+export function statedRiskRFrom(text: string | undefined): number | null {
+  const trimmed = (text ?? "").trim();
+  return trimmed === "" ? null : Number(trimmed);
+}
+
+/** Why a stated risk is refused, or undefined. Unstated is fine; otherwise 0.01 to 10 R, at most two decimals. */
+export function statedRiskError(text: string | undefined): string | undefined {
+  const value = statedRiskRFrom(text);
+  if (value == null) return undefined;
+  return isValidStatedRiskR(value) ? undefined : "Stated risk must be 0.01 to 10 R, up to two decimals";
+}
+
+/**
+ * The stop that risks `riskRValue` of an account R size, for one trade (04 §4 "Use stop"). Dollars are
+ * `rSizeCents × riskRValue`; points are dollars ÷ (quantity × $/pt). The stop lands on the tick grid on the
+ * risk side, rounded away from entry, so the risk is never smaller than the stated one. Null when any input
+ * is invalid, when the entry is off the tick grid, or when the stop would equal the entry.
+ */
+export function suggestedStopFromRiskR(entryPrice: number, direction: TradeDirection, symbol: string, quantity: number, rSizeCents: number, riskRValue: number): number | null {
+  const spec = specFor(symbol);
+  if (!spec || !isWholeQuantity(quantity) || !Number.isFinite(entryPrice) || entryPrice <= 0) return null;
+  if (!Number.isFinite(rSizeCents) || rSizeCents <= 0 || !Number.isFinite(riskRValue) || riskRValue <= 0) return null;
+  if (toTicks(entryPrice, symbol) == null) return null;
+  const usd = (rSizeCents / 100) * riskRValue;
+  const points = usd / (quantity * spec.pointValueUsd);
+  const ticks = Math.ceil(points / spec.tickSize - 1e-9);
+  if (!(ticks > 0)) return null;
+  const distance = ticks * spec.tickSize;
+  const stop = Number((direction === "SHORT" ? entryPrice + distance : entryPrice - distance).toFixed(tickDecimals(spec.tickSize)));
+  return stop > 0 && stop !== entryPrice ? stop : null;
 }
 
 /** Price text → number, or null for an empty field. "abc" is NaN, so the validator reports it. */
