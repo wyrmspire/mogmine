@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { AGENT_API_VERSION, apiBaseUrl, buildDiscovery, buildOpenApiSpec, setupBlock, specUrl } from "../agent/openapi.ts";
+import { AGENT_API_VERSION, apiBaseUrl, buildDiscovery, buildOpenApiSpec, guideUrl, setupBlock, specUrl } from "../agent/openapi.ts";
 import { COLLECTION_KEYS, SINGLETON_KEYS } from "../agent/http.ts";
 
 const ORIGIN = "https://mogmine.vercel.app";
@@ -36,7 +36,7 @@ function routeFiles(dir: string): string[] {
 }
 
 const API = path.join(process.cwd(), "app/api/v1");
-const ROUTE_PAIRS = ["me", "records", "singletons"]
+const ROUTE_PAIRS = ["guide", "me", "records", "singletons"]
   .flatMap((group) => routeFiles(path.join(API, group)))
   .flatMap((file) => {
     const rel = path.relative(API, path.dirname(file)).split(path.sep).join("/");
@@ -61,7 +61,7 @@ test("spec: bearer auth is declared and applied to every operation by default", 
 });
 
 test("spec: the (path, method) pairs are exactly the methods the route files export", () => {
-  assert.equal(ROUTE_PAIRS.length, 9, "sanity: the v1 surface has nine operations");
+  assert.equal(ROUTE_PAIRS.length, 10, "sanity: the v1 surface has ten operations");
   const specPairs = opsOf().map(([method, route]) => `${method} ${route}`).sort();
   assert.deepEqual(specPairs, ROUTE_PAIRS);
 });
@@ -69,7 +69,7 @@ test("spec: the (path, method) pairs are exactly the methods the route files exp
 test("spec: operationIds are unique camelCase and exactly the agreed set", () => {
   const ids = opsOf().map(([, , op]) => op.operationId as string);
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual([...ids].sort(), ["archiveRecord", "createRecord", "deleteRecord", "getMe", "getRecord", "getSingleton", "listRecords", "putSingleton", "updateRecord"]);
+  assert.deepEqual([...ids].sort(), ["archiveRecord", "createRecord", "deleteRecord", "getGuide", "getMe", "getRecord", "getSingleton", "listRecords", "putSingleton", "updateRecord"]);
 });
 
 test("spec: path enums come from the registry constants (type excludes candles, key lists the singletons)", () => {
@@ -131,14 +131,16 @@ test("discovery: base URL, spec URL, bearer auth, scopes, version and the enable
   assert.equal(buildDiscovery(ORIGIN, false).enabled, false);
 });
 
-test("setupBlock: exact text, base URL and key on their own lines", () => {
+test("setupBlock: exact text, guide line, base URL and key on their own lines", () => {
   const token = `mmk_${"a".repeat(43)}`;
+  assert.equal(guideUrl(ORIGIN), "https://mogmine.vercel.app/api/v1/guide");
   assert.equal(
     setupBlock(ORIGIN, token),
     [
       "MogMine agent API",
       "Base URL: https://mogmine.vercel.app/api/v1",
       "OpenAPI spec: https://mogmine.vercel.app/api/v1/openapi.json",
+      "Before writing anything, read https://mogmine.vercel.app/api/v1/guide",
       `Auth header: Authorization: Bearer ${token}`,
       `Agent key: ${token}`,
     ].join("\n"),

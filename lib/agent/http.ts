@@ -79,12 +79,13 @@ export function createRateLimiter(options: { limit: number; windowMs: number; no
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
-/** Query string to `ListQuery`. Booleans parse only for `true` / `false`; `limit` clamps to 1–500 (junk = 100). */
+/**
+ * Query string to `ListQuery`. Samples and archived rows are hidden unless the caller asks for them: a missing or junk
+ * flag is `false`, never `undefined`. (11/23 regression: `undefined` skipped the archived filter, so archived accounts
+ * leaked into default API lists.) `limit` clamps to 1–500 (junk = 100).
+ */
 export function parseListQuery(searchParams: URLSearchParams): ListQuery {
-  const flag = (name: string): boolean | undefined => {
-    const value = searchParams.get(name);
-    return value === "true" ? true : value === "false" ? false : undefined;
-  };
+  const flag = (name: string): boolean => searchParams.get(name) === "true";
   const raw = searchParams.get("limit");
   const parsed = raw === null || raw.trim() === "" ? NaN : Number(raw);
   const limit = Number.isFinite(parsed) ? Math.min(MAX_LIMIT, Math.max(1, Math.trunc(parsed))) : DEFAULT_LIMIT;
