@@ -13,6 +13,7 @@ import { sanitizeCandidates } from "../mood-store-sanitize.ts";
 import { sanitizeChallenges } from "../challenge-sanitize.ts";
 import { sanitizePlaybooks } from "../playbooks-sanitize.ts";
 import { sanitizePlans } from "../plans-sanitize.ts";
+import { sanitizeDailyReviews } from "../daily-review-sanitize.ts";
 import { sanitizeDrills } from "../drills-sanitize.ts";
 import { sanitizeCalls } from "../calls-sanitize.ts";
 import { sanitizePrefs } from "../prefs-sanitize.ts";
@@ -131,6 +132,9 @@ const SLOTS: { [K in CollectionKey]: CollectionSlot<CollectionRecordTypes[K]> } 
   },
   plans: {
     storageKey: "mogmine-plans-v1", read: sanitizePlans, write: (_blob, items) => items,
+  },
+  daily_reviews: {
+    storageKey: "mogmine-daily-reviews-v1", read: sanitizeDailyReviews, write: (_blob, items) => items,
   },
   drills: {
     storageKey: "mogmine-drills-v1", read: sanitizeDrills, write: (_blob, items) => items,
@@ -383,6 +387,7 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
     challenges: collection("challenges"),
     playbooks: collection("playbooks"),
     plans: collection("plans"),
+    daily_reviews: collection("daily_reviews"),
     drills: collection("drills"),
     calls: collection("calls"),
     prompt_dismissals: collection("prompt_dismissals"),

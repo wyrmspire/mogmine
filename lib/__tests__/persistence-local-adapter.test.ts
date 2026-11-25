@@ -96,3 +96,18 @@ test("select: the mock choice never touches device storage", async () => {
   assert.ok(listed.ok);
   assert.equal(listed.value.length, 1);
 });
+
+test("daily_reviews: the device slot is the review list under mogmine-daily-reviews-v1, sanitized on read", async () => {
+  const store = createMemoryKeyValueStore();
+  const { repositories: repo } = createLocalAdapter({ kind: "local", store, candles: createMemoryCandleStore() });
+  const review = {
+    id: "review-2026-11-23", user_id: DEFAULT_OWNER_USER_ID, session_date: "2026-11-23", account_id: null, trade_ids: ["t-1"],
+    plan_ids: [], points: [], lesson: "Wait for the retest", status: "draft" as const, recorded_at: "2026-11-23T22:00:00.000Z",
+  };
+  const put = await repo.daily_reviews.put(DEFAULT_OWNER_USER_ID, review);
+  assert.equal(put.ok, true);
+  const listed = await repo.daily_reviews.list(DEFAULT_OWNER_USER_ID, {});
+  assert.equal(listed.ok && listed.value.map((item) => item.id).join(","), "review-2026-11-23");
+  const stored = JSON.parse(store.getItem("mogmine-daily-reviews-v1") ?? "[]") as Array<Record<string, unknown>>;
+  assert.equal(stored[0]?.lesson, "Wait for the retest");
+});
