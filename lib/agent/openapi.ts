@@ -323,6 +323,21 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           errors: [...ERROR_STATUSES_READ, 422],
         }),
       },
+      "/strategy-lab/skills": {
+        get: operation({
+          operationId: "getStrategyLabSkills", summary: "List the Strategy Lab skills: id, version, kind, params, outputs, needs", scope: "read",
+          success: { status: 200, description: "skills: the registry metadata (no bars are read)." }, errors: ERROR_STATUSES_READ,
+        }),
+      },
+      "/strategy-lab/context": {
+        post: operation({
+          operationId: "postStrategyLabContext", summary: "Context Card for one MES mark, every value computed by the server (read scope)", scope: "read",
+          description: "Body: { symbol: \"MES\", time (ISO-8601 with zone, floored to the minute, not in the future), price (multiple of 0.25), side: long|short, account_id? }. R is the account's fixed R size. Facts after the mark are in after-mark rows only.",
+          requestBody: jsonBody("{ symbol, time, price, side, account_id? }"),
+          success: { status: 200, description: "state, card (header, basis, groups of rows, missing) and provenance." },
+          errors: [...ERROR_STATUSES_READ, 422],
+        }),
+      },
       "/levels": {
         get: operation({
           operationId: "getLevels",
