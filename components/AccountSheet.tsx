@@ -13,6 +13,9 @@ const MODES: Array<{ value: DrawdownMode; label: string }> = [
 ];
 
 const centsText = (cents: number | null) => (cents == null ? "" : (cents / 100).toFixed(2).replace(/\.00$/, ""));
+/** 1R in this account is $1 to $100,000 (04 §3.3). Empty means the Default R size applies. */
+const R_SIZE_MIN_CENTS = 100;
+const R_SIZE_MAX_CENTS = 10_000_000;
 
 /**
  * Add or edit an account (docs/21). Name and starting balance are required; rules are optional and only
@@ -25,6 +28,7 @@ export function AccountSheet({ account, onClose }: { account?: TradingAccount; o
   const [mode, setMode] = useState<DrawdownMode>(account?.rules.drawdown ?? "trailing_eod");
   const [daily, setDaily] = useState(centsText(account?.rules.daily_loss_cents ?? null));
   const [target, setTarget] = useState(centsText(account?.rules.profit_target_cents ?? null));
+  const [rSizeText, setRSizeText] = useState(centsText(account?.r_size_cents ?? null));
   const [submitted, setSubmitted] = useState(false);
   const firstField = useRef<HTMLInputElement>(null);
 
@@ -45,7 +49,12 @@ export function AccountSheet({ account, onClose }: { account?: TradingAccount; o
   const loss = optional(maxLoss);
   const dailyLoss = optional(daily);
   const profit = optional(target);
+  const rSizeCents = rSizeText.trim() === "" ? null : dollarsToCents(rSizeText);
+  const rSizeError = rSizeText.trim() === "" || (rSizeCents != null && rSizeCents >= R_SIZE_MIN_CENTS && rSizeCents <= R_SIZE_MAX_CENTS)
+    ? undefined
+    : "Enter an amount from $1 to $100,000, or leave it empty to use the Default R size";
   const errors = {
+    rSize: rSizeError,
     name: name.trim() ? undefined : "Give the account a name",
     start: startCents == null ? "Enter the starting balance" : startCents < 0 ? "The starting balance cannot be below $0" : undefined,
     maxLoss: loss.error,
@@ -61,10 +70,10 @@ export function AccountSheet({ account, onClose }: { account?: TradingAccount; o
     if (hasErrors || startCents == null) return;
     const rules = { max_loss_cents: loss.cents, drawdown: mode, daily_loss_cents: dailyLoss.cents, profit_target_cents: profit.cents };
     if (account) {
-      updateAccount(account.id, { name: name.trim(), starting_balance_cents: startCents, rules });
+      updateAccount(account.id, { name: name.trim(), starting_balance_cents: startCents, r_size_cents: rSizeCents, rules });
       showToast("Account updated. The total is recalculated from your trades.");
     } else {
-      addAccount({ name: name.trim(), starting_balance_cents: startCents, rules });
+      addAccount({ name: name.trim(), starting_balance_cents: startCents, r_size_cents: rSizeCents, rules });
       showToast("Account added. Pick it when you log a trade.");
     }
     onClose();
@@ -109,6 +118,11 @@ export function AccountSheet({ account, onClose }: { account?: TradingAccount; o
             <label className="field"><span>Daily loss limit ($) <i>optional</i></span>
               <input inputMode="decimal" value={daily} placeholder="1000" aria-invalid={!!show("daily")} onChange={(event) => setDaily(event.target.value)} />
               {show("daily") && <span className="error">{show("daily")}</span>}
+            </label>
+            <label className="field"><span>R size ($) <i>optional</i></span>
+              <input inputMode="decimal" value={rSizeText} placeholder="300" aria-invalid={!!show("rSize")} aria-describedby="r-size-hint" onChange={(event) => setRSizeText(event.target.value)} />
+              <span id="r-size-hint" style={{ fontSize: 12, color: "var(--text-dim)" }}>1R in this account. Empty uses the Default R size in Tune.</span>
+              {show("rSize") && <span className="error">{show("rSize")}</span>}
             </label>
             {maxLoss.trim() !== "" && (
               <label className="field wide"><span>How the loss limit moves</span>

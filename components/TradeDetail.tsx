@@ -13,6 +13,9 @@ import { recordUserMood, setSpokeScore, undoMoodRecord, useMood } from "@/lib/mo
 import { EXIT_REASONS } from "@/lib/trades";
 import { PitStop } from "./PitStop";
 import { RiskChips } from "./RiskChips";
+import { RiskLine } from "./RiskLine";
+import { useAccounts } from "@/lib/accounts-store";
+import { resolveRSize } from "@/lib/r-size";
 import { StopMovesEditor } from "./StopMovesEditor";
 import { TradeCardSheet } from "./TradeCardSheet";
 import { RStrip } from "./RStrip";
@@ -91,6 +94,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const zone = prefs.timeZone;
+  // R size in dollars for this trade: its frozen size, else its account's, else the Default R size (04 §3.2).
+  const accountsState = useAccounts();
+  const rSize = resolveRSize(trade, accountsState.accounts, prefs);
+  const accountName = accountsState.accounts.find((account) => account.id === trade.account_id)?.name ?? null;
   const undatedExit = trade.exit_time != null && !Number.isFinite(Date.parse(trade.exit_time));
   const [chosen, setChosen] = useState<Timeframe>(() => {
     const fromUrl = searchParams.get("tf") as Timeframe | null;
@@ -644,7 +651,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               </div>
             </div>
           )}
-          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={prefs.riskBudgetUsd} shield={prefs.shield} />}
+          <RiskLine trade={trade} rSize={rSize} accountName={accountName} shield={renderPrivacy} />
+          {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={rSize.cents / 100} shield={prefs.shield} />}
           {/* The frozen first stop once the working stop has moved, or why R is blank (R-10). */}
           {stopHistory && <p className="initial-stop">{stopHistory}</p>}
 
