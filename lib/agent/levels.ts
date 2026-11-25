@@ -10,6 +10,7 @@ import { missingCandleLevels } from "../chart-levels.ts";
 import { withheldReasons } from "../level-withheld.ts";
 import type { LevelCoverage, WithheldLevel } from "../level-withheld.ts";
 import { computeSessionIndicators } from "../session-indicators.ts";
+import { EMA_CALC_VERSION, computeEma200 } from "../ema.ts";
 import type { GapPolicy } from "../session-indicators.ts";
 import { planStateAsOf } from "../plans.ts";
 import type { PlanningSession } from "../plans.ts";
@@ -95,6 +96,8 @@ export interface AgentLevelsPayload {
   session_so_far: { rth_high: { price: number; formed_at: string } | null; rth_low: { price: number; formed_at: string } | null };
   planned: PlannedLevelOut[];
   vwap: { rth: VwapOut; globex: VwapOut };
+  /** IN-3: the 200 EMA on 1m closes at `as_of` (the last bar that had closed by then). Null value when warm-up is short. */
+  ema200: Ema200Out;
   provenance: {
     provider: string;
     timeframe: "1m";
@@ -103,6 +106,14 @@ export interface AgentLevelsPayload {
     as_of: string;
     session_date: string;
   };
+}
+
+export interface Ema200Out {
+  value: number | null;
+  approximate: boolean;
+  timeframe: "1m";
+  calc_version: typeof EMA_CALC_VERSION;
+  unavailable_reason: string | null;
 }
 
 export function isLevelSymbol(value: string | null): value is LevelSymbol {
@@ -225,6 +236,16 @@ export async function buildAgentLevels(
     };
   };
 
+  // IN-3: the EMA reads the same bars as above, so it is cut at `as_of` as well.
+  const ema = computeEma200(bars, "1m");
+  const ema200: Ema200Out = {
+    value: ema.points.at(-1)?.value ?? null,
+    approximate: ema.approximate,
+    timeframe: "1m",
+    calc_version: EMA_CALC_VERSION,
+    unavailable_reason: ema.unavailableReason,
+  };
+
   const plans = await commands.listFiltered("plans", undefined, { session_date: sessionDate });
   if (!plans.ok) return plans;
 
@@ -257,6 +278,7 @@ export async function buildAgentLevels(
         rth: vwap("rth", "complete"),
         globex: vwap("globex", "globex-tolerant"),
       },
+      ema200,
       provenance: {
         provider,
         timeframe: "1m",
