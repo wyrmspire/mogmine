@@ -21,6 +21,7 @@ import { sanitizeDrillRecord } from "../drills-sanitize.ts";
 import { sanitizeCall, sanitizeDismissal } from "../calls-sanitize.ts";
 import { sanitizeChallenge } from "../challenge-sanitize.ts";
 import { sanitizePrefs } from "../prefs-sanitize.ts";
+import { sessionDate } from "../session.ts";
 import { PROMPT_LIBRARY_SCHEMA } from "../discretionary-prompts.ts";
 import type { PromptLibraryV1 } from "../discretionary-prompts.ts";
 
@@ -204,10 +205,33 @@ function withFrozenRSize(
   return { ...trade, r_size_cents: resolveRSize({ ...trade, r_size_cents: null }, inputs.accounts, inputs.prefs).cents };
 }
 
+/**
+ * Narrowing for agent list reads (docs/07 §3.5). `from` and `to` bound the entry time, both inclusive. `session_date`
+ * is the trading day of the entry (`sessionDate`, 18:00 ET rollover), so an evening trade sits on the next day.
+ */
+export interface AgentListFilters {
+  session_date?: string;
+  from?: string;
+  to?: string;
+  account_id?: string;
+  playbook_id?: string;
+}
+
+/** The filters each collection supports. Any other filter on a collection is refused, never silently ignored. */
+const FILTERS_BY_COLLECTION: Partial<Record<CollectionKey, ReadonlyArray<keyof AgentListFilters>>> = {
+  trades: ["session_date", "from", "to", "account_id", "playbook_id"],
+  plans: ["session_date"],
+};
+
 export interface JournalCommands {
   create<K extends CollectionKey>(key: K, raw: unknown): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
   read<K extends CollectionKey>(key: K, id: RecordId): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
   list<K extends CollectionKey>(key: K, query?: ListQuery): Promise<PersistResult<CollectionRecordTypes[K][]>>;
+  /**
+   * Read-only: `list` narrowed by the agent filters. Filters apply after the repository read, so `limit` applies to the
+   * filtered rows. With no filter set this is `list`.
+   */
+  listFiltered<K extends CollectionKey>(key: K, query?: ListQuery, filters?: AgentListFilters): Promise<PersistResult<CollectionRecordTypes[K][]>>;
   /** Shallow patch over the stored record, re-validated as a whole. Fails with `conflict` if the row changed since it was read. */
   update<K extends CollectionKey>(key: K, id: RecordId, patch: Record<string, unknown>): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
   /** Sets `archived` on types whose delete policy is `archive` (accounts, playbooks). */
@@ -277,6 +301,34 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
 
     list(key, query) {
       return repoFor(key).list(owner, query);
+    },
+
+    async listFiltered(key, query, filters) {
+      const active = (Object.keys(filters ?? {}) as Array<keyof AgentListFilters>).filter((name) => filters?.[name] !== undefined);
+      if (active.length === 0) return repoFor(key).list(owner, query);
+      const supported: ReadonlyArray<keyof AgentListFilters> = FILTERS_BY_COLLECTION[key] ?? [];
+      const refused = active.find((name) => !supported.includes(name));
+      if (refused) return fail("invalid", `${refused} is not a filter on ${key}.`, key);
+      // Filter first, then limit: the limit counts rows that match.
+      const rows = await repoFor(key).list(owner, { ...query, limit: undefined });
+      if (!rows.ok) return rows;
+      const from = filters?.from === undefined ? undefined : Date.parse(filters.from);
+      const to = filters?.to === undefined ? undefined : Date.parse(filters.to);
+      const matches = (row: unknown): boolean => {
+        if (!isObject(row)) return false;
+        if (filters?.session_date !== undefined && (key === "trades" ? sessionDate(String(row.entry_time)) : row.session_date) !== filters.session_date) return false;
+        if (from !== undefined || to !== undefined) {
+          const at = Date.parse(String(row.entry_time));
+          if (from !== undefined && !(at >= from)) return false;
+          if (to !== undefined && !(at <= to)) return false;
+        }
+        if (filters?.account_id !== undefined && row.account_id !== filters.account_id) return false;
+        if (filters?.playbook_id !== undefined && row.playbook_id !== filters.playbook_id) return false;
+        return true;
+      };
+      const matched = (rows.value as unknown[]).filter(matches);
+      const limited = query?.limit === undefined ? matched : matched.slice(0, Math.max(0, query.limit));
+      return { ok: true, value: limited as CollectionRecordTypes[typeof key][] };
     },
 
     async update(key, id, patch) {

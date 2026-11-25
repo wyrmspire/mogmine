@@ -85,12 +85,43 @@ const idParam = {
   schema: { type: "string" },
 };
 
+/** `?include=derived` on trades and accounts. The block is computed on read and never stored (docs/07 §3.5). */
+const includeParam = {
+  name: "include",
+  in: "query",
+  required: false,
+  schema: { type: "string", enum: ["derived"] },
+  description:
+    "`derived` adds a `derived` block, computed on read and never stored. On trades: pnl_cents, result_r (gross P&L ÷ R size), " +
+    "risk_cents, risk_r, r_size_cents, r_size_source, stated_risk_r, hold_seconds (null while open), session_date. On accounts: " +
+    "balance_cents, realized_cents, adjustments_cents, drawdown_cents, closed_trades, open_trades, from_journal_gross. " +
+    "Other collections ignore it.",
+};
+
 const listParams = [
   { name: "includeSamples", in: "query", required: false, schema: { type: "boolean" }, description: "Include sample (fixture) rows. Default false." },
   { name: "includeArchived", in: "query", required: false, schema: { type: "boolean" }, description: "Include archived rows. Default false." },
   { name: "parentId", in: "query", required: false, schema: { type: "string" }, description: "Only children of this parent record." },
   { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 500, default: 100 }, description: "Rows to return (1 to 500)." },
+  includeParam,
+  {
+    name: "session_date", in: "query", required: false, schema: { type: "string", format: "date" },
+    description: "Trades: the trading day of the entry (18:00 ET rollover). Plans: the plan's session date. YYYY-MM-DD; malformed is 422.",
+  },
+  {
+    name: "from", in: "query", required: false, schema: { type: "string", format: "date-time" },
+    description: "Trades only: entry time at or after this instant. ISO-8601 with a zone (for example 2026-11-23T14:00:00Z); malformed is 422.",
+  },
+  {
+    name: "to", in: "query", required: false, schema: { type: "string", format: "date-time" },
+    description: "Trades only: entry time at or before this instant. ISO-8601 with a zone; malformed is 422.",
+  },
+  { name: "account_id", in: "query", required: false, schema: { type: "string" }, description: "Trades only: trades on this account." },
+  { name: "playbook_id", in: "query", required: false, schema: { type: "string" }, description: "Trades only: trades filed under this playbook." },
 ];
+
+/** Filters are applied after the read, so `limit` counts matching rows. A filter a collection does not support is 422. */
+const FILTER_NOTE = " Filters: `session_date`, `from`, `to`, `account_id`, `playbook_id` (trades); `session_date` (plans).";
 
 function ok(description: string) {
   return { description, content: { "application/json": { schema: { $ref: "#/components/schemas/Ok" } } } };
@@ -208,7 +239,9 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
         parameters: [typeParam],
         get: operation({
           operationId: "listRecords", summary: "List records in a collection", scope: "read",
-          success: { status: 200, description: "An array of records, newest first." }, errors: [...ERROR_STATUSES_READ, 404],
+          description: "Records, newest first. With `?include=derived` each row gains `derived`." + FILTER_NOTE,
+          success: { status: 200, description: "An array of records (each with `derived` when asked)." },
+          errors: [...ERROR_STATUSES_READ, 404, 422],
           parameters: listParams,
         }),
         post: operation({
@@ -221,7 +254,9 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
         parameters: [typeParam, idParam],
         get: operation({
           operationId: "getRecord", summary: "Read one record", scope: "read",
-          success: { status: 200, description: "The record." }, errors: [...ERROR_STATUSES_READ, 404],
+          success: { status: 200, description: "The record, or `{ record, meta, derived }` with `?include=derived`." },
+          errors: [...ERROR_STATUSES_READ, 404],
+          parameters: [includeParam],
         }),
         patch: operation({
           operationId: "updateRecord", summary: "Change some fields of a record", scope: "write", description: writeRuleReminder(origin),
@@ -231,6 +266,18 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
         delete: operation({
           operationId: "deleteRecord", summary: "Delete one record", scope: "write",
           success: { status: 200, description: "`null` once the record is removed." }, errors: [...ERROR_STATUSES_WRITE, 404],
+        }),
+      },
+      "/vocabulary": {
+        get: operation({
+          operationId: "getVocabulary",
+          summary: "The names to use: playbooks, setup and execution tags, accounts with R sizes, symbols, exit reasons, plan presets, time rules",
+          description:
+            "Read this before naming a playbook or a tag. Playbooks are the owner's live list (active first; archived are flagged). " +
+            "Setup tags are not playbooks. Accounts are active only, each with its resolved r_size_cents and r_size_source.",
+          scope: "read",
+          success: { status: 200, description: "The vocabulary, with house_rules_version." },
+          errors: ERROR_STATUSES_READ,
         }),
       },
       "/records/{type}/{id}/archive": {

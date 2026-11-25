@@ -3,6 +3,17 @@
 // `cause` is for logs only).
 import { RECORD_CONTRACTS } from "../persistence/registry.ts";
 import type { CollectionKey, ListQuery, PersistErrorCode, SingletonKey } from "../persistence/contract.ts";
+import type { AgentListFilters } from "../commands/journal-commands.ts";
+
+/**
+ * A list query: the `ListQuery` plus the optional filters and `include=derived` (see `parseListQuery`). `filterError` is set
+ * when a filter is malformed; the route then answers 422.
+ */
+export type AgentListQuery = ListQuery & {
+  filters?: AgentListFilters;
+  includeDerived?: true;
+  filterError?: string;
+};
 
 export type AgentErrorCode = PersistErrorCode | "rate_limited";
 
@@ -79,23 +90,79 @@ export function createRateLimiter(options: { limit: number; windowMs: number; no
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
+/** `YYYY-MM-DD` that is a real calendar date (2026-02-30 is not). */
+export function isSessionDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const ms = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value;
+}
+
+/** An ISO-8601 date-time that names its zone. Without one the server would guess the zone, so it is refused. */
+export function isIsoTimestamp(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
+}
+
+/** `include=derived` (comma-separated values are allowed). Anything else is ignored. */
+export function parseIncludeDerived(searchParams: URLSearchParams): boolean {
+  return (searchParams.get("include") ?? "").split(",").map((part) => part.trim()).includes("derived");
+}
+
 /**
- * Query string to `ListQuery`. Samples and archived rows are hidden unless the caller asks for them: a missing or junk
- * flag is `false`, never `undefined`. (11/23 regression: `undefined` skipped the archived filter, so archived accounts
- * leaked into default API lists.) `limit` clamps to 1–500 (junk = 100).
+ * The collection filters (`session_date`, `from`, `to`, `account_id`, `playbook_id`). A blank value counts as absent.
+ * A malformed date or time gives `error` (the route answers 422). Returns no `filters` when none is set.
  */
-export function parseListQuery(searchParams: URLSearchParams): ListQuery {
+export function parseAgentListFilters(searchParams: URLSearchParams): { filters?: AgentListFilters; error?: string } {
+  const filters: AgentListFilters = {};
+  const read = (name: string): string | undefined => {
+    const value = searchParams.get(name)?.trim();
+    return value ? value : undefined;
+  };
+  const sessionDate = read("session_date");
+  const from = read("from");
+  const to = read("to");
+  const accountId = read("account_id");
+  const playbookId = read("playbook_id");
+  if (sessionDate !== undefined) {
+    if (!isSessionDate(sessionDate)) return { error: "session_date must be a real date as YYYY-MM-DD, such as 2026-11-23." };
+    filters.session_date = sessionDate;
+  }
+  if (from !== undefined) {
+    if (!isIsoTimestamp(from)) return { error: "from must be an ISO-8601 time with a zone, such as 2026-11-23T14:00:00Z." };
+    filters.from = from;
+  }
+  if (to !== undefined) {
+    if (!isIsoTimestamp(to)) return { error: "to must be an ISO-8601 time with a zone, such as 2026-11-23T20:00:00Z." };
+    filters.to = to;
+  }
+  if (from !== undefined && to !== undefined && Date.parse(from) > Date.parse(to)) return { error: "from must not be after to." };
+  if (accountId !== undefined) filters.account_id = accountId;
+  if (playbookId !== undefined) filters.playbook_id = playbookId;
+  return Object.keys(filters).length > 0 ? { filters } : {};
+}
+
+/**
+ * Query string to `AgentListQuery`. Samples and archived rows are hidden unless the caller asks for them: a missing or
+ * junk flag is `false`, never `undefined`. (11/23 regression: `undefined` skipped the archived filter, so archived
+ * accounts leaked into default API lists.) `limit` clamps to 1–500 (junk = 100). The filters and `include=derived`
+ * are added only when asked for, so a plain list keeps the plain shape.
+ */
+export function parseListQuery(searchParams: URLSearchParams): AgentListQuery {
   const flag = (name: string): boolean => searchParams.get(name) === "true";
   const raw = searchParams.get("limit");
   const parsed = raw === null || raw.trim() === "" ? NaN : Number(raw);
   const limit = Number.isFinite(parsed) ? Math.min(MAX_LIMIT, Math.max(1, Math.trunc(parsed))) : DEFAULT_LIMIT;
   const parentId = searchParams.get("parentId");
-  return {
+  const query: AgentListQuery = {
     includeSamples: flag("includeSamples"),
     includeArchived: flag("includeArchived"),
     parentId: parentId ? parentId : undefined,
     limit,
   };
+  const { filters, error } = parseAgentListFilters(searchParams);
+  if (filters) query.filters = filters;
+  if (error) query.filterError = error;
+  if (parseIncludeDerived(searchParams)) query.includeDerived = true;
+  return query;
 }
 
 /** Collections the API exposes: every v1 record type with many rows per owner (read from the registry). */
