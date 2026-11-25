@@ -15,7 +15,7 @@ import { takeVsPass } from "../drills.ts";
 import type { DrillRecord } from "../drills.ts";
 import { dayStats, runningStats } from "../selectors.ts";
 import { shareCardContent } from "../shareCard.ts";
-import { isScratch, normalizeTrade, rMultiple, riskMultiple } from "../trades.ts";
+import { isScratch, normalizeTrade, riskMultiple } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 
 const NOW = "2026-11-26T18:00:00Z";
@@ -49,11 +49,10 @@ const C = trade("C", { exit_price: 5992, stop_loss_price: 5988, initial_stop_pri
 const SET = [A, B, C];
 const C_R = -40 / 300; // −0.1333…, shown as −0.13R
 
-test("riskMultiple is the old stop-width rMultiple on every sample fixture", () => {
-  assert.equal(riskMultiple, rMultiple);
-  for (const t of [A, B, C, trade("tight", { exit_price: 6010, stop_loss_price: 5995, initial_stop_price: 5995 })]) {
-    assert.equal(riskMultiple(t), rMultiple(t));
-  }
+test("riskMultiple is the stop-width ratio on sample fixtures, distinct from account R", () => {
+  near(riskMultiple(A), 123 / 17.5);
+  assert.equal(riskMultiple(B), -1);
+  near(riskMultiple(C), -8 / 12);
   // Stop-width ratio, unchanged: the old "2.0R" fixture is now 2.0× risk, not account R.
   const twoX = trade("twox", { exit_price: 6010, stop_loss_price: 5995, initial_stop_price: 5995 });
   assert.equal(riskMultiple(twoX), 2);

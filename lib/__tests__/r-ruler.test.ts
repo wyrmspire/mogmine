@@ -39,12 +39,53 @@ test("buildMarks: adds R ruler marks and playbook label to plan box (M3, #42)", 
   assert.ok(segments.some((s) => s.p0 === 6850), "+1R segment at 6850");
   assert.ok(segments.some((s) => s.p0 === 6860), "+2R segment at 6860");
 
-  // Verify R ruler labels (+1R, +2R)
+  // Verify R ruler labels (+1.0R, +2.0R: no accountRiskR, so 1 stop-width unit = 1R)
   const labels = marks.filter((m) => m.kind === "label");
-  assert.ok(labels.some((l) => l.text === "+1R"), "must include +1R label");
-  assert.ok(labels.some((l) => l.text === "+2R"), "must include +2R label");
+  assert.ok(labels.some((l) => l.text === "+1.0R"), "must include +1.0R label");
+  assert.ok(labels.some((l) => l.text === "+2.0R"), "must include +2.0R label");
 
   // Verify playbook mark
   const pbMark = labels.find((l) => l.text.includes("VWAP Reclaim"));
   assert.ok(pbMark, "must include playbook mark");
+});
+
+test("buildMarks: a 0.25R trade spaces its ruler at each stop width but labels it in account R (RS-3b, 04 §3.5)", () => {
+  // $75 risk on a $300 R size is 0.25R. MES entry 6840, stop 6825 (15 pts), target 6885 (3× the stop width).
+  const trade = normalizeTrade({
+    id: "trade-ruler-025",
+    symbol: "MES",
+    direction: "LONG",
+    entry_time: "2026-11-20T14:00:00Z",
+    exit_time: "2026-11-20T14:30:00Z",
+    entry_price: 6840,
+    exit_price: 6850,
+    stop_loss_price: 6825,
+    planned_target_price: 6885,
+    quantity: 1,
+  });
+  const candleTimes = [
+    Date.parse("2026-11-20T14:00:00Z"),
+    Date.parse("2026-11-20T14:15:00Z"),
+    Date.parse("2026-11-20T14:30:00Z"),
+  ];
+  const marks = buildMarks(deriveTrade(fromLegacy(trade)), null, "1m", "high", false, {
+    candleTimes,
+    showRuler: true,
+    accountRiskR: 0.25,
+  });
+
+  // Lines stay at 1×, 2×, 3× the 15-point stop width: 6855, 6870, 6885.
+  const rulerPrices = marks
+    .filter((m): m is Extract<typeof marks[number], { kind: "segment" }> => m.kind === "segment" && m.layer === "plan" && m.faint === true)
+    .map((s) => s.p0);
+  assert.deepEqual(rulerPrices.toSorted((a, b) => a - b), [6855, 6870, 6885]);
+
+  // Labels are true account R: 1×, 2×, 3× of 0.25R.
+  const labels = marks.filter((m) => m.kind === "label").map((m) => m.text);
+  assert.ok(labels.includes("+0.25R"), "must include +0.25R");
+  assert.ok(labels.includes("+0.5R"), "must include +0.5R");
+  assert.ok(labels.includes("+0.75R"), "must include +0.75R");
+
+  // The target label is in account R too: 3× stop width = +0.75R.
+  assert.ok(marks.some((m) => "label" in m && m.label === "TP +0.75R"), "target reads TP +0.75R");
 });

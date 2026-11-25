@@ -10,7 +10,7 @@ import sampleBarsData from "../../fixtures/sample-bars.json" with { type: "json"
 
 const sampleBars = sampleBarsData as unknown as SampleBarsPayload;
 import { applyFixtureRefresh } from "../store.ts";
-import { exitFlagReason, excursions, isClosed, isScratch, normalizeTrade, plannedR, tradeTicks } from "../trades.ts";
+import { exitFlagReason, excursions, isClosed, isScratch, normalizeTrade, plannedRewardRisk, tradeTicks } from "../trades.ts";
 import type { Candle, TradeRecord } from "../trades.ts";
 
 const minute = 60_000;
@@ -233,10 +233,10 @@ test("planned R and exit flag reason", () => {
   const winner = demoTrades.find((item) => item.id === "mnq-trend-hold");
   assert.ok(scalp && winner);
 
-  const scalpPlan = plannedR(scalp);
+  const scalpPlan = plannedRewardRisk(scalp);
   assert.ok(scalpPlan != null);
   assert.equal(formatR(scalpPlan), "+2.0R");
-  assert.equal(formatR(plannedR(winner)!), "+3.0R");
+  assert.equal(formatR(plannedRewardRisk(winner)!), "+3.0R");
   assert.equal(exitFlagReason(scalp), "SL");
   assert.equal(exitFlagReason(winner), "TP");
   assert.equal(exitFlagReason({ ...scalp, exit_price: 27870 }), null);

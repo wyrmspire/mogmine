@@ -2,7 +2,7 @@
 // `initial_stop_price` with its set time; later edits move `stop_loss_price` only.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { initialRMultiple, normalizeTrade, rMultiple, stopPatch } from "../trades.ts";
+import { initialRiskMultiple, normalizeTrade, riskMultiple, stopPatch } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 
 const entryTime = "2026-11-10T15:00:00.000Z";
@@ -51,23 +51,23 @@ test("R-10: a stored initial stop survives normalising (backup restore never ove
   assert.deepEqual(stopPatch(restored, 6848, laterAt), { stop_loss_price: 6848 });
 });
 
-test("R-10: initialRMultiple is null with no initial stop", () => {
+test("R-10: initialRiskMultiple is null with no initial stop", () => {
   const noStop = saved({});
-  assert.equal(initialRMultiple(noStop), null);
-  // A working stop alone does not create an initial stop: R on it is rMultiple's business only.
+  assert.equal(initialRiskMultiple(noStop), null);
+  // A working stop alone does not create an initial stop: R on it is riskMultiple's business only.
   const workingOnly = saved({ stop_loss_price: 6841.25 });
-  assert.equal(initialRMultiple(workingOnly), null);
-  assert.equal(rMultiple(workingOnly), 2);
+  assert.equal(initialRiskMultiple(workingOnly), null);
+  assert.equal(riskMultiple(workingOnly), 2);
 });
 
-test("R-10: initialRMultiple keeps the frozen stop after the working stop moves", () => {
+test("R-10: initialRiskMultiple keeps the frozen stop after the working stop moves", () => {
   const trade = saved({ ...stopPatch({ initial_stop_price: null }, 6841.25, setAt) });
   // +17.5 pts over the frozen 8.75-pt risk is +2R, whatever the working stop later became.
-  assert.equal(initialRMultiple(trade), 2);
+  assert.equal(initialRiskMultiple(trade), 2);
   const edited = { ...trade, ...stopPatch(trade, 6845, laterAt) };
   // R itself is measured on the first risk too (riskStopPrice): moving the stop never changes R.
-  assert.equal(rMultiple(edited), 2);
-  assert.equal(initialRMultiple(edited), 2);
+  assert.equal(riskMultiple(edited), 2);
+  assert.equal(initialRiskMultiple(edited), 2);
 });
 
 test("R-10: an old record normalises with both new fields null (never back-filled from the stop)", () => {

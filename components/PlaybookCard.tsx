@@ -18,6 +18,9 @@ import type { PlaybookCardData } from "@/lib/playbook-card";
 import { buildPlaybookCard } from "@/lib/playbook-card-image";
 import type { CardSide, CardSize } from "@/lib/shareCard";
 import { formatDateTime } from "@/lib/time";
+import { useAccounts } from "@/lib/accounts-store";
+import { usePrefs } from "@/lib/prefs";
+import { resolveRSize, riskR } from "@/lib/r-size";
 import { observeTrade } from "@/lib/trade-bar-validation";
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
 import { buildMarks } from "@/lib/trade-marks";
@@ -147,6 +150,8 @@ function ExampleChart({ ref, example, shield, zone, onRendered }: {
   onRendered: (privacy: boolean) => void;
 }) {
   const [bars, setBars] = useState<Bars>({ state: "loading" });
+  const accounts = useAccounts();
+  const prefs = usePrefs();
 
   useEffect(() => {
     if (!example) return;
@@ -162,8 +167,9 @@ function ExampleChart({ ref, example, shield, zone, onRendered }: {
     const { stored } = bars;
     const derived = deriveTrade(fromLegacy(example));
     const observed = observeTrade(derived, stored.candles, TIMEFRAME_MINUTES[stored.baseTimeframe]);
-    return buildMarks(derived, observed, stored.baseTimeframe, "medium", shield, { candleTimes: stored.candles.map(({ time }) => time) });
-  }, [example, bars, shield]);
+    const accountRiskR = riskR(example, resolveRSize(example, accounts.accounts, prefs));
+    return buildMarks(derived, observed, stored.baseTimeframe, "medium", shield, { candleTimes: stored.candles.map(({ time }) => time), accountRiskR });
+  }, [example, bars, shield, accounts.accounts, prefs]);
 
   const rendered = useCallback(() => onRendered(shield), [onRendered, shield]);
 

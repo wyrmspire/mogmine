@@ -320,8 +320,6 @@ export function riskMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price"
   if (riskTicks == null || ticks == null || !isWholeQuantity(trade.quantity)) return null;
   return ticks / riskTicks;
 }
-/** @deprecated Renamed to `riskMultiple` (RS-3a). Remove after RS-3b. */
-export const rMultiple = riskMultiple;
 
 /**
  * The patch for setting or changing a trade's stop (R-10). The first stop a trade ever has is
@@ -342,8 +340,6 @@ export function stopPatch(
 export function initialRiskMultiple(trade: Priced & Pick<TradeRecord, "initial_stop_price">): number | null {
   return trade.initial_stop_price == null ? null : riskMultiple({ ...trade, stop_loss_price: trade.initial_stop_price });
 }
-/** @deprecated Renamed to `initialRiskMultiple` (RS-3a). Remove after RS-3b. */
-export const initialRMultiple = initialRiskMultiple;
 
 /**
  * A backup restore never overwrites an initial stop the device already holds for the same trade
@@ -883,8 +879,6 @@ export function plannedRewardRisk(trade: Priced & Pick<TradeRecord, "stop_loss_p
   if (rewardTicks <= 0) return null;
   return rewardTicks / riskTicks;
 }
-/** @deprecated Renamed to `plannedRewardRisk` (RS-3a). Remove after RS-3b. */
-export const plannedR = plannedRewardRisk;
 
 /**
  * A scratch is a result within 0.1R or 2 ticks of the entry, whichever is larger.
