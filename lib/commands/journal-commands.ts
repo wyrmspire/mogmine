@@ -98,14 +98,9 @@ function parseTrade(raw: unknown, nowMs = Date.now()): Parsed<TradeRecord> {
   // movement history may legitimately lock profit on the other side of entry, so it gets only the tick check below.
   const stopAtEntry = trade.initial_stop_price ?? (trade.stop_moves?.length ? null : trade.stop_loss_price);
   const errors = validateTradeInput({
-    symbol: trade.symbol,
-    direction: trade.direction,
-    quantity: trade.quantity,
-    entry_price: trade.entry_price,
-    exit_price: trade.status === "open" ? null : trade.exit_price,
-    stop_loss_price: stopAtEntry,
-    planned_target_price: trade.planned_target_price,
-    key_level_price: trade.key_level_price,
+    symbol: trade.symbol, direction: trade.direction, quantity: trade.quantity,
+    entry_price: trade.entry_price, exit_price: trade.status === "open" ? null : trade.exit_price,
+    stop_loss_price: stopAtEntry, planned_target_price: trade.planned_target_price, key_level_price: trade.key_level_price,
   });
   const firstError = Object.values(errors)[0];
   if (firstError) return bad(firstError);
@@ -288,10 +283,7 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
   /** Create and update check trade times against the clock (UX-09). Archive only reads and keeps the stored times. */
   const parseAt = <K extends CollectionKey>(key: K, raw: unknown): Parsed<CollectionRecordTypes[K]> =>
     key === "trades" ? (parseTrade(raw, now()) as Parsed<CollectionRecordTypes[K]>) : COLLECTION_PARSERS[key](raw);
-  const fail = <T>(code: PersistErrorCode, message: string, recordType?: RecordTypeKey, id?: RecordId): PersistResult<T> => ({
-    ok: false,
-    error: { code, message, recordType, id },
-  });
+  const fail = <T>(code: PersistErrorCode, message: string, recordType?: RecordTypeKey, id?: RecordId): PersistResult<T> => ({ ok: false, error: { code, message, recordType, id } });
   const repoFor = <K extends CollectionKey>(key: K) => repos[key] as CollectionRepository<CollectionRecordTypes[K]>;
   const idOf = (record: unknown): RecordId => (isObject(record) && typeof record.id === "string" ? record.id : "");
 

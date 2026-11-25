@@ -22,7 +22,7 @@ const MINUTE = 60_000;
 async function setup() {
   const store = createMemoryKeyValueStore();
   const adapter = createLocalAdapter({ kind: "mock", store, candles: createMemoryCandleStore() });
-  const commands = createJournalCommands(adapter.repositories);
+  const commands = createJournalCommands(adapter.repositories, undefined, { now: () => NOW_MS });
   const account = makeAccount({ id: "sim-acct-eval-50k", name: "SIM Eval 50K", starting_balance_cents: 5_000_000, now: NOW, r_size_cents: 30_000 });
   assert.equal((await commands.create("accounts", account)).ok, true);
   return commands;

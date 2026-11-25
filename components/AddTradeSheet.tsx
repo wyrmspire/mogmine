@@ -75,8 +75,8 @@ export function AddTradeSheet() {
   const [dayBars, setDayBars] = useState<{ from: number; candles: Candle[] } | null>(null);
   const [finderNonce, setFinderNonce] = useState(0);
   const online = useOnline();
-  // A date that starts after the sheet opened has no bars yet.
-  const [openedAt] = useState(() => Date.now());
+  // Captured at mount and refreshed in event handlers so render stays pure (`react-hooks/purity`).
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const dialogRef = useRef<HTMLElement>(null);
   const firstField = useRef<HTMLButtonElement>(null);
   const accounts = useAccounts();
@@ -105,7 +105,7 @@ export function AddTradeSheet() {
     return () => { window.removeEventListener("keydown", onKey); previousFocus?.focus(); };
   }, []);
 
-  const change = (patch: Partial<EntryDraft>) => setDraft((current) => keepDraft(DRAFT_KEY, { ...current, ...patch }));
+  const change = (patch: Partial<EntryDraft>) => { setNowMs(new Date().getTime()); setDraft((current) => keepDraft(DRAFT_KEY, { ...current, ...patch })); };
   const isOpenDraft = draft.status === "open";
   // Still open: the entry defaults to now unless the trader already set a time (R-03b).
   const setStatus = (status: TradeStatus) => {
@@ -159,7 +159,7 @@ export function AddTradeSheet() {
     else if (!errors.entryClock && !errors.date && exit <= entry) errors.exitClock = "The exit must be after the entry";
   }
   // UX-09: a trade dated in the future (beyond the 5-minute clock allowance) is refused, not just warned.
-  const future = validateFutureTimes(entry.getTime(), isOpenDraft || !exit ? null : exit.getTime(), Date.now(), zone);
+  const future = validateFutureTimes(entry.getTime(), isOpenDraft || !exit ? null : exit.getTime(), nowMs, zone);
   errors.entryClock = errors.entryClock ?? future.entry;
   if (!isOpenDraft) errors.exitClock = errors.exitClock ?? future.exit;
   const hasErrors = Object.values(errors).some(Boolean) || statedRiskError(draft.statedRiskR) != null;
@@ -183,7 +183,7 @@ export function AddTradeSheet() {
   const dayRange = dayWindow(draft.date, zone);
   const entryReady = entryPrice != null && entryPrice > 0 && !errors.entryPrice;
   const hint = draft.entryEdited && !Number.isNaN(entry.getTime()) ? entry.getTime() : null;
-  const finderInput = entryPrice != null && entryReady && dayRange && dayRange.from < openedAt
+  const finderInput = entryPrice != null && entryReady && dayRange && dayRange.from < nowMs
     ? {
       symbol: draft.symbol, direction: draft.direction, entryPrice,
       exitPrice: !isOpenDraft && exitPrice != null && exitPrice > 0 && !errors.exitPrice ? exitPrice : null,
@@ -233,8 +233,11 @@ export function AddTradeSheet() {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    const submitNow = new Date().getTime();
+    setNowMs(submitNow);
     setSubmitted(true);
-    if (hasErrors || entryPrice == null) return;
+    const submitFuture = validateFutureTimes(entry.getTime(), isOpenDraft || !exit ? null : exit.getTime(), submitNow, zone);
+    if (hasErrors || submitFuture.entry || (!isOpenDraft && submitFuture.exit) || entryPrice == null) return;
     // Missing is null, never 0 or the entry price (R-03).
     const exitFields = isOpenDraft
       ? { status: "open" as const, exit_time: null, exit_price: null }
@@ -258,13 +261,7 @@ export function AddTradeSheet() {
     const saved = addTradeAndFlush(trade);
     if (draft.entryMoodSpoke) {
       const nowIso = new Date().toISOString();
-      recordUserMood(
-        trade.id,
-        { [draft.entryMoodSpoke]: ONE_TAP_MOOD_SCORE },
-        nowIso,
-        entry.toISOString(),
-        nowIso,
-      );
+      recordUserMood(trade.id, { [draft.entryMoodSpoke]: ONE_TAP_MOOD_SCORE }, nowIso, entry.toISOString(), nowIso);
     }
     const nextDraft = entryDraftAfterSave(draft, trade.id, saved);
     keepDraft(DRAFT_KEY, nextDraft);

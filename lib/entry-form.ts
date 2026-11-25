@@ -45,7 +45,6 @@ export interface EntryDraft {
   entryMoodSpoke?: string | null;
 }
 
-/** Minutes the default entry sits before the default exit for a closed trade. */
 /** Clock drift allowed before a trade time counts as in the future (Q-11, 02 §2.3). */
 export const FUTURE_ALLOWANCE_MS = 5 * 60_000;
 
@@ -66,6 +65,7 @@ export function checkPriceAgainstDayRange(price: number | null, symbol: string, 
   return `${formatPrice(price, symbol)} is far from where ${canonicalSymbol(symbol) ?? symbol} traded that day (${formatPrice(dayLow, symbol)}–${formatPrice(dayHigh, symbol)}). Typo?`;
 }
 
+/** Minutes the default entry sits before the default exit for a closed trade. */
 export const DEFAULT_HOLD_MINUTES = 30;
 
 /** `YYYY-MM-DDTHH:mm` → `{ date, clock }`. Empty parts for anything else. */
