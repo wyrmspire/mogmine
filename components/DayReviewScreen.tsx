@@ -12,6 +12,7 @@ import {
 } from "@/lib/daily-review";
 import type { DailyReview, ReviewPoint, ReviewPointKind } from "@/lib/daily-review";
 import { updateDailyReview, upsertDailyReview, useDailyReviewsStore } from "@/lib/daily-review-store";
+import { markLinkedTradesReviewed } from "@/lib/day-review-screen";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { parseSessionDateParam, stepRegularSessionDate } from "@/lib/selectors";
 import { usePlansStore } from "@/lib/plans-store";
@@ -104,7 +105,7 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
     return saved;
   };
   const saveRef = useRef(save);
-  saveRef.current = save;
+  useEffect(() => { saveRef.current = save; });
 
   // The lesson saves 600 ms after the last keystroke, and again on blur.
   useEffect(() => {
@@ -145,11 +146,10 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   const toggleDone = () => save({ status: done ? "draft" : "done" });
   // Q-4: marks the linked trades only; the day's status is separate. Undo restores each trade's own previous status.
   const markReviewed = () => {
-    const snapshot = unreviewed.map((trade) => ({ id: trade.id, status: trade.review_status }));
-    snapshot.forEach(({ id }) => updateTrade(id, { review_status: "reviewed" }));
-    showToast(`Marked ${snapshot.length} trades reviewed`, {
+    const { count, undo } = markLinkedTradesReviewed(unreviewed, (id, status) => updateTrade(id, { review_status: status }));
+    showToast(`Marked ${count} trades reviewed`, {
       label: "Undo",
-      run: () => snapshot.forEach(({ id, status }) => updateTrade(id, { review_status: status })),
+      run: undo,
     });
   };
 

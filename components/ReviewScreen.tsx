@@ -12,9 +12,8 @@ import { formatDuration, formatMoney, formatPoints, formatPrice, formatR } from 
 import { setPrefs, usePrefs } from "@/lib/prefs";
 import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
-import { stepRegularSessionDate } from "@/lib/selectors";
+import { dayStatus, recentTradingDays } from "@/lib/day-review-screen";
 import { useDailyReviewsStore } from "@/lib/daily-review-store";
-import type { DailyReview } from "@/lib/daily-review";
 import { updateTrade, useJournal } from "@/lib/store";
 import { formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -35,31 +34,11 @@ export function ReviewScreen() {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_CHIP_LIMIT = 14;
-const DAYS_STRIP_LENGTH = 14;
 
 /** Short day chip label, `Mon 23`. Session dates are labels, so UTC is the calendar. */
 function dayChipLabel(date: string) {
   const day = new Date(`${date}T00:00:00Z`);
   return `${WEEKDAYS[day.getUTCDay()]} ${day.getUTCDate()}`;
-}
-
-/** The last 14 regular trading days up to `todayDate`, newest first (weekends skipped, as NAV-1). */
-function recentTradingDays(todayDate: string): string[] {
-  const weekday = new Date(`${todayDate}T00:00:00Z`).getUTCDay();
-  let day = weekday === 0 || weekday === 6 ? stepRegularSessionDate(todayDate, -1) : todayDate;
-  const days: string[] = [];
-  for (let index = 0; index < DAYS_STRIP_LENGTH; index += 1) {
-    days.push(day);
-    day = stepRegularSessionDate(day, -1);
-  }
-  return days;
-}
-
-/** A day is done if any of its reviews (any account scope) is done; draft if it has a review; otherwise none. */
-function dayStatus(reviews: readonly DailyReview[], date: string): "none" | "draft" | "done" {
-  const own = reviews.filter((review) => review.session_date === date);
-  if (own.some((review) => review.status === "done")) return "done";
-  return own.length > 0 ? "draft" : "none";
 }
 
 /** Days strip (06 §3): last 14 trading days, each linking to its day review. */

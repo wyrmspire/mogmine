@@ -7,6 +7,7 @@ import type { ReviewPoint } from "../daily-review.ts";
 import {
   getDailyReviews, resetDailyReviewsForTests, updateDailyReview, upsertDailyReview,
 } from "../daily-review-store.ts";
+import { dayStatus, markLinkedTradesReviewed, recentTradingDays } from "../day-review-screen.ts";
 import { normalizeTrade } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 import type { PlanningSession } from "../plans.ts";
@@ -20,7 +21,27 @@ function trade(id: string, patch: Partial<TradeRecord> = {}): TradeRecord {
 
 beforeEach(() => resetDailyReviewsForTests());
 
-describe("Done for the day (Q-4)", () => {
+describe("Days strip (last 14 trading days)", () => {
+  it("skips Saturdays and Sundays and pairs each date with none, draft, or done", () => {
+    const days = recentTradingDays("2026-11-22"); // Sunday -> starts at Friday 2026-11-20
+    assert.equal(days.length, 14);
+    assert.equal(days[0], "2026-11-20");
+    for (const date of days) {
+      const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+      assert.notEqual(weekday, 0);
+      assert.notEqual(weekday, 6);
+    }
+    const reviews = [
+      makeDailyReview({ session_date: "2026-11-20", status: "done", recorded_at: "2026-11-20T22:00:00.000Z" }),
+      makeDailyReview({ session_date: "2026-11-19", status: "draft", recorded_at: "2026-11-19T22:00:00.000Z" }),
+    ];
+    assert.equal(dayStatus(reviews, "2026-11-20"), "done");
+    assert.equal(dayStatus(reviews, "2026-11-19"), "draft");
+    assert.equal(dayStatus(reviews, "2026-11-18"), "none");
+  });
+});
+
+describe("Done for the day and mark linked trades reviewed (Q-4)", () => {
   it("sets status done on the review and leaves every linked trade's review_status untouched", () => {
     const trades = [trade("t-new", { review_status: "new" }), trade("t-tagged", { review_status: "tagged" })];
     const before = trades.map((item) => ({ id: item.id, review_status: item.review_status }));
@@ -30,6 +51,24 @@ describe("Done for the day (Q-4)", () => {
     assert.equal(done?.status, "done");
     assert.equal(getDailyReviews().length, 1);
     assert.deepEqual(trades.map((item) => ({ id: item.id, review_status: item.review_status })), before);
+  });
+
+  it("marks linked unreviewed trades reviewed and restores exact prior statuses on undo", () => {
+    const statuses = new Map<string, TradeRecord["review_status"]>([
+      ["t-new", "new"],
+      ["t-tagged", "tagged"],
+      ["t-done", "reviewed"],
+    ]);
+    const linked = [...statuses.entries()].map(([id, review_status]) => ({ id, review_status }));
+    const { count, undo } = markLinkedTradesReviewed(linked, (id, status) => statuses.set(id, status));
+    assert.equal(count, 2);
+    assert.equal(statuses.get("t-new"), "reviewed");
+    assert.equal(statuses.get("t-tagged"), "reviewed");
+    assert.equal(statuses.get("t-done"), "reviewed");
+    undo();
+    assert.equal(statuses.get("t-new"), "new");
+    assert.equal(statuses.get("t-tagged"), "tagged");
+    assert.equal(statuses.get("t-done"), "reviewed");
   });
 });
 
