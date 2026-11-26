@@ -1,6 +1,6 @@
 /**
  * Strategy Lab bar loader (SL-2, docs/design-2026-11-24/09 §10.2; SL-15b additive coverage). A settled session comes from
- * the device store, then `mogmine_bars_1m`, then Yahoo for missing minutes only. Bars merge and are never replaced.
+ * the device store, then `mogmine_market_candles`, then Yahoo for missing minutes only. Bars merge and are never replaced.
  * Never throws: every failure is an excluded session with a reason.
  */
 import { idbGet, idbSet } from "../idb.ts";
@@ -9,7 +9,7 @@ import {
   cleanCandles, computeMissingRanges, defaultCoverageStorage, mergeBars1m, mergeCoveredRanges, recordSessionCoverage,
   type CleanStats, type CoveredRange,
 } from "./bar-coverage.ts";
-import { readRemoteSessionBars1m } from "./bars-cache.ts";
+import { readArchiveCandles } from "../persistence/archive-candles.ts";
 import { buildBarSeries } from "./series.ts";
 import type { BarSeries, SourceBar } from "./types.ts";
 
@@ -50,7 +50,7 @@ export interface BarLoaderDeps {
   fetch?: (url: string) => Promise<HttpResponseLike>;
   /** Defaults to the IndexedDB helper, which is a miss outside a browser. */
   cache?: SessionCache;
-  /** Server bars for one session (`mogmine_bars_1m`). Defaults to `readRemoteSessionBars1m`. Null when unavailable. */
+  /** Archive bars for one session (`mogmine_market_candles`). Null when unavailable. */
   remoteBars?: (window: SessionWindow) => Promise<SourceBar[] | null>;
   now?: () => number;
   /** Prefix for the relative `/api/market-data` URL. Empty in the browser. */
@@ -118,11 +118,11 @@ function excluded(date: string, reason: ExclusionReason, detail: string, baseTim
   return { date, status: "excluded", reason, detail, baseTimeframe };
 }
 
-/** The server read: bars when `mogmine_bars_1m` has any for the window, else null. Never throws. */
+/** TM-0 archive read: `MES=F` 1m rows in authenticated Supabase mode, else null. Never throws. */
 export async function defaultRemoteBars(window: SessionWindow): Promise<SourceBar[] | null> {
   try {
-    const result = await readRemoteSessionBars1m(LAB_SYMBOL, window);
-    return result.ok && result.value?.length ? result.value : null;
+    const result = await readArchiveCandles("MES=F", window.from, window.to);
+    return result?.candles.map((bar) => ({ ...bar, volume: bar.volume > 0 ? bar.volume : null })) ?? null;
   } catch {
     return null;
   }

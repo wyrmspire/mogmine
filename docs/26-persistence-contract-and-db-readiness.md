@@ -69,7 +69,7 @@ Migration notes for #176:
 | :--- | :--- | :--- |
 | **Partials** (`PartialExit`, `PartialTarget`, `lib/partials.ts`) | **Deferred.** When a UI records them, they become optional `TradeRecord` fields `partial_exits?: PartialExit[]` and `partial_targets?: PartialTarget[]`, stored as `jsonb` on `mogmine_trades`, using the `lib/partials.ts` shapes unchanged. | Avoids a third shape. A fills ledger (below) would supersede `partial_exits` and is owner-gated by OD-5. |
 | **Prompt library** | **Deferred.** Seeded in code; the contract has a singleton repository for it. Persist when a prompt editor ships. | Nothing customizes it yet; storing the seed would freeze it and block seed upgrades. |
-| **Candles / archive** | Device cache stays IndexedDB, not in backups. Server archive is `mogmine_market_candles`, `mogmine_market_coverage`, `mogmine_market_archive_jobs` (#70 / docs/10), `shared_read`. **Deferred, owner-gated.** | #70 / PR #71 is not merged here. |
+| **Candles / archive** | Device cache stays IndexedDB, not in backups. Server archive is `mogmine_market_candles`, `mogmine_market_coverage`, `mogmine_market_archive_jobs` (#70 / docs/10), `shared_read`. TM-0 reads it first for trade charts and Strategy Lab only in authenticated Supabase mode, then falls back to Yahoo and the device cache. Crossed `mogmine_market_rolls` entries are labelled on the chart. | Requires the archive migrations from `feat/databento-mes-1m`. |
 | `executions` / fills ledger | **Deferred** (`mogmine_executions`). | OD-5 is open; not closed here. |
 | `trade_candles` | **Out of v1.** Replaced by the shared candle archive keyed by symbol/timeframe/time, not per trade. | docs/06 warning: per-trade copies duplicate bars. |
 | `trade_companion_charts` | **Deferred** (`mogmine_trade_companion_charts`). | No companion-chart attachment UI yet. |
@@ -152,7 +152,7 @@ Code: collections in [`lib/persistence/store-sync.ts`](../lib/persistence/store-
 | `calls` | `mogmine-calls-v1` `.calls` | **synced** `mogmine_calls` | Calls about sample trades stay on the device (#193 review). |
 | `prompt_dismissals` | `mogmine-calls-v1` `.dismissals` | **synced** `mogmine_prompt_dismissals` | Same rule as calls. |
 | `prompt_library` | none (seeded in code) | **not synced** (memory-only, deferred) | Nothing customizes it yet (§4). |
-| `candles` | IndexedDB `mogmine` / `candles` | **not synced** (device cache, #70) | Market data is re-fetched; the server archive is owner-gated (§4). |
+| `candles` | IndexedDB `mogmine` / `candles` | **archive-first read, not synced** | Supabase mode reads the shared archive through authenticated RLS; local mode keeps the existing device/Yahoo behavior. |
 | Sync metadata | `mogmine-sync-v1:*` | **device-only** | Per-device bookkeeping (§8.3). |
 
 Derived values (call grades, `after_the_fact`, challenge progress, session review, P&L / R, mood suggestions) are never written (`derivedNeverStored`).

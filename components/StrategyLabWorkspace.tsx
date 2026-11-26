@@ -34,7 +34,7 @@ import type { BarSeries, Recipe, RunResult } from "@/lib/strategy-lab/types";
 
 const RUN_SESSIONS = 22;
 const LIMITS_TEXT =
-  "1-minute history: about the last 30 days (Yahoo). Older sessions are skipped. Volume baselines use at most ~20 sessions. No news filter. Δ is a proxy.";
+  "1-minute history: archive first when signed in, then Yahoo and this device. Volume baselines use at most ~20 sessions. No news filter. Δ is a proxy.";
 
 type LabTab = "mark" | "recipes" | "runs";
 const TABS: readonly { id: LabTab; label: string }[] = [

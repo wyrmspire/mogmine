@@ -402,9 +402,10 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     fetching: candles?.fetching,
     online,
   });
-  const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
+  const sourceLabel = candles?.source === "Yahoo Finance" || candles?.source === "Yahoo" ? "Yahoo" : candles?.source ?? "No candles";
   const sourceInterval = `${base} source${base !== "1m" ? " (1m unavailable)" : ""}`;
-  const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? `${timeframe} chart · ${sourceInterval}${barCoverage === "partial" ? " · gaps in trade" : ""}` : "—"}`;
+  const rollText = candles?.rolls?.length ? ` · roll ${candles.rolls.map((roll) => `${roll.fromContract}→${roll.toContract}`).join(", ")}` : "";
+  const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? `${timeframe} chart · ${sourceInterval}${barCoverage === "partial" ? " · gaps in trade" : ""}${rollText}` : "—"}`;
 
   return <>
     <div className="detail-layout">

@@ -19,7 +19,7 @@ export type Timeframe = "1m" | "5m" | "15m" | "1h";
 export type ReviewStatus = "new" | "tagged" | "reviewed";
 /** `open`: no exit yet, both exit fields are null (R-03, docs/09 §8). Only these two values. */
 export type TradeStatus = "open" | "closed";
-export type CandleSource = "Yahoo Finance" | "Demo fixture";
+export type CandleSource = "Yahoo Finance" | "Demo fixture" | "Databento" | "Yahoo" | "Archive";
 
 export const TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h"];
 export const TIMEFRAME_MINUTES: Record<Timeframe, number> = { "1m": 1, "5m": 5, "15m": 15, "1h": 60 };
@@ -1003,7 +1003,8 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     throw new Error(`Trade ${raw.id}: status ${status} does not match its exit fields`);
   }
   const isSample = raw.is_sample === true;
-  const validSource = raw.candle_source === "Yahoo Finance" || (raw.candle_source === "Demo fixture" && isSample);
+  const validSource = raw.candle_source === "Yahoo Finance" || raw.candle_source === "Databento"
+    || raw.candle_source === "Yahoo" || raw.candle_source === "Archive" || (raw.candle_source === "Demo fixture" && isSample);
   const hadNonMarketCandles = raw.candle_source != null && !validSource;
   // `mes` and `MES` share one spec. An unknown symbol is kept as typed, and its money shows as null.
   const symbol = canonicalSymbol(raw.symbol) ?? raw.symbol;

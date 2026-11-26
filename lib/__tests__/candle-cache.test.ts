@@ -47,6 +47,54 @@ function fakeDependencies(initial: StoredCandles, now: number, fetched: Candle[]
   return { cache, dependencies, counts: () => ({ requests, writes }) };
 }
 
+test("TM-0: the authenticated archive resolves before the device cache and Yahoo route", async () => {
+  const archived = bars(close - minute);
+  let reads = 0;
+  let requests = 0;
+  let writes = 0;
+  const result = await loadCachedCandles(trade, candleSignature(trade), {
+    archive: async () => ({
+      candles: archived,
+      source: "Databento",
+      rolls: [{ sessionDate: "2026-09-14", fromContract: "MESU6", toContract: "MESZ6" }],
+    }),
+    read: async () => { reads += 1; return stored(bars(exit)); },
+    request: async () => { requests += 1; return { candles: bars(exit), baseTimeframe: "1m" }; },
+    write: async () => { writes += 1; },
+    now: () => close,
+  });
+
+  assert.equal(result?.source, "Databento");
+  assert.deepEqual(result?.rolls?.map((item) => item.fromContract), ["MESU6"]);
+  assert.deepEqual({ reads, requests, writes }, { reads: 0, requests: 0, writes: 1 });
+});
+
+test("TM-0: an archive miss falls back to the existing device cache without Yahoo", async () => {
+  const cached = stored(bars(close - minute));
+  let archives = 0;
+  const fake = fakeDependencies(cached, close + minute, bars(close + minute));
+  const result = await loadCachedCandles(trade, candleSignature(trade), {
+    ...fake.dependencies,
+    archive: async () => { archives += 1; return null; },
+  });
+
+  assert.equal(result, cached);
+  assert.equal(archives, 1);
+  assert.deepEqual(fake.counts(), { requests: 0, writes: 0 });
+});
+
+test("TM-0: an archive window without the trade anchors falls back instead of drawing an incomplete chart", async () => {
+  const cached = stored(bars(close - minute));
+  const fake = fakeDependencies(cached, close + minute, bars(close + minute));
+  const result = await loadCachedCandles(trade, candleSignature(trade), {
+    ...fake.dependencies,
+    archive: async () => ({ candles: bars(exit).filter((bar) => bar.time !== exit), source: "Archive", rolls: [] }),
+  });
+
+  assert.equal(result, cached);
+  assert.deepEqual(fake.counts(), { requests: 0, writes: 0 });
+});
+
 test("a partial matching cache is not refetched while its hindsight window is open", async () => {
   const partial = stored(bars(exit + 3 * minute));
   const fake = fakeDependencies(partial, close - minute, bars(close - minute));

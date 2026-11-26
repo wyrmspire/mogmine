@@ -13,6 +13,7 @@ import type { Candle, CandleSource, Timeframe, TradeRecord } from "./trades.ts";
 import { anchorsTradeWindow, coversTradeWindow } from "./market-data/coverage.ts";
 import { reasonFromResponse } from "./market-data/outcome.ts";
 import type { NoCandlesReason } from "./market-data/outcome.ts";
+import { readArchiveCandles, type ArchiveCandles, type MarketRoll } from "./persistence/archive-candles.ts";
 
 export interface CandleEntry {
   status: "loading" | "ready" | "none";
@@ -27,6 +28,7 @@ export interface CandleEntry {
   lastAttemptAt: number;
   /** Why the last load found no candles, when it said (a future trade, nothing served, a failure). */
   reason?: NoCandlesReason | null;
+  rolls?: MarketRoll[];
 }
 
 export interface StoredCandles {
@@ -35,6 +37,7 @@ export interface StoredCandles {
   source: CandleSource;
   baseTimeframe: Timeframe;
   fetchedAt: number;
+  rolls?: MarketRoll[];
 }
 
 interface CandleResponse {
@@ -55,6 +58,8 @@ export interface CandleLoadDependencies {
   onCoverageRefetch?(): void;
   /** Ask the network even when the matching cache looks final for now: a due R-02 retry or refresh. */
   refresh?: boolean;
+  /** Supabase archive lookup. Null continues through the current device/Yahoo resolver. */
+  archive?: (trade: TradeRecord) => Promise<ArchiveCandles | null>;
 }
 
 /** [time, open, high, low, close] with an optional sixth column: traded volume, when a fixture carries it. */
@@ -118,7 +123,7 @@ function adopt(trade: TradeRecord, stored: StoredCandles, servedFromCache = fals
   // A set served from the device cache dates from when it was fetched, so a same-day trade opened
   // cold refreshes on the next check instead of showing old bars for another 5 minutes (R-02).
   const lastAttemptAt = servedFromCache ? stored.fetchedAt : entries.get(trade.id)?.lastAttemptAt ?? Date.now();
-  put(trade.id, { status: "ready", candles: stored.candles, source: stored.source, baseTimeframe: stored.baseTimeframe, fetching: false, signature: stored.signature, lastAttemptAt });
+  put(trade.id, { status: "ready", candles: stored.candles, source: stored.source, baseTimeframe: stored.baseTimeframe, fetching: false, signature: stored.signature, lastAttemptAt, rolls: stored.rolls });
 }
 
 async function loadSampleCandles(trade: TradeRecord, signature: string) {
@@ -218,17 +223,23 @@ export async function loadCachedCandles(
   dependencies: CandleLoadDependencies,
 ): Promise<StoredCandles | null> {
   const key = candleCacheKey(trade);
-  const cached = await dependencies.read(key);
-  if (dependencies.isCurrent?.() === false) return null;
   const entryMs = Date.parse(trade.entry_time);
   // An open trade (R-03c) is anchored by its entry bar alone, and its cache is never final.
   const exitMs = trade.exit_time == null ? null : Date.parse(trade.exit_time);
+  const anchored = (candles: Candle[], timeframe: Timeframe | undefined): timeframe is Timeframe =>
+    Boolean(timeframe && TIMEFRAMES.includes(timeframe) && anchorsTradeWindow(candles, entryMs, exitMs, timeframe, trade.symbol));
+  const archived = await dependencies.archive?.(trade);
+  if (archived && anchored(archived.candles, "1m")) {
+    const archiveStored: StoredCandles = { signature, candles: archived.candles, source: archived.source, baseTimeframe: "1m", fetchedAt: dependencies.now(), rolls: archived.rolls };
+    await dependencies.write(key, archiveStored);
+    return archiveStored;
+  }
+  const cached = await dependencies.read(key);
+  if (dependencies.isCurrent?.() === false) return null;
   const covers = (candles: Candle[], timeframe: Timeframe | undefined): timeframe is Timeframe =>
     Boolean(exitMs != null && timeframe && TIMEFRAMES.includes(timeframe) && coversTradeWindow(candles, entryMs, exitMs, timeframe, trade.symbol));
   // A payload anchors the trade when the entry and exit bars are present (AC-07): gaps inside
   // the hold are drawn and counted on screen, never a reason to drop the whole chart (#90 follow-up).
-  const anchored = (candles: Candle[], timeframe: Timeframe | undefined): timeframe is Timeframe =>
-    Boolean(timeframe && TIMEFRAMES.includes(timeframe) && anchorsTradeWindow(candles, entryMs, exitMs, timeframe, trade.symbol));
   // Keep a signature-matching cache as a fallback, adopt it straight away when it fully covers
   // the trade window (#90), and only skip the network when it also needs no post-exit refetch (#86).
   const matching = cached?.signature === signature ? cached : undefined;
@@ -282,6 +293,11 @@ async function load(trade: TradeRecord, signature: string, refresh: boolean) {
       isCurrent: () => entries.get(trade.id)?.signature === signature,
       onCoverageRefetch: () => coverageAttempts.set(trade.id, signature),
       refresh,
+      archive: async (requestedTrade) => {
+        const from = Date.parse(requestedTrade.entry_time) - 30 * 60_000;
+        const exit = requestedTrade.exit_time == null ? Date.now() : Date.parse(requestedTrade.exit_time);
+        return readArchiveCandles(requestedTrade.yahoo_ticker, from, exit + 90 * 60_000);
+      },
     });
     if (stored) adopt(trade, stored, !askedNetwork);
   } catch (error) {
