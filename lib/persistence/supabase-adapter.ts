@@ -37,6 +37,8 @@ export interface QueryLike extends PromiseLike<DbResult<DbRow[]>> {
   eq(column: string, value: string | boolean): QueryLike;
   order(column: string, options?: { ascending?: boolean }): QueryLike;
   limit(count: number): QueryLike;
+  /** Inclusive row range (PostgREST `.range(from, to)`). Optional: a double without it falls back to `limit`. */
+  range?(from: number, to: number): QueryLike;
   maybeSingle(): PromiseLike<DbResult<DbRow>>;
 }
 export interface SupabaseLike {
@@ -67,6 +69,8 @@ const COLLECTION_COLUMNS: Record<CollectionKey, { parent?: string; sample?: bool
 };
 
 export const REPLACE_ROWS_RPC = "mogmine_replace_rows";
+/** Rows per request when a paged list gives an `offset` but no `limit`. Matches PostgREST's default `max-rows`. */
+const DEFAULT_PAGE_ROWS = 1000;
 
 export interface SupabaseAdapterOptions {
   /** The browser client (anon key + signed-in session). A thunk so the SDK loads only when this adapter is used. */
@@ -170,10 +174,21 @@ export function createSupabaseAdapter(options: SupabaseAdapterOptions): Persiste
         if (query.includeArchived === false && columns.archived) request = request.eq("archived", false);
         if (query.parentId !== undefined && columns.parent) request = request.eq(columns.parent, query.parentId);
         request = request.order("created_at", { ascending: true }).order("id", { ascending: true });
-        if (query.limit !== undefined) request = request.limit(Math.max(0, query.limit));
+        const offset = Math.max(0, Math.floor(query.offset ?? 0));
+        let skip = 0;
+        if (offset > 0 && request.range) {
+          // `range` is inclusive: a page of `pageLimit` rows starting at `offset` ends at `offset + pageLimit - 1`.
+          const pageLimit = query.limit !== undefined ? Math.max(0, query.limit) : DEFAULT_PAGE_ROWS;
+          request = request.range(offset, offset + pageLimit - 1);
+        } else {
+          // A double without `range`: read `offset + n` rows from the start, then drop the first `offset`.
+          skip = offset;
+          if (query.limit !== undefined) request = request.limit(Math.max(0, query.limit) + offset);
+        }
         const { data, error } = await request;
         if (error) return mapDbError(error, key);
-        return { ok: true, value: (data ?? []).flatMap((row) => restore<Row>(key, row) ?? []) };
+        const rows = (data ?? []).slice(skip);
+        return { ok: true, value: rows.flatMap((row) => restore<Row>(key, row) ?? []) };
       },
 
       async get(who, id) {
