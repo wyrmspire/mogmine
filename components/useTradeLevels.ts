@@ -81,14 +81,16 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
       let withheld: readonly WithheldLevel[] = [];
       let session: DayCandles | null = null;
       try {
-        const [prior, today] = await Promise.all([
+        const [prior, today, earlierWeek] = await Promise.all([
           loadDayCandles(trade.symbol, windows.prior.from, windows.prior.to),
           windows.today ? loadDayCandles(trade.symbol, bounds.open, Math.min(bounds.close, nowMinute)).catch(() => null) : null,
+          // Earlier week days (Mon to the day before prior) for week_high / week_low. A failed day is null: that level is withheld.
+          Promise.all(windows.earlierWeek.map((w) => loadDayCandles(trade.symbol, w.from, w.to).catch(() => null))),
         ]);
         session = today;
         // Levels cut at entry (the as-of rule): bars after entry never reach the level calculation.
         const todayAtEntry = today && { candles: today.candles.filter(({ time }) => time < entryMs), baseTimeframe: today.baseTimeframe };
-        const report = tradeLevelReport(trade, prior, todayAtEntry);
+        const report = tradeLevelReport(trade, prior, todayAtEntry, earlierWeek);
         levels = report?.levels ?? [];
         withheld = report?.withheld ?? [];
       } catch { /* no bars: no computed levels */ }
