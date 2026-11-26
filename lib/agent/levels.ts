@@ -6,7 +6,7 @@ import { canonicalSymbol, specFor } from "../trades.ts";
 import type { Candle } from "../trades.ts";
 import { computeLevelsFromInputs, extractSessionInputsFromCandles, levelLabel } from "../levels.ts";
 import type { ComputedLevelType } from "../levels.ts";
-import { missingCandleLevels } from "../chart-levels.ts";
+import { earlierWeekSessionWindows, missingCandleLevels } from "../chart-levels.ts";
 import { withheldReasons } from "../level-withheld.ts";
 import type { LevelCoverage, WithheldLevel } from "../level-withheld.ts";
 import { computeSessionIndicators } from "../session-indicators.ts";
@@ -205,9 +205,12 @@ export async function buildAgentLevels(
   const todayLoad = asOfMs > today.open ? await loadCandles(symbol, today.open, cutoff, "1m") : null;
   const provider = priorLoad.provider;
   const bars = [...priorLoad.bars, ...(todayLoad?.bars ?? [])].filter((bar) => bar.time + MINUTE_MS <= asOfMs);
+  // Earlier week days (Monday on) feed week_high / week_low only. A day that fails to load is left out: its week level is withheld.
+  const earlierLoads = await Promise.all(earlierWeekSessionWindows(sessionDate).map((w) => loadCandles(symbol, w.from, w.to, "1m").catch(() => null)));
+  const earlierBars = earlierLoads.flatMap((load) => load?.bars ?? []).filter((bar) => bar.time + MINUTE_MS <= asOfMs);
 
   const extracted = extractSessionInputsFromCandles({
-    symbol, provider, providerSymbol: spec?.yahooTicker ?? "", sessionDate, candles: bars, timeframe: "1m", asOf: asOfMs,
+    symbol, provider, providerSymbol: spec?.yahooTicker ?? "", sessionDate, candles: [...earlierBars, ...bars], timeframe: "1m", asOf: asOfMs,
   });
   const levels = computeLevelsFromInputs({ symbol, sessionDate, inputs: extracted.inputs });
   const withheld = withheldReasons(missingCandleLevels(levels), extracted.coverage, "1m");
