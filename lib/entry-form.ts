@@ -5,8 +5,16 @@
 import { DEFAULT_TIME_ZONE, formatDateTime, fromZonedInput, toZonedInput } from "./time.ts";
 import { formatPrice } from "./format.ts";
 import { isValidStatedRiskR } from "./r-size.ts";
-import { canonicalSymbol, isExitReason, isStopMoveWidening, isWholeQuantity, snapToTick, specFor, stopPatch, tickDecimals, toTicks } from "./trades.ts";
+import { canonicalSymbol, closeTradePatch, isExitReason, isStopMoveWidening, isWholeQuantity, snapToTick, specFor, stopPatch, tickDecimals, toTicks } from "./trades.ts";
 import type { Candle, StopMove, TradeDirection, TradeRecord, TradeExitReason, TradeStatus } from "./trades.ts";
+import { partialsTradeMetrics } from "./partials-record.ts";
+import type { PartialsTradeMetrics } from "./partials-record.ts";
+import type { PartialExit, PartialTarget } from "./partials-record.ts";
+
+/** One optional split target (issue #38): a planned exit price and the contracts it takes. */
+export interface DraftPartialTarget { price: string; qty: string }
+/** One optional partial exit (issue #38): a scale-out fill, or a leg of a closed trade that left in pieces. */
+export interface DraftPartialExit { price: string; clock: string; qty: string; reason?: TradeExitReason | null }
 
 /** One optional "I moved my stop" row in manual entry (issue #36 G2): the new stop price and its clock. */
 export interface DraftStopMove { price: string; clock: string }
@@ -50,6 +58,10 @@ export interface EntryDraft {
   stopMoves?: DraftStopMove[];
   /** Optional. Quick tags the trader accepted, e.g. "Moved Stop" (UX-33: accepted by a tap, never automatic). */
   quickTags?: string[];
+  /** Optional. Split targets (issue #38: T1, T2 …), in the order typed. */
+  partialTargets?: DraftPartialTarget[];
+  /** Optional. Partial exits (issue #38), in the order typed. On a closed trade they must add up to Contracts. */
+  partialExits?: DraftPartialExit[];
 }
 
 /** Clock drift allowed before a trade time counts as in the future (Q-11, 02 §2.3). */
@@ -85,6 +97,9 @@ export function splitZonedInput(value: string): { date: string; clock: string } 
 export function zonedParts(instant: Date, zone: string) {
   return splitZonedInput(toZonedInput(instant, zone));
 }
+
+const isDraftRow = (value: unknown): value is { price: string; qty: string; clock?: unknown; reason?: unknown } =>
+  !!value && typeof value === "object" && typeof (value as { price?: unknown }).price === "string" && typeof (value as { qty?: unknown }).qty === "string";
 
 function isDraftStopMove(value: unknown): value is DraftStopMove {
   const move = value as Partial<DraftStopMove> | null;
@@ -136,6 +151,8 @@ export function upgradeDraft(raw: unknown, now: Date, zone: string): EntryDraft 
     entryMoodSpoke: typeof old.entryMoodSpoke === "string" ? old.entryMoodSpoke : null,
     stopMoves: Array.isArray(old.stopMoves) ? (old.stopMoves as unknown[]).filter(isDraftStopMove).map(({ price, clock }) => ({ price, clock })) : [],
     quickTags: Array.isArray(old.quickTags) ? old.quickTags.filter((tag: unknown): tag is string => typeof tag === "string") : [],
+    ...(Array.isArray(old.partialTargets) ? { partialTargets: (old.partialTargets as unknown[]).filter(isDraftRow).map(({ price, qty }) => ({ price, qty })) } : {}),
+    ...(Array.isArray(old.partialExits) ? { partialExits: (old.partialExits as unknown[]).filter(isDraftRow).map((row) => ({ price: row.price, qty: row.qty, clock: typeof row.clock === "string" ? row.clock : "", reason: isExitReason(row.reason) ? row.reason : null })) } : {}),
   };
 }
 
@@ -322,4 +339,101 @@ export function resolveDraftStopMoves(params: {
 export function entryStopFields(stopPrice: number | null, resolved: Pick<ResolvedStopMoves, "moves" | "workingStopPrice">, entryIso: string, nowIso: string): Partial<TradeRecord> {
   if (resolved.moves.length === 0) return stopPatch({ initial_stop_price: null }, stopPrice, nowIso);
   return { initial_stop_price: stopPrice, initial_stop_set_at: entryIso, stop_loss_price: resolved.workingStopPrice, stop_moves: resolved.moves };
+}
+
+// ── Split targets and partial exits (issue #38, docs/15 §2.3–2.4, docs/26 §4) ───────────────────
+
+export interface ResolvedPartials {
+  /** First row problem, shown inline and blocking save. Null when valid. */
+  error: string | null;
+  /** A partial-exit row is filled: the single Exit price and time are replaced by the legs. */
+  legged: boolean;
+  targets: PartialTarget[];
+  exits: PartialExit[];
+  /** Weighted-average exit price (tick grid) and latest leg time, when the legs close every contract. */
+  exitPrice: number | null;
+  exitTime: string | null;
+  /** Exact multi-lot metrics (docs/15 §2.4) when the legs close every contract. */
+  metrics: PartialsTradeMetrics | null;
+}
+
+const filledRow = (row: { price: string; qty: string; clock?: string }) => row.price.trim() !== "" || row.qty.trim() !== "" || (row.clock ?? "").trim() !== "";
+
+/**
+ * Validate the optional split targets and partial exits (blank rows ignored). Quantities cannot exceed Contracts; a
+ * closed trade's exits must add up to Contracts exactly, which sets its exit price and time. Pure.
+ */
+export function resolveDraftPartials(params: { draft: EntryDraft; entryPrice: number | null; quantity: number; isOpenDraft: boolean; entryMs: number; zone: string }): ResolvedPartials {
+  const { draft, entryPrice, quantity, isOpenDraft, entryMs, zone } = params;
+  const targetRows = (draft.partialTargets ?? []).filter(filledRow);
+  const exitRows = (draft.partialExits ?? []).filter(filledRow);
+  const legged = !isOpenDraft && exitRows.length > 0;
+  const empty = { legged, targets: [], exits: [], exitPrice: null, exitTime: null, metrics: null };
+  const fail = (error: string): ResolvedPartials => ({ ...empty, error });
+  if (targetRows.length === 0 && exitRows.length === 0) return { ...empty, error: null };
+  if (!isWholeQuantity(quantity)) return fail("Enter the contracts first");
+  if (entryPrice == null || !Number.isFinite(entryPrice)) return fail("Enter the entry price first");
+  if (exitRows.length > 0 && !Number.isFinite(entryMs)) return fail("Pick the entry time first");
+  const sign = draft.direction === "SHORT" ? -1 : 1;
+  const targets: PartialTarget[] = [];
+  for (const [index, row] of targetRows.entries()) {
+    const label = `Target T${index + 1}`;
+    const price = priceOrNull(row.price);
+    const qty = Number(row.qty);
+    if (price == null || !Number.isFinite(price) || toTicks(price, draft.symbol) == null) return fail(`${label} needs a price on the tick grid`);
+    if ((price - entryPrice) * sign <= 0) return fail(`${label} must sit on the reward side of entry`);
+    if (!isWholeQuantity(qty)) return fail(`${label} needs a whole quantity of 1 or more`);
+    targets.push({ key: `t${index + 1}`, price, qty });
+  }
+  const targetQty = targets.reduce((sum, target) => sum + target.qty, 0);
+  if (targetQty > quantity) return fail(`Target contracts (${targetQty}) cannot exceed Contracts (${quantity})`);
+  const exits: PartialExit[] = [];
+  for (const [index, row] of exitRows.entries()) {
+    const label = `Partial exit ${index + 1}`;
+    const price = priceOrNull(row.price);
+    const qty = Number(row.qty);
+    if (!/^\d{2}:\d{2}$/.test(row.clock ?? "")) return fail(`${label} needs a time`);
+    const at = fromZonedInput(`${addCalendarDays(draft.date, row.clock < draft.entryClock ? 1 : 0)}T${row.clock}`, zone).getTime();
+    if (!Number.isFinite(at) || at < entryMs) return fail(`${label} cannot be before the entry`);
+    if (price == null || !Number.isFinite(price) || toTicks(price, draft.symbol) == null) return fail(`${label} needs a price on the tick grid`);
+    if (!isWholeQuantity(qty)) return fail(`${label} needs a whole quantity of 1 or more`);
+    exits.push({ time: new Date(at).toISOString(), price, qty, ...(row.reason ? { reason: row.reason } : {}) });
+  }
+  exits.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+  const exitQty = exits.reduce((sum, leg) => sum + leg.qty, 0);
+  if (exitQty > quantity) return fail(`Partial exits (${exitQty}) cannot exceed Contracts (${quantity})`);
+  if (legged && exitQty !== quantity) return fail(`Partial exit quantities (${exitQty}) must equal Contracts (${quantity}), or switch status to Still open`);
+  if (!legged || exitQty !== quantity) return { error: null, legged, targets, exits, exitPrice: null, exitTime: null, metrics: null };
+  const exitPrice = snapToTick(exits.reduce((sum, leg) => sum + leg.price * leg.qty, 0) / quantity, draft.symbol);
+  if (exitPrice == null) return fail("Partial exit prices must sit on the tick grid");
+  const exitTime = exits.reduce((latest, leg) => (Date.parse(leg.time) > Date.parse(latest) ? leg.time : latest), exits[0].time);
+  const stop = priceOrNull(draft.stopPrice);
+  const metrics = partialsTradeMetrics({
+    symbol: draft.symbol, direction: draft.direction, quantity, entry_price: entryPrice, exit_price: exitPrice, status: "closed",
+    entry_time: new Date(entryMs).toISOString(), exit_time: exitTime, initial_stop_price: stop, stop_loss_price: stop, partial_exits: exits, partial_targets: targets,
+  });
+  return { error: null, legged, targets, exits, exitPrice, exitTime, metrics };
+}
+
+/** Contracts an open trade still holds after its partial exits. */
+export function remainingOpenQty(trade: Pick<TradeRecord, "quantity" | "partial_exits">): number {
+  return trade.quantity - (trade.partial_exits ?? []).reduce((sum, leg) => sum + leg.qty, 0);
+}
+
+/**
+ * The patch for closing `exitQty` contracts of an open trade (issue #38). Less than what is open: stays open with
+ * one more leg. The last lot: a single close is `closeTradePatch`; several legs close at their weighted average.
+ * Null when `exitQty` is out of 1..open contracts.
+ */
+export function scaleOutTradePatch(trade: TradeRecord, exitIso: string, exitPrice: number, exitQty: number, reason: TradeExitReason | null): Partial<TradeRecord> | null {
+  const remainingQty = remainingOpenQty(trade);
+  if (!isWholeQuantity(exitQty) || exitQty > remainingQty) return null;
+  const leg: PartialExit = { time: exitIso, price: exitPrice, qty: exitQty, ...(reason ? { reason } : {}) };
+  const nextExits = [...(trade.partial_exits ?? []), leg];
+  if (exitQty < remainingQty) return { partial_exits: nextExits, status: "open", exit_time: null, exit_price: null };
+  if (nextExits.length === 1) return closeTradePatch(trade, exitIso, exitPrice, reason);
+  const average = snapToTick(nextExits.reduce((sum, item) => sum + item.price * item.qty, 0) / trade.quantity, trade.symbol);
+  if (average == null) return null;
+  const latest = nextExits.reduce((a, item) => (Date.parse(item.time) > Date.parse(a) ? item.time : a), exitIso);
+  return { ...closeTradePatch(trade, latest, average, reason), partial_exits: nextExits };
 }
