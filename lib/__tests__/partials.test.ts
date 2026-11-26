@@ -5,7 +5,8 @@ import {
   calculatePartials,
   calculatePartialLotBands,
   calculatePlannedTargets,
-  calculateWeightedPlannedR,
+  resolveRSizeCents,
+  calculateWeightedPlannedRewardRisk,
   isScratchPartials,
   tickValueCents,
 } from "../partials.ts";
@@ -43,6 +44,7 @@ test("Fixture 7 case (ex-partials): 2 lots MES, T1 at +1.0R, T2 at +2.5R -> +1.7
     initialStopPrice: 7595.00,
     exits,
     targets,
+    rSizeCents: 30_000, // $300 account R
   });
 
   // Position status
@@ -72,10 +74,14 @@ test("Fixture 7 case (ex-partials): 2 lots MES, T1 at +1.0R, T2 at +2.5R -> +1.7
   assert.equal(summary.pnlCents, 8_750);
   assert.equal(summary.pnlUsd, 87.50);
 
-  // Weighted R multiple: $87.50 / $50.00 = +1.75R
-  assert.equal(summary.rMultiple, 1.75);
-  assert.equal(summary.realizedR, 1.75);
-  assert.equal(summary.closedR, 1.75);
+  // Stop-width ratio: 70 contract ticks / (20 ticks x 2 contracts) = 1.75
+  assert.equal(summary.riskMultiple, 1.75);
+  assert.equal(summary.closedRiskMultiple, 1.75);
+  // Account R at $300 per R: risk $50 / $300, result $87.50 / $300
+  assert.equal(summary.rSizeCents, 30_000);
+  assert.equal(summary.riskR, 5000 / 30000);
+  assert.equal(summary.resultR, 8750 / 30000);
+  assert.equal(summary.realizedAccountR, 8750 / 30000);
 
   // Bands geometry
   assert.equal(summary.bands.length, 2);
@@ -97,8 +103,9 @@ test("Fixture 7 case (ex-partials): 2 lots MES, T1 at +1.0R, T2 at +2.5R -> +1.7
   assert.equal(band1.points, 5.0);
   assert.equal(band1.pnlCents, 2_500);
   assert.equal(band1.pnlUsd, 25.0);
-  assert.equal(band1.r, 1.0);
-  assert.equal(band1.rContribution, 0.5); // (1 lot / 2 lots) * 1.0R = 0.5R
+  assert.equal(band1.riskMultiple, 1.0);
+  assert.equal(band1.riskMultipleContribution, 0.5); // (1 lot / 2 lots) * 1.0 = 0.5
+  assert.equal(band1.accountR, 2500 / 30000); // $25 / $300
   assert.equal(band1.shareOfPosition, 0.5);
   assert.equal(band1.opacityMultiplier, 0.5);
   assert.equal(band1.exitReason, "target");
@@ -121,22 +128,25 @@ test("Fixture 7 case (ex-partials): 2 lots MES, T1 at +1.0R, T2 at +2.5R -> +1.7
   assert.equal(band2.points, 12.5);
   assert.equal(band2.pnlCents, 6_250);
   assert.equal(band2.pnlUsd, 62.5);
-  assert.equal(band2.r, 2.5);
-  assert.equal(band2.rContribution, 1.25); // (1 lot / 2 lots) * 2.5R = 1.25R
+  assert.equal(band2.riskMultiple, 2.5);
+  assert.equal(band2.riskMultipleContribution, 1.25); // (1 lot / 2 lots) * 2.5 = 1.25
+  assert.equal(band2.accountR, 6250 / 30000); // $62.50 / $300
   assert.equal(band2.shareOfPosition, 0.5);
   assert.equal(band2.opacityMultiplier, 0.5);
   assert.equal(band2.exitReason, "target");
   assert.equal(band2.targetKey, "t2");
 
   // Sum of contributions equals total weighted R
-  assert.equal(band1.rContribution! + band2.rContribution!, 1.75);
+  assert.equal(band1.riskMultipleContribution! + band2.riskMultipleContribution!, 1.75);
 
   // Planned targets evaluation
   assert.equal(summary.targets.length, 2);
-  assert.equal(summary.targets[0].plannedR, 1.0);
+  assert.equal(summary.targets[0].plannedRewardRisk, 1.0);
   assert.equal(summary.targets[0].plannedPnlUsd, 25.0);
-  assert.equal(summary.targets[1].plannedR, 2.5);
+  assert.equal(summary.targets[0].plannedAccountR, 2500 / 30000);
+  assert.equal(summary.targets[1].plannedRewardRisk, 2.5);
   assert.equal(summary.targets[1].plannedPnlUsd, 62.5);
+  assert.equal(summary.targets[1].plannedAccountR, 6250 / 30000);
 });
 
 test("Contract point values and integer tick math across MNQ, ES, and NQ", () => {
@@ -157,7 +167,7 @@ test("Contract point values and integer tick math across MNQ, ES, and NQ", () =>
   assert.equal(mnqSummary.contractTicks, 800);
   assert.equal(mnqSummary.pnlCents, 40_000); // $400
   assert.equal(mnqSummary.pnlUsd, 400.0);
-  assert.equal(mnqSummary.rMultiple, 2.0); // ($100 + $300) / $200 = 2.0R
+  assert.equal(mnqSummary.riskMultiple, 2.0); // ($100 + $300) / $200 = 2.0R
 
   // ES: 0.25 tick, $50/pt -> $12.50/tick (1,250 cents/tick)
   assert.equal(tickValueCents("ES"), 1_250);
@@ -176,7 +186,7 @@ test("Contract point values and integer tick math across MNQ, ES, and NQ", () =>
   assert.equal(esSummary.contractTicks, 120);
   assert.equal(esSummary.pnlCents, 150_000); // $1,500
   assert.equal(esSummary.pnlUsd, 1_500.0);
-  assert.equal(esSummary.rMultiple, 1.5); // ($500 + $1000) / $1000 = 1.5R
+  assert.equal(esSummary.riskMultiple, 1.5); // ($500 + $1000) / $1000 = 1.5R
 
   // NQ: 0.25 tick, $20/pt -> $5.00/tick (500 cents/tick)
   assert.equal(tickValueCents("NQ"), 500);
@@ -194,7 +204,7 @@ test("Contract point values and integer tick math across MNQ, ES, and NQ", () =>
   assert.equal(nqSummary.initialRiskPerContractCents, 40_000); // $400
   assert.equal(nqSummary.pnlCents, 160_000); // $1,600
   assert.equal(nqSummary.pnlUsd, 1_600.0);
-  assert.equal(nqSummary.rMultiple, 2.0);
+  assert.equal(nqSummary.riskMultiple, 2.0);
 });
 
 test("Guard: R === null when initial stop is absent (never 0)", () => {
@@ -204,6 +214,7 @@ test("Guard: R === null when initial stop is absent (never 0)", () => {
     entryPrice: 7600.00,
     totalQty: 2,
     initialStopPrice: null, // No initial stop
+    rSizeCents: 30_000, // $300 account R
     exits: [
       { time: "t1", price: 7605.00, qty: 1 },
       { time: "t2", price: 7610.00, qty: 1 },
@@ -212,19 +223,22 @@ test("Guard: R === null when initial stop is absent (never 0)", () => {
 
   // P&L is priceable
   assert.equal(summary.pnlUsd, 75.0);
-  // Risk and R metrics MUST be strictly null (never 0)
+  // Risk and stop-width metrics MUST be strictly null (never 0)
   assert.equal(summary.stopDistanceTicks, null);
   assert.equal(summary.initialRiskPerContractCents, null);
   assert.equal(summary.initialRiskPerContractUsd, null);
   assert.equal(summary.totalInitialRiskCents, null);
   assert.equal(summary.totalInitialRiskUsd, null);
-  assert.equal(summary.rMultiple, null);
-  assert.equal(summary.realizedR, null);
-  assert.equal(summary.closedR, null);
+  assert.equal(summary.riskMultiple, null);
+  assert.equal(summary.closedRiskMultiple, null);
+  assert.equal(summary.riskR, null);
+  // Account R does not need a stop (D-A): $75 / $300
+  assert.equal(summary.resultR, 7500 / 30000);
+  assert.equal(summary.realizedAccountR, 7500 / 30000);
 
   for (const band of summary.bands) {
-    assert.equal(band.r, null);
-    assert.equal(band.rContribution, null);
+    assert.equal(band.riskMultiple, null);
+    assert.equal(band.riskMultipleContribution, null);
   }
 });
 
@@ -239,8 +253,8 @@ test("Guard: Stop on the wrong side or at entry yields R === null (never positiv
     exits: [{ time: "t1", price: 7610.00, qty: 1 }],
   });
   assert.equal(wrongLong.stopDistanceTicks, null);
-  assert.equal(wrongLong.rMultiple, null);
-  assert.equal(wrongLong.bands[0].r, null);
+  assert.equal(wrongLong.riskMultiple, null);
+  assert.equal(wrongLong.bands[0].riskMultiple, null);
 
   // Long trade with stop AT entry (distance = 0)
   const zeroDistLong = calculatePartials({
@@ -252,7 +266,7 @@ test("Guard: Stop on the wrong side or at entry yields R === null (never positiv
     exits: [{ time: "t1", price: 7610.00, qty: 1 }],
   });
   assert.equal(zeroDistLong.stopDistanceTicks, null);
-  assert.equal(zeroDistLong.rMultiple, null);
+  assert.equal(zeroDistLong.riskMultiple, null);
 
   // Short trade with stop BELOW entry
   const wrongShort = calculatePartials({
@@ -264,7 +278,7 @@ test("Guard: Stop on the wrong side or at entry yields R === null (never positiv
     exits: [{ time: "t1", price: 7590.00, qty: 1 }],
   });
   assert.equal(wrongShort.stopDistanceTicks, null);
-  assert.equal(wrongShort.rMultiple, null);
+  assert.equal(wrongShort.riskMultiple, null);
 });
 
 test("Handles open remaining lots cleanly", () => {
@@ -276,6 +290,7 @@ test("Handles open remaining lots cleanly", () => {
     entryTime: "2026-11-12T15:34:00Z",
     totalQty: 3,
     initialStopPrice: 7595.00, // 20 ticks risk = $25/lot. Total initial risk for 3 lots = $75
+    rSizeCents: 7_500, // $75 account R for this case
     exits: [
       { time: "2026-11-12T15:42:00Z", price: 7605.00, qty: 1, reason: "target", targetKey: "t1" },
       { time: "2026-11-12T15:50:00Z", price: 7610.00, qty: 1, reason: "target", targetKey: "t2" },
@@ -293,12 +308,15 @@ test("Handles open remaining lots cleanly", () => {
   assert.equal(summary.pnlCents, 7_500); // $25 + $50 = $75
   assert.equal(summary.pnlUsd, 75.0);
 
-  // rMultiple is null for unclosed trade
-  assert.equal(summary.rMultiple, null);
-  // realizedR is $75 / $75 total initial risk = 1.0R realized so far
-  assert.equal(summary.realizedR, 1.0);
-  // closedR is $75 / $50 closed initial risk = 1.5R on the closed portion
-  assert.equal(summary.closedR, 1.5);
+  // riskMultiple is null for an unclosed trade; resultR is null while lots remain open
+  assert.equal(summary.riskMultiple, null);
+  assert.equal(summary.resultR, null);
+  // Account R size set to $75 here: realized $75 / $75 = 1.0 account R so far (runner still open)
+  assert.equal(summary.rSizeCents, 7_500);
+  assert.equal(summary.realizedAccountR, 1.0);
+  assert.equal(summary.riskR, 1.0); // total initial risk $75 / $75
+  // closedRiskMultiple: 60 contract ticks / (20 ticks x 2 closed contracts) = 1.5
+  assert.equal(summary.closedRiskMultiple, 1.5);
 
   // Bands: 2 closed bands, 1 open band
   assert.equal(summary.bands.length, 3);
@@ -320,8 +338,8 @@ test("Handles open remaining lots cleanly", () => {
   assert.equal(openBand.points, null);
   assert.equal(openBand.pnlCents, null);
   assert.equal(openBand.pnlUsd, null);
-  assert.equal(openBand.r, null);
-  assert.equal(openBand.rContribution, null);
+  assert.equal(openBand.riskMultiple, null);
+  assert.equal(openBand.riskMultipleContribution, null);
   assert.equal(openBand.shareOfPosition, 1 / 3);
   assert.equal(openBand.opacityMultiplier, 1 / 3);
 });
@@ -341,9 +359,9 @@ test("Short trades: multi-lot partial targets and losses", () => {
   });
   assert.equal(shortWinner.contractTicks, 70);
   assert.equal(shortWinner.pnlUsd, 87.50);
-  assert.equal(shortWinner.rMultiple, 1.75);
-  assert.equal(shortWinner.bands[0].r, 1.0);
-  assert.equal(shortWinner.bands[1].r, 2.5);
+  assert.equal(shortWinner.riskMultiple, 1.75);
+  assert.equal(shortWinner.bands[0].riskMultiple, 1.0);
+  assert.equal(shortWinner.bands[1].riskMultiple, 2.5);
 
   // Short losing trade with 2 lots
   const shortLoser = calculatePartials({
@@ -359,9 +377,9 @@ test("Short trades: multi-lot partial targets and losses", () => {
   });
   assert.equal(shortLoser.contractTicks, -30);
   assert.equal(shortLoser.pnlUsd, -37.50);
-  assert.equal(shortLoser.rMultiple, -0.75);
-  assert.equal(shortLoser.bands[0].r, -0.5);
-  assert.equal(shortLoser.bands[1].r, -1.0);
+  assert.equal(shortLoser.riskMultiple, -0.75);
+  assert.equal(shortLoser.bands[0].riskMultiple, -0.5);
+  assert.equal(shortLoser.bands[1].riskMultiple, -1.0);
 });
 
 test("FIFO lot matching across multiple entries (scale-ins)", () => {
@@ -431,7 +449,7 @@ test("Rejection of off-tick prices and unknown symbols", () => {
   });
   assert.equal(offTick.contractTicks, null);
   assert.equal(offTick.pnlUsd, null);
-  assert.equal(offTick.rMultiple, null);
+  assert.equal(offTick.riskMultiple, null);
   assert.equal(offTick.bands[0].ticks, null);
 
   // Unknown contract symbol
@@ -445,10 +463,10 @@ test("Rejection of off-tick prices and unknown symbols", () => {
   });
   assert.equal(unknownSymbol.contractTicks, null);
   assert.equal(unknownSymbol.pnlUsd, null);
-  assert.equal(unknownSymbol.rMultiple, null);
+  assert.equal(unknownSymbol.riskMultiple, null);
 });
 
-test("calculatePlannedTargets and calculateWeightedPlannedR", () => {
+test("calculatePlannedTargets and calculateWeightedPlannedRewardRisk", () => {
   const targets = calculatePlannedTargets({
     symbol: "MES",
     direction: "LONG",
@@ -461,17 +479,17 @@ test("calculatePlannedTargets and calculateWeightedPlannedR", () => {
   });
 
   assert.equal(targets.length, 2);
-  assert.equal(targets[0].plannedR, 1.0);
+  assert.equal(targets[0].plannedRewardRisk, 1.0);
   assert.equal(targets[0].plannedTicks, 20);
   assert.equal(targets[0].plannedPoints, 5.0);
   assert.equal(targets[0].plannedPnlUsd, 25.0);
 
-  assert.equal(targets[1].plannedR, 2.5);
+  assert.equal(targets[1].plannedRewardRisk, 2.5);
   assert.equal(targets[1].plannedTicks, 50);
   assert.equal(targets[1].plannedPoints, 12.5);
   assert.equal(targets[1].plannedPnlUsd, 62.5);
 
-  const weightedR = calculateWeightedPlannedR(targets, 7595.00, 7600.00, "MES", "LONG");
+  const weightedR = calculateWeightedPlannedRewardRisk(targets, 7595.00, 7600.00, "MES", "LONG");
   assert.equal(weightedR, 1.75);
 
   // Target on wrong side
@@ -482,8 +500,8 @@ test("calculatePlannedTargets and calculateWeightedPlannedR", () => {
     initialStopPrice: 7595.00,
     targets: [{ key: "t_bad", price: 7590.00, qty: 1 }],
   });
-  assert.equal(wrongTargets[0].plannedR, null);
-  assert.equal(calculateWeightedPlannedR(wrongTargets, 7595.00, 7600.00, "MES", "LONG"), null);
+  assert.equal(wrongTargets[0].plannedRewardRisk, null);
+  assert.equal(calculateWeightedPlannedRewardRisk(wrongTargets, 7595.00, 7600.00, "MES", "LONG"), null);
 });
 
 test("calculatePartialLotBands helper returns band geometry directly", () => {
@@ -507,4 +525,53 @@ test("calculatePartialLotBands helper returns band geometry directly", () => {
   assert.equal(bands[0].p1, 7605.00);
   assert.equal(bands[0].targetKey, "t1");
   assert.equal(bands[1].targetKey, "t2");
+});
+
+test("Partially open trade: account R from closed lots, no resultR, open band has no account R", () => {
+  const summary = calculatePartials({
+    symbol: "MES",
+    direction: "LONG",
+    entryPrice: 7600.00,
+    totalQty: 2,
+    initialStopPrice: 7595.00,
+    rSizeCents: 30_000,
+    exits: [{ time: "t1", price: 7610.00, qty: 1, reason: "target", targetKey: "t1" }],
+  });
+
+  assert.equal(summary.isOpen, true);
+  assert.equal(summary.isClosed, false);
+  assert.equal(summary.resultR, null);
+  // +10 pts MES = 40 ticks x $1.25 = $50 on the closed lot
+  assert.equal(summary.realizedAccountR, 5000 / 30_000);
+  assert.equal(summary.riskMultiple, null);
+  assert.equal(summary.closedRiskMultiple, 2);
+
+  const openBand = summary.bands[1];
+  assert.equal(openBand.isOpen, true);
+  assert.equal(openBand.accountR, null);
+  assert.equal(openBand.riskMultiple, null);
+  assert.equal(summary.bands[0].accountR, 5000 / 30_000);
+});
+
+test("R size: omitted or invalid falls back to the repo default; planned account R works without a stop", () => {
+  const exit = [{ time: "t1", price: 7605.00, qty: 1 }];
+  const fallback = calculatePartials({ symbol: "MES", direction: "LONG", entryPrice: 7600, totalQty: 1, exits: exit });
+  const zero = calculatePartials({ symbol: "MES", direction: "LONG", entryPrice: 7600, totalQty: 1, exits: exit, rSizeCents: 0 });
+  const defaultCents = resolveRSizeCents();
+
+  assert.equal(defaultCents, 25_000);
+  assert.equal(fallback.rSizeCents, defaultCents);
+  assert.equal(zero.rSizeCents, defaultCents);
+  assert.equal(fallback.resultR, 2500 / defaultCents);
+
+  const planned = calculatePlannedTargets({
+    symbol: "MES",
+    direction: "LONG",
+    entryPrice: 7600.00,
+    targets: [{ key: "t1", price: 7605.00, qty: 1 }, { key: "bad", price: 7595.00, qty: 1 }],
+    rSizeCents: 30_000,
+  });
+  assert.equal(planned[0].plannedRewardRisk, null);
+  assert.equal(planned[0].plannedAccountR, 2500 / 30_000);
+  assert.equal(planned[1].plannedAccountR, null);
 });
