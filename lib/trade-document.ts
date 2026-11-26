@@ -4,12 +4,14 @@
 import {
   DEFAULT_OWNER_USER_ID,
   canonicalSymbol,
+  isExitReason,
   isStopMove,
   isWholeQuantity,
   specFor,
   tickDecimals,
   toTicks,
 } from "./trades.ts";
+import { chronologicalSeq } from "./partials-record.ts";
 import type {
   ChecklistItem,
   FuturesContractSpec,
@@ -152,6 +154,8 @@ export interface TradeDocAnnotations {
   candle_source?: TradeRecord["candle_source"];
   fixture_version?: number;
   annotations_modified?: boolean;
+  partial_exits?: TradeRecord["partial_exits"];
+  partial_targets?: TradeRecord["partial_targets"];
 }
 
 export interface TradeDocument {
@@ -1535,8 +1539,9 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
   let seq = 1;
 
   const planStop = record.initial_stop_price ?? record.stop_loss_price;
-  const targets: PlanTarget[] =
-    record.planned_target_price != null
+  const targets: PlanTarget[] = record.partial_targets?.length
+    ? record.partial_targets.map((t) => ({ key: t.key, price: t.price, qty: t.qty }))
+    : record.planned_target_price != null
       ? [{ key: "t1", price: record.planned_target_price, qty: record.quantity }]
       : [];
 
@@ -1589,8 +1594,13 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
     }
   }
 
-  // Exit fill for closed trades only (open trades emit entry fill only).
-  if (record.status === "closed" && record.exit_time != null && record.exit_price != null) {
+  for (const leg of record.partial_exits ?? []) {
+    const reason = isExitReason(leg.reason) ? leg.reason : undefined;
+    events.push({ seq: seq++, t: leg.time, type: "fill", basis: "stated", role: "exit", qty: leg.qty, price: leg.price, ...(reason && { reason, reason_basis: "stated" as const }) });
+  }
+
+  // Exit fill for closed trades only (open trades emit entry fill only). Partial legs above replace it (docs/15 §2.3).
+  if (!record.partial_exits?.length && record.status === "closed" && record.exit_time != null && record.exit_price != null) {
     const activeStop = record.stop_loss_price;
     let reason: ExitReason | undefined;
     let reasonBasis: EventBasis | undefined;
@@ -1661,8 +1671,10 @@ export function fromLegacy(record: TradeRecord): TradeDocument {
       imported_at: null,
     },
     is_sample: record.is_sample,
-    events,
+    events: record.partial_exits?.length ? chronologicalSeq(events) : events,
     annotations: {
+      partial_exits: record.partial_exits,
+      partial_targets: record.partial_targets,
       account_id: record.account_id,
       trade_style: record.trade_style,
       key_level_price: record.key_level_price,
@@ -1792,5 +1804,7 @@ function isAnnotations(value: unknown): value is TradeDocAnnotations {
     (value.sparkline === undefined || (Array.isArray(value.sparkline) && value.sparkline.every((price) => typeof price === "number"))) &&
     (value.candle_source === undefined || value.candle_source === "Yahoo Finance" || value.candle_source === "Demo fixture") &&
     (value.fixture_version === undefined || typeof value.fixture_version === "number") &&
-    (value.annotations_modified === undefined || typeof value.annotations_modified === "boolean");
+    (value.annotations_modified === undefined || typeof value.annotations_modified === "boolean") &&
+    (value.partial_exits === undefined || (Array.isArray(value.partial_exits) && value.partial_exits.every(isRecord))) &&
+    (value.partial_targets === undefined || (Array.isArray(value.partial_targets) && value.partial_targets.every(isRecord)));
 }
