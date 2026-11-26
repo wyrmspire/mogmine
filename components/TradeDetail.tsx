@@ -403,7 +403,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     online,
   });
   const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
-  const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? timeframe : "—"}`;
+  const sourceInterval = `${base} source${base !== "1m" ? " (1m unavailable)" : ""}`;
+  const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? `${timeframe} chart · ${sourceInterval}${barCoverage === "partial" ? " · gaps in trade" : ""}` : "—"}`;
 
   return <>
     <div className="detail-layout">
