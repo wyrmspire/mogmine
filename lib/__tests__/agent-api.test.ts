@@ -593,7 +593,7 @@ test("vocabulary: GET with a read key is 200 and the tags are never playbooks; a
   const data = reply.json.data as { setup_tags: string[]; playbooks: { name: string }[]; house_rules_version: string };
   assert.ok(data.setup_tags.includes("VWAP Hold"));
   assert.ok(!data.playbooks.some((playbook) => playbook.name === "VWAP Hold"));
-  assert.equal(data.house_rules_version, "2026-11-24.1");
+  assert.equal(data.house_rules_version, "2026-11-26.1");
   assert.equal(reply.headers.get("cache-control"), "no-store");
   const writeOnly = await mintKey(world, OWNER_A, ["write"]);
   assert.equal((await call(world, "GET", "/api/v1/vocabulary", { token: writeOnly })).status, 403);
