@@ -24,8 +24,12 @@ import {
   type RecipeStore,
 } from "@/lib/strategy-lab/recipes-store";
 import { markSeedFromBar, runSummaryLine, skillSliceLabel } from "@/lib/strategy-lab/results-view";
+import { toPersistedRun } from "@/lib/strategy-lab/persistence";
 import { runRecipe } from "@/lib/strategy-lab/runner";
 import { findSimilarRecipe } from "@/lib/strategy-lab/similar";
+import {
+  persistedLastRuns, runsCoverVersion, topUpOnLabOpen, useLabPersistence,
+} from "@/lib/strategy-lab/use-lab-persistence";
 import type { BarSeries, Recipe, RunResult } from "@/lib/strategy-lab/types";
 
 const RUN_SESSIONS = 22;
@@ -89,9 +93,11 @@ export function StrategyLabWorkspace() {
     hydrateAccounts();
     hydratePlaybooks();
     hydrateJournal();
+    void topUpOnLabOpen();
   }, []);
 
   const recipeStore = useSyncExternalStore(subscribeRecipeStore, getClientRecipeStore, () => SERVER_STORE);
+  const persistence = useLabPersistence({ getRecipes: getClientRecipeStore, setRecipes: setClientRecipeStore });
   const accountStore = useAccounts();
   const playbooksStore = usePlaybooks();
   const journal = useJournal();
@@ -151,6 +157,12 @@ export function StrategyLabWorkspace() {
         ...prev,
         [recipe.id]: { recipe, series: loaded.series, result, accountName: runAcct?.name ?? null },
       }));
+      const persisted = toPersistedRun(result, {
+        id: `${recipe.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: Date.now(),
+        accountName: runAcct?.name ?? null,
+      });
+      if (persisted) persistence.persistRun(persisted);
       setActiveRunId(recipe.id);
       setRunJob({ status: "idle" });
     } catch {
@@ -174,6 +186,7 @@ export function StrategyLabWorkspace() {
       const saved = saveRecipe(recipeStore, sim.recipe);
       if (saved.ok) {
         setClientRecipeStore(saved.store);
+        persistence.persistRecipes([saved.recipe]);
         setEditor({ mode: "edit", key: `${saved.recipe.id}@${saved.recipe.version}`, recipeId: saved.recipe.id, reasons: sim.reasons, anchorDate: anchor });
         setTab("recipes");
         return;
@@ -198,7 +211,7 @@ export function StrategyLabWorkspace() {
     setTab("mark");
   }
 
-  const lastRuns: Record<string, string> = {};
+  const lastRuns: Record<string, string> = persistedLastRuns(persistence.runs);
   for (const [id, entry] of Object.entries(runsById)) lastRuns[id] = runSummaryLine(entry.result);
 
   const activeRun = (activeRunId ? runsById[activeRunId] : undefined) ?? Object.values(runsById)[0] ?? null;
@@ -219,9 +232,10 @@ export function StrategyLabWorkspace() {
     : null;
 
   const editingStored = editor.mode === "edit" && editor.recipeId ? findRecipe(recipeStore, editor.recipeId) : undefined;
-  const newestHasRuns = Boolean(
-    editingStored && runsById[editingStored.id]?.recipe.version === editingStored.version,
-  );
+  const newestHasRuns = Boolean(editingStored && (
+    runsById[editingStored.id]?.recipe.version === editingStored.version
+    || runsCoverVersion(persistence.runs, editingStored.id, editingStored.version)
+  ));
   const runnableRecipe: Recipe | undefined = editingStored
     ?? (editor.mode === "edit" && editor.initialDraft ? (editor.initialDraft as unknown as Recipe) : undefined);
 
@@ -280,6 +294,7 @@ export function StrategyLabWorkspace() {
               rSizeLabel={basisLabel}
               onSave={(nextStore, saved) => {
                 setClientRecipeStore(nextStore);
+                persistence.persistRecipes([saved]);
                 setEditor({ mode: "edit", key: `${saved.id}@${saved.version}`, recipeId: saved.id, anchorDate: editor.anchorDate });
               }}
               onCancel={() => setEditor({ mode: "closed" })}
@@ -324,6 +339,7 @@ export function StrategyLabWorkspace() {
                       const parsed = importRecipesJson(backupText);
                       if (parsed.error) { setNotice(parsed.error); return; }
                       setClientRecipeStore(parsed.store);
+                      persistence.persistRecipes(parsed.store.recipes);
                       setNotice(`Imported ${parsed.store.recipes.length} recipe version(s).`);
                     }}
                   >
