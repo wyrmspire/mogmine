@@ -21,6 +21,8 @@ export interface Playbook {
   checklist_rules: PlaybookRule[];
   /** No hard delete: old trades still reference the playbook (docs/16 §R-07). */
   archived: boolean;
+  /** docs/23 §9: the trader's teaching example. Omitted when unset so the seed fingerprints never change. */
+  pinned_example_trade_id?: string;
 }
 
 /** The impulse bucket. Clean Run scores it as broken (docs/17 §4), so it keeps its id, has no rules and cannot be archived. */

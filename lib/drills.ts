@@ -163,3 +163,48 @@ export function takeVsPass(records: readonly DrillRecord[], trades: readonly Tra
     ready: latest.size >= DRILL_SCORE_MIN_ANSWERS,
   };
 }
+
+export interface DrillRevealRuleNote {
+  kind: "broken" | "clean" | "none";
+  /** The first unchecked frozen rule when broken, else the first rule. Null when there are no rules. */
+  ruleLabel: string | null;
+  followed: number;
+  total: number;
+}
+
+/**
+ * docs/23 §9: which frozen checklist rule to teach on the reveal. A trade with an unchecked rule names its first
+ * broken rule; a trade with every rule checked is clean; a trade with no frozen checklist teaches nothing.
+ */
+export function drillRevealRuleNote(trade: Pick<TradeRecord, "playbook_id" | "checklist_state">): DrillRevealRuleNote {
+  const items = trade.checklist_state ?? [];
+  const total = items.length;
+  if (!total) return { kind: "none", ruleLabel: null, followed: 0, total: 0 };
+  const followed = items.filter((item) => item.checked).length;
+  if (followed < total) {
+    const broken = items.find((item) => !item.checked)!;
+    return { kind: "broken", ruleLabel: broken.label, followed, total };
+  }
+  return { kind: "clean", ruleLabel: items[0].label, followed, total };
+}
+
+// docs/23 §7: the pre-open warm-up runs Monday to Friday, 06:00 up to the 09:30 ET open (Eastern time, DST-aware).
+const PRE_OPEN_START_MIN = 6 * 60;
+const PRE_OPEN_END_MIN = 9 * 60 + 30;
+const WEEKDAYS = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+const easternParts = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
+
+/**
+ * docs/23 §7: show the 5-card warm-up prompt on Today before the open, when at least one closed, real trade is old
+ * enough to drill. The clock is read in America/New_York through Intl, so DST shifts are handled.
+ */
+export function isPreOpenWarmupWindow(trades: readonly TradeRecord[], nowMs: number): { show: boolean; eligibleCount: number } {
+  const eligibleCount = trades.filter((trade) => drillSkipReason(trade, nowMs, true) === null).length;
+  const parts = easternParts.formatToParts(new Date(nowMs));
+  const read = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const minutes = (Number.parseInt(read("hour"), 10) % 24) * 60 + (Number.parseInt(read("minute"), 10) || 0);
+  const inWindow = WEEKDAYS.has(read("weekday")) && minutes >= PRE_OPEN_START_MIN && minutes < PRE_OPEN_END_MIN;
+  return { show: inWindow && eligibleCount >= 1, eligibleCount };
+}

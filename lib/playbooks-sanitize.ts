@@ -6,8 +6,22 @@ import type { TradeStyle } from "./trades.ts";
 
 export const STYLES: readonly TradeStyle[] = ["scalp", "session_90m", "investment"];
 
+/** A usable pinned trade id, or null. Empty, blank and non-string values count as unset. */
+export function pinnedExampleId(raw: unknown): string | null {
+  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
+}
+
+/** Copy of a playbook with its pinned example set, or removed. The key is omitted when unset (docs/23 §9). */
+export function withPinnedExample(playbook: Playbook, tradeId: string | null): Playbook {
+  const { pinned_example_trade_id: _previous, ...rest } = playbook;
+  const pinned = pinnedExampleId(tradeId);
+  return pinned ? { ...rest, pinned_example_trade_id: pinned } : rest;
+}
+
 export function clonePlaybook(playbook: Playbook): Playbook {
-  return { ...playbook, checklist_rules: playbook.checklist_rules.map((rule) => ({ ...rule })) };
+  const copy: Playbook = { ...playbook, checklist_rules: playbook.checklist_rules.map((rule) => ({ ...rule })) };
+  if (!pinnedExampleId(playbook.pinned_example_trade_id)) delete copy.pinned_example_trade_id;
+  return copy;
 }
 
 export const trimText = (value: unknown, max: number) =>
@@ -38,7 +52,7 @@ export function sanitizePlaybook(raw: unknown): Playbook | null {
   const rules = sanitizeRules(obj.checklist_rules);
   if (!id || !name || !rules) return null;
   const noSetup = id === NO_SETUP_ID;
-  return {
+  const playbook: Playbook = {
     id,
     user_id: typeof obj.user_id === "string" && obj.user_id.trim() ? obj.user_id : DEFAULT_OWNER_USER_ID,
     name,
@@ -47,6 +61,7 @@ export function sanitizePlaybook(raw: unknown): Playbook | null {
     checklist_rules: noSetup ? [] : rules,
     archived: noSetup ? false : obj.archived === true,
   };
+  return withPinnedExample(playbook, pinnedExampleId(obj.pinned_example_trade_id));
 }
 
 /** Clean a stored or restored list: drop bad and duplicate entries, keep order, and add any missing seed at the end. */
