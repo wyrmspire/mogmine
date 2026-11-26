@@ -341,8 +341,14 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const ex = useMemo(() => (ready ? excursions(trade, candles.candles, baseMinutes) : null), [ready, candles, trade, baseMinutes]);
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
-  const exitEff = useMemo(() => calculateExitEfficiency(trade, mfe), [trade, mfe]);
-  const planVsActual = useMemo(() => derivePlanVsActual(trade), [trade]);
+  const exitEff = useMemo(
+    () => calculateExitEfficiency(trade, mfe, { accounts: accountsState.accounts, prefs }),
+    [trade, mfe, accountsState.accounts, prefs],
+  );
+  const planVsActual = useMemo(
+    () => derivePlanVsActual(trade, { accounts: accountsState.accounts, prefs }),
+    [trade, accountsState.accounts, prefs],
+  );
   // Do the fills sit inside the bars they are drawn on? If not, say so instead of looking like a bug (B-12).
   // A missing bar is a coverage issue, not a fill-alignment issue: only test bars that exist (issue #60).
   const misaligned = useMemo(() => {

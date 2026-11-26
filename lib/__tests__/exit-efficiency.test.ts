@@ -54,6 +54,29 @@ test("calculateExitEfficiency: a trade with no stop still gets account R", () =>
   assert.equal(eff.summary, "captured +0.10R of +0.20R available (50%)");
 });
 
+test("calculateExitEfficiency: live account R overrides the prefs fallback for a legacy trade", () => {
+  const trade = normalizeTrade({
+    id: "eff-live-account",
+    symbol: "MES",
+    direction: "LONG",
+    entry_time: "2026-11-20T14:30:00Z",
+    exit_time: "2026-11-20T15:00:00Z",
+    entry_price: 6000,
+    exit_price: 6015,
+    stop_loss_price: 5995,
+    quantity: 1,
+    account_id: "acct-300",
+    r_size_cents: null,
+  });
+  const eff = calculateExitEfficiency(trade, 20, {
+    accounts: [{ id: "acct-300", r_size_cents: 30_000 }],
+    prefs: { riskBudgetUsd: 250 },
+  });
+  assert.equal(eff?.realizedR, 0.25);
+  assert.equal(eff?.mfeR, 1 / 3);
+  assert.equal(eff?.summary, "captured +0.25R of +0.33R available (75%)");
+});
+
 test("calculateExitEfficiency: returns null for open trades or zero MFE", () => {
   const openTrade = normalizeTrade({
     id: "eff-open",

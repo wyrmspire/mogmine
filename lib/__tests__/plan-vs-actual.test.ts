@@ -86,3 +86,28 @@ test("derivePlanVsActual: handles missing plan cleanly", () => {
   assert.equal(comparison.fidelity, "No Plan Recorded");
   assert.equal(comparison.rows.length, 0);
 });
+
+test("derivePlanVsActual: live account R overrides the prefs fallback for a legacy trade", () => {
+  const trade = normalizeTrade({
+    id: "pva-live-account",
+    symbol: "MES",
+    direction: "LONG",
+    entry_time: "2026-11-20T14:30:00Z",
+    exit_time: "2026-11-20T15:00:00Z",
+    entry_price: 6000,
+    exit_price: 6015,
+    initial_stop_price: 5995,
+    stop_loss_price: 5995,
+    planned_target_price: 6020,
+    quantity: 1,
+    account_id: "acct-300",
+    r_size_cents: null,
+  });
+  const comparison = derivePlanVsActual(trade, {
+    accounts: [{ id: "acct-300", r_size_cents: 30_000 }],
+    prefs: { riskBudgetUsd: 250 },
+  });
+  const result = comparison.rows.find((row) => row.label === "Result (R)");
+  assert.equal(result?.actual, "+0.25R");
+  assert.equal(result?.deltaDisplay, "−0.08R");
+});

@@ -135,7 +135,12 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   }, [lessonDraft, review?.lesson]);
 
   const points = review?.points ?? [];
-  const totals = dailyReviewTotals({ session_date: date, trade_ids: linkedIds }, journal.trades, prefs.shield);
+  const totals = dailyReviewTotals(
+    { session_date: date, trade_ids: linkedIds },
+    journal.trades,
+    prefs.shield,
+    { accounts: accounts.accounts, prefs },
+  );
   const byId = new Map(journal.trades.map((trade) => [trade.id, trade] as const));
   const candidateIds = [...new Set([...linkedIds, ...proposeTradeIds(journal.trades, date, accountId, { includeSamples: prefs.showSamples })])];
   const candidates = candidateIds.map((id) => byId.get(id)).filter((trade): trade is TradeRecord => Boolean(trade));

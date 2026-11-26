@@ -134,7 +134,7 @@ export interface TakeVsPass {
   take: { n: number; avgR: number | null };
   smaller: { n: number; avgR: number | null };
   pass: { n: number; avgR: number | null };
-  /** Answered trades with no R (no stop), left out of every average. */
+  /** Answered trades with no resolvable account R, left out of every average. */
   noR: number;
   /** True once there are enough answers to show the comparison (§4.5). */
   ready: boolean;
