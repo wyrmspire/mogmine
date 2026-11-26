@@ -1,24 +1,32 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { remainingOpenQty, scaleOutTradePatch } from "@/lib/entry-form";
 import { formatPrice } from "@/lib/format";
+import { usePrefs } from "@/lib/prefs";
 import { updateTrade } from "@/lib/store";
 import { fromZonedInput, toZonedInput, zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { closeTradePatch, EXIT_REASONS, specFor, validateClose } from "@/lib/trades";
+import { EXIT_REASONS, specFor, validateClose } from "@/lib/trades";
 import type { TradeExitReason, TradeRecord } from "@/lib/trades";
 
 const toNumber = (text: string) => (text.trim() === "" ? null : Number(text));
 
 /**
  * Close an open trade (R-03b): exit time (default now), exit price, and optional exit reason (G1),
- * checked by the same rules as the entry form. Saving sets `status: "closed"`, and the candle
- * signature change reloads the chart. Shows no size or dollars, so Shield (#15) has nothing to hide here.
+ * checked by the same rules as the entry form. With more than one contract still open, the trader closes some
+ * of them (issue #38 scale-out): the rest stay open. Saving the last contracts sets `status: "closed"`, and the
+ * candle signature change reloads the chart. Under Shield (#15) the contract count is masked on screen.
  */
 export function CloseTradeSheet({ trade, zone, onClose }: { trade: TradeRecord; zone: string; onClose: () => void }) {
   const [exitTime, setExitTime] = useState(() => toZonedInput(new Date(), zone));
   const [exitPrice, setExitPrice] = useState("");
   const [exitReason, setExitReason] = useState<TradeExitReason | null>(null);
+  const prefs = usePrefs();
+  const remaining = remainingOpenQty(trade);
+  const [closingText, setClosingText] = useState(() => String(remaining));
+  const closing = remaining > 1 ? Number(closingText) : remaining;
+  const closingOk = Number.isInteger(closing) && closing >= 1 && closing <= remaining;
   const [submitted, setSubmitted] = useState(false);
   const firstField = useRef<HTMLInputElement>(null);
 
@@ -51,9 +59,11 @@ export function CloseTradeSheet({ trade, zone, onClose }: { trade: TradeRecord; 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setSubmitted(true);
-    if (hasErrors || price == null) return;
-    updateTrade(trade.id, closeTradePatch(trade, exit.toISOString(), price, exitReason));
-    showToast("Trade closed");
+    if (hasErrors || price == null || !closingOk) return;
+    const patch = scaleOutTradePatch(trade, exit.toISOString(), price, closing, exitReason);
+    if (!patch) return;
+    updateTrade(trade.id, patch);
+    showToast(closing < remaining ? `Partial exit saved — ${remaining - closing} remaining open` : "Trade closed");
     onClose();
   };
 
@@ -75,6 +85,12 @@ export function CloseTradeSheet({ trade, zone, onClose }: { trade: TradeRecord; 
               {show("exit_price") && <span className="error">{show("exit_price")}</span>}
             </label>
           </div>
+          {remaining > 1 && (
+            <label className="field" style={{ marginTop: 12 }}><span>Contracts closing <i>of {remaining} open</i>{prefs.shield && <i className="shield-tag" style={{ opacity: 0.6, marginLeft: 4 }}>masked</i>}</span>
+              <input inputMode="numeric" type={prefs.shield ? "password" : "number"} min={1} max={remaining} step={1} value={closingText} placeholder={prefs.shield ? "••" : String(remaining)} aria-label={prefs.shield ? "Contracts closing (masked under Shield)" : "Contracts closing"} aria-invalid={submitted && !closingOk} style={{ minHeight: 44 }} onChange={(event) => setClosingText(event.target.value)} />
+              {submitted && !closingOk && <span className="error">Enter 1 to {remaining} contracts</span>}
+            </label>
+          )}
           <div className="exit-reason-section" style={{ marginTop: 12 }}>
             <div className="exit-reason-head">
               <span className="exit-reason-title">How did it end? <i>optional</i></span>
@@ -97,7 +113,7 @@ export function CloseTradeSheet({ trade, zone, onClose }: { trade: TradeRecord; 
               })}
             </div>
           </div>
-          <button className="btn-primary btn-block" type="submit" style={{ marginTop: 14 }}>Save exit</button>
+          <button className="btn-primary btn-block" type="submit" style={{ marginTop: 14 }}>{closing < remaining ? "Save partial exit" : "Save exit"}</button>
         </form>
       </section>
     </div>

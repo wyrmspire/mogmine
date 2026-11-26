@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { checkPriceAgainstDayRange, dayWindow, entryDraftAfterSave, entryStopFields, entryTimes, priceOrNull, resolveDraftStopMoves, statedRiskError, statedRiskRFrom, stepPriceText, suggestionPatch, upgradeDraft, validateFutureTimes, zonedParts } from "@/lib/entry-form";
+import { checkPriceAgainstDayRange, dayWindow, entryDraftAfterSave, entryStopFields, entryTimes, priceOrNull, resolveDraftPartials, resolveDraftStopMoves, statedRiskError, statedRiskRFrom, stepPriceText, suggestionPatch, upgradeDraft, validateFutureTimes, zonedParts } from "@/lib/entry-form";
 import { RiskRow } from "./RiskRow";
 import { EntryExitReasonRow, EntryStopMoves } from "./EntryStopMoves";
+import { EntryPartialsSection } from "./EntryPartialsSection";
 import { loadDayCandles } from "@/lib/candles";
 import { inferTradeTimes } from "@/lib/infer-times";
 import type { InferResult } from "@/lib/infer-times";
@@ -124,7 +125,6 @@ export function AddTradeSheet() {
 
   const spec = specFor(draft.symbol);
   const entryPrice = priceOrNull(draft.entryPrice);
-  const exitPrice = isOpenDraft ? null : priceOrNull(draft.exitPrice);
   const stopPrice = priceOrNull(draft.stopPrice);
   const targetPrice = priceOrNull(draft.targetPrice);
   // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50).
@@ -133,7 +133,11 @@ export function AddTradeSheet() {
   const typedQuantity = Number(draft.quantity);
   const quantity = isWholeQuantity(typedQuantity) ? typedQuantity : typedQuantity;
   const times = entryTimes(draft, zone);
-  const { entry, exit } = times;
+  const { entry, exit: draftExit } = times;
+  // Split targets and partial exits (issue #38). Filled exit legs replace the single Exit price and time.
+  const partials = resolveDraftPartials({ draft, entryPrice, quantity, isOpenDraft, entryMs: entry.getTime(), zone });
+  const exitPrice = isOpenDraft ? null : partials.legged ? partials.exitPrice : priceOrNull(draft.exitPrice);
+  const exit = partials.legged ? (partials.exitTime ? new Date(partials.exitTime) : null) : draftExit;
   // Optional "I moved my stop" rows (issue #36 G2): validated against the initial stop and the trade's times.
   const draftStopMoves = draft.stopMoves ?? [];
   const resolvedStopMoves = resolveDraftStopMoves({
@@ -169,7 +173,7 @@ export function AddTradeSheet() {
   const future = validateFutureTimes(entry.getTime(), isOpenDraft || !exit ? null : exit.getTime(), nowMs, zone);
   errors.entryClock = errors.entryClock ?? future.entry;
   if (!isOpenDraft) errors.exitClock = errors.exitClock ?? future.exit;
-  const hasErrors = Object.values(errors).some(Boolean) || statedRiskError(draft.statedRiskR) != null || resolvedStopMoves.error != null;
+  const hasErrors = Object.values(errors).some(Boolean) || statedRiskError(draft.statedRiskR) != null || resolvedStopMoves.error != null || partials.error != null;
   const show = (key: ErrorKey) => (submitted ? errors[key] : undefined);
   // A price error shows as soon as the price is typed (wrong-side stop, off-tick), not only on save.
   const showPrice = (key: PriceKey) => (submitted || draft[key].trim() !== "" ? errors[key] : undefined);
@@ -180,7 +184,7 @@ export function AddTradeSheet() {
   const riskUsd = priced ? initialRiskUsd(priced) : null;
   const riskPoints = priced && priced.stop_loss_price != null ? formatPointDistance(priced.entry_price - priced.stop_loss_price, draft.symbol) : null;
   const plan = priced ? plannedRewardRisk(priced) : null;
-  const pnl = priced ? tradePnl(priced) : null;
+  const pnl = partials.metrics ? partials.metrics.pnlUsd : priced ? tradePnl(priced) : null;
   // Result in account R (resultR, 04 §3.1): P&L ÷ the selected account's R size. Computed here because the draft is not a full TradeRecord yet.
   const rSize = resolveRSize({ account_id: accountId }, accounts.accounts, prefs);
   const r = pnl == null ? null : (pnl * 100) / rSize.cents;
@@ -258,6 +262,7 @@ export function AddTradeSheet() {
       // R-10: a stop typed here is the stop and the frozen initial stop. Stop moves freeze it the same way (SM-3).
       ...entryStopFields(stopPrice, resolvedStopMoves, entry.toISOString(), new Date().toISOString()),
       quick_tags: draft.quickTags ?? [],
+      partial_targets: partials.targets, partial_exits: partials.exits,
       planned_target_price: targetPrice,
       key_level_price: null,
       note: "",
@@ -316,7 +321,7 @@ export function AddTradeSheet() {
 
           <fieldset className="price-ladder" aria-label="Prices">
             <PriceRow id="entry-price" label="Entry" value={draft.entryPrice} placeholder="6844.25" step={step} error={showPrice("entryPrice")} onChange={(value) => change({ entryPrice: value })} onStep={(ticks) => stepPrice("entryPrice", ticks)} />
-            {!isOpenDraft && <PriceRow id="exit-price" label="Exit" value={draft.exitPrice} placeholder="6849.00" step={step} error={showPrice("exitPrice")} onChange={(value) => change({ exitPrice: value })} onStep={(ticks) => stepPrice("exitPrice", ticks)} />}
+            {!isOpenDraft && !partials.legged && <PriceRow id="exit-price" label="Exit" value={draft.exitPrice} placeholder="6849.00" step={step} error={showPrice("exitPrice")} onChange={(value) => change({ exitPrice: value })} onStep={(ticks) => stepPrice("exitPrice", ticks)} />}
             <PriceRow id="stop-price" label="Stop" optional value={draft.stopPrice} placeholder={draft.direction === "LONG" ? "below entry" : "above entry"} step={step} error={showPrice("stopPrice")} onChange={(value) => change({ stopPrice: value })} onStep={(ticks) => stepPrice("stopPrice", ticks)} />
             <PriceRow id="target-price" label="Target" optional value={draft.targetPrice} placeholder={draft.direction === "LONG" ? "above entry" : "below entry"} step={step} error={showPrice("targetPrice")} onChange={(value) => change({ targetPrice: value })} onStep={(ticks) => stepPrice("targetPrice", ticks)} />
           </fieldset>
@@ -336,6 +341,7 @@ export function AddTradeSheet() {
           />
 
           {!isOpenDraft && <EntryExitReasonRow value={draft.exitReason} onChange={(exitReason) => change({ exitReason })} />}
+          <EntryPartialsSection draft={draft} error={partials.error ?? (partials.legged ? errors.exitClock ?? null : null)} onChange={change} />
 
           <div className="form-preview" aria-live="polite">
             <span>{riskUsd != null || riskPoints != null
@@ -420,7 +426,7 @@ export function AddTradeSheet() {
               </div>
               {show("entryClock") && <span className="error">{show("entryClock")}</span>}
             </div>
-            {!isOpenDraft && (
+            {!isOpenDraft && !partials.legged && (
               <div className="field wide"><label htmlFor="exit-clock"><span>Exit time</span></label>
                 <div className="clock-row">
                   <input id="exit-clock" type="time" step={60} value={draft.exitClock} aria-invalid={!!show("exitClock")} onChange={(event) => change({ exitClock: event.target.value, exitEdited: true })} />
