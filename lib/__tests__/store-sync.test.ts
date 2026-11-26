@@ -252,9 +252,20 @@ test("a full page from the server (row cap) is not read as deletions: clean loca
   await direct(fake).remove(UID, "a");
   const real = createSupabaseAdapter({ client: fake, candles: createMemoryCandleStore() });
   const filler = Array.from({ length: REMOTE_ROW_CAP }, (_, index) => trade(`r${index}`));
+  const storedFiller = filler.map((record) => ({
+    record,
+    meta: { user_id: UID, created_at: "2026-11-20T14:30:00.000Z", updated_at: "2026-11-20T14:30:00.000Z" },
+  }));
   const capped = {
     ...real,
-    repositories: { ...real.repositories, trades: { ...real.repositories.trades, list: async () => ({ ok: true as const, value: filler }) } },
+    repositories: {
+      ...real.repositories,
+      trades: {
+        ...real.repositories.trades,
+        list: async () => ({ ok: true as const, value: filler }),
+        listStored: async () => ({ ok: true as const, value: storedFiller }),
+      },
+    },
   } as PersistenceAdapter;
   const h2 = harness({ fake, initial: h.local(), storage: h.storage, adapter: capped });
   await h2.sync.pull();
