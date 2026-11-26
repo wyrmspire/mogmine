@@ -5,7 +5,7 @@ import type { DrillRecord, TakeVsPass } from "./drills.ts";
 import type { Playbook } from "./playbooks.ts";
 import { runningStats } from "./selectors.ts";
 import { adherence, isOpen } from "./trades.ts";
-import type { TradeRecord } from "./trades.ts";
+import type { RSizeOptions, TradeRecord } from "./trades.ts";
 
 /** No rate prints below this many trades (interim, OD-46 e). */
 export const PLAYBOOK_CARD_MIN_TRADES = 10;
@@ -53,8 +53,9 @@ export function playbookCardData(
   trades: readonly TradeRecord[],
   drills: readonly DrillRecord[],
   now: number,
+  opts?: RSizeOptions,
 ): PlaybookCardData {
-  const summary = runningStats(trades, now).byPlaybook.find((group) => group.playbookId === playbook.id);
+  const summary = runningStats(trades, now, opts).byPlaybook.find((group) => group.playbookId === playbook.id);
   const count = summary?.tradeCount ?? 0;
   const belowMinimum = count < PLAYBOOK_CARD_MIN_TRADES;
   return {
@@ -70,6 +71,6 @@ export function playbookCardData(
       skippedR: summary?.skippedRCount ?? 0,
       belowMinimum,
     },
-    drill: takeVsPass(drills, trades.filter((trade) => trade.playbook_id === playbook.id && !trade.is_sample)),
+    drill: takeVsPass(drills, trades.filter((trade) => trade.playbook_id === playbook.id && !trade.is_sample), opts),
   };
 }
