@@ -225,7 +225,6 @@ async function checkVocabulary(commands: JournalCommands): Promise<{ ok: true; v
         executionTags: [...EXECUTION_TAGS],
         tagRegistry,
         defaultRSizeCents: resolveRSize({ account_id: null }, [], prefs).cents,
-        dayPriceRange: null,
       },
     },
   };
@@ -237,6 +236,12 @@ export interface TradeCheckRun {
   /** The limit key for upstream candle calls (the token id). */
   limitKey: string;
   now?: number;
+}
+
+/** The low and high of the loaded bars, for the price_out_of_range warning. Null when no bars were loaded. */
+function barsPriceRange(bars: readonly Candle[]): { low: number; high: number } | null {
+  if (bars.length === 0) return null;
+  return { low: Math.min(...bars.map((bar) => bar.low)), high: Math.max(...bars.map((bar) => bar.high)) };
 }
 
 /** Runs one check. Reads only: the commands here are read calls, and nothing is saved. */
@@ -274,6 +279,7 @@ export async function runTradeCheck(input: TradeCheckInput, run: TradeCheckRun):
   const resolved = resolveRSize(record, vocabulary.value.accounts, vocabulary.value.prefs);
   const checked = checkTradeWrite(record, rawInput, {
     ...vocabulary.value.writeCtx,
+    dayPriceRange: barsPriceRange(bars),
     isCreate: input.kind === "draft",
     writtenFields: new Set(Object.keys(rawInput)),
     nowMs,

@@ -43,7 +43,7 @@ export interface WriteCheckContext {
 export const FUTURE_TOLERANCE_MS = 5 * 60_000;
 /** Q-11: a price more than this fraction outside the day's range is warned about. */
 const RANGE_BAND = 0.01;
-/** The stop on a closed stop or trail exit may sit this many ticks from the exit price (HR-5). */
+/** A closed stop or trail exit may sit this many ticks from the working stop, either side, before it is flagged (HR-5). */
 const EXIT_TICK_TOLERANCE = 2;
 
 const NOTE_FIELDS = ["note", "pre_trade_thesis", "management_notes", "post_exit_notes"] as const;
@@ -129,6 +129,31 @@ function refusal(candidate: TradeRecord, rawInput: Record<string, unknown>, ctx:
   return null;
 }
 
+/**
+ * HR-5: a closed stop or trail exit against its working stop, by side. Adverse slippage (the fill past the stop) and an
+ * untriggered exit (the price never reached the stop) are both flagged, with different advice. Within the tolerance is silent.
+ */
+function exitReasonWarning(candidate: TradeRecord, working: number | null | undefined, tickSize: number | undefined): AgentWriteWarning | null {
+  if (candidate.status !== "closed" || (candidate.exit_reason !== "stop" && candidate.exit_reason !== "trail")) return null;
+  if (!tickSize || working == null || candidate.exit_price == null) return null;
+  const reason = candidate.exit_reason;
+  const exit = candidate.exit_price;
+  const sign = candidate.direction === "LONG" ? 1 : -1;
+  // Positive when the exit sits on the favorable side of the working stop, negative when it slipped past it.
+  const favorableTicks = Math.round(((exit - working) * sign) / tickSize);
+  if (Math.abs(favorableTicks) <= EXIT_TICK_TOLERANCE) return null;
+  if (favorableTicks > 0) {
+    return {
+      code: "exit_reason_mismatch",
+      message: `exit_reason "${reason}" but exit_price ${exit} sits ${favorableTicks} ticks on the favorable (untriggered) side of working stop ${working}, so the stop was never reached. Use "manual" or "target" if the trade left before the stop, or record the stop_moves trail (HR-4, HR-5).`,
+    };
+  }
+  return {
+    code: "exit_reason_mismatch",
+    message: `exit_reason "${reason}" but exit_price ${exit} slipped ${-favorableTicks} ticks past working stop ${working} (adverse slippage). Keep both true prices if real stop slippage occurred, or add stop_moves if the stop was widened (HR-4, HR-5).`,
+  };
+}
+
 /** Warnings (201 with `warnings`). They never block a write. */
 function warningsFor(candidate: TradeRecord, ctx: WriteCheckContext): AgentWriteWarning[] {
   const warnings: AgentWriteWarning[] = [];
@@ -158,11 +183,8 @@ function warningsFor(candidate: TradeRecord, ctx: WriteCheckContext): AgentWrite
   const key = canonicalSymbol(candidate.symbol);
   const spec = key ? FUTURES_SPECS[key] : undefined;
   const working = moves.length > 0 ? moves[moves.length - 1].price : candidate.stop_loss_price;
-  if (candidate.status === "closed" && (candidate.exit_reason === "stop" || candidate.exit_reason === "trail")
-    && spec && working != null && candidate.exit_price != null
-    && Math.abs(candidate.exit_price - working) > spec.tickSize * EXIT_TICK_TOLERANCE + 1e-9) {
-    warnings.push({ code: "exit_reason_mismatch", message: `exit_reason "${candidate.exit_reason}" but exit_price ${candidate.exit_price} is more than 2 ticks from the working stop ${working} (HR-5).` });
-  }
+  const exitWarning = exitReasonWarning(candidate, working, spec?.tickSize);
+  if (exitWarning) warnings.push(exitWarning);
 
   if (riskComparison(candidate, rSizeCents(candidate, ctx)).differs) {
     warnings.push({ code: "stated_risk_differs", message: "stated_risk_r differs from the risk the stop implies (HR-7). Keep the trader's figure; check the stop." });
