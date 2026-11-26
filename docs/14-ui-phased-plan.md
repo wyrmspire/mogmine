@@ -15,7 +15,7 @@ Scope is the "First" column of [08 §15](08-ux-notes-viewing-and-journaling.md#1
 | 3 — Pit Stop and review queue | `5a9f8c6` | Done |
 | 4 — Chart window from the trade's own duration | on `main` | Done |
 | 5 — Shield mode, Trade Card sheet, Tune | on `main` (via PR #76) | Done |
-| 6 — Polish, measurements, spec reconciliation | — | Not started (proposed in §5) |
+| 6 — Polish, measurements, spec reconciliation | — | In progress. Home-screen icons (`#20`) are on `main` (`public/apple-touch-icon.png`, `icon-192.png`, `icon-512.png`). Accessibility checklist (`#19`) and the spec write-back (`#21`, [R3-16](../notes/handoffs/2026-11-26-R3-16.md)) are on the branch and reported done; GitHub may still show `#19`–`#21` open, so check before closing. Real-phone budget check `#22` remains owner-only. |
 
 Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors (7 before; 1 old warning in `postcss.config.mjs`), `npm test` 10 of 10, `npm run build` passes. Screens were checked in headless Chrome at 390 × 844 and 1280 × 900: no horizontal overflow, no console errors, no tap target under 44 px except the chart library's own attribution logo. **Not checked: a real phone, iOS Safari, the share sheet.**
 
@@ -78,7 +78,7 @@ Checks at the Phase 3 commit: `npx tsc --noEmit` clean, `npm run lint` 0 errors 
 - **Trade Card sheet** (08 §11): preview before sharing, privacy toggle that re-renders the chart (UX-71/72), Share / Save / Copy (UX-76), zone on every time (UX-75), image ready before the tap (UX-70).
 - **Tune**: gold preset and intensity, Position Box opacity, the profit and risk palette (Classic or Blue / Orange), and a **journal backup** (download and restore a file). The whole journal lives in one browser's storage; clearing site data deletes it.
 
-## 5. Phase 6 (proposed) — Polish, measurement, reconciliation
+## 5. Phase 6 — Polish, measurement, reconciliation (status in §1)
 
 - `AGENTS.md` §4 and 08 §16 checklists on every screen, including large text, reduced motion and the palette with red and green removed.
 - Home-screen icons for iOS, and the "Add to Home Screen" hint (08 §14).
@@ -108,8 +108,8 @@ Not yet written back into the specs. Phase 6 does this, or sooner if you prefer.
 
 | Spec | Difference |
 | :--- | :--- |
-| 08 §3 | No `/playbooks` screen. The dock is Today, Feed, Add, Review, Tune. |
-| 08 §3 | The Feed's `?playbook=` filter is not built. `?style=` is built and Phase 4 removes it. |
+| 08 §3 | Resolved: `/playbooks` exists as the binder, opened from Tune. The dock is Today, Feed, Add, Review, Tune. |
+| 08 §3 | Resolved: the Feed's `?playbook=` filter is built (`NAV-1`, with `?date=`, `?account=`, `?tag=`, `?status=`). `?style=` was removed in Phase 4. |
 | 08 §7 | A note alone counts as `tagged`. The spec names only a playbook or a tag. |
 | 08 UX-86 | The zone preference exists. Its default stays Central, the owner's choice, not ET. |
 | 05 §1 | Trade-to-trade swipe is on the header strip only (as UX-40 says), with Prev / Next buttons. |

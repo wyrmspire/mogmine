@@ -61,16 +61,16 @@ class PositionBoxRenderer implements IPrimitivePaneRenderer {
       const left = Math.min(x1, x2) * scaleX;
       const width = Math.max(4, Math.abs(x2 - x1)) * scaleX;
 
-      // 1. Profit / Target Zone (Emerald)
+      // 1. Reward price-edge fill (--zone-reward; D-010 fills only, D-V1 price edges)
       const profitTop = Math.min(yEntry, yExit) * scaleY;
       const profitHeight = Math.max(2, Math.abs(yExit - yEntry)) * scaleY;
-      ctx.fillStyle = `rgba(16, 185, 129, ${alpha})`;
+      ctx.fillStyle = withAlpha(zoneReward, alpha); // zoneReward is read from --zone-reward (see notes)
       ctx.fillRect(left, profitTop, width, profitHeight);
 
-      // 2. Risk / Stop / MAE Zone (Crimson)
+      // 2. Risk / stop / MAE price-edge fill (--zone-risk)
       const riskTop = Math.min(yEntry, yRisk) * scaleY;
       const riskHeight = Math.max(2, Math.abs(yRisk - yEntry)) * scaleY;
-      ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
+      ctx.fillStyle = withAlpha(zoneRisk, alpha); // zoneRisk is read from --zone-risk
       ctx.fillRect(left, riskTop, width, riskHeight);
 
       // 3. Dashed Diagonal Execution Path (Entry -> Exit)
@@ -93,7 +93,7 @@ class PositionBoxRenderer implements IPrimitivePaneRenderer {
 - **Snap times to bars first.** `timeToCoordinate()` returns `null` for any time that is not on the time scale. A fill at 09:48:37 is not a bar time, so an unsnapped box is never drawn. Convert `entryTime` and `exitTime` to their bar's open time for the active timeframe, and redo it on every timeframe switch (B-23). A fill with no bar within tolerance (its own bar, or a nearby one within three bars and 30 minutes, OD-28) is unresolved: `snapToBar` returns `null` and the box is hidden. It is never drawn at a bar days away (issue #51).
 - **These type names are v5.** `IPrimitivePaneView` and `IPrimitivePaneRenderer` were `ISeriesPrimitivePaneView` and `ISeriesPrimitivePaneRenderer` in v4. Build against v5: `chart.addSeries(CandlestickSeries, options)`, and `createSeriesMarkers(series, markers)` in place of `series.setMarkers()`.
 - **Do not call `getComputedStyle()` inside `draw()`.** It runs on every frame of a pinch. Read `--position-box-opacity`, `--gold-mid` and the profit and risk colours into a small store, update it when a slider or preset changes, then call `requestUpdate()`. The values still come from the CSS variables (Invariant 5).
-- **Read the profit and risk colours from tokens too** (`--profit-emerald`, `--risk-crimson`). The literal `rgba(16, 185, 129, …)` above blocks a colour-blind preset ([08](08-ux-notes-viewing-and-journaling.md) UX-80).
+- **Read the reward and risk colours from tokens too** (`--zone-reward`, `--zone-risk`; the shipped look is fills only with price edges, D-010 and D-V1, see [08](08-ux-notes-viewing-and-journaling.md)). Hard-coded RGB values block the colour-blind preset ([08](08-ux-notes-viewing-and-journaling.md) UX-80).
 - **Chart times are shifted for display only.** The library has no time-zone support. Pass every bar, marker and primitive time through one `toChartTime()` helper, and never let a shifted time reach the database or the AI (B-22).
 - **Extend the series autoscale, not only the drawing.** Merge `entry_price`, `exit_price`, `stop_loss_price` and `planned_target_price` into the candlestick series' `autoscaleInfoProvider`, and return the same bounds from the primitive's `autoscaleInfo()`. Fit must restore automatic price scaling so TP, SL and exit remain visible.
 - **Never generate sample candles.** A sample may point at real archived/fetched bars, but if those bars are unavailable it has no chart, exactly like a real trade. Give seeded sample trades an explicit planned target; do not infer one in the chart.
@@ -214,15 +214,17 @@ export const FUTURES_SPECS: Record<string, FuturesContractSpec> = {
 - `LONG`: `(exitPrice - entryPrice) * quantity * spec.pointValueUsd`
 - `SHORT`: `(entryPrice - exitPrice) * quantity * spec.pointValueUsd`
 
-**R-Multiple Formula (when `stopLossPrice` exists):**
-- `riskPoints = Math.abs(entryPrice - stopLossPrice)`
-- `rewardPoints = direction === 'LONG' ? (exitPrice - entryPrice) : (entryPrice - exitPrice)`
-- `rMultiple = riskPoints > 0 ? rewardPoints / riskPoints : null`
+**Account R (shipped; replaces the old `rewardPoints / riskPoints` R-Multiple):**
+- `rSizeCents` = the account's fixed `r_size_cents` ($300 standard unit; $250 fallback), frozen on each trade at save.
+- `resultR = grossPnlCents / rSizeCents`. Works with or without a stop; `null` when P&L cannot be computed.
+- `riskR = initialStopRiskCents / rSizeCents`. `null` without a stop or a stated risk, never `0`.
+- `riskMultiple` is the separate stop-width ratio (captured ticks ÷ stop ticks). Show it as `× risk` or `R:R`, never as `R`.
+- Code: `lib/r-size.ts` (`resultR`, `riskR`) and `lib/trades.ts` (`riskMultiple`).
 
 *Agent Notes added 2026-11-14 ([09](09-backend-risk-register.md) §4):*
 - **The formulas above only hold for one entry fill and one exit fill.** With scale-ins or partial exits, compute gross P&L from the fills: the sum of signed `quantity × price` over every fill, times `pointValueUsd`. Average prices are for display only (B-30).
 - **Do the arithmetic in integer ticks:** `Math.round(price / tickSize)`. Tick sizes `0.1` and `0.01` are not exact in floating point (B-31).
-- **R with scaling is an open decision** (`OD-10`). The recommendation is `P&L ÷ initial risk in dollars`. Without a stop, R is `null`, never `0`.
+- **R with scaling** is settled by the fixed account unit above (`resultR`, `riskR`). Without a stop, `riskR` is `null`, never `0`.
 - **Cross-check against the broker.** Closing fills from TopstepX carry the broker's own `profitAndLoss`. Flag a mismatch. Do not hide it (B-34).
 - **`YM`, `RTY`, `GC` and `CL` are missing from the table above.** The full matrix is in `mogprompt.md` §3.1.
 
