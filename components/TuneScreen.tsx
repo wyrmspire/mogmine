@@ -18,6 +18,7 @@ import { getDailyReviewsBackup, restoreDailyReviews } from "@/lib/daily-review-s
 import { PlaybookEditor } from "./PlaybookEditor";
 import { TagRegistryEditor } from "./TagRegistryEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
+import { TRADINGVIEW_ATTRIBUTION } from "@/lib/chart-chrome";
 import { showToast } from "@/lib/toast";
 
 type PendingRestore = Extract<ParseBackupResult, { ok: true }> & { fileName: string };
@@ -477,6 +478,21 @@ export function TuneScreen() {
             </div>
           </div>
         )}
+      </section>
+
+      <section className="specular-card card-pad" aria-label="About and licences" style={{ marginTop: 12 }}>
+        <div className="card-head" style={{ marginBottom: 6 }}>
+          <h3>About &amp; Licences</h3>
+        </div>
+        <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>{TRADINGVIEW_ATTRIBUTION.notice}</p>
+        <a
+          href={TRADINGVIEW_ATTRIBUTION.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ minHeight: 44, display: "inline-flex", alignItems: "center", fontSize: 13 }}
+        >
+          {TRADINGVIEW_ATTRIBUTION.label} · lightweight-charts licence
+        </a>
       </section>
     </div>
   );

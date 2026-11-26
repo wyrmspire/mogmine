@@ -4,7 +4,8 @@ import { useCallback, useEffect, useImperativeHandle, useRef, useState, useSyncE
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
 import { addVolumePane, paintVolumePane, type VolumeSeries } from "./VolumePane";
-import { SessionLevelsPrimitive, computeLevelRightOffsetBars, levelPillColumnPx } from "./SessionLevelsPrimitive";
+import { SessionLevelsPrimitive, levelPillColumnPx } from "./SessionLevelsPrimitive";
+import { DEFAULT_RIGHT_OFFSET_BARS, MIN_BAR_SPACING_PX, effectiveRightOffsetBars } from "@/lib/chart-chrome";
 import { LevelCard, levelHitForTick, selectExportLevelPills } from "./LevelCard";
 import { describeTrade } from "@/lib/describe";
 import { formatPoints, formatPrice } from "@/lib/format";
@@ -151,7 +152,7 @@ function applyLevelRightOffset(state: Live) {
   const range = timeScale.getVisibleLogicalRange();
   const bars = range ? visibleLogicalBars(range) : 0;
   const barSpacing = bars > 0 ? timeScale.width() / bars : 0;
-  const offset = computeLevelRightOffsetBars(state.levelLabels.length, levelPillColumnPx(state.levelLabels), barSpacing);
+  const offset = effectiveRightOffsetBars(state.levelLabels.length, levelPillColumnPx(state.levelLabels), barSpacing);
   if (offset === state.levelRightOffset) return;
   state.levelRightOffset = offset;
   setProgrammaticRange(state, () => {
@@ -402,7 +403,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     l.primitive.update(p.marks, t, p.neighbourTrades);
     const pills = p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : [];
     paintLevels(l, { levels: p.levels, theme: t, bars, timeframe: barTimeframe, trade: tr }, p.levelMode, pills);
-    // Tap mode draws no pills, so no right-edge reserve either (LB-6): rightOffset stays 0.
+    // Tap mode draws no pills, so only the breathing room applies (LB-6, F-10).
     l.levelLabels = p.levelMode === "tap" ? [] : pills.map((pill) => pill.label);
     applyLevelRightOffset(l);
     l.vwapSeries.applyOptions({ color: t.vwap, visible: p.vwap.length > 0 });
@@ -459,9 +460,9 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       const chart = lwc.createChart(host, {
         width: host.clientWidth,
         height: host.clientHeight,
-        layout: { fontSize: 11, attributionLogo: true },
+        layout: { fontSize: 11, attributionLogo: false }, // licence notice lives on Tune (UX-E5, D-V4)
         rightPriceScale: { scaleMargins: { top: 0.14, bottom: 0.12 } },
-        timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 0 },
+        timeScale: { timeVisible: true, secondsVisible: false, rightOffset: DEFAULT_RIGHT_OFFSET_BARS, minBarSpacing: MIN_BAR_SPACING_PX },
         // A vertical swipe that starts on the chart scrolls the page (UX-41). The chart owns pinch (UX-44).
         handleScroll: { vertTouchDrag: false },
         handleScale: { axisPressedMouseMove: true, pinch: true, mouseWheel: true },
@@ -490,7 +491,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
       });
       const state: Live = {
-        lwc, host, chart, series, volumeSeries, primitive, levelsPrimitive, levelLabels: [], levelRightOffset: 0, vwapSeries, renderedVwap: null,
+        lwc, host, chart, series, volumeSeries, primitive, levelsPrimitive, levelLabels: [], levelRightOffset: DEFAULT_RIGHT_OFFSET_BARS, vwapSeries, renderedVwap: null,
         emaSeries, renderedEma: null,
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
