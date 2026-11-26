@@ -11,7 +11,7 @@
 // No table and no migration until OD-30 is settled. See docs/18.
 
 import { resolveRSize, resultR } from "./r-size.ts";
-import type { TradeRecord } from "./trades.ts";
+import type { RSizeOptions, TradeRecord } from "./trades.ts";
 
 export type MoodSource = "user" | "voice_ai";
 /** Where a resolved value came from. `tag` is a default read from execution tags, never stored. */
@@ -148,6 +148,8 @@ export interface MoodVector {
 export interface MoodVectorOptions {
   /** `pre_exit`: only scores captured before the exit, and no tag defaults (tags carry no time). */
   phase?: "any" | "pre_exit";
+  /** Account R sizes and prefs for the R outcome of each trade (omit for the default R size). */
+  rSize?: RSizeOptions;
 }
 
 const byCreated = (a: MoodRecord, b: MoodRecord) => Date.parse(a.created_at) - Date.parse(b.created_at);
@@ -427,6 +429,7 @@ export interface SimilarTradesOptions {
   limit?: number;
   minOverlap?: number;
   phase?: MoodVectorOptions["phase"];
+  rSize?: RSizeOptions;
 }
 
 export interface SimilarTrade {
@@ -454,12 +457,13 @@ export function similarTrades(
   const minSimilarity = options.minSimilarity ?? 0.9;
   const limit = options.limit ?? 50;
   const vectorOptions = { phase: options.phase ?? "any" } as const;
+  const rSize = options.rSize;
   const base = moodVector(target, records, registry, vectorOptions);
   const matches = trades
     .filter((trade) => trade.id !== target.id && trade.is_sample === target.is_sample)
     .flatMap((trade) => {
       const score = moodSimilarity(base, moodVector(trade, records, registry, vectorOptions), options.minOverlap ?? MIN_SPOKE_OVERLAP);
-      return score && score.similarity >= minSimilarity ? [{ trade, similarity: score.similarity, r: resultR(trade, resolveRSize(trade)) }] : [];
+      return score && score.similarity >= minSimilarity ? [{ trade, similarity: score.similarity, r: resultR(trade, resolveRSize(trade, rSize?.accounts, rSize?.prefs)) }] : [];
     })
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
@@ -511,7 +515,7 @@ export function moodOutcomeStats(trades: TradeRecord[], records: MoodRecord[], r
   for (const trade of trades) {
     if (trade.is_sample) { skipped.sample += 1; continue; }
     if (trade.exit_time == null) { skipped.open += 1; continue; }
-    const r = resultR(trade, resolveRSize(trade));
+    const r = resultR(trade, resolveRSize(trade, options.rSize?.accounts, options.rSize?.prefs));
     if (r == null) { skipped.noR += 1; continue; }
     const vector = moodVector(trade, records, registry, options);
     if (!knownCount(vector)) { skipped.noMood += 1; continue; }
