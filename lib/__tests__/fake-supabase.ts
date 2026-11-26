@@ -53,6 +53,7 @@ export function createFakeSupabase(uid: string | null = null): FakeSupabase {
     const filters: [string, unknown][] = [];
     const orders: string[] = [];
     let limit: number | undefined;
+    let window: [number, number] | undefined;
 
     const run = (): DbResult<Row[]> => {
       calls.push(`${op.kind} ${table}`);
@@ -64,6 +65,7 @@ export function createFakeSupabase(uid: string | null = null): FakeSupabase {
       if (op.kind === "select") {
         let found = all.filter(visible);
         if (orders.length) found = [...found].sort((a, b) => a.created_at.localeCompare(b.created_at) || String(a.id).localeCompare(String(b.id)));
+        if (window) found = found.slice(window[0], window[1] + 1);
         if (limit !== undefined) found = found.slice(0, limit);
         return { data: found.map((row) => structuredClone(row)), error: null };
       }
@@ -113,6 +115,10 @@ export function createFakeSupabase(uid: string | null = null): FakeSupabase {
       },
       limit(count) {
         limit = count;
+        return query;
+      },
+      range(from, to) {
+        window = [from, to];
         return query;
       },
       maybeSingle() {

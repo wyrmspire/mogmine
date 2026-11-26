@@ -7,7 +7,7 @@
 // nothing dirty is ever lost. Last write wins on push (no expectedUpdatedAt).
 import { getPersistence, chooseAdapter } from "./select.ts";
 import type { KeyValueStore } from "./local-adapter.ts";
-import type { CollectionKey, CollectionRepository, PersistError, PersistenceAdapter } from "./contract.ts";
+import type { CollectionKey, CollectionRepository, PersistError, PersistenceAdapter, UserId } from "./contract.ts";
 import { fingerprint } from "./sync-fingerprint.ts";
 import {
   backoffDelay, browserStorage, keepOrphans, readBase, readDeviceOwner, scopedBase, writeBase, writeDeviceOwner,
@@ -74,6 +74,40 @@ const FLUSH_BLOCKED = new Set<PersistError["code"]>(["unauthenticated", "unavail
 const PULL_IDLE_REFRESH_MS = 60_000;
 /** Supabase PostgREST default `max-rows`. */
 export const REMOTE_ROW_CAP = 1000;
+/** Pages per pull: 50 × REMOTE_ROW_CAP = 50,000 rows per collection. Stops a buggy source from looping forever. */
+export const MAX_PULL_PAGES = 50;
+
+/**
+ * Every row of one collection, page by page (`offset` steps of `REMOTE_ROW_CAP`). `maybeTruncated` means the pull
+ * could not prove it saw the whole history: the page budget ran out, or a full page repeated rows already read
+ * (a source that ignores `offset`, e.g. a filler mock). Duplicates are dropped, keeping first-seen order.
+ */
+async function listAllRemote<T extends { id: string }>(
+  repo: CollectionRepository<T>,
+  owner: UserId,
+): Promise<{ ok: true; value: { remote: T[]; maybeTruncated: boolean } } | { ok: false; error: PersistError }> {
+  const byId = new Map<string, T>();
+  let offset = 0;
+  let pages = 0;
+  let truncated = false;
+  for (;;) {
+    const page = await repo.list(owner, { includeSamples: true, includeArchived: true, limit: REMOTE_ROW_CAP, offset });
+    if (!page.ok) return page;
+    pages += 1;
+    if (page.value.length >= REMOTE_ROW_CAP && page.value.every((record) => byId.has(record.id))) {
+      truncated = true; // the same full page again: `offset` was ignored, so nothing more can be read
+      break;
+    }
+    for (const record of page.value) if (!byId.has(record.id)) byId.set(record.id, record);
+    if (page.value.length < REMOTE_ROW_CAP) break; // a short page is the last one
+    if (pages >= MAX_PULL_PAGES) {
+      truncated = true;
+      break;
+    }
+    offset += REMOTE_ROW_CAP;
+  }
+  return { ok: true, value: { remote: [...byId.values()], maybeTruncated: truncated } };
+}
 
 interface Timer { handle: unknown; armed: boolean }
 
@@ -154,17 +188,16 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
       return;
     }
     setState("syncing", null, state.lastSyncedAt);
-    const listed = await repoOf(adapter).list(owner, { includeSamples: true, includeArchived: true });
+    const listed = await listAllRemote(repoOf(adapter), owner);
     if (disposed) return;
     if (!listed.ok) {
       pullFailed(listed.error);
       return;
     }
 
-    const remote = listed.value;
-    // PostgREST caps a response at `max-rows` (1000 on Supabase by default). A full page may be truncated, so it
-    // must never be read as "the server deleted the rest" (no local record is dropped on such a pull).
-    const maybeTruncated = remote.length >= REMOTE_ROW_CAP;
+    // PostgREST caps a response at `max-rows` (1000 on Supabase by default), so the pull pages through the whole
+    // history. Only a pull that could not finish paging may not read a missing row as "the server deleted it".
+    const { remote, maybeTruncated } = listed.value;
     const current = options.getLocal();
     const base = scopedBase(readBase(storage, key), owner);
     const deviceOwner = readDeviceOwner(storage, key);
