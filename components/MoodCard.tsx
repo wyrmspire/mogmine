@@ -103,7 +103,7 @@ export function MoodStatsCard({ trades }: { trades: TradeRecord[] }) {
   const skipped = [
     stats.skipped.sample && `${stats.skipped.sample} sample`,
     stats.skipped.open && `${stats.skipped.open} open`,
-    stats.skipped.noR && `${stats.skipped.noR} without a stop`,
+    stats.skipped.noR && `${stats.skipped.noR} without R`,
     stats.skipped.noMood && `${stats.skipped.noMood} without a mood`,
   ].filter(Boolean);
 

@@ -8,6 +8,7 @@ import { SessionLevelsPrimitive, levelPillColumnPx } from "./SessionLevelsPrimit
 import { DEFAULT_RIGHT_OFFSET_BARS, MIN_BAR_SPACING_PX, effectiveRightOffsetBars } from "@/lib/chart-chrome";
 import { LevelCard, levelHitForTick, selectExportLevelPills } from "./LevelCard";
 import { describeTrade } from "@/lib/describe";
+import { useAccounts } from "@/lib/accounts-store";
 import { formatPoints, formatPrice } from "@/lib/format";
 import { getTheme, subscribeTheme } from "@/lib/theme";
 import type { ChartTheme } from "@/lib/theme";
@@ -241,6 +242,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   const live = useRef<Live | null>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => null);
   const prefs = usePrefs();
+  const accounts = useAccounts();
   const levelMode: LevelLabelsMode = levelLabelsMode ?? prefs.levelLabels;
   // The open level card (LB-6). `fromList`: opened by a focused list row, so leaving the row closes it.
   const [openLevel, setOpenLevel] = useState<{ hit: LevelHit; fromList: boolean } | null>(null);
@@ -729,7 +731,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     ref={hostRef}
     className="chart-host"
     role="img"
-    aria-label={`${describeTrade(trade, zone, privacy)} Candlestick chart with the position box.`}
+    aria-label={`${describeTrade(trade, zone, privacy, { accounts: accounts.accounts, prefs })} Candlestick chart with the position box.`}
     data-timeframe={timeframe}
     data-visible-bars={diagnosticWindow.visibleBars.toFixed(3)}
     data-trade-share={(diagnosticWindow.holdBars / diagnosticWindow.visibleBars).toFixed(4)}

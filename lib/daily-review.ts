@@ -6,7 +6,7 @@ import { buildDayCardData } from "./day-card.ts";
 import type { PlanningSession } from "./plans.ts";
 import { sessionDate } from "./session.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
-import type { TradeRecord } from "./trades.ts";
+import type { RSizeOptions, TradeRecord } from "./trades.ts";
 
 export type ReviewPointKind = "went_well" | "mistake" | "observation" | "next_time";
 export type DailyReviewStatus = "draft" | "done";
@@ -109,6 +109,7 @@ export function dailyReviewTotals(
   review: Pick<DailyReview, "session_date" | "trade_ids">,
   trades: readonly TradeRecord[],
   shield: boolean,
+  opts?: RSizeOptions,
 ): DayCardData {
   const byId = new Map(trades.map((trade) => [trade.id, trade] as const));
   const realLinkedTrades: TradeRecord[] = [];
@@ -116,7 +117,7 @@ export function dailyReviewTotals(
     const trade = byId.get(id);
     if (trade && !trade.is_sample) realLinkedTrades.push(trade);
   }
-  return buildDayCardData(review.session_date, realLinkedTrades, shield);
+  return buildDayCardData(review.session_date, realLinkedTrades, shield, opts);
 }
 
 export function makeDailyReview(input: {

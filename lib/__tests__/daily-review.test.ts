@@ -137,6 +137,24 @@ describe("Rules 2 and 6: totals computed from linked trades, samples excluded", 
     assert.equal(totals.shield, true);
     assert.equal(totals.formattedNetMoney, null);
   });
+
+  it("uses the linked trade's live account R when its snapshot is absent", () => {
+    const legacy = trade("legacy", afternoon, {
+      entry_price: 7000,
+      exit_price: 7015,
+      quantity: 1,
+      r_size_cents: null,
+      account_id: "acct-300",
+    });
+    const totals = dailyReviewTotals(
+      { session_date: "2026-11-23", trade_ids: [legacy.id] },
+      [legacy],
+      false,
+      { accounts: [{ id: "acct-300", r_size_cents: 30_000 }], prefs: { riskBudgetUsd: 250 } },
+    );
+    assert.equal(totals.netR, 0.25);
+    assert.equal(totals.trades[0].resultR, 0.25);
+  });
 });
 
 describe("Rules 3 and 4: text limits and status never touches trades", () => {
