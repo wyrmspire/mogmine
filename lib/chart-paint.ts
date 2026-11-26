@@ -2,6 +2,7 @@
 // Pure functions, plus drawChip / zoneGradient which only use the context they are given.
 // Runtime colours still come from the CSS variables that lib/theme.ts reads (Invariant 5). CHART_TOKENS
 // is the documented default for the same values: tests pin it against app/globals.css and 08.
+import type { FlagMark } from "./trade-marks.ts";
 
 /** Token defaults, classic palette unless a `blueOrange` entry says otherwise (08 §4.1, §4.5). */
 export const CHART_TOKENS = {
@@ -26,6 +27,10 @@ export const CHART_TOKENS = {
   },
 } as const;
 
+/** Export chips are 18 px tall for crisp Trade Card PNGs (08 §4.3). Shield chips are at least 44 px wide. */
+export const CHIP_EXPORT_HEIGHT = 18;
+export const CHIP_MIN_WIDTH_SHIELD = 44;
+
 /** Dash patterns in px (08 §4.2). Dots are only for inferred values, drawn round-capped. */
 export const DASH = {
   planned: [6, 4], inferred: [2, 3], working: [3, 3], archived: [3, 3], cancelled: [4, 4], ruler: [2, 4],
@@ -41,8 +46,8 @@ export function dashFor(style: LineStyleName): number[] {
 export const crisp = (v: number, dpr: number, width = 1) =>
   (Math.round(v * dpr) + (Math.round(width * dpr) % 2 ? 0.5 : 0)) / dpr;
 
-/** Chip width: text plus horizontal padding on both sides. */
-export const chipWidth = (textWidth: number) => textWidth + 2 * CHART_TOKENS.chip.padX;
+/** Chip width: text plus horizontal padding on both sides, never narrower than `minWidth`. */
+export const chipWidth = (textWidth: number, minWidth = 0) => Math.max(minWidth, textWidth + 2 * CHART_TOKENS.chip.padX);
 
 /** Fill alpha for a zone: Position Box Opacity times the token factor. Never mutates the tokens. */
 export const zoneAlpha = (factor: number, boxOpacity: number) => factor * boxOpacity;
@@ -103,4 +108,36 @@ export function subtractRect(a: PaintRect, b: PaintRect): PaintRect[] {
 /** `a` with every rectangle in `cuts` removed. Used so plan fills never sit under an actual zone. */
 export function subtractRects(a: PaintRect, cuts: readonly PaintRect[]): PaintRect[] {
   return cuts.reduce<PaintRect[]>((pieces, cut) => pieces.flatMap((piece) => subtractRect(piece, cut)), [a]);
+}
+
+/** One straight canvas stroke from (x0, y0) to (x1, y1). */
+export function strokeLine(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+}
+
+/** Draws the flag outline or fill. `stroke` forces an outline, used for the chartBg halo pass (08 §4.2). */
+export function drawFlag(ctx: CanvasRenderingContext2D, mark: FlagMark, x: number, y: number, stroke: boolean) {
+  ctx.beginPath();
+  if (mark.shape === "dot") {
+    ctx.arc(x, y, mark.hollow ? 3 : 3.5, 0, 2 * Math.PI);
+    ctx.stroke();
+  } else if (mark.shape === "cross") {
+    ctx.moveTo(x - 4, y - 4);
+    ctx.lineTo(x + 4, y + 4);
+    ctx.moveTo(x + 4, y - 4);
+    ctx.lineTo(x - 4, y + 4);
+    ctx.stroke();
+  } else {
+    // 8 × 7 px triangle (08 §4.2).
+    const direction = mark.shape.endsWith("_up") ? -1 : 1;
+    ctx.moveTo(x, y + direction * 3.5);
+    ctx.lineTo(x + 4, y - direction * 3.5);
+    ctx.lineTo(x - 4, y - direction * 3.5);
+    ctx.closePath();
+    if (stroke || mark.hollow || mark.basis === "inferred") ctx.stroke();
+    else ctx.fill();
+  }
 }
