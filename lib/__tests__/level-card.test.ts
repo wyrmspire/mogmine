@@ -116,7 +116,8 @@ test("export swaps to <= 4 labelled groups and restores live tap mode in finally
   const exportBody = chart.slice(exportStart, chart.indexOf("}), []);", exportStart));
   assert.match(exportBody, /paintLevels\(l, paint, "always", exportPills\)/);
   assert.match(exportBody, /selectExportLevelPills\(livePills/);
-  assert.match(exportBody, /try \{\s*return l\.chart\.takeScreenshot\(true, false\);\s*\} finally \{\s*paintLevels\(l, paint, "tap", livePills\);/);
+  // UX-E4 adds setExportMode and the resized view inside the same try/finally; the D-E contract still holds.
+  assert.match(exportBody, /try \{[\s\S]*?return l\.chart\.takeScreenshot\(true, false\);\s*\} finally \{[\s\S]*?paintLevels\(l, paint, "tap", livePills\);/);
 });
 
 test("the card sits outside the lightweight-charts canvas, so takeScreenshot never draws it (Invariant 1)", () => {
