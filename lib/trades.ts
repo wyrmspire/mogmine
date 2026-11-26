@@ -593,24 +593,8 @@ export function defaultTimeframe(holdDurationSeconds: number): Timeframe {
   return "1h";
 }
 
-export function aggregateCandles(candles: Candle[], timeframe: Timeframe): Candle[] {
-  const minutes = TIMEFRAME_MINUTES[timeframe];
-  if (minutes === 1) return candles;
-  const bucketMs = minutes * 60_000;
-  const result: Candle[] = [];
-  for (const bar of candles) {
-    const time = Math.floor(bar.time / bucketMs) * bucketMs;
-    const current = result.at(-1);
-    if (!current || current.time !== time) result.push({ ...bar, time });
-    else {
-      current.high = Math.max(current.high, bar.high);
-      current.low = Math.min(current.low, bar.low);
-      current.close = bar.close;
-      current.volume += bar.volume;
-    }
-  }
-  return result;
-}
+export { aggregateCandles, aggregateCandlesWithMeta } from "./candle-aggregation.ts";
+export type { AggregatedCandleMeta, AggregateOptions } from "./candle-aggregation.ts";
 
 /**
  * How an instant lines up with the available bars (issue #51).
