@@ -443,9 +443,9 @@ test("context skills: registered metadata, declared output keys, and no lookahea
   const friday = ctxAt(series, indexOf(series, rthAt(FRI, 90)), levelIndex);
   for (const skill of CONTEXT_SKILLS) okValues(skill, friday);
 
-  // Default SKILLS registry wires all 17 MVP skills (S1–S9, V1–V5, M1–M3).
-  assert.equal(Object.keys(SKILLS).length, 17);
-  assert.equal(listSkills().length, 17);
+  // Default SKILLS registry wires all 23 skills: S1–S9, V1–V5, M1–M3, plus 6 batch-2 skills.
+  assert.equal(Object.keys(SKILLS).length, 23);
+  assert.equal(listSkills().length, 23);
   for (const skill of CONTEXT_SKILLS) {
     assert.equal(getSkill(skill.meta.id), skill);
   }
