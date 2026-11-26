@@ -53,7 +53,7 @@ RLS `own` = select/insert/update/delete all require `user_id = auth.uid()`. `sha
 | `calls` | `DiscretionCall` | `mogmine-calls-v1` `.calls` | `mogmine_calls` | `user_id` | own | yes | hard | v1 (storage only; UI is OD-52) |
 | `prompt_dismissals` | `PromptDismissal` | `mogmine-calls-v1` `.dismissals` | `mogmine_prompt_dismissals` | `user_id` | own | yes | with trade | v1 |
 | `prompt_library` | `PromptLibraryV1` / `ReviewPrompt` | none (seeded in code) | `mogmine_prompt_libraries` | `user_id` | own | no | — | deferred |
-| `candles` | `Candle[]` | IndexedDB `mogmine` / `candles` | `mogmine_market_candles` | shared | shared_read | no | — | deferred (#70) |
+| `candles` | `Candle[]` | IndexedDB `mogmine` / `candles` | `mogmine_market_candles` | shared | shared_read | no | — | archive live; app adapter deferred (#70) |
 
 Migration notes for #176:
 
@@ -69,7 +69,7 @@ Migration notes for #176:
 | :--- | :--- | :--- |
 | **Partials** (`PartialExit`, `PartialTarget`, `lib/partials.ts`) | **Deferred.** When a UI records them, they become optional `TradeRecord` fields `partial_exits?: PartialExit[]` and `partial_targets?: PartialTarget[]`, stored as `jsonb` on `mogmine_trades`, using the `lib/partials.ts` shapes unchanged. | Avoids a third shape. A fills ledger (below) would supersede `partial_exits` and is owner-gated by OD-5. |
 | **Prompt library** | **Deferred.** Seeded in code; the contract has a singleton repository for it. Persist when a prompt editor ships. | Nothing customizes it yet; storing the seed would freeze it and block seed upgrades. |
-| **Candles / archive** | Device cache stays IndexedDB, not in backups. Server archive is `mogmine_market_candles`, `mogmine_market_coverage`, `mogmine_market_archive_jobs` (#70 / docs/10), `shared_read`. **Deferred, owner-gated.** | #70 / PR #71 is not merged here. |
+| **Candles / archive** | Device cache stays IndexedDB, not in backups. Server archive uses `mogmine_market_candles` and `mogmine_market_coverage`, `shared_read`. | Owner approved #70 on 2026-11-26. Migration `20261126073815_mogmine_market_archive.sql` is applied to `showmob-dev`; the initial Databento `MES=F` 1m backfill covers session dates 2026-08-25 through 2026-11-24. Daily continuation, archive jobs and the app read path remain deferred. |
 | `executions` / fills ledger | **Deferred** (`mogmine_executions`). | OD-5 is open; not closed here. |
 | `trade_candles` | **Out of v1.** Replaced by the shared candle archive keyed by symbol/timeframe/time, not per trade. | docs/06 warning: per-trade copies duplicate bars. |
 | `trade_companion_charts` | **Deferred** (`mogmine_trade_companion_charts`). | No companion-chart attachment UI yet. |
@@ -108,6 +108,7 @@ Computed, never stored: session review, challenge results while live, call grade
 | `20261123004804_mogmine_allowed_invoker.sql` | `mogmine_is_allowed()` runs as the caller (clears security advisor 0029) |
 | `20261123004848_mogmine_journal_grants.sql` | Table grants for `authenticated` / `service_role` (this project gives new tables no DML by default) |
 | `20261123021202_mogmine_agent_tokens.sql` | #185: `mogmine_agent_tokens` (SHA-256 hash only, scopes, revoke-only update) and `mogmine_agent_audit`; RLS, owner reads own rows; the service role only looks up by hash, sets `last_used_at` and writes the audit log |
+| `20261126073815_mogmine_market_archive.sql` | #70: shared `mogmine_market_candles` and `mogmine_market_coverage`; forced RLS, authenticated read, service-role-only writes; Databento and Yahoo sources |
 
 **Tables.** `mogmine_allowed_users` plus one table per v1 row in §3: `mogmine_trades`, `mogmine_mood_records`, `mogmine_mood_candidates`, `mogmine_accounts`, `mogmine_balance_checks`, `mogmine_challenges`, `mogmine_playbooks`, `mogmine_plans`, `mogmine_drills`, `mogmine_calls`, `mogmine_prompt_dismissals` (collections: primary key `(user_id, id)`, `id text`), and the singletons `mogmine_user_prefs`, `mogmine_mood_registries` (primary key `user_id`). Every row has `user_id uuid references auth.users`, `record jsonb`, `created_at`, `updated_at`.
 
@@ -121,7 +122,7 @@ Computed, never stored: session review, challenge results while live, call grade
 - Every write and read goes through the device sanitizers (`sanitizeCollectionRecord` / `sanitizeSingletonRecord`); `derivedNeverStored` fields (and `candles`) are stripped before a write and recomputed on read.
 - `expectedUpdatedAt` is a guarded `UPDATE ... WHERE updated_at = expected`; no row back is `conflict`. Omitted means last write wins (upsert).
 - Cascades: the command layer deletes children by `parentId` first; an `after delete` trigger on trades and accounts is the backstop. Foreign keys between journal tables stay unenforced (restores may insert children first). `replaceAll` calls `mogmine_replace_rows` (one transaction, security invoker, `mogmine_` collection tables only, cascade backstop off for the restore).
-- `prompt_library` is memory-only; `candles` stay in the device cache (#70 is owner-gated).
+- `prompt_library` is memory-only. Candles still use the device cache in the app; #70 now has a server archive, but wiring `CandleCacheRepository` to it is a later slice.
 - Browser client: anon key + session only (`lib/persistence/supabase-client.ts`, loaded lazily). The service-role key is never used by the adapter.
 
 **Applying a new MogMine migration.** This repo does not hold Showmob's 8 migrations, so `supabase db push` refuses ("remote migration versions not found locally") and suggests `migration repair`. **Never repair or squash Showmob's history.** Apply MogMine migrations with the Supabase MCP `apply_migration` (or the SQL editor), then save the file under the version it was recorded as (`supabase migration list --remote` on the VM shows it). Review first that the SQL touches only `mogmine_` objects (`lib/__tests__/persistence-supabase-adapter.test.ts` checks the files), and run the security advisor after. The VM CLI is linked to `vsasmtsifuylhfrrsrso`; its token lives in `~/.config/supabase/agent.env`, never in the repo.
