@@ -71,6 +71,28 @@ function createPlaybooksSync(overrides: Partial<CollectionSyncOptions<Playbook>>
 
 let playbooksSync: CollectionSync = createPlaybooksSync();
 
+// Cross-tab (docs/26 §8.4 #7): another open tab writes PLAYBOOKS_STORAGE_KEY. Adopt its copy so this tab never overwrites it.
+let storageListener: ((event: StorageEvent) => void) | null = null;
+
+function listenForStorage() {
+  if (storageListener || typeof window === "undefined") return;
+  storageListener = (event: StorageEvent) => {
+    if (event.storageArea !== localStorage || (event.key !== PLAYBOOKS_STORAGE_KEY && event.key !== null)) return;
+    try {
+      set({ playbooks: event.newValue ? sanitizePlaybooks(JSON.parse(event.newValue)) : seeds(), saved: true });
+      playbooksSync.changed();
+    } catch {
+      /* keep ours */
+    }
+  };
+  window.addEventListener("storage", storageListener);
+}
+
+function stopListeningForStorage() {
+  if (storageListener && typeof window !== "undefined") window.removeEventListener?.("storage", storageListener);
+  storageListener = null;
+}
+
 export function hydratePlaybooks() {
   if (state.hydrated || typeof window === "undefined") return;
   let playbooks: Playbook[] = seeds();
@@ -82,15 +104,7 @@ export function hydratePlaybooks() {
     saved = false;
   }
   set({ playbooks, hydrated: true, saved });
-  window.addEventListener("storage", (event) => {
-    if (event.storageArea !== localStorage || (event.key !== PLAYBOOKS_STORAGE_KEY && event.key !== null)) return;
-    try {
-      set({ playbooks: event.newValue ? sanitizePlaybooks(JSON.parse(event.newValue)) : seeds(), saved: true });
-      playbooksSync.changed();
-    } catch {
-      /* keep ours */
-    }
-  });
+  listenForStorage();
   playbooksSync.start();
 }
 
@@ -207,15 +221,22 @@ export function playbooksDifferFromSeeds(list: readonly Playbook[]) {
   return JSON.stringify(sanitizePlaybooks(list)) !== JSON.stringify(seeds());
 }
 
+/**
+ * Backup restore. Playbooks are archive-only on the server, so a playbook the backup leaves out (a custom one or a
+ * seed) is kept here as archived and pushed that way. Dropping it would leave the server row active. No Setup stays.
+ */
 export function restorePlaybooks(playbooks: readonly Playbook[]) {
   hydratePlaybooks();
-  set({ playbooks: sanitizePlaybooks(playbooks) });
+  const incoming = new Set(playbooks.map((item) => item.id));
+  const omitted = state.playbooks.filter((item) => item.id !== NO_SETUP_ID && !incoming.has(item.id)).map((item) => ({ ...item, archived: true }));
+  set({ playbooks: sanitizePlaybooks([...playbooks, ...omitted]) });
   persist();
   playbooksSync.changed();
 }
 
 /** Test hook: back to unhydrated seeds and the default (disabled) syncer. */
 export function resetPlaybooksForTests() {
+  stopListeningForStorage();
   state = empty();
   setPlaybookRegistry(state.playbooks);
   playbooksSync.dispose();

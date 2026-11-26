@@ -60,6 +60,26 @@ function createDrillsSync(overrides: Partial<CollectionSyncOptions<DrillRecord>>
 
 let drillsSync: CollectionSync = createDrillsSync();
 
+// Cross-tab (docs/26 §8.4 #7): another open tab writes this key. Adopt its copy so this tab never overwrites it.
+let storageListener: ((event: StorageEvent) => void) | null = null;
+
+function listenForStorage() {
+  if (storageListener || typeof window === "undefined") return;
+  storageListener = (event: StorageEvent) => {
+    if (event.key !== DRILLS_STORAGE_KEY || !event.newValue) return;
+    try {
+      set({ records: sanitizeDrills(JSON.parse(event.newValue)) });
+      drillsSync.changed();
+    } catch { /* malformed: keep this tab's copy */ }
+  };
+  window.addEventListener("storage", storageListener);
+}
+
+function stopListeningForStorage() {
+  if (storageListener && typeof window !== "undefined") window.removeEventListener?.("storage", storageListener);
+  storageListener = null;
+}
+
 export function hydrateDrills() {
   if (state.hydrated || typeof window === "undefined") return;
   let records: DrillRecord[] = [];
@@ -71,6 +91,7 @@ export function hydrateDrills() {
     saved = false;
   }
   set({ records, hydrated: true, saved });
+  listenForStorage();
   drillsSync.start();
 }
 
@@ -106,6 +127,7 @@ export function restoreDrills(records: readonly DrillRecord[] | null | undefined
 
 /** Test hook: back to unhydrated and empty, and the default (disabled) syncer. */
 export function resetDrillsForTests() {
+  stopListeningForStorage();
   state = empty();
   drillsSync.dispose();
   drillsSync = createDrillsSync();

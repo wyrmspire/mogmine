@@ -63,6 +63,26 @@ function createPlansSync(overrides: Partial<CollectionSyncOptions<PlanningSessio
 
 let plansSync: CollectionSync = createPlansSync();
 
+// Cross-tab (docs/26 §8.4 #7): another open tab writes this key. Adopt its copy so this tab never overwrites it.
+let storageListener: ((event: StorageEvent) => void) | null = null;
+
+function listenForStorage() {
+  if (storageListener || typeof window === "undefined") return;
+  storageListener = (event: StorageEvent) => {
+    if (event.key !== PLANS_STORAGE_KEY || !event.newValue) return;
+    try {
+      set({ plans: sanitizePlans(JSON.parse(event.newValue)) });
+      plansSync.changed();
+    } catch { /* malformed: keep this tab's copy */ }
+  };
+  window.addEventListener("storage", storageListener);
+}
+
+function stopListeningForStorage() {
+  if (storageListener && typeof window !== "undefined") window.removeEventListener?.("storage", storageListener);
+  storageListener = null;
+}
+
 export function getPlansBackup(): PlanningSession[] {
   hydratePlans();
   return sanitizePlans(state.plans);
@@ -87,6 +107,7 @@ export function hydratePlans() {
     saved = false;
   }
   set({ plans, hydrated: true, saved });
+  listenForStorage();
   plansSync.start();
 }
 
@@ -184,6 +205,7 @@ export function replacePlans(plans: readonly PlanningSession[]) {
 
 /** Test hook: back to unhydrated and empty, and the default (disabled) syncer. */
 export function resetPlansForTests() {
+  stopListeningForStorage();
   state = empty();
   plansSync.dispose();
   plansSync = createPlansSync();

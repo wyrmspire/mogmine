@@ -50,6 +50,27 @@ function createAccountSyncs(overrides: { accounts?: Partial<CollectionSyncOption
 
 let syncs: AccountSyncs = createAccountSyncs();
 
+// Cross-tab (docs/26 §8.4 #7): another open tab writes STORAGE_KEY. Adopt its copy so this tab never overwrites it.
+let storageListener: ((event: StorageEvent) => void) | null = null;
+
+function listenForStorage() {
+  if (storageListener || typeof window === "undefined") return;
+  storageListener = (event: StorageEvent) => {
+    if (event.key !== STORAGE_KEY || !event.newValue) return;
+    try {
+      set(fromStored(JSON.parse(event.newValue)));
+      syncs.accounts.changed();
+      syncs.checks.changed();
+    } catch { /* keep ours */ }
+  };
+  window.addEventListener("storage", storageListener);
+}
+
+function stopListeningForStorage() {
+  if (storageListener && typeof window !== "undefined") window.removeEventListener?.("storage", storageListener);
+  storageListener = null;
+}
+
 function set(patch: Partial<AccountsState>) {
   state = { ...state, ...patch };
   listeners.forEach((listener) => listener());
@@ -79,14 +100,7 @@ export function hydrateAccounts() {
     // Unreadable or blocked: start empty in memory and leave the stored value untouched.
   }
   set({ ...loaded, hydrated: true });
-  window.addEventListener("storage", (event) => {
-    if (event.key !== STORAGE_KEY || !event.newValue) return;
-    try {
-      set(fromStored(JSON.parse(event.newValue)));
-      syncs.accounts.changed();
-      syncs.checks.changed();
-    } catch { /* keep ours */ }
-  });
+  listenForStorage();
   syncs.accounts.start();
   syncs.checks.start();
 }
@@ -135,9 +149,14 @@ export function sanitizeAccountsBackup(raw: unknown): AccountsBackup | null {
   return fromStored(raw);
 }
 
-/** Replace accounts from a backup file, alongside `replaceTrades`. */
+/**
+ * Replace accounts from a backup file, alongside `replaceTrades`. Accounts are archive-only (no hard delete on the
+ * server), so an account the backup leaves out is kept here as archived. Dropping it would leave the server row active.
+ */
 export function restoreAccounts(backup: AccountsBackup) {
-  set({ accounts: backup.accounts, checks: backup.checks });
+  const incoming = new Set(backup.accounts.map((account) => account.id));
+  const omitted = state.accounts.filter((account) => !incoming.has(account.id)).map((account) => ({ ...account, archived: true }));
+  set({ accounts: sanitizeAccounts([...backup.accounts, ...omitted]), checks: sanitizeBalanceChecks(backup.checks) });
   persist();
   syncs.accounts.changed();
   syncs.checks.changed();
@@ -145,6 +164,7 @@ export function restoreAccounts(backup: AccountsBackup) {
 
 /** Test hook: restore the given state and disabled-by-default syncers (the previous ones are disposed). */
 export function resetAccountsForTests(next: Partial<AccountsState> = {}) {
+  stopListeningForStorage();
   syncs.accounts.dispose();
   syncs.checks.dispose();
   syncs = createAccountSyncs();
