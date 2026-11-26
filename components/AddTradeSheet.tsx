@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { checkPriceAgainstDayRange, dayWindow, entryDraftAfterSave, entryTimes, priceOrNull, statedRiskError, statedRiskRFrom, stepPriceText, suggestionPatch, upgradeDraft, validateFutureTimes, zonedParts } from "@/lib/entry-form";
+import { checkPriceAgainstDayRange, dayWindow, entryDraftAfterSave, entryStopFields, entryTimes, priceOrNull, resolveDraftStopMoves, statedRiskError, statedRiskRFrom, stepPriceText, suggestionPatch, upgradeDraft, validateFutureTimes, zonedParts } from "@/lib/entry-form";
 import { RiskRow } from "./RiskRow";
+import { EntryExitReasonRow, EntryStopMoves } from "./EntryStopMoves";
 import { loadDayCandles } from "@/lib/candles";
 import { inferTradeTimes } from "@/lib/infer-times";
 import type { InferResult } from "@/lib/infer-times";
@@ -20,7 +21,7 @@ import { recordUserMood, useMood } from "@/lib/mood-store";
 import { addTradeAndFlush, useJournal } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { EXIT_REASONS, FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedRewardRisk, specFor, stopPatch, tickDecimals, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { FUTURES_SPECS, MOVED_STOP_TAG, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedRewardRisk, specFor, tickDecimals, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { Candle, TradeStatus } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft, useOnline } from "@/lib/ui";
 
@@ -133,6 +134,12 @@ export function AddTradeSheet() {
   const quantity = isWholeQuantity(typedQuantity) ? typedQuantity : typedQuantity;
   const times = entryTimes(draft, zone);
   const { entry, exit } = times;
+  // Optional "I moved my stop" rows (issue #36 G2): validated against the initial stop and the trade's times.
+  const draftStopMoves = draft.stopMoves ?? [];
+  const resolvedStopMoves = resolveDraftStopMoves({
+    stopMoves: draftStopMoves, initialStopPrice: stopPrice, entryPrice, direction: draft.direction, symbol: draft.symbol,
+    date: draft.date, entryMs: entry.getTime(), exitMs: isOpenDraft || !exit ? null : exit.getTime(), zone,
+  });
 
   // Price, side, size and tick rules live in the lib, including the stop-side and target-side rules.
   // An off-tick price is rejected, never snapped.
@@ -162,7 +169,7 @@ export function AddTradeSheet() {
   const future = validateFutureTimes(entry.getTime(), isOpenDraft || !exit ? null : exit.getTime(), nowMs, zone);
   errors.entryClock = errors.entryClock ?? future.entry;
   if (!isOpenDraft) errors.exitClock = errors.exitClock ?? future.exit;
-  const hasErrors = Object.values(errors).some(Boolean) || statedRiskError(draft.statedRiskR) != null;
+  const hasErrors = Object.values(errors).some(Boolean) || statedRiskError(draft.statedRiskR) != null || resolvedStopMoves.error != null;
   const show = (key: ErrorKey) => (submitted ? errors[key] : undefined);
   // A price error shows as soon as the price is typed (wrong-side stop, off-tick), not only on save.
   const showPrice = (key: PriceKey) => (submitted || draft[key].trim() !== "" ? errors[key] : undefined);
@@ -248,8 +255,9 @@ export function AddTradeSheet() {
       entry_time: entry.toISOString(), ...exitFields,
       entry_price: entryPrice,
       exit_reason: !isOpenDraft ? (draft.exitReason ?? null) : null,
-      // R-10: a stop typed here is the stop and the frozen initial stop.
-      ...stopPatch({ initial_stop_price: null }, stopPrice, new Date().toISOString()),
+      // R-10: a stop typed here is the stop and the frozen initial stop. Stop moves freeze it the same way (SM-3).
+      ...entryStopFields(stopPrice, resolvedStopMoves, entry.toISOString(), new Date().toISOString()),
+      quick_tags: draft.quickTags ?? [],
       planned_target_price: targetPrice,
       key_level_price: null,
       note: "",
@@ -320,30 +328,14 @@ export function AddTradeSheet() {
             onStated={(text) => change({ statedRiskR: text })} onUseStop={(price) => change({ stopPrice: price.toFixed(tickDecimals(spec?.tickSize ?? 0.01)) })}
           />
 
-          {!isOpenDraft && (
-            <div className="exit-reason-section">
-              <div className="exit-reason-head">
-                <span className="exit-reason-title">How did it end? <i>optional</i></span>
-              </div>
-              <div className="chip-row" role="group" aria-label="How did it end?">
-                {EXIT_REASONS.map((reason) => {
-                  const selected = draft.exitReason === reason.value;
-                  return (
-                    <button
-                      key={reason.value}
-                      type="button"
-                      className="chip"
-                      aria-pressed={selected}
-                      aria-label={`Exit reason: ${reason.label}`}
-                      onClick={() => change({ exitReason: selected ? null : reason.value })}
-                    >
-                      {reason.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <EntryStopMoves
+            symbol={draft.symbol} stopPrice={draft.stopPrice} entryPrice={draft.entryPrice} zone={zone}
+            exitClock={isOpenDraft ? null : draft.exitClock} rows={draftStopMoves} error={resolvedStopMoves.error}
+            widened={resolvedStopMoves.widened} quickTags={draft.quickTags ?? []}
+            onRows={(stopMoves) => change({ stopMoves })} onAcceptTag={() => change({ quickTags: [...(draft.quickTags ?? []), MOVED_STOP_TAG] })}
+          />
+
+          {!isOpenDraft && <EntryExitReasonRow value={draft.exitReason} onChange={(exitReason) => change({ exitReason })} />}
 
           <div className="form-preview" aria-live="polite">
             <span>{riskUsd != null || riskPoints != null
