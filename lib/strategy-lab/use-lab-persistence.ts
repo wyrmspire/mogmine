@@ -3,7 +3,7 @@
 //   asynchronously; a failure (42P01, unavailable, signed out) is silent and the local copy stands.
 // - useBarStoreAutoTopUp: fills the 1m bar store for recent sessions and for each real MES trade on open and on
 //   every entry or time edit. Browser code never writes `mogmine_bars_1m`; the server does, through the archive job.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { sessionDate } from "../session.ts";
 import type { TradeRecord } from "../trades.ts";
 import { MINUTE_MS, sessionsForTrade } from "./bar-coverage.ts";
@@ -146,6 +146,27 @@ export interface LabPersistence {
   persistRun: (run: PersistedRun) => void;
 }
 
+const SERVER_RUNS: PersistedRun[] = [];
+let clientRuns: PersistedRun[] | null = null;
+const runListeners = new Set<() => void>();
+
+function subscribeRuns(listener: () => void) {
+  runListeners.add(listener);
+  return () => { runListeners.delete(listener); };
+}
+
+function getClientRuns(): PersistedRun[] {
+  if (clientRuns === null && typeof window !== "undefined") {
+    clientRuns = loadLocalRuns(browserStorage());
+  }
+  return clientRuns ?? SERVER_RUNS;
+}
+
+function setClientRuns(next: PersistedRun[]) {
+  clientRuns = next;
+  runListeners.forEach((listener) => listener());
+}
+
 /** The remote repository, created on first use in the browser and kept in the hook's ref. */
 function remoteOf(ref: { current: StrategyLabRemoteRepo | null }): StrategyLabRemoteRepo {
   ref.current ??= createStrategyLabRemoteRepo();
@@ -153,14 +174,13 @@ function remoteOf(ref: { current: StrategyLabRemoteRepo | null }): StrategyLabRe
 }
 
 export function useLabPersistence(options: LabPersistenceOptions): LabPersistence {
-  const [runs, setRuns] = useState<PersistedRun[]>([]);
+  const runs = useSyncExternalStore(subscribeRuns, getClientRuns, () => SERVER_RUNS);
   const optionsRef = useRef(options);
   const repoRef = useRef<StrategyLabRemoteRepo | null>(null);
   useEffect(() => { optionsRef.current = options; });
 
   useEffect(() => {
     let alive = true;
-    setRuns(loadLocalRuns(browserStorage()));
     void (async () => {
       const remote = remoteOf(repoRef);
       const recipes = await remote.listRecipes();
@@ -176,7 +196,7 @@ export function useLabPersistence(options: LabPersistenceOptions): LabPersistenc
         const saved = saveLocalRun(storage, run);
         if (saved.ok) kept = saved.value;
       }
-      setRuns(kept);
+      setClientRuns(kept);
     })();
     return () => { alive = false; };
   }, []);
@@ -188,7 +208,7 @@ export function useLabPersistence(options: LabPersistenceOptions): LabPersistenc
     },
     persistRun(run) {
       const saved = saveLocalRun(browserStorage(), run);
-      if (saved.ok) setRuns(saved.value);
+      if (saved.ok) setClientRuns(saved.value);
       void remoteOf(repoRef).putRun(run);
     },
   };

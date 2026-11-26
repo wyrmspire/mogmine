@@ -24,7 +24,6 @@ import {
 } from "../strategy-lab/bar-coverage.ts";
 import { topUpSessionBars } from "../strategy-lab/use-lab-persistence.ts";
 import { readRemoteSessionBars1m, topUpArchiveSessionBars1m, type ServiceBarsClientLike } from "../strategy-lab/bars-cache.ts";
-import type { PersistResult } from "../persistence/contract.ts";
 
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
