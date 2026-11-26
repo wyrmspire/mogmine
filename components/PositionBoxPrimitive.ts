@@ -20,23 +20,9 @@ export interface ArchivedBoxRect {
   height: number;
 }
 
-/**
- * Pure hit-testing helper checking pointer coordinates (x, y) against rendered
- * layer === "archived" box rectangles (#40, K-UI).
- * Returns the matching tradeId or null.
- *
- * When rects overlap, searches in reverse order so the topmost (most recently drawn)
- * rect takes precedence. Handles boundary touches, zero/negative dimensions, and tolerances.
- */
-export function hitTestArchivedBoxes(
-  x: number,
-  y: number,
-  rects: readonly ArchivedBoxRect[] | null | undefined,
-  tolerance = 0,
-): string | null {
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !rects || rects.length === 0) {
-    return null;
-  }
+/** Pure hit-test against rendered `layer === "archived"` rects (#40, K-UI); topmost (last drawn) wins. */
+export function hitTestArchivedBoxes(x: number, y: number, rects: readonly ArchivedBoxRect[] | null | undefined, tolerance = 0): string | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !rects || rects.length === 0) return null;
   const tol = Math.max(0, Number.isFinite(tolerance) ? tolerance : 0);
   for (let i = rects.length - 1; i >= 0; i--) {
     const rect = rects[i];
@@ -45,9 +31,7 @@ export function hitTestArchivedBoxes(
     const maxX = Math.max(rect.x, rect.x + rect.width) + tol;
     const minY = Math.min(rect.y, rect.y + rect.height) - tol;
     const maxY = Math.max(rect.y, rect.y + rect.height) + tol;
-    if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-      return rect.tradeId;
-    }
+    if (x >= minX && x <= maxX && y >= minY && y <= maxY) return rect.tradeId;
   }
   return null;
 }
@@ -113,29 +97,16 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
     return createPositionAxisViews(extractTradeAxisTags(this.marks, theme), (p) => attachment.series.priceToCoordinate(p), attachment.chart.paneSize().height);
   }
 
-  getArchivedRects(): readonly ArchivedBoxRect[] {
-    return this.archivedRects;
-  }
+  getArchivedRects(): readonly ArchivedBoxRect[] { return this.archivedRects; }
 
-  /**
-   * Hit test implementation matching lightweight-charts ISeriesPrimitive interface.
-   * Returns a PrimitiveHoveredItem containing the neighbour tradeId in externalId,
-   * with cursorStyle: 'pointer' so the chart displays a pointer cursor on hover.
-   */
+  /** Hit test matching lightweight-charts ISeriesPrimitive; sets externalId and pointer cursor on archived boxes. */
   hitTest(x: number, y: number): PrimitiveHoveredItem | null {
     const tradeId = hitTestArchivedBoxes(x, y, this.archivedRects);
-    if (!tradeId) return null;
-    return {
-      externalId: tradeId,
-      zOrder: "normal",
-      cursorStyle: "pointer",
-    };
+    return tradeId ? { externalId: tradeId, zOrder: "normal", cursorStyle: "pointer" } : null;
   }
 
-  /** Direct helper returning the hit tradeId string or null */
-  hitTestTradeId(x: number, y: number): string | null {
-    return hitTestArchivedBoxes(x, y, this.archivedRects);
-  }
+  /** Direct helper returning the hit tradeId string or null. */
+  hitTestTradeId(x: number, y: number): string | null { return hitTestArchivedBoxes(x, y, this.archivedRects); }
 
   update(marks: readonly Mark[], theme: ChartTheme, neighbourTrades?: readonly NeighbourTradeProjection[]) {
     if (this.marks !== marks) {
