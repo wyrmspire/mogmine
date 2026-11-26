@@ -83,6 +83,8 @@ export interface ListQuery {
 /** Many rows per owner, keyed by `id`. `put` is an upsert of the whole record (no partial patches at this layer). */
 export interface CollectionRepository<T extends { id: RecordId }> {
   list(owner: UserId, query?: ListQuery): Promise<PersistResult<T[]>>;
+  /** Same rows and order as `list`, with each row's server metadata (`updated_at` for optimistic concurrency). Optional: test doubles may omit it. */
+  listStored?(owner: UserId, query?: ListQuery): Promise<PersistResult<Stored<T>[]>>;
   get(owner: UserId, id: RecordId): Promise<PersistResult<Stored<T>>>;
   put(owner: UserId, record: T, options?: WriteOptions): Promise<PersistResult<Stored<T>>>;
   /** Hard delete. Types marked `deletePolicy: "archive"` in the registry must archive instead and return `forbidden`. */
