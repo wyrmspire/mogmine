@@ -60,7 +60,7 @@ interface CtxLog { log: string[] }
 // A recording stand-in for CanvasRenderingContext2D: logs every property write and method call, in order.
 function recordingCtx(): { ctx: CanvasRenderingContext2D; out: CtxLog } {
   const out: CtxLog = { log: [] };
-  const stub = (name: string): any => new Proxy(function () {}, {
+  const stub = (name: string): unknown => new Proxy(function () {}, {
     get: (_target, prop) => (prop === "width" ? 10 : typeof prop === "symbol" ? undefined : stub(`${name}.${String(prop)}`)),
     apply: () => { out.log.push(`${name}()`); return stub(name); },
     set: (_target, prop, value) => { out.log.push(`${name}.${String(prop)}=${typeof value === "string" || typeof value === "boolean" ? String(value) : "obj"}`); return true; },
