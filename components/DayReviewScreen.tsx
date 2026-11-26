@@ -99,7 +99,7 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   // DR-3: chart snapshots keyed by trade and privacy. Cards behind the Share sheet render with the export's Shield.
   const [snapshots, setSnapshots] = useState<Record<string, HTMLCanvasElement>>({});
   const [shareOpen, setShareOpen] = useState(false);
-  const [exportShield, setExportShield] = useState(true); // OD-46a: Shield on by default
+  const [exportShieldPick, setExportShield] = useState(true); // OD-46a: Shield on by default
   const [encoded, setEncoded] = useState<{ key: string; blob: Blob; url: string; width: number; height: number } | null>(null);
   const onSnapshotReady = useCallback((tradeId: string, canvas: HTMLCanvasElement, shield: boolean) => {
     setSnapshots((prev) => ({ ...prev, [snapshotKey(tradeId, shield)]: canvas }));
@@ -159,6 +159,8 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
 
   // UX-70: the PNG is encoded as soon as the sheet opens or an input changes, so the Share tap has a Blob ready.
   const orientation = prefs.reviewCardOrientation;
+  // The app's Shield always wins: with Shield on, the share sheet hides dollars and contract counts too.
+  const exportShield = prefs.shield || exportShieldPick;
   const cardShield = shareOpen ? exportShield : prefs.shield;
   const snapKeys = linkedIds.map((id) => (snapshots[snapshotKey(id, exportShield)] ? "1" : "0")).join("");
   const shareKey = `${date}|${orientation}|${exportShield ? 1 : 0}|${linkedIds.join(",")}|${snapKeys}`;
@@ -185,6 +187,13 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [shareOpen, shareKey, exportShield, orientation, linkedIds, journal.trades, snapshots, date, accounts.accounts, prefs]);
+  // Escape closes the Share day sheet, as SessionReview and CloseTradeSheet do.
+  useEffect(() => {
+    if (!shareOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setShareOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [shareOpen]);
   // The tap calls navigator.share (or the download link) synchronously: the file is already encoded.
   const shareDay = () => {
     if (!readyShare) return;
@@ -286,7 +295,7 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
         <ul className="day-review-list">
           {candidates.filter((trade) => !linkedIds.includes(trade.id)).map((trade) => (
             <li key={trade.id} className="day-review-row is-unlinked">
-              <label className="day-review-check">
+              <label className="day-review-check" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center" }}>
                 <input type="checkbox" checked={false} onChange={() => toggleLink(trade.id)} aria-label={`Link ${trade.symbol} ${formatListTime(trade.entry_time, prefs.timeZone)}`} />
               </label>
               <Link className="day-review-link" href={`/trades/${trade.id}`}>
@@ -357,13 +366,13 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
       </div>
 
       {shareOpen && (
-        <section className="day-share-sheet" role="dialog" aria-label="Share day" style={SHEET_STYLE}>
+        <section className="day-share-sheet" role="dialog" aria-modal="true" aria-label="Share day" style={SHEET_STYLE}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <strong>Share day</strong>
-            <button type="button" className="btn-ghost" style={{ minHeight: 44, minWidth: 44 }} onClick={() => setShareOpen(false)}>Close</button>
+            <button type="button" className="btn-ghost" style={{ minHeight: 44, minWidth: 44 }} aria-label="Close share day" onClick={() => setShareOpen(false)}>Close</button>
           </div>
           <label style={{ minHeight: 44, display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" checked={exportShield} onChange={(event) => setExportShield(event.target.checked)} />
+            <input type="checkbox" checked={exportShield} disabled={prefs.shield} onChange={(event) => setExportShield(event.target.checked)} />
             <span>Shield: hide dollars and contract size</span>
           </label>
           {readyShare
@@ -415,8 +424,8 @@ function PointGroup(props: {
               <option value="">Whole day</option>
               {props.trades.map((trade) => <option key={trade.id} value={trade.id}>About {trade.symbol} · {formatListTime(trade.entry_time, props.timeZone)}</option>)}
             </select>
-            <button type="submit" className="btn-primary" style={{ minHeight: 44 }} disabled={!text.trim()}>Save point</button>
-            <button type="button" className="btn-ghost" style={{ minHeight: 44 }} onClick={props.onCancel}>Cancel</button>
+            <button type="submit" className="btn-primary" style={{ minHeight: 44 }} disabled={!text.trim()} aria-label={`Save ${props.title} point`}>Save point</button>
+            <button type="button" className="btn-ghost" style={{ minHeight: 44 }} onClick={props.onCancel} aria-label={`Cancel ${props.title} point`}>Cancel</button>
           </div>
         </form>
       )}

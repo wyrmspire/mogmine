@@ -123,6 +123,7 @@ function MapGrid({ layout }: { layout: LabMapLayout }) {
                   {cell.n > 0 && cell.feedHref ? (
                     <Link
                       className="lab-map-link"
+                      style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                       href={cell.feedHref}
                       aria-label={`${cell.playbookName} with ${cell.tag}: ${cell.n} ${cell.n === 1 ? "trade" : "trades"}`}
                     >
@@ -148,7 +149,7 @@ function MapPairs({ layout }: { layout: LabMapLayout }) {
       <ul className="lab-bars" aria-label="Playbook and setup tag pairs, most used first">
         {layout.pairs.map((pair) => (
           <li key={`${pair.playbookId}\u0000${pair.tag}`}>
-            <Link className="lab-bar" href={pair.feedHref}>
+            <Link className="lab-bar" style={{ minHeight: 44 }} href={pair.feedHref}>
               <span>{pair.playbookName} + {pair.tag}</span>
               <b className="num">{pair.n}</b>
               <span className="lab-bar-track">
