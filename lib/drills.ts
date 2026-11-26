@@ -2,7 +2,7 @@
 // No storage and no React. Answers live in `mogmine-drills-v1` (CD-2b) and never touch `take_again`.
 import { TIMEFRAME_MINUTES, isOpen, processRead } from "./trades.ts";
 import { resolveRSize, resultR } from "./r-size.ts";
-import type { Candle, Timeframe, TradeRecord } from "./trades.ts";
+import type { Candle, RSizeOptions, Timeframe, TradeRecord } from "./trades.ts";
 
 const DAY_MS = 86_400_000;
 /** Same-day recall spoils a drill (BET-03): only trades older than this are dealt. */
@@ -87,8 +87,8 @@ export function playbookDeck(trades: readonly TradeRecord[], playbookId: string,
  * Whether an answer disagreed with the result (§4.3): *Take it* on a losing trade that broke its rules, or
  * *Pass* on a winning trade that followed them. Null when the trade has no R or no process read to judge by.
  */
-export function isMiss(answer: DrillAnswer, trade: TradeRecord): boolean | null {
-  const r = resultR(trade, resolveRSize(trade));
+export function isMiss(answer: DrillAnswer, trade: TradeRecord, opts?: RSizeOptions): boolean | null {
+  const r = resultR(trade, resolveRSize(trade, opts?.accounts, opts?.prefs));
   const process = processRead(trade);
   if (r == null || process == null) return null;
   if (answer === "take") return r < 0 && process === "broken";
@@ -97,12 +97,12 @@ export function isMiss(answer: DrillAnswer, trade: TradeRecord): boolean | null 
 }
 
 /** When a trade is next due in the misses deck, or null when it is not in it. */
-export function missDueAt(trade: TradeRecord, records: readonly DrillRecord[]): number | null {
+export function missDueAt(trade: TradeRecord, records: readonly DrillRecord[], opts?: RSizeOptions): number | null {
   const answers = records
     .filter((record) => record.trade_id === trade.id && record.kind === "take_it")
     .sort((a, b) => Date.parse(a.answered_at) - Date.parse(b.answered_at));
   let lastMiss = -1;
-  answers.forEach((record, index) => { if (isMiss(record.answer, trade)) lastMiss = index; });
+  answers.forEach((record, index) => { if (isMiss(record.answer, trade, opts)) lastMiss = index; });
   if (lastMiss < 0) return null;
   const reviewsSince = answers.length - 1 - lastMiss;
   if (reviewsSince >= MISS_INTERVALS_DAYS.length) return null;
@@ -110,10 +110,10 @@ export function missDueAt(trade: TradeRecord, records: readonly DrillRecord[]): 
 }
 
 /** Misses that are due now, longest overdue first. */
-export function missesDeck(trades: readonly TradeRecord[], records: readonly DrillRecord[], now: number, hasBars: (id: string) => boolean): Deck {
+export function missesDeck(trades: readonly TradeRecord[], records: readonly DrillRecord[], now: number, hasBars: (id: string) => boolean, opts?: RSizeOptions): Deck {
   const { ok, skipped } = eligible(trades, now, hasBars);
   const due = ok.flatMap((trade) => {
-    const at = missDueAt(trade, records);
+    const at = missDueAt(trade, records, opts);
     return at != null && at <= now ? [{ id: trade.id, at }] : [];
   });
   return { trade_ids: due.sort((a, b) => a.at - b.at).map(({ id }) => id), skipped };
@@ -141,7 +141,7 @@ export interface TakeVsPass {
 }
 
 /** Average R of trades answered *Take it* against those answered *Pass* (§4.5). */
-export function takeVsPass(records: readonly DrillRecord[], trades: readonly TradeRecord[]): TakeVsPass {
+export function takeVsPass(records: readonly DrillRecord[], trades: readonly TradeRecord[], opts?: RSizeOptions): TakeVsPass {
   const byId = new Map(trades.map((trade) => [trade.id, trade]));
   const latest = new Map<string, DrillRecord>();
   for (const record of records) {
@@ -153,7 +153,7 @@ export function takeVsPass(records: readonly DrillRecord[], trades: readonly Tra
   let noR = 0;
   for (const record of latest.values()) {
     const trade = byId.get(record.trade_id)!;
-    const r = resultR(trade, resolveRSize(trade));
+    const r = resultR(trade, resolveRSize(trade, opts?.accounts, opts?.prefs));
     if (r == null) noR += 1;
     else groups[record.answer].push(r);
   }

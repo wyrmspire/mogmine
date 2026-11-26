@@ -6,7 +6,7 @@ import { DRILL_SCORE_MIN_ANSWERS } from "./drills.ts";
 import { PLAYBOOK_CARD_MIN_TRADES, playbookCardData } from "./playbook-card.ts";
 import type { PlaybookCardData } from "./playbook-card.ts";
 import type { Playbook } from "./playbooks.ts";
-import type { TradeRecord } from "./trades.ts";
+import type { RSizeOptions, TradeRecord } from "./trades.ts";
 
 export interface BinderView {
   /** Active playbooks in the trader's own order (R-07 store order). */
@@ -20,10 +20,11 @@ export function binderView(
   trades: readonly TradeRecord[],
   drills: readonly DrillRecord[],
   now: number,
+  opts?: RSizeOptions,
 ): BinderView {
   const active = playbooks.filter((playbook) => !playbook.archived);
   return {
-    cards: active.map((playbook) => playbookCardData(playbook, trades, drills, now)),
+    cards: active.map((playbook) => playbookCardData(playbook, trades, drills, now, opts)),
     archived: playbooks.length - active.length,
   };
 }

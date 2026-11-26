@@ -77,7 +77,7 @@ export interface DayGroup {
 }
 
 /** Trades grouped by trading day, newest day first. Statistics never count sample trades next to real ones. */
-export function groupByDay(trades: TradeRecord[]): DayGroup[] {
+export function groupByDay(trades: TradeRecord[], opts?: RSizeOptions): DayGroup[] {
   const groups = new Map<string, TradeRecord[]>();
   for (const trade of trades) {
     const date = sessionDate(trade.entry_time);
@@ -86,7 +86,7 @@ export function groupByDay(trades: TradeRecord[]): DayGroup[] {
   }
   return [...groups.entries()].sort(([a], [b]) => (a < b ? 1 : -1)).map(([date, list]) => {
     const real = list.filter((trade) => !trade.is_sample);
-    return { date, trades: list, stats: dayStats(real.length ? real : list), sampleOnly: real.length === 0 };
+    return { date, trades: list, stats: dayStats(real.length ? real : list, opts), sampleOnly: real.length === 0 };
   });
 }
 

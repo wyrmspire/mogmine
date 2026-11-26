@@ -2,11 +2,11 @@
 import { formatPrice } from "./format.ts";
 import { formatDetailTime } from "./time.ts";
 import { tradePoints } from "./trades.ts";
-import type { TradeRecord } from "./trades.ts";
+import type { RSizeOptions, TradeRecord } from "./trades.ts";
 import { resolveRSize, resultR } from "./r-size.ts";
 
-export function describeTrade(trade: TradeRecord, zone: string, privacy = false) {
-  const r = resultR(trade, resolveRSize(trade));
+export function describeTrade(trade: TradeRecord, zone: string, privacy = false, opts?: RSizeOptions) {
+  const r = resultR(trade, resolveRSize(trade, opts?.accounts, opts?.prefs));
   const points = tradePoints(trade);
   const result = r != null
     ? `${r >= 0 ? "plus" : "minus"} ${Math.abs(r).toFixed(2)} R`
