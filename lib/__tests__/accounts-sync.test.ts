@@ -131,8 +131,8 @@ test("a restore pushes the restored set: checks not in the backup are removed on
   restoreAccounts({ accounts: [restored], checks: [] });
   assert.equal(await syncs.accounts.flushNow(), true);
   assert.equal(await syncs.checks.flushNow(), true);
-  assert.ok(serverNames(fake).includes("Restored:false"), "the restored account is pushed");
+  assert.deepEqual(serverNames(fake), ["Old:true", "Restored:false"], "restored is pushed active and omitted is archived on the server");
   assert.deepEqual(serverChecks(fake), [], "the check missing from the backup is removed");
-  // Accounts are archive-only on the server, so the old account row stays there. This device drops it; see the handoff.
-  assert.deepEqual(getAccountsState().accounts.map((item) => item.name), ["Restored"]);
+  // Accounts are archive-only (docs/26 §8.4 #4): an account omitted by the backup stays locally as archived.
+  assert.deepEqual(getAccountsState().accounts.map((item) => `${item.name}:${item.archived}`), ["Restored:false", "Old:true"]);
 });
