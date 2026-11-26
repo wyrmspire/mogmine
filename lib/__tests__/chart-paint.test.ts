@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { CHART_TOKENS, chipWidth, crisp, dashFor, subtractRect, subtractRects, withAlpha, zoneAlpha } from "../chart-paint.ts";
+import { CHART_TOKENS, CHIP_EXPORT_HEIGHT, CHIP_MIN_WIDTH_SHIELD, DASH, chipWidth, crisp, dashFor, subtractRect, subtractRects, withAlpha, zoneAlpha } from "../chart-paint.ts";
 import { hitTestArchivedBoxes } from "../../components/PositionBoxPrimitive.ts";
 
 const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
@@ -217,4 +217,16 @@ test("geometry is unchanged: archived box hit testing still returns the top-most
   assert.equal(hitTestArchivedBoxes(45, 5, rects), "b");
   assert.equal(hitTestArchivedBoxes(10, 5, rects), "a");
   assert.equal(hitTestArchivedBoxes(200, 5, rects), null);
+});
+
+test("R-ruler dash is [2, 4] (08 §4.2) and export chips are 18 px tall with a 44 px shield minimum (08 §4.3)", () => {
+  assert.deepEqual([...DASH.ruler], [2, 4]);
+  assert.equal(CHIP_EXPORT_HEIGHT, 18);
+  assert.equal(CHIP_MIN_WIDTH_SHIELD, 44);
+});
+
+test("chipWidth honours a minimum width and never shrinks below text plus padding", () => {
+  assert.equal(chipWidth(10, CHIP_MIN_WIDTH_SHIELD), CHIP_MIN_WIDTH_SHIELD, "short text widens to the minimum");
+  assert.equal(chipWidth(60, CHIP_MIN_WIDTH_SHIELD), 72, "long text keeps its natural width");
+  assert.equal(chipWidth(10, 0), chipWidth(10), "default minimum is zero");
 });

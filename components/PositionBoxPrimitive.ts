@@ -1,10 +1,11 @@
 // Canvas display-list painter. Marks arrive in price and UTC bar-open coordinates.
 import type { CanvasRenderingTarget2D } from "fancy-canvas";
 import type {
-  AutoscaleInfo, IPrimitivePaneView, ISeriesPrimitive, PrimitiveHoveredItem, SeriesAttachedParameter, Time, UTCTimestamp,
+  AutoscaleInfo, IPrimitivePaneView, ISeriesPrimitive, ISeriesPrimitiveAxisView, PrimitiveHoveredItem, SeriesAttachedParameter, Time, UTCTimestamp,
 } from "lightweight-charts";
-import { CHART_TOKENS, DASH, chipWidth, crisp, dashFor, drawChip, subtractRects, withAlpha, zoneAlpha, zoneGradient } from "../lib/chart-paint.ts";
+import { CHART_TOKENS, CHIP_EXPORT_HEIGHT, DASH, chipWidth, crisp, dashFor, drawChip, drawFlag, strokeLine, subtractRects, withAlpha, zoneAlpha, zoneGradient } from "../lib/chart-paint.ts";
 import type { PaintRect } from "../lib/chart-paint.ts";
+import { createPositionAxisViews, extractTradeAxisTags, isRulerLabel, isRulerSegment } from "../lib/position-axis-views.ts";
 import { separateLabels } from "../lib/label-stack.ts";
 import type { ChartTheme } from "../lib/theme.ts";
 import type { FlagMark, Mark, SegmentMark } from "../lib/trade-marks.ts";
@@ -53,9 +54,6 @@ export function hitTestArchivedBoxes(
 export const hitTestArchivedMark = hitTestArchivedBoxes;
 
 const EDGE_INSET = 4;
-/** Chip height plus a 2 px gap: labels closer than this are stacked apart (08 §4.3). */
-const LABEL_HEIGHT = CHART_TOKENS.chip.height + 2;
-const CHIP_HALF = CHART_TOKENS.chip.height / 2;
 type Area = PaintRect;
 type Tone = FlagMark["tone"];
 type Chip = { bg: string; fg: string };
@@ -76,37 +74,6 @@ function setDash(ctx: CanvasRenderingContext2D, dash: SegmentMark["dash"]) {
   ctx.lineCap = dash === "dotted" ? "round" : "butt";
 }
 
-function strokeLine(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
-}
-
-/** Draws the flag outline or fill. `stroke` forces an outline, used for the chartBg halo pass (08 §4.2). */
-function drawFlag(ctx: CanvasRenderingContext2D, mark: FlagMark, x: number, y: number, stroke: boolean) {
-  ctx.beginPath();
-  if (mark.shape === "dot") {
-    ctx.arc(x, y, mark.hollow ? 3 : 3.5, 0, 2 * Math.PI);
-    ctx.stroke();
-  } else if (mark.shape === "cross") {
-    ctx.moveTo(x - 4, y - 4);
-    ctx.lineTo(x + 4, y + 4);
-    ctx.moveTo(x + 4, y - 4);
-    ctx.lineTo(x - 4, y + 4);
-    ctx.stroke();
-  } else {
-    // 8 × 7 px triangle (08 §4.2).
-    const direction = mark.shape.endsWith("_up") ? -1 : 1;
-    ctx.moveTo(x, y + direction * 3.5);
-    ctx.lineTo(x + 4, y - direction * 3.5);
-    ctx.lineTo(x - 4, y - direction * 3.5);
-    ctx.closePath();
-    if (stroke || mark.hollow || mark.basis === "inferred") ctx.stroke();
-    else ctx.fill();
-  }
-}
-
 export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   private attachment?: SeriesAttachedParameter<Time>;
   private marks: readonly Mark[] = [];
@@ -114,6 +81,7 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   private priceRange: AutoscaleInfo | null = null;
   private archivedRects: ArchivedBoxRect[] = [];
   private neighbourTrades?: readonly NeighbourTradeProjection[];
+  private exporting = false;
   private readonly views: readonly IPrimitivePaneView[] = [
     { zOrder: () => "bottom", renderer: () => ({ draw: (target) => this.draw(target, true) }) },
     { zOrder: () => "normal", renderer: () => ({ draw: (target) => this.draw(target, false) }) },
@@ -129,6 +97,19 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
 
   setNeighbourTrades(trades?: readonly NeighbourTradeProjection[]) {
     this.neighbourTrades = trades;
+  }
+
+  /** Trade Card export: chips at 18 px with 11.5 px text, crisp at 2× (08 §4.3). Called by UX-E4. */
+  setExportMode(exporting = false) {
+    this.exporting = exporting;
+    this.attachment?.requestUpdate();
+  }
+
+  /** The selected trade's entry, stop, target and exit as price-axis tags (D-V3). Archived neighbours are excluded. */
+  priceAxisViews(): readonly ISeriesPrimitiveAxisView[] {
+    const { attachment, theme } = this;
+    if (!attachment || !theme) return [];
+    return createPositionAxisViews(extractTradeAxisTags(this.marks, theme), (p) => attachment.series.priceToCoordinate(p), attachment.chart.paneSize().height);
   }
 
   getArchivedRects(): readonly ArchivedBoxRect[] {
@@ -210,7 +191,11 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         : tone === "risk" ? { bg: theme.chipRisk, fg: CHART_TOKENS.chip.text }
           : { bg: theme.chipNeutral, fg: CHART_TOKENS.chip.neutralText });
     // Words use the sans face, numbers the mono face (08 §4.3). Both come from --font-* via lib/theme.ts.
-    const chipFont = (label: string) => (/\d/.test(label) ? `500 10.5px ${theme.fontMono}` : `600 10.5px ${theme.fontSans}`);
+    // Export chips are 18 px tall with 11.5 px text; live chips are 16 px with 10.5 px (08 §4.3).
+    const chipH = this.exporting ? CHIP_EXPORT_HEIGHT : CHART_TOKENS.chip.height;
+    const chipHalf = chipH / 2;
+    const chipPx = this.exporting ? 11.5 : 10.5;
+    const chipFont = (label: string) => (/\d/.test(label) ? `500 ${chipPx}px ${theme.fontMono}` : `600 ${chipPx}px ${theme.fontSans}`);
     const dpr = target.useBitmapCoordinateSpace(({ verticalPixelRatio }) => verticalPixelRatio);
 
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize: pane }) => {
@@ -225,7 +210,7 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         queued.push({
           label, width, chip, font: chipFont(label), alpha: ctx.globalAlpha,
           x: Math.max(2, Math.min(atX, pane.width - width - 2)),
-          y: Math.min(pane.height - CHIP_HALF, Math.max(CHIP_HALF, atY)),
+          y: Math.min(pane.height - chipHalf, Math.max(chipHalf, atY)),
         });
       };
       const bounds = (xa: number, xb: number, ya: number, yb: number): Area | null => {
@@ -271,6 +256,16 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
           }
           if (atY < 0 || atY > pane.height) return;
           if (mark.kind === "label") {
+            if (isRulerLabel(mark)) {
+              // R-ruler labels are quiet text at the box's left edge, not pills over candles (08 §5).
+              ctx.globalAlpha *= 0.8;
+              ctx.font = `10px ${theme.fontMono}`;
+              ctx.fillStyle = theme.labelMuted;
+              ctx.textAlign = "left";
+              ctx.textBaseline = "middle";
+              ctx.fillText(mark.text, atX + 4, atY);
+              return;
+            }
             text(mark.text, atX + 5, atY - 8, chipFor(mark.tone));
             return;
           }
@@ -300,10 +295,18 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         if (x0 == null || x1 == null || y0 == null || y1 == null) return;
         if (mark.kind === "segment") {
           if (edge && (x1 - x0 < 6 || y0 < 0 || y0 > pane.height)) return;
-          if (mark.faint) ctx.globalAlpha *= edge === "both" ? 0.4 : 0.5;
-          // Hairlines are 1 px at most (08 §4.2). Flat lines snap to the device pixel grid.
-          ctx.lineWidth = Math.min(mark.width ?? 1, 1.25);
-          setDash(ctx, mark.basis === "inferred" ? "dotted" : mark.dash);
+          if (isRulerSegment(mark)) {
+            // R-ruler lines: [2, 4] butt-capped dashes at 0.35 in labelMuted (08 §4.2).
+            ctx.globalAlpha *= 0.35;
+            ctx.strokeStyle = theme.labelMuted;
+            ctx.lineCap = "butt";
+            ctx.setLineDash([...DASH.ruler]);
+          } else {
+            if (mark.faint) ctx.globalAlpha *= edge === "both" ? 0.4 : 0.5;
+            // Hairlines are 1 px at most (08 §4.2). Flat lines snap to the device pixel grid.
+            ctx.lineWidth = Math.min(mark.width ?? 1, 1.25);
+            setDash(ctx, mark.basis === "inferred" ? "dotted" : mark.dash);
+          }
           const flat = y0 === y1;
           const ya = flat ? crisp(y0, dpr, ctx.lineWidth) : y0;
           if (x0 === x1 && flat) strokeLine(ctx, x0 - halfBar, ya, x1 + halfBar, ya);
@@ -422,11 +425,17 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
       }
 
       if (!queued.length) return;
-      const ys = separateLabels(queued, LABEL_HEIGHT, 0, pane.height);
+      const ys = separateLabels(queued, chipH + 2, 0, pane.height);
       queued.forEach((item, index) => {
         ctx.save();
         ctx.globalAlpha = item.alpha;
-        drawChip(ctx, item.x, ys[index] - CHIP_HALF, item.width, CHART_TOKENS.chip.height, CHART_TOKENS.chip.radius, item.chip.bg);
+        // A chip pushed more than 2 px from its anchor gets a crisp leader back to it (08 §4.3).
+        if (Math.abs(ys[index] - item.y) > 2) {
+          ctx.globalAlpha = item.alpha * 0.6; ctx.strokeStyle = item.chip.bg; ctx.lineWidth = 1;
+          strokeLine(ctx, item.x - 5, crisp(item.y, dpr), item.x, crisp(ys[index], dpr));
+          ctx.globalAlpha = item.alpha;
+        }
+        drawChip(ctx, item.x, ys[index] - chipHalf, item.width, chipH, CHART_TOKENS.chip.radius, item.chip.bg);
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.font = item.font;
