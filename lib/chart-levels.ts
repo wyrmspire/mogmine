@@ -3,7 +3,7 @@ import { computeLevelsFromInputs, extractSessionInputsFromCandles } from "./leve
 import type { ComputedLevel, ComputedLevelType } from "./levels.ts";
 import { planStateAsOf } from "./plans.ts";
 import type { PlanningSession } from "./plans.ts";
-import { equityIndexSessionBounds, previousRegularSessionDate, sessionDate } from "./session.ts";
+import { equityIndexSessionBounds, offsetSessionDate, previousRegularSessionDate, sessionDate, sessionWeekMonday } from "./session.ts";
 import { formatPrice } from "./format.ts";
 import { specFor } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
@@ -94,8 +94,22 @@ export function missingCandleLevels(levels: readonly Pick<ComputedLevel, "key">[
 }
 
 /**
- * The two day-mode windows the levels need for a trade: the whole prior session and the trade's
- * session up to entry. Levels are computed as of the entry, never later (no look-ahead, B-14).
+ * The whole regular sessions of the current week (Monday on) that come before the prior session, in order.
+ * They feed `week_high` and `week_low` (LV-1). Monday to Tuesday gives none: the prior session covers them.
+ */
+export function earlierWeekSessionWindows(sessionDateStr: string): Array<{ sessionDate: string; from: number; to: number }> {
+  const prior = previousRegularSessionDate(sessionDateStr);
+  const windows: Array<{ sessionDate: string; from: number; to: number }> = [];
+  for (let day = sessionWeekMonday(sessionDateStr); day < prior; day = offsetSessionDate(day, 1)) {
+    const bounds = equityIndexSessionBounds(day);
+    windows.push({ sessionDate: day, from: bounds.open, to: bounds.close });
+  }
+  return windows;
+}
+
+/**
+ * The day-mode windows the levels need for a trade: the whole prior session, the trade's session up to
+ * entry, and the earlier sessions of its week. Levels are computed as of the entry, never later (no look-ahead, B-14).
  */
 export function tradeLevelWindows(entryTime: string) {
   const asOf = Date.parse(entryTime);
@@ -107,6 +121,7 @@ export function tradeLevelWindows(entryTime: string) {
     asOf,
     prior: { from: prior.open, to: prior.close },
     today: asOf > today.open ? { from: today.open, to: Math.min(asOf, today.close) } : null,
+    earlierWeek: earlierWeekSessionWindows(date),
   };
 }
 
@@ -120,8 +135,9 @@ export function tradeLevels(
   trade: { symbol: string; entry_time: string },
   prior: LevelCandles,
   today: LevelCandles | null,
+  earlierWeek?: readonly (LevelCandles | null)[],
 ): ComputedLevel[] | null {
-  const report = tradeLevelReport(trade, prior, today);
+  const report = tradeLevelReport(trade, prior, today, earlierWeek);
   return report?.levels.length ? report.levels : null;
 }
 
@@ -130,18 +146,21 @@ export function tradeLevelReport(
   trade: { symbol: string; entry_time: string },
   prior: LevelCandles,
   today: LevelCandles | null,
+  earlierWeek?: readonly (LevelCandles | null)[],
 ): { levels: ComputedLevel[]; withheld: WithheldLevel[] } | null {
   const symbol = trade.symbol.toUpperCase();
   if (symbol !== "MES" && symbol !== "MNQ") return null;
   // Both windows must be one native series and timeframe. Mixing 1m and 5m would mis-read coverage.
   if (today && today.baseTimeframe !== prior.baseTimeframe) return null;
+  // Earlier week days on another timeframe are dropped: they stay not-loaded (withheld), and PDH/PDL/ONH/ONL still compute.
+  const matchingEarlier = (earlierWeek ?? []).filter((day): day is LevelCandles => day !== null && day.baseTimeframe === prior.baseTimeframe);
   const windows = tradeLevelWindows(trade.entry_time);
   const inputs = extractSessionInputsFromCandles({
     symbol,
     provider: "yahoo_finance",
     providerSymbol: specFor(symbol)?.yahooTicker ?? "",
     sessionDate: windows.sessionDate,
-    candles: [...prior.candles, ...(today?.candles ?? [])],
+    candles: [...matchingEarlier.flatMap((day) => day.candles), ...prior.candles, ...(today?.candles ?? [])],
     timeframe: prior.baseTimeframe,
     asOf: windows.asOf,
   });
