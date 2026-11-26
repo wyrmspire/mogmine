@@ -1,6 +1,6 @@
 # Strategy Lab: local historical scans and saved hits
 
-Planning handoff for Chris, 2026-11-26. This is a future slice, not a change to the current release order or authorization to connect the market archive to the app. The blueprint's archive gate still applies.
+Planning handoff for Chris and Gemini, 2026-11-26. This is a future slice, not a change to the current release order or authorization to connect the market archive to the app. The blueprint's archive gate still applies.
 
 ## What already exists
 
