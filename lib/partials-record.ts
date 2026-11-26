@@ -17,15 +17,23 @@ const isTime = (value: unknown): value is string => typeof value === "string" &&
 const isPrice = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const isQty = (value: unknown): value is number => typeof value === "number" && isWholeQuantity(value);
 
-const isExitLike = (raw: unknown): raw is Loose & PartialExit =>
-  isObject(raw) && isTime(raw.time) && isPrice(raw.price) && isQty(raw.qty);
+export const isPartialExit = (raw: unknown): raw is Loose & PartialExit =>
+  isObject(raw) &&
+  isTime(raw.time) &&
+  isPrice(raw.price) &&
+  isQty(raw.qty) &&
+  (raw.id === undefined || typeof raw.id === "string") &&
+  (raw.seq === undefined || Number.isSafeInteger(raw.seq)) &&
+  (raw.reason === undefined || typeof raw.reason === "string") &&
+  (raw.targetKey === undefined || typeof raw.targetKey === "string") &&
+  (raw.orderId === undefined || typeof raw.orderId === "string");
 
-const isTargetLike = (raw: unknown): raw is Loose & PartialTarget =>
+export const isPartialTarget = (raw: unknown): raw is Loose & PartialTarget =>
   isObject(raw) && typeof raw.key === "string" && raw.key.trim() !== "" && isPrice(raw.price) && isQty(raw.qty);
 
 /** One partial exit with only the optional fields that are present and well typed. Null when the core fields fail. */
 function exitLeg(raw: unknown): PartialExit | null {
-  if (!isExitLike(raw)) return null;
+  if (!isPartialExit(raw)) return null;
   const leg: PartialExit = { time: raw.time, price: raw.price, qty: raw.qty };
   if (typeof raw.id === "string") leg.id = raw.id;
   if (typeof raw.seq === "number") leg.seq = raw.seq;
@@ -51,7 +59,7 @@ export function sanitizePartialTargets(raw: unknown, _symbol: string): PartialTa
   if (!Array.isArray(raw)) return undefined;
   const targets: PartialTarget[] = [];
   for (const item of raw) {
-    if (isTargetLike(item)) targets.push({ key: item.key, price: item.price, qty: item.qty });
+    if (isPartialTarget(item)) targets.push({ key: item.key, price: item.price, qty: item.qty });
   }
   return targets.length > 0 ? targets : undefined;
 }
@@ -64,10 +72,10 @@ const TARGET_SHAPE_ERROR = "Every partial target needs a key, a finite price and
  * as sent (malformed items refuse the write, never get dropped); `trade` is the normalized record.
  */
 export function validateTradePartials(raw: Loose, trade: TradeRecord): string | null {
-  if (raw.partial_exits !== undefined && !(Array.isArray(raw.partial_exits) && raw.partial_exits.every(isExitLike))) {
+  if (raw.partial_exits !== undefined && !(Array.isArray(raw.partial_exits) && raw.partial_exits.every(isPartialExit))) {
     return EXIT_SHAPE_ERROR;
   }
-  if (raw.partial_targets !== undefined && !(Array.isArray(raw.partial_targets) && raw.partial_targets.every(isTargetLike))) {
+  if (raw.partial_targets !== undefined && !(Array.isArray(raw.partial_targets) && raw.partial_targets.every(isPartialTarget))) {
     return TARGET_SHAPE_ERROR;
   }
   const exits = trade.partial_exits ?? [];
