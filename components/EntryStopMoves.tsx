@@ -78,6 +78,7 @@ export function EntryStopMoves({ symbol, stopPrice, entryPrice, exitClock, zone,
       <button type="button" className="chip" aria-expanded={expanded} onClick={() => setExpanded(!expanded)} style={{ minHeight: 44 }}>
         I moved my stop (optional){rows.length > 0 && <span className="stop-moves-count" style={{ fontVariantNumeric: "tabular-nums", marginLeft: 6 }}>{rows.length}</span>}
       </button>
+      {!expanded && error && <span className="error" role="alert">{error}</span>}
       {expanded && (
         <div className="stop-moves-body" style={{ display: "grid", gap: 8, paddingTop: 8 }}>
           {rows.map((row, index) => {
