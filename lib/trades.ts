@@ -5,7 +5,9 @@ import { insideBarTimes } from "./session.ts";
 import { isValidRSizeCents, isValidStatedRiskR, riskCents } from "./r-size.ts";
 import type { TradingAccount } from "./accounts.ts";
 import type { Prefs } from "./prefs-sanitize.ts";
+import { partialsTradeMetrics, sanitizePartialExits, sanitizePartialTargets, type PartialExit, type PartialTarget } from "./partials-record.ts";
 export { expectedInsideBarTimes } from "./session.ts";
+export type { PartialExit, PartialTarget } from "./partials-record.ts";
 
 export type TradeDirection = "LONG" | "SHORT";
 
@@ -136,6 +138,8 @@ export interface TradeRecord {
    * Optional; empty or undefined means no stop moves recorded.
    */
   stop_moves?: StopMove[];
+  partial_exits?: PartialExit[];
+  partial_targets?: PartialTarget[];
   planned_target_price: number | null;
   key_level_price: number | null;
   quantity: number;
@@ -263,6 +267,7 @@ function sideSign(direction: string): 1 | -1 | null {
 export function tradeTicks(trade: Priced): number | null {
   // An open trade has no result yet: no unrealised P&L from delayed bars (OD-38, B-30).
   if (trade.exit_price == null || !isWholeQuantity(trade.quantity)) return null;
+  const lots = partialsTradeMetrics(trade); if (lots) return lots.avgTicks;
   const sign = sideSign(trade.direction);
   const entry = toTicks(trade.entry_price, trade.symbol);
   const exit = toTicks(trade.exit_price, trade.symbol);
@@ -272,6 +277,7 @@ export function tradeTicks(trade: Priced): number | null {
 
 /** Signed points captured per contract, or null when the trade cannot be priced. */
 export function tradePoints(trade: Priced): number | null {
+  const lots = partialsTradeMetrics(trade); if (lots) return lots.points;
   const spec = specFor(trade.symbol);
   const ticks = tradeTicks(trade);
   if (!spec || ticks == null) return null;
@@ -280,6 +286,7 @@ export function tradePoints(trade: Priced): number | null {
 
 /** Gross P&L in dollars, computed in integer ticks and cents. Null for an invalid trade, never a plausible number. */
 export function tradePnl(trade: Priced): number | null {
+  const lots = partialsTradeMetrics(trade); if (lots) return lots.pnlUsd;
   const ticks = tradeTicks(trade);
   const cents = tickValueCents(trade.symbol);
   if (ticks == null || cents == null || !isWholeQuantity(trade.quantity)) return null;
@@ -315,6 +322,7 @@ export function initialRiskUsd(trade: Priced & Pick<TradeRecord, "stop_loss_pric
  * NOT account R: account R is `resultR` in `lib/r-size.ts` (04 §3.1, D-A). `null` without a valid stop.
  */
 export function riskMultiple(trade: Priced & Pick<TradeRecord, "stop_loss_price"> & Stops): number | null {
+  const lots = partialsTradeMetrics(trade); if (lots) return lots.riskMultiple;
   const riskTicks = stopRiskTicks(trade);
   const ticks = tradeTicks(trade);
   if (riskTicks == null || ticks == null || !isWholeQuantity(trade.quantity)) return null;
@@ -1045,6 +1053,8 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
   if (raw.stop_moves !== undefined) {
     trade.stop_moves = sanitizeStopMoves(raw.stop_moves);
   }
+  if (raw.partial_exits !== undefined) trade.partial_exits = sanitizePartialExits(raw.partial_exits, symbol);
+  if (raw.partial_targets !== undefined) trade.partial_targets = sanitizePartialTargets(raw.partial_targets, symbol);
   if (!validSource) trade.candle_source = undefined;
   if (hadNonMarketCandles) trade.sparkline = [];
   // R size (04 §3.3): a stored value survives only when it is a valid whole-cent amount. risk_cents is always recomputed.
