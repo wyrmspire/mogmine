@@ -18,6 +18,12 @@ import {
 import { buildBarSeries } from "../strategy-lab/series.ts";
 import type { SourceBar } from "../strategy-lab/types.ts";
 import { equityIndexSessionBounds } from "../session.ts";
+import {
+  COVERAGE_INDEX_KEY, computeMissingRanges, loadCoverageIndex, mergeBars1m, mergeCoveredRanges, recordSessionCoverage,
+  sessionMissingRanges, sessionsForTrade, type CoverageStorage,
+} from "../strategy-lab/bar-coverage.ts";
+import { topUpSessionBars } from "../strategy-lab/use-lab-persistence.ts";
+import { readRemoteSessionBars1m, topUpArchiveSessionBars1m, type ServiceBarsClientLike } from "../strategy-lab/bars-cache.ts";
 
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
@@ -322,4 +328,212 @@ test("recent sessions skip weekends and end on the given session", () => {
   assert.deepEqual(recentSessionDates("2026-11-23", 3), ["2026-11-19", "2026-11-20", "2026-11-23"]);
   assert.deepEqual(recentSessionDates("2026-11-25", 1), ["2026-11-25"]);
   assert.equal(recentSessionDates("2026-11-25", 22).length, 22);
+});
+
+// SL-15b: the additive, coverage-aware bar store.
+
+const HALF = 30 * MINUTE_MS;
+
+/** A 1m answer for [from, to) that serves `count` bars starting at `from`. */
+const barsFrom = (from: number, count: number, volume = 100): SourceBar[] =>
+  Array.from({ length: count }, (_, i) => ({ time: from + i * MINUTE_MS, open: 5900, high: 5901, low: 5899, close: 5900.5, volume }));
+
+/** Seeds one device entry as the loader writes it. */
+function seeded(window: SessionWindow, bars: SourceBar[], covered: Array<[number, number]>) {
+  return { [cacheKey(window.date)]: { schema: CACHE_SCHEMA, date: window.date, baseTimeframe: "1m", bars, coveredRanges: covered } };
+}
+
+test("a settled session is served from the server store with no Yahoo call and is written through to the device", async () => {
+  const window = sessionWindow("2026-11-25");
+  const memory = memoryCache();
+  const net = routeFetch(() => ({ status: 500 }));
+  const remote = barsFrom(window.from, 60);
+  const load = await loadSession("2026-11-25", {
+    fetch: net.fetch, cache: memory.cache, now: () => NOW, remoteBars: async () => remote,
+  });
+  assert.equal(load.status === "loaded" && load.source, "supabase");
+  assert.equal(load.status === "loaded" && load.bars.length, 60);
+  assert.equal(net.calls.length, 0, "no Yahoo call when the server store has the session");
+  assert.deepEqual(memory.sets, [cacheKey("2026-11-25")]);
+  const stored = memory.store.get(cacheKey("2026-11-25")) as { coveredRanges: Array<[number, number]> };
+  assert.deepEqual(stored.coveredRanges, [[window.from, window.to]]);
+});
+
+test("a session older than Yahoo's 30-day 1m horizon loads from the server store and never calls Yahoo", async () => {
+  const old = sessionWindow("2026-10-20");
+  const net = routeFetch(() => ({ status: 404 }));
+  const load = await loadSession("2026-10-20", {
+    fetch: net.fetch, cache: memoryCache().cache, now: () => NOW, remoteBars: async () => barsFrom(old.from, 3),
+  });
+  assert.equal(load.status === "loaded" && load.source, "supabase");
+  assert.equal(net.calls.length, 0);
+
+  const none = await loadSession("2026-10-20", { fetch: net.fetch, cache: memoryCache().cache, now: () => NOW, remoteBars: async () => null });
+  assert.equal(none.status === "excluded" && none.reason, "no-data");
+  assert.equal(net.calls.length, 0, "old windows never reach Yahoo");
+});
+
+test("a partly covered session fetches only the missing minutes, keeps the cached ones, and a rerun makes no calls", async () => {
+  const window = sessionWindow("2026-11-25");
+  const mid = window.from + HALF;
+  const cachedBars = barsFrom(window.from, 30, 250);
+  const memory = memoryCache(seeded(window, cachedBars, [[window.from, mid]]));
+  const net = routeFetch((url) => okFor(url, "1m", 40, 100));
+  const deps: BarLoaderDeps = { fetch: net.fetch, cache: memory.cache, now: () => NOW };
+
+  const first = await loadSession("2026-11-25", deps);
+  assert.equal(net.calls.length, 1);
+  assert.equal(new URL(net.calls[0], "http://lab.test").searchParams.get("from"), new Date(mid).toISOString());
+  assert.equal(new URL(net.calls[0], "http://lab.test").searchParams.get("to"), new Date(window.to).toISOString());
+  assert.equal(first.status === "loaded" && first.source, "network");
+  if (first.status !== "loaded") return;
+  assert.equal(first.bars.filter((bar) => bar.time < mid).length, 30, "earlier minutes survive the top-up");
+  assert.equal(first.bars.find((bar) => bar.time === window.from)?.volume, 250, "the cached volume is not overwritten");
+
+  const second = await loadSession("2026-11-25", deps);
+  assert.equal(net.calls.length, 1, "a second run makes zero fetch calls");
+  assert.equal(second.status === "loaded" && second.source, "cache");
+});
+
+test("when Yahoo 404s or serves 5m for the missing part, the cached minutes are kept and the session still loads", async () => {
+  const window = sessionWindow("2026-11-25");
+  const mid = window.from + HALF;
+  for (const reply of [{ status: 404 }, { body: { candles: [], baseTimeframe: "5m" } }] as Reply[]) {
+    const memory = memoryCache(seeded(window, barsFrom(window.from, 30), [[window.from, mid]]));
+    const net = routeFetch(() => reply);
+    const load = await loadSession("2026-11-25", { fetch: net.fetch, cache: memory.cache, now: () => NOW });
+    assert.equal(load.status === "loaded" && load.bars.length, 30);
+    assert.equal(load.status === "loaded" && load.source, "cache");
+    assert.equal(memory.sets.length, 0, "a failed top-up writes nothing");
+  }
+});
+
+test("mergeBars1m never deletes existing minutes, takes incoming OHLC, and keeps real volume over 0 or null", () => {
+  const window = { from: 0, to: 10 * MINUTE_MS };
+  const existing: SourceBar[] = [
+    { time: 0, open: 1, high: 2, low: 0.5, close: 1.5, volume: 300 },
+    { time: MINUTE_MS, open: 1, high: 2, low: 0.5, close: 1.5, volume: null },
+    { time: 2 * MINUTE_MS, open: 1, high: 2, low: 0.5, close: 1.5, volume: 40 },
+    { time: 99 * MINUTE_MS, open: 1, high: 2, low: 0.5, close: 1.5, volume: 9 },
+  ];
+  const incoming: SourceBar[] = [
+    { time: 0, open: 7, high: 8, low: 6, close: 7.5, volume: 0 },
+    { time: MINUTE_MS, open: 3, high: 4, low: 2.5, close: 3.5, volume: 55 },
+    { time: 2 * MINUTE_MS, open: 9, high: 9.5, low: 8.5, close: 9.2, volume: null },
+    { time: 3 * MINUTE_MS, open: Number.NaN, high: 1, low: 1, close: 1, volume: 1 },
+  ];
+  const merged = mergeBars1m(existing, incoming, window);
+  assert.deepEqual(merged.map((bar) => bar.time), [0, MINUTE_MS, 2 * MINUTE_MS, 99 * MINUTE_MS], "sorted; the out-of-window NaN row is gone, the old row stays");
+  assert.equal(merged[0].open, 7, "incoming OHLC wins on a shared minute");
+  assert.equal(merged[0].volume, 300, "a 0 incoming volume never overwrites real volume");
+  assert.equal(merged[1].volume, 55, "a positive incoming volume beats a missing one");
+  assert.equal(merged[2].volume, 40, "a null incoming volume keeps the existing volume");
+});
+
+test("coverage math: ranges coalesce, missing ranges are sorted sub-ranges, and a full cover returns nothing", () => {
+  assert.deepEqual(mergeCoveredRanges([[5, 10], [0, 3], [3, 5], [8, 12], [20, 20]]), [[0, 12]]);
+  const target = { from: 0, to: 100 };
+  assert.deepEqual(computeMissingRanges(target, [[10, 20], [60, 70]]), [[0, 10], [20, 60], [70, 100]]);
+  assert.deepEqual(computeMissingRanges(target, [[0, 100]]), [], "idempotent when fully covered");
+  assert.deepEqual(computeMissingRanges(target, [[-5, 200]]), []);
+  assert.deepEqual(computeMissingRanges({ from: 5, to: 5 }, []), []);
+});
+
+test("the device coverage index round-trips, ignores corrupt values, and a blocked store is a silent no-op", () => {
+  const values = new Map<string, string>();
+  const storage: CoverageStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); } };
+  recordSessionCoverage(storage, "MES", "2026-11-25", [[0, 60], [60, 120]], 2, 1234);
+  assert.deepEqual(loadCoverageIndex(storage).MES["2026-11-25"], { coveredRanges: [[0, 120]], barCount: 2, updatedAt: 1234 });
+  assert.deepEqual(sessionMissingRanges(loadCoverageIndex(storage), "MES", "2026-11-25", { from: 0, to: 200 }), [[120, 200]]);
+  assert.equal(values.has(COVERAGE_INDEX_KEY), true);
+
+  values.set(COVERAGE_INDEX_KEY, "{not json");
+  assert.deepEqual(loadCoverageIndex(storage), {});
+  const blocked: CoverageStorage = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+  assert.doesNotThrow(() => recordSessionCoverage(blocked, "MES", "2026-11-25", [[0, 1]], 1, 1));
+  assert.deepEqual(loadCoverageIndex(null), {});
+});
+
+test("a real MES trade needs its sessions plus the prior regular session; samples and other symbols need none", () => {
+  const trade = { symbol: "MES", is_sample: false, entry_time: "2026-11-25T15:00:00Z", exit_time: "2026-11-25T16:00:00Z" };
+  assert.deepEqual(sessionsForTrade(trade), ["2026-11-24", "2026-11-25"]);
+  // A Monday trade reaches back over the weekend to Friday.
+  assert.deepEqual(sessionsForTrade({ ...trade, entry_time: "2026-11-30T15:00:00Z", exit_time: "2026-11-30T16:00:00Z" }), ["2026-11-27", "2026-11-30"]);
+  // An open trade runs to now.
+  assert.deepEqual(sessionsForTrade({ ...trade, exit_time: null }, Date.parse("2026-11-26T15:00:00Z")), ["2026-11-24", "2026-11-25", "2026-11-26"]);
+  assert.deepEqual(sessionsForTrade({ ...trade, is_sample: true }), []);
+  assert.deepEqual(sessionsForTrade({ ...trade, symbol: "MNQ" }), []);
+});
+
+test("topping up a trade's sessions fetches only the missing ranges, and a rerun after full coverage makes zero calls", async () => {
+  const trade = { symbol: "MES", is_sample: false, entry_time: "2026-11-25T15:00:00Z", exit_time: "2026-11-25T16:00:00Z" };
+  const window = sessionWindow("2026-11-25");
+  const mid = window.from + HALF;
+  const memory = memoryCache(seeded(window, barsFrom(window.from, 30), [[window.from, mid]]));
+  const net = routeFetch((url) => okFor(url, "1m", 5));
+  const deps: BarLoaderDeps = { fetch: net.fetch, cache: memory.cache, now: () => NOW, remoteBars: async () => null };
+
+  for (const date of sessionsForTrade(trade, NOW)) await topUpSessionBars(date, deps);
+  // 11-24 is fully missing (one window); 11-25 needs only [mid, to).
+  assert.equal(net.calls.length, 2);
+  assert.equal(new URL(net.calls[1], "http://lab.test").searchParams.get("from"), new Date(mid).toISOString());
+
+  for (const date of sessionsForTrade(trade, NOW)) await topUpSessionBars(date, deps);
+  assert.equal(net.calls.length, 2, "rerun on covered sessions makes zero calls");
+});
+
+test("today's in-progress session is covered only up to its last fetched minute, so the next top-up fetches just the new minutes", async () => {
+  const window = sessionWindow("2026-11-30");
+  const memory = memoryCache();
+  const net = routeFetch((url) => okFor(url, "1m", 5));
+  const deps: BarLoaderDeps = { fetch: net.fetch, cache: memory.cache, now: () => NOW, remoteBars: async () => null };
+
+  await topUpSessionBars("2026-11-30", deps);
+  assert.equal(net.calls.length, 1);
+  const stored = memory.store.get(cacheKey("2026-11-30")) as { coveredRanges: Array<[number, number]> };
+  assert.deepEqual(stored.coveredRanges, [[window.from, window.from + 5 * MINUTE_MS]]);
+
+  await topUpSessionBars("2026-11-30", deps);
+  assert.equal(net.calls.length, 2, "the next top-up asks only for minutes after the last bar");
+  assert.equal(new URL(net.calls[1], "http://lab.test").searchParams.get("from"), new Date(window.from + 5 * MINUTE_MS).toISOString());
+});
+
+test("archive top-up fetches only missing sub-ranges, upserts them on symbol,time, and is a no-op when complete", async () => {
+  const window = { from: 0, to: 20 * MINUTE_MS };
+  // Minutes 0-4 and 10-14 exist; 5-9 and 15-19 are missing.
+  const existing = [...barsFrom(0, 5), ...barsFrom(10 * MINUTE_MS, 5)];
+  const asked: Array<[number, number]> = [];
+  const upserts: Array<{ rows: Record<string, unknown>[]; onConflict: string }> = [];
+  const serviceClient: ServiceBarsClientLike = {
+    from: () => ({
+      upsert: (rows, options) => { upserts.push({ rows, onConflict: options.onConflict }); return Promise.resolve({ error: null }); },
+    }),
+  };
+  const result = await topUpArchiveSessionBars1m({
+    serviceClient,
+    readExisting: async () => ({ ok: true, value: existing }),
+    fetchRange: async (missing) => { asked.push([missing.from, missing.to]); return barsFrom(missing.from, 5); },
+  }, { symbol: "MES", window, source: "yahoo" });
+  assert.equal(result.ok && result.value.ranges, 2);
+  assert.deepEqual(asked, [[5 * MINUTE_MS, 10 * MINUTE_MS], [15 * MINUTE_MS, 20 * MINUTE_MS]]);
+  assert.equal(upserts.length, 1);
+  assert.equal(upserts[0].onConflict, "symbol,time");
+  assert.equal(upserts[0].rows.length, 10);
+
+  const complete = await topUpArchiveSessionBars1m({
+    serviceClient,
+    readExisting: async () => ({ ok: true, value: [...existing, ...barsFrom(5 * MINUTE_MS, 5), ...barsFrom(15 * MINUTE_MS, 5)] }),
+    fetchRange: async () => { asked.push([-1, -1]); return []; },
+  }, { symbol: "MES", window, source: "yahoo" });
+  assert.equal(complete.ok && complete.value.fetched, 0);
+  assert.equal(asked.length, 2, "no fetch when complete");
+  assert.equal(upserts.length, 1, "no write when complete");
+});
+
+test("with the adapter off, the server read is empty and the loader falls back to Yahoo and the device", async () => {
+  const read = await readRemoteSessionBars1m("MES", { from: 0, to: MINUTE_MS });
+  assert.equal(read.ok && read.value, null, "the adapter is off in tests, so there is no server copy");
+  const net = routeFetch((url) => okFor(url));
+  const load = await loadSession("2026-11-25", { fetch: net.fetch, cache: memoryCache().cache, now: () => NOW });
+  assert.equal(load.status === "loaded" && load.source, "network");
 });

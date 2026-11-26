@@ -7,6 +7,7 @@
 import type { PersistResult } from "../persistence/contract.ts";
 import type { DbError } from "../persistence/supabase-adapter.ts";
 import { mapDbError } from "../persistence/supabase-adapter.ts";
+import { computeMissingRanges, MINUTE_MS, mergeCoveredRanges, type BarWindow, type CoveredRange } from "./bar-coverage.ts";
 import { isObject, labFail, supabaseAdapterOn, withLabSession, type LabClientOption } from "./persistence.ts";
 import type { SourceBar } from "./types.ts";
 
@@ -14,8 +15,7 @@ export const BARS_1M_TABLE = "mogmine_bars_1m";
 const ARCHIVE_CHUNK = 500;
 const BAR_COLUMNS = "time,open,high,low,close,volume";
 
-/** Half-open window [from, to) in UTC epoch milliseconds. */
-export interface BarWindow { from: number; to: number }
+export type { BarWindow };
 
 /** The service_role slice used by the archive job. `@supabase/supabase-js` satisfies it structurally. */
 export interface ServiceBarsClientLike {
@@ -151,4 +151,39 @@ export async function upsertBars1mForArchive(
     return labFail("unavailable", "Could not reach the bar archive. Try again.", undefined, error instanceof Error ? error.name : "unknown");
   }
   return { ok: true, value: { written: rows.length, dropped } };
+}
+
+export interface ArchiveTopUpDeps {
+  /** service_role client, injected by the server job. Never the browser client (it has no write grant). */
+  serviceClient: ServiceBarsClientLike;
+  /** Existing rows for the window. Defaults to `readRemoteSessionBars1m` (the browser-safe read). */
+  readExisting?: (symbol: string, window: BarWindow) => Promise<PersistResult<SourceBar[] | null>>;
+  /** Fetches bars for one missing `[from, to)` sub-range only. Failures return an empty list. */
+  fetchRange: (missing: BarWindow) => Promise<SourceBar[]>;
+}
+
+export interface ArchiveTopUpResult { ranges: number; fetched: number; written: number; dropped: number }
+
+/**
+ * Fill the gaps of one window in `mogmine_bars_1m` for a server job. Coverage comes from the existing rows (a bar at
+ * minute t covers [t, t+1m)). `fetchRange` runs only for missing sub-ranges, and nothing is written when the window
+ * is already complete. Upserts only add or update rows (onConflict symbol,time); no row is ever deleted.
+ */
+export async function topUpArchiveSessionBars1m(
+  deps: ArchiveTopUpDeps,
+  input: { symbol: string; window: BarWindow; source: string },
+): Promise<PersistResult<ArchiveTopUpResult>> {
+  const read = deps.readExisting ?? readRemoteSessionBars1m;
+  const existing = await read(input.symbol, input.window);
+  if (!existing.ok) return existing;
+  const covered: CoveredRange[] = mergeCoveredRanges((existing.value ?? []).map((bar): CoveredRange => [bar.time, bar.time + MINUTE_MS]));
+  const missing = computeMissingRanges(input.window, covered);
+  if (missing.length === 0) return { ok: true, value: { ranges: 0, fetched: 0, written: 0, dropped: 0 } };
+
+  const fetched: SourceBar[] = [];
+  for (const [from, to] of missing) fetched.push(...await deps.fetchRange({ from, to }));
+  if (fetched.length === 0) return { ok: true, value: { ranges: missing.length, fetched: 0, written: 0, dropped: 0 } };
+  const written = await upsertBars1mForArchive(deps.serviceClient, { symbol: input.symbol, source: input.source, bars: fetched });
+  if (!written.ok) return written;
+  return { ok: true, value: { ranges: missing.length, fetched: fetched.length, written: written.value.written, dropped: written.value.dropped } };
 }
