@@ -1,7 +1,8 @@
 // #191: the sync layer for one document per owner (prefs today; docs/26 §8). The same rules as store-sync.ts, for one
 // value instead of a list: the device cache is always written first by the store; this layer copies the value to and
 // from the Supabase singleton repository in the background. A clean device copy takes the server copy; a dirty one
-// (edited since the server last saw it) is kept and pushed; nothing dirty is ever lost. Last write wins on push.
+// (edited since the server last saw it) is kept and pushed; nothing dirty is ever lost. A push is conditional on the
+// `updated_at` last seen; a conflict re-reads the document once and retries once (R3-05).
 // Pure TypeScript: no React, no SDK import. The adapter comes from `getPersistence()` unless a test injects one.
 import { getPersistence } from "./select.ts";
 import type { KeyValueStore } from "./local-adapter.ts";
@@ -55,19 +56,22 @@ export interface SingletonSync {
 interface SingletonBase {
   owner: string | null;
   fp: string | null;
+  /** The server's `updated_at` at the last pull or push: the `expectedUpdatedAt` of the next write. Null when unknown. */
+  updatedAt: string | null;
 }
 
 function readSingletonBase(storage: KeyValueStore, key: string): SingletonBase {
   const raw = storage.getItem(`${SYNC_PREFIX}:base:${key}`);
-  if (raw === null) return { owner: null, fp: null };
+  if (raw === null) return { owner: null, fp: null, updatedAt: null };
   try {
     const value = JSON.parse(raw) as Partial<SingletonBase> | null;
     return {
       owner: typeof value?.owner === "string" ? value.owner : null,
       fp: typeof value?.fp === "string" ? value.fp : null,
+      updatedAt: typeof value?.updatedAt === "string" ? value.updatedAt : null, // absent in bases saved before R3-05
     };
   } catch {
-    return { owner: null, fp: null };
+    return { owner: null, fp: null, updatedAt: null };
   }
 }
 
@@ -79,6 +83,9 @@ function writeSingletonBase(storage: KeyValueStore, key: string, base: Singleton
 function baseFingerprintFor(base: SingletonBase, owner: string): string | null {
   return base.owner === owner ? base.fp : null;
 }
+
+/** The `updated_at` the server last showed for `owner`. A base saved for someone else counts as none. */
+const baseUpdatedAtFor = (base: SingletonBase, owner: string): string | null => (base.owner === owner ? base.updatedAt : null);
 
 const SIGNED_OUT_MESSAGE = "Sign in to sync your journal.";
 const FLUSH_BLOCKED = new Set<PersistError["code"]>(["unauthenticated", "unavailable", "unknown"]);
@@ -179,10 +186,12 @@ export function createSingletonSync<T>(options: SingletonSyncOptions<T>): Single
     if (foreign && deviceOwner !== null) keepOrphans(storage, key, deviceOwner, [local]);
 
     let next: T = local;
-    // The fingerprint the server is known to hold after this pull. Equal to the local one means nothing to push.
+    // The fingerprint and `updated_at` the server is known to hold after this pull. A matching fingerprint means nothing to push.
     let serverFp: string | null = null;
+    let serverAt: string | null = null;
     if (remote) {
       serverFp = fingerprint(key, remote.record);
+      serverAt = remote.meta.updated_at;
       const unedited = options.unedited !== undefined ? fingerprint(key, options.unedited) : null;
       const clean = foreign || (baseFp !== null ? localFp === baseFp : unedited !== null && localFp === unedited);
       if (clean) next = remote.record;
@@ -194,7 +203,7 @@ export function createSingletonSync<T>(options: SingletonSyncOptions<T>): Single
     if (fingerprint(key, next) !== localFp) options.apply(next);
 
     writeDeviceOwner(storage, key, owner);
-    writeSingletonBase(storage, key, { owner, fp: serverFp });
+    writeSingletonBase(storage, key, { owner, fp: serverFp, updatedAt: serverAt });
     pulled = true;
     pulledOwner = owner;
     lastPullAt = now();
@@ -237,10 +246,26 @@ export function createSingletonSync<T>(options: SingletonSyncOptions<T>): Single
     }
 
     setState("syncing", null, state.lastSyncedAt);
-    const result = await repoOf(adapter).put(owner, local); // last write wins: no expectedUpdatedAt
+    const repo = repoOf(adapter);
+    const expected = baseUpdatedAtFor(readSingletonBase(storage, key), owner);
+    let result = await repo.put(owner, local, expected ? { expectedUpdatedAt: expected } : undefined);
     if (disposed) return false;
+    if (!result.ok && result.error.code === "conflict") {
+      // A server write since the last pull (an agent API call): read it once, adopt its `updated_at` as the base, and
+      // push the local value on top once. A second conflict is reported, never retried in a loop.
+      const fresh = await repo.get(owner);
+      if (disposed) return false;
+      if (!fresh.ok) result = fresh;
+      else {
+        const freshFp = fresh.value ? fingerprint(key, fresh.value.record) : null;
+        const freshAt = fresh.value?.meta.updated_at ?? null;
+        writeSingletonBase(storage, key, { owner, fp: freshFp, updatedAt: freshAt });
+        result = await repo.put(owner, local, freshAt ? { expectedUpdatedAt: freshAt } : undefined);
+      }
+      if (disposed) return false;
+    }
     if (result.ok) {
-      writeSingletonBase(storage, key, { owner, fp: localFp }); // what was sent, not what came back: never loops
+      writeSingletonBase(storage, key, { owner, fp: localFp, updatedAt: result.value.meta?.updated_at ?? null }); // what was sent, not what came back: never loops
       retryStep = 0;
       setState("synced", null, isoNow());
       return true;

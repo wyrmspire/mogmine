@@ -162,8 +162,8 @@ export function createSupabaseAdapter(options: SupabaseAdapterOptions): Persiste
     const columns = COLLECTION_COLUMNS[key];
     const policy = contractFor(key).deletePolicy;
 
-    return {
-      async list(who, query: ListQuery = {}) {
+    /** The rows one `list` / `listStored` call asks for: filters, order and paging, shared by both. */
+    const fetchRows = async (who: UserId, query: ListQuery): Promise<PersistResult<DbRow[]>> => {
         const s = await session(key);
         if (!s.ok) return s;
         const owner = ownerFor(who, s.value.uid);
@@ -187,8 +187,26 @@ export function createSupabaseAdapter(options: SupabaseAdapterOptions): Persiste
         }
         const { data, error } = await request;
         if (error) return mapDbError(error, key);
-        const rows = (data ?? []).slice(skip);
-        return { ok: true, value: rows.flatMap((row) => restore<Row>(key, row) ?? []) };
+        return { ok: true, value: (data ?? []).slice(skip) };
+    };
+
+    return {
+      async list(who, query: ListQuery = {}) {
+        const rows = await fetchRows(who, query);
+        if (!rows.ok) return rows;
+        return { ok: true, value: rows.value.flatMap((row) => restore<Row>(key, row) ?? []) };
+      },
+
+      async listStored(who, query: ListQuery = {}) {
+        const rows = await fetchRows(who, query);
+        if (!rows.ok) return rows;
+        return {
+          ok: true,
+          value: rows.value.flatMap((row) => {
+            const record = restore<Row>(key, row);
+            return record ? [{ record, meta: meta(row) }] : [];
+          }),
+        };
       },
 
       async get(who, id) {
