@@ -47,7 +47,7 @@ Notes are never lost: the planning session uses the same save-on-type and "Saved
 - **Authored levels** from the day's planning sessions are drawn on the same chart as computed ones. Each has a right-edge label.
 - **Drawing** uses a Canvas `SessionLevelsPrimitive` (Invariant 1). It reads colours from CSS variables (Invariant 5) and draws only levels from the same instrument as the chart (`OD-15`). A toggle in the chart view options controls it.
 - **Indicators.** Session VWAP comes first. Every indicator records its calculation version and covered bars ([11 §4](11-product-workflows-and-api-context.md#4-indicator-context-is-reproducible)).
-- **Persisted chart choices (`IN-1`).** `vwapAnchor` (`off`, `rth` or `globex`), `levelLabels`, `ema200` and `reviewCardOrientation` are saved in prefs, so a reload keeps the chart as the trader left it.
+- **Persisted chart choices (`IN-1`, `IK-2`).** Ordered indicator instances are saved in prefs, each with its own inputs, visibility and style. The sanitizer migrates `vwapAnchor`, VWAP bands/fill/weekly, `levelLabels`, `ema200` and `showVolume`; `reviewCardOrientation` remains a separate pref.
 - **VWAP and level coverage (`IK-1`, owner 2026-11-26).** Fill `1m` holes with real `5m`, then `15m`, then `1h` bars for only those stretches. VWAP subtracts already-counted finer volume from a coarse bar; levels use its exact high/low. Draw when every minute is covered, mark only lower-resolution stretches with `≈`, and withhold when all resolutions leave a hole. Weekly VWAP anchors Sunday 18:00 ET; session and weekly VWAP share configurable standard-deviation bands.
 - **200 EMA on the displayed timeframe (`IN-3`, `D-G`).** The 200 EMA follows the timeframe on screen across the chart, HUD, prefs and `/levels`.
 
@@ -74,7 +74,7 @@ Built as `sessionReview` in `lib/session-review.ts` (PS-4a). The window runs fro
 | `PS-2` | Plan screen on Today | `components/PlanSheet.tsx`, `components/TodayScreen.tsx` | Done: start a "Pre-…" session in under 10 seconds, add levels with tick steppers, write observations, all states from docs/08 §4 |
 | `PS-3` | Plan levels on charts | `lib/chart-levels.ts`, `components/useTradeLevels.ts` | Done: a trade chart shows the same-instrument planning-session levels for its `session_date`, as they stood at entry |
 | `PS-4` | After-session review | `lib/session-review.ts`, `components/SessionReview.tsx`, `components/PlanCard.tsx` | Done: §4 above, no-trade sessions handled. Opened from a plan on Today, or from the last 14 days under "Session reviews" on Review. |
-| `IND-1` | Session and weekly VWAP | `lib/chart-indicators.ts` (math in `lib/session-indicators.ts`), chart toggle | Done: the trader picks RTH or Globex in View (default Off), can enable Sunday-open weekly VWAP and 1σ/2σ bands, and receives mixed-resolution provenance under `IK-1`. An uncovered minute withholds the affected indicator. |
+| `IND-1` / `IK-2` | Indicator kit, session and weekly VWAP | `lib/indicator-kit.ts`, `lib/chart-indicators.ts` (math in `lib/session-indicators.ts`), Indicators sheet | Done: ordered independent instances support RTH, Globex and Sunday-open weekly VWAP, configurable bands/fills, EMA inputs/styles, Volume and Session levels. Mixed-resolution provenance remains under `IK-1`; an uncovered minute withholds the affected indicator. |
 
 Each slice is one branch and one PR (~250–450 lines, [CONTRIBUTING §3](../CONTRIBUTING.md)). Run the four checks in [16 §0](16-floor-roadmap.md#0-rules-for-every-step).
 

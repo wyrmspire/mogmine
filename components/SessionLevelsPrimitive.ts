@@ -16,6 +16,7 @@ import { formatPrice } from "../lib/format.ts";
 import type { LevelLine, LevelPill, LevelRole } from "@/lib/chart-levels";
 import type { ChartTheme } from "@/lib/theme";
 import type { LevelLabelsMode } from "@/lib/prefs-sanitize";
+import type { IndicatorLineStyle } from "@/lib/indicator-kit";
 
 const FONT = "500 11px ui-monospace, SFMono-Regular, Menlo, monospace";
 const PILL_HEIGHT = 16;
@@ -68,6 +69,10 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
   private mode: LevelLabelsMode = "tap";
   private symbol = "MES";
   private entryPrice: number | null = null;
+  private lineStyle: IndicatorLineStyle = "solid";
+  private lineWidth = 1;
+  private colorOverride: string | null = null;
+  private labels = true;
   // Both layers sit under candles and wicks (LB-1): the pills never cover a bar.
   private readonly views: readonly IPrimitivePaneView[] = [
     { zOrder: () => "bottom", renderer: () => ({ draw: (target) => this.draw(target, "rays") }) },
@@ -87,6 +92,7 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
    */
   update(lines: readonly LevelLine[], theme: ChartTheme, barMs: number, pills?: readonly LevelPill[], options: {
     lastBarTime?: number | null; mode?: LevelLabelsMode; symbol?: string; entryPrice?: number | null;
+    lineStyle?: IndicatorLineStyle; lineWidth?: number; color?: string | null; labels?: boolean;
   } = {}) {
     this.lines = lines;
     // Rays stop at the last bar (LB-4). Null keeps the full-width ray.
@@ -97,6 +103,10 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
     this.mode = options.mode ?? "tap";
     this.symbol = options.symbol ?? "MES";
     this.entryPrice = options.entryPrice ?? null;
+    this.lineStyle = options.lineStyle ?? "solid";
+    this.lineWidth = options.lineWidth ?? 1;
+    this.colorOverride = options.color ?? null;
+    this.labels = options.labels !== false;
     this.theme = theme;
     this.barMs = barMs;
     this.attachment?.requestUpdate();
@@ -105,7 +115,7 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
   /** LB-6: price-only tags for the merged groups nearest the entry, at most three. Empty in `"always"` mode. */
   priceAxisViews(): readonly ISeriesPrimitiveAxisView[] {
     const { attachment, theme } = this;
-    if (this.mode !== "tap" || !attachment || !theme || this.entryPrice == null) return [];
+    if (!this.labels || this.mode !== "tap" || !attachment || !theme || this.entryPrice == null) return [];
     const paneHeight = attachment.chart.paneSize().height;
     return selectAxisTagGroups(this.pills, this.entryPrice).map((group): ISeriesPrimitiveAxisView => {
       const coordinate = () => attachment.series.priceToCoordinate(group.price) ?? OFF_PANE;
@@ -123,7 +133,7 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
   /** The level under a tap at CSS `(x, y)`: a ray within 10 px (and across its drawn span), or a zone. Null when none. */
   hitTestLevel(x: number, y: number): LevelHit | null {
     const { attachment } = this;
-    if (!attachment) return null;
+    if (!attachment || !this.labels) return null;
     const pane = attachment.chart.paneSize();
     return hitLevel(this.lines, [], { x, y }, {
       priceToY: (price) => {
@@ -156,7 +166,7 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
     if (!attachment || !theme || (!this.lines.length && !this.pills.length)) return;
     // Tap mode draws no pills (LB-6): the labels layer is empty, and no ray fades for a collision.
     const tap = this.mode === "tap";
-    if (tap && layer === "labels") return;
+    if ((tap || !this.labels) && layer === "labels") return;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize: pane }) => {
       const pills = this.pills.flatMap((pill) => {
         const y = attachment.series.priceToCoordinate(pill.price);
@@ -168,7 +178,7 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
       ctx.save();
       ctx.font = FONT;
       if (layer === "rays") {
-        ctx.lineWidth = 1;
+        ctx.lineWidth = this.lineWidth;
         for (const line of this.lines) {
           const raw = attachment.series.priceToCoordinate(line.price);
           if (raw == null || raw < 0 || raw > pane.height) continue;
@@ -179,8 +189,8 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
           // Settlement levels (PDC, 3 PM close, settle) are quiet dotted neutral rays (Q-7).
           const settlement = line.settlement === true;
           ctx.globalAlpha = faded ? 0.3 : settlement ? 0.6 : 0.8;
-          ctx.strokeStyle = settlement ? theme.levelNeutral : roleColor(theme, line.role);
-          ctx.setLineDash(settlement ? [1, 3] : line.proxy ? [4, 4] : []);
+          ctx.strokeStyle = this.colorOverride ?? (settlement ? theme.levelNeutral : roleColor(theme, line.role));
+          ctx.setLineDash(settlement || this.lineStyle === "dotted" ? [1, 3] : line.proxy || this.lineStyle === "dashed" ? [4, 4] : []);
           ctx.beginPath();
           ctx.moveTo(span.x0, y);
           ctx.lineTo(span.x1, y);

@@ -1,5 +1,7 @@
 // Pure preference sanitizers and defaults (no React, no window). Split out of lib/prefs.ts so server routes can import the command layer (#185a).
 import { DEFAULT_TIME_ZONE, TIME_ZONE_OPTIONS } from "./time.ts";
+import { migrateLegacyIndicators, sanitizeIndicatorInstances } from "./indicator-kit.ts";
+import type { IndicatorInstance } from "./indicator-kit.ts";
 
 export type GoldPreset = "bullion" | "champagne" | "amber" | "platinum";
 export type Palette = "classic" | "blue-orange";
@@ -41,6 +43,8 @@ export interface Prefs {
   showVolume?: boolean;
   /** Orientation of exported review cards (Q-5). */
   reviewCardOrientation: ReviewCardOrientation;
+  /** Ordered indicator kit instances. Each owns its inputs, visibility and style (IK-2). */
+  indicators: IndicatorInstance[];
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -62,6 +66,7 @@ export const DEFAULT_PREFS: Prefs = {
   ema200: false,
   showVolume: true,
   reviewCardOrientation: "portrait",
+  indicators: migrateLegacyIndicators({}),
 };
 
 export const GOLD_PRESETS: GoldPreset[] = ["bullion", "champagne", "amber", "platinum"];
@@ -97,5 +102,6 @@ export function sanitize(raw: Partial<Prefs>): Prefs {
     ema200: raw.ema200 === true,
     showVolume: raw.showVolume !== false,
     reviewCardOrientation: raw.reviewCardOrientation === "landscape" ? "landscape" : DEFAULT_PREFS.reviewCardOrientation,
+    indicators: sanitizeIndicatorInstances(raw.indicators, raw),
   };
 }

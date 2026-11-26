@@ -11,9 +11,9 @@ export const EMA_CALC_VERSION = "ema200-v1";
 export const EMA_PERIOD = 200;
 export const EMA_WARMUP_EXTRA = 500;
 export const EMA_MIN_BARS = EMA_PERIOD + EMA_WARMUP_EXTRA; // 700
+export type EmaSource = "close" | "open" | "high" | "low" | "hlc3";
 /** Warm-up gaps above this share of expected in-session bars make the line approximate (dashed, "≈"). */
 export const EMA_MAX_MISSING_RATIO = 0.03;
-const ALPHA = 2 / (EMA_PERIOD + 1);
 
 export interface EmaPoint {
   /** Bar open time, UTC milliseconds (the same convention as VwapPoint and Candle). */
@@ -32,6 +32,12 @@ export interface Ema200Result {
   /** Bars the calculation used (after dedupe and aggregation to the displayed timeframe). */
   presentBars: number;
   unavailableReason: string | null;
+}
+
+export interface EmaResult extends Omit<Ema200Result, "calcVersion"> {
+  calcVersion: string;
+  length: number;
+  source: EmaSource;
 }
 
 /** A result with no points and the reason why. Callers use it when they cannot even load the bars (for example, 1m older than 30 days). */
@@ -73,33 +79,48 @@ function expectedSlots(fromMs: number, toMs: number, barMs: number) {
  * Points carry the bar open time; the first point is the 700th bar.
  */
 export function computeEma200(bars: readonly Candle[], timeframe: Timeframe): Ema200Result {
+  const result = computeEma(bars, timeframe, EMA_PERIOD, "close");
+  return { ...result, calcVersion: EMA_CALC_VERSION };
+}
+
+function sourceValue(bar: Candle, source: EmaSource) {
+  return source === "hlc3" ? (bar.high + bar.low + bar.close) / 3 : bar[source];
+}
+
+/** Configurable EMA used by IK-2 instances. It keeps the established 500-bar seed decay window. */
+export function computeEma(bars: readonly Candle[], timeframe: Timeframe, length: number, source: EmaSource = "close"): EmaResult {
+  const period = Math.round(Math.min(500, Math.max(2, length)));
+  const minBars = period + EMA_WARMUP_EXTRA;
+  const alpha = 2 / (period + 1);
   const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
   const sorted = dedupeSorted(bars);
   const native = nativeSpacingMs(sorted);
   if (native !== null && native > barMs) {
-    return emaUnavailable(timeframe, `Needs ${timeframe} bars, but only ${native / 60_000}-minute bars are loaded`);
+    return { ...emaUnavailable(timeframe, `Needs ${timeframe} bars, but only ${native / 60_000}-minute bars are loaded`), calcVersion: `ema-v2-${period}-${source}`, length: period, source };
   }
   const series = aggregateCandles(sorted, timeframe);
-  if (series.length < EMA_MIN_BARS) {
-    return emaUnavailable(timeframe, `Needs ${EMA_MIN_BARS} ${timeframe} bars for warm-up (${series.length} available)`);
+  if (series.length < minBars) {
+    return { ...emaUnavailable(timeframe, `Needs ${minBars} ${timeframe} bars for warm-up (${series.length} available)`), calcVersion: `ema-v2-${period}-${source}`, length: period, source };
   }
 
   let ema = 0;
-  for (let i = 0; i < EMA_PERIOD; i += 1) ema += series[i].close;
-  ema /= EMA_PERIOD;
+  for (let i = 0; i < period; i += 1) ema += sourceValue(series[i], source);
+  ema /= period;
   const points: EmaPoint[] = [];
-  for (let i = EMA_PERIOD; i < series.length; i += 1) {
-    ema = series[i].close * ALPHA + ema * (1 - ALPHA);
-    if (i >= EMA_MIN_BARS - 1) points.push({ time: series[i].time, value: ema });
+  for (let i = period; i < series.length; i += 1) {
+    ema = sourceValue(series[i], source) * alpha + ema * (1 - alpha);
+    if (i >= minBars - 1) points.push({ time: series[i].time, value: ema });
   }
 
   // Warm-up coverage: the first 700 bars span [series[0], series[699]]. Missing in-session slots widen that span.
-  const warmupEnd = series[EMA_MIN_BARS - 1].time;
-  const expected = Math.max(EMA_MIN_BARS, expectedSlots(series[0].time, warmupEnd, barMs));
-  const missingRatio = (expected - EMA_MIN_BARS) / expected;
+  const warmupEnd = series[minBars - 1].time;
+  const expected = Math.max(minBars, expectedSlots(series[0].time, warmupEnd, barMs));
+  const missingRatio = (expected - minBars) / expected;
   return {
-    calcVersion: EMA_CALC_VERSION,
+    calcVersion: `ema-v2-${period}-${source}`,
     timeframe,
+    length: period,
+    source,
     points,
     approximate: missingRatio > EMA_MAX_MISSING_RATIO,
     missingRatio,

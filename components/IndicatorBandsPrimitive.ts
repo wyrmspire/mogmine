@@ -6,13 +6,15 @@ import type { VwapBandPoint } from "@/lib/chart-indicators";
 export interface IndicatorBandLayer {
   bands: readonly (readonly VwapBandPoint[])[];
   color: string;
-  dashed?: boolean;
+  width?: number;
+  style?: "solid" | "dashed" | "dotted";
+  opacity?: number;
+  fillOpacity?: number;
 }
 
 export class IndicatorBandsPrimitive implements ISeriesPrimitive<Time> {
   private attachment?: SeriesAttachedParameter<Time>;
   private layers: readonly IndicatorBandLayer[] = [];
-  private fill = false;
   private readonly views: readonly IPrimitivePaneView[] = [{
     zOrder: () => "bottom",
     renderer: () => ({ draw: (target) => this.draw(target) }),
@@ -23,9 +25,8 @@ export class IndicatorBandsPrimitive implements ISeriesPrimitive<Time> {
   paneViews() { return this.views; }
   autoscaleInfo() { return null; }
 
-  update(layers: readonly IndicatorBandLayer[], fill: boolean) {
+  update(layers: readonly IndicatorBandLayer[]) {
     this.layers = layers;
-    this.fill = fill;
     this.attachment?.requestUpdate();
   }
 
@@ -34,11 +35,11 @@ export class IndicatorBandsPrimitive implements ISeriesPrimitive<Time> {
     if (!attachment || !this.layers.some((layer) => layer.bands.length)) return;
     target.useMediaCoordinateSpace(({ context: ctx }) => {
       ctx.save();
-      ctx.lineWidth = 1;
       for (const layer of this.layers) {
+        ctx.lineWidth = layer.width ?? 1;
         ctx.strokeStyle = layer.color;
         ctx.fillStyle = layer.color;
-        ctx.setLineDash(layer.dashed ? [4, 4] : []);
+        ctx.setLineDash(layer.style === "dotted" ? [1, 3] : layer.style === "dashed" ? [4, 4] : []);
         layer.bands.forEach((series, rank) => {
           const points = series.flatMap((point) => {
             const x = attachment.chart.timeScale().timeToCoordinate(Math.floor(point.time / 1000) as UTCTimestamp);
@@ -47,15 +48,15 @@ export class IndicatorBandsPrimitive implements ISeriesPrimitive<Time> {
             return x == null || upper == null || lower == null ? [] : [{ x, upper, lower }];
           });
           if (points.length < 2) return;
-          if (this.fill) {
-            ctx.globalAlpha = rank === 0 ? 0.045 : 0.025;
+          if ((layer.fillOpacity ?? 0) > 0) {
+            ctx.globalAlpha = (layer.fillOpacity ?? 0) * (rank === 0 ? 1 : 0.6);
             ctx.beginPath();
             points.forEach((point, index) => index ? ctx.lineTo(point.x, point.upper) : ctx.moveTo(point.x, point.upper));
             for (let index = points.length - 1; index >= 0; index -= 1) ctx.lineTo(points[index].x, points[index].lower);
             ctx.closePath();
             ctx.fill();
           }
-          ctx.globalAlpha = rank === 0 ? 0.55 : 0.35;
+          ctx.globalAlpha = (layer.opacity ?? 0.55) * (rank === 0 ? 1 : 0.65);
           for (const edge of ["upper", "lower"] as const) {
             ctx.beginPath();
             points.forEach((point, index) => index ? ctx.lineTo(point.x, point[edge]) : ctx.moveTo(point.x, point[edge]));

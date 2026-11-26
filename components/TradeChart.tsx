@@ -27,6 +27,7 @@ import type { VwapBandPoint, VwapPoint } from "@/lib/chart-indicators";
 import type { EmaPoint } from "@/lib/ema";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
+import type { IndicatorFillSlot, IndicatorInstance, IndicatorLineSlot, IndicatorLineStyle } from "@/lib/indicator-kit";
 
 type LWC = typeof import("lightweight-charts");
 type IChartApi = import("lightweight-charts").IChartApi;
@@ -97,6 +98,17 @@ interface Props {
   onSelectLevel?: (hit: LevelHit | null) => void;
   /** LB-B2: a focused level-list row (its tick) opens that level's card. Null when focus leaves. */
   highlightedLineTick?: number | null;
+  /** IK-2: persisted style owners for each rendered canvas/series layer. */
+  indicatorStyle?: {
+    levels?: IndicatorInstance; vwap?: IndicatorInstance; weeklyVwap?: IndicatorInstance;
+    ema?: IndicatorInstance; volume?: IndicatorInstance;
+  };
+  extraIndicatorLines?: readonly {
+    id: string; label: string; points: readonly VwapPoint[]; approximate: boolean; style: IndicatorInstance;
+  }[];
+  extraIndicatorBands?: readonly {
+    id: string; bands: readonly (readonly VwapBandPoint[])[]; approximate: boolean; style: IndicatorInstance;
+  }[];
 }
 
 /** What one paint of the level primitive needs from the latest props. */
@@ -106,14 +118,46 @@ interface LevelPaint {
   bars: Candle[];
   timeframe: Timeframe;
   trade: TradeRecord;
+  style?: IndicatorInstance;
 }
 
 /** Pushes pills and a mode to the level primitive. Shared by the live draw and the export snapshot (D-E). */
 function paintLevels(state: Live, paint: LevelPaint, mode: LevelLabelsMode, pills: readonly LevelPill[]) {
   const { trade: tr, bars } = paint;
-  state.levelsPrimitive.update(paint.levels, paint.theme, TIMEFRAME_MINUTES[paint.timeframe] * 60_000, pills, {
+  const slot = paint.style?.style.rays;
+  const line = slot?.kind === "line" ? slot : undefined;
+  state.levelsPrimitive.update(line?.visible === false ? [] : paint.levels, paint.theme, TIMEFRAME_MINUTES[paint.timeframe] * 60_000, line?.visible === false ? [] : pills, {
     lastBarTime: bars[bars.length - 1].time, mode, symbol: tr.symbol, entryPrice: tr.entry_price,
+    lineStyle: line?.style, lineWidth: line?.width, color: line && line.color !== "theme:role" ? indicatorColor(line.color, paint.theme, "levels") : null, labels: paint.style?.labels,
   });
+}
+
+function indicatorColor(color: string | undefined, theme: ChartTheme, fallback: "vwap" | "weekly" | "ema" | "levels" | "volume") {
+  if (color?.startsWith("#")) return color;
+  const key = color?.slice(6);
+  if (key === "vwap") return theme.vwap;
+  if (key === "ema") return theme.ema200 ?? "#38bdf8";
+  if (key === "support") return theme.levelSupport;
+  if (key === "resistance") return theme.levelResistance;
+  if (key === "gold") return theme.goldMid;
+  if (fallback === "weekly") return theme.weeklyVwap ?? theme.vwap;
+  if (fallback === "ema") return theme.ema200 ?? "#38bdf8";
+  if (fallback === "levels") return theme.levelNeutral;
+  return fallback === "volume" ? theme.textMuted : theme.vwap;
+}
+
+function lineSlot(instance: IndicatorInstance | undefined, key = "main"): IndicatorLineSlot | undefined {
+  const slot = instance?.style[key];
+  return slot?.kind === "line" ? slot : undefined;
+}
+
+function fillSlot(instance: IndicatorInstance | undefined, key: string): IndicatorFillSlot | undefined {
+  const slot = instance?.style[key];
+  return slot?.kind === "fill" || slot?.kind === "background" ? slot : undefined;
+}
+
+function lwcLineStyle(lwc: LWC, style: IndicatorLineStyle | undefined) {
+  return style === "dotted" ? lwc.LineStyle.Dotted : style === "dashed" ? lwc.LineStyle.Dashed : lwc.LineStyle.Solid;
 }
 
 interface Live {
@@ -135,6 +179,7 @@ interface Live {
   renderedWeeklyVwap: readonly VwapPoint[] | null;
   emaSeries: LineSeries;
   renderedEma: readonly EmaPoint[] | null;
+  extraSeries: Map<string, { series: LineSeries; rendered: readonly VwapPoint[] | null; label: string; approximate: boolean; labels: boolean }>;
   fitRange: { from: number; to: number } | null;
   renderedBars: Candle[];
   renderedTimeframe: Timeframe | null;
@@ -245,8 +290,10 @@ const NO_LEVELS: readonly LevelLine[] = [];
 const NO_VWAP: readonly VwapPoint[] = [];
 const NO_VWAP_BANDS: readonly (readonly VwapBandPoint[])[] = [];
 const NO_EMA: readonly EmaPoint[] = [];
+const NO_EXTRA_LINES: readonly NonNullable<Props["extraIndicatorLines"]>[number][] = [];
+const NO_EXTRA_BANDS: readonly NonNullable<Props["extraIndicatorBands"]>[number][] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapBands = NO_VWAP_BANDS, vwapApproximate = false, weeklyVwap = NO_VWAP, weeklyVwapBands = NO_VWAP_BANDS, weeklyVwapApproximate = false, vwapBandFill = false, showVolume = false, ema = NO_EMA, emaApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapBands = NO_VWAP_BANDS, vwapApproximate = false, weeklyVwap = NO_VWAP, weeklyVwapBands = NO_VWAP_BANDS, weeklyVwapApproximate = false, vwapBandFill = false, showVolume = false, ema = NO_EMA, emaApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null, indicatorStyle, extraIndicatorLines = NO_EXTRA_LINES, extraIndicatorBands = NO_EXTRA_BANDS }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
@@ -256,11 +303,11 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   const levelMode: LevelLabelsMode = levelLabelsMode ?? prefs.levelLabels;
   // The open level card (LB-6). `fromList`: opened by a focused list row, so leaving the row closes it.
   const [openLevel, setOpenLevel] = useState<{ hit: LevelHit; fromList: boolean } | null>(null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel, indicatorStyle, extraIndicatorLines, extraIndicatorBands });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel, indicatorStyle, extraIndicatorLines, extraIndicatorBands }; });
   const closeLevel = useCallback(() => {
     setOpenLevel(null);
     latest.current.onSelectLevel?.(null);
@@ -328,7 +375,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       const p = latest.current;
       if (!p.theme || !p.bars.length || !p.levels.length || p.levelMode !== "tap") return l.chart.takeScreenshot(true, false);
       // D-E: the PNG carries at most four labelled groups. Live "tap" mode is restored before this returns.
-      const paint: LevelPaint = { levels: p.levels, theme: p.theme, bars: p.bars, timeframe: p.timeframe, trade: p.trade };
+      const paint: LevelPaint = { levels: p.levels, theme: p.theme, bars: p.bars, timeframe: p.timeframe, trade: p.trade, style: p.indicatorStyle?.levels };
       const livePills = levelPills(p.levels, tradeAnchors(p.trade), p.trade.symbol, p.trade.entry_price);
       const exportPills = selectExportLevelPills(livePills, p.trade.entry_price, p.trade.key_level_price ?? null);
       paintLevels(l, paint, "always", exportPills);
@@ -398,7 +445,10 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       l.renderedTimeframe = barTimeframe;
     }
     // VOL-1: the volume band repaints with the bars, its toggle and the theme. It sets the candle margins too.
-    setProgrammaticRange(l, () => { paintVolumePane(l.chart, l.volumeSeries, bars, t, p.showVolume, l.host.clientHeight); });
+    const volumeStyle = fillSlot(p.indicatorStyle?.volume, "bars");
+    setProgrammaticRange(l, () => { paintVolumePane(l.chart, l.volumeSeries, bars, t, p.showVolume, l.host.clientHeight, volumeStyle ? {
+      color: volumeStyle.color === "theme:volume" ? undefined : indicatorColor(volumeStyle.color, t, "volume"), opacity: volumeStyle.opacity,
+    } : undefined); });
 
     if (timeframeChanged) {
       l.extraBefore = 0;
@@ -414,31 +464,68 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t, p.neighbourTrades);
     const pills = p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : [];
-    paintLevels(l, { levels: p.levels, theme: t, bars, timeframe: barTimeframe, trade: tr }, p.levelMode, pills);
+    paintLevels(l, { levels: p.levels, theme: t, bars, timeframe: barTimeframe, trade: tr, style: p.indicatorStyle?.levels }, p.levelMode, pills);
     // Tap mode draws no pills, so only the breathing room applies (LB-6, F-10).
     l.levelLabels = p.levelMode === "tap" ? [] : pills.map((pill) => pill.label);
     applyLevelRightOffset(l);
-    l.vwapSeries.applyOptions({ color: t.vwap, visible: p.vwap.length > 0 });
+    const vwapStyle = lineSlot(p.indicatorStyle?.vwap);
+    l.vwapSeries.applyOptions({ color: indicatorColor(vwapStyle?.color, t, "vwap"), visible: p.vwap.length > 0 && vwapStyle?.visible !== false, lineWidth: (vwapStyle?.width ?? 1) as 1 | 2 | 3 | 4, lineStyle: lwcLineStyle(l.lwc, p.vwapApproximate ? "dashed" : vwapStyle?.style) });
     if (l.renderedVwap !== p.vwap) {
       // Points sit on displayed bar times only, so the time scale gains no new indices.
       setProgrammaticRange(l, () => { l.vwapSeries.setData(p.vwap.map((point) => ({ time: toTime(point.time), value: point.value }))); });
       l.renderedVwap = p.vwap;
     }
-    const weeklyColor = t.weeklyVwap ?? t.vwap;
-    l.weeklyVwapSeries.applyOptions({ color: weeklyColor, visible: p.weeklyVwap.length > 0, lineStyle: l.lwc.LineStyle.Dashed });
+    const weeklyStyle = lineSlot(p.indicatorStyle?.weeklyVwap);
+    const weeklyColor = indicatorColor(weeklyStyle?.color, t, "weekly");
+    l.weeklyVwapSeries.applyOptions({ color: weeklyColor, visible: p.weeklyVwap.length > 0 && weeklyStyle?.visible !== false, lineWidth: (weeklyStyle?.width ?? 1) as 1 | 2 | 3 | 4, lineStyle: lwcLineStyle(l.lwc, p.weeklyVwapApproximate ? "dashed" : weeklyStyle?.style ?? "dashed") });
     if (l.renderedWeeklyVwap !== p.weeklyVwap) {
       setProgrammaticRange(l, () => { l.weeklyVwapSeries.setData(p.weeklyVwap.map((point) => ({ time: toTime(point.time), value: point.value }))); });
       l.renderedWeeklyVwap = p.weeklyVwap;
     }
+    const vwapBandsStyle = lineSlot(p.indicatorStyle?.vwap, "bands");
+    const vwapFillStyle = fillSlot(p.indicatorStyle?.vwap, "bandFill");
+    const weeklyBandsStyle = lineSlot(p.indicatorStyle?.weeklyVwap, "bands");
+    const weeklyFillStyle = fillSlot(p.indicatorStyle?.weeklyVwap, "bandFill");
     l.indicatorBandsPrimitive.update([
-      { bands: p.vwapBands, color: t.vwap, dashed: p.vwapApproximate },
-      { bands: p.weeklyVwapBands, color: weeklyColor, dashed: true },
-    ], p.vwapBandFill);
+      { bands: vwapBandsStyle?.visible === false ? [] : p.vwapBands, color: indicatorColor(vwapBandsStyle?.color, t, "vwap"), width: vwapBandsStyle?.width, style: p.vwapApproximate ? "dashed" : vwapBandsStyle?.style, fillOpacity: vwapFillStyle ? (vwapFillStyle.visible ? vwapFillStyle.opacity : 0) : p.vwapBandFill ? 0.1 : 0 },
+      { bands: weeklyBandsStyle?.visible === false ? [] : p.weeklyVwapBands, color: indicatorColor(weeklyBandsStyle?.color, t, "weekly"), width: weeklyBandsStyle?.width, style: p.weeklyVwapApproximate ? "dashed" : weeklyBandsStyle?.style, fillOpacity: weeklyFillStyle ? (weeklyFillStyle.visible ? weeklyFillStyle.opacity : 0) : p.vwapBandFill ? 0.1 : 0 },
+      ...p.extraIndicatorBands.map((extra) => {
+        const line = lineSlot(extra.style, "bands");
+        const fill = fillSlot(extra.style, "bandFill");
+        return { bands: line?.visible === false ? [] : extra.bands, color: indicatorColor(line?.color, t, "vwap"), width: line?.width, style: extra.approximate ? "dashed" as const : line?.style, fillOpacity: fill?.visible ? fill.opacity : 0 };
+      }),
+    ]);
     // IN-3: the 200 EMA is 1 px and dashed while approximate. Like VWAP, it never sets the price scale.
-    l.emaSeries.applyOptions({ color: t.ema200 ?? "#38bdf8", visible: p.ema.length > 0, lineStyle: p.emaApproximate ? l.lwc.LineStyle.Dashed : l.lwc.LineStyle.Solid });
+    const emaStyle = lineSlot(p.indicatorStyle?.ema);
+    l.emaSeries.applyOptions({ color: indicatorColor(emaStyle?.color, t, "ema"), visible: p.ema.length > 0 && emaStyle?.visible !== false, lineWidth: (emaStyle?.width ?? 1) as 1 | 2 | 3 | 4, lineStyle: lwcLineStyle(l.lwc, p.emaApproximate ? "dashed" : emaStyle?.style) });
     if (l.renderedEma !== p.ema) {
       setProgrammaticRange(l, () => { l.emaSeries.setData(p.ema.map((point) => ({ time: toTime(point.time), value: point.value }))); });
       l.renderedEma = p.ema;
+    }
+    const wantedExtra = new Set(p.extraIndicatorLines.map(({ id }) => id));
+    for (const [id, item] of l.extraSeries) {
+      if (!wantedExtra.has(id)) { l.chart.removeSeries(item.series); l.extraSeries.delete(id); }
+    }
+    for (const extra of p.extraIndicatorLines) {
+      let item = l.extraSeries.get(extra.id);
+      if (!item) {
+        const series = l.chart.addSeries(l.lwc.LineSeries, {
+          lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+          autoscaleInfoProvider: () => null,
+          priceFormat: { type: "price", precision: 2, minMove: specFor(tr.symbol)?.tickSize ?? 0.01 },
+        });
+        item = { series, rendered: null, label: extra.label, approximate: extra.approximate, labels: extra.style.labels };
+        l.extraSeries.set(extra.id, item);
+      }
+      const style = lineSlot(extra.style);
+      item.label = extra.label;
+      item.approximate = extra.approximate;
+      item.labels = extra.style.labels;
+      item.series.applyOptions({ color: indicatorColor(style?.color, t, extra.style.indicatorId === "ema" ? "ema" : "vwap"), visible: style?.visible !== false, lineWidth: (style?.width ?? 1) as 1 | 2 | 3 | 4, lineStyle: lwcLineStyle(l.lwc, extra.approximate ? "dashed" : style?.style) });
+      if (item.rendered !== extra.points) {
+        setProgrammaticRange(l, () => { item!.series.setData(extra.points.map((point) => ({ time: toTime(point.time), value: point.value }))); });
+        item.rendered = extra.points;
+      }
     }
 
     // Recompute in bars for this timeframe. Coarser bars therefore show wider clock-time context.
@@ -522,7 +609,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       const state: Live = {
         lwc, host, chart, series, volumeSeries, primitive, levelsPrimitive, indicatorBandsPrimitive, levelLabels: [], levelRightOffset: DEFAULT_RIGHT_OFFSET_BARS, vwapSeries, renderedVwap: null,
         weeklyVwapSeries, renderedWeeklyVwap: null,
-        emaSeries, renderedEma: null,
+        emaSeries, renderedEma: null, extraSeries: new Map(),
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
         userPanned: false, programmaticRangeChange: false,
@@ -538,12 +625,16 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         if (target) {
           const symbol = latest.current.trade.symbol;
           const vwapAt = bar ? param.seriesData.get(vwapSeries) as { value?: number } | undefined : undefined;
-          const vwapText = vwapAt?.value != null ? `  ·  VWAP ${latest.current.vwapApproximate ? "≈ " : ""}${formatPrice(vwapAt.value, symbol)}` : "";
+          const vwapText = vwapAt?.value != null && latest.current.indicatorStyle?.vwap?.labels !== false ? `  ·  VWAP ${latest.current.vwapApproximate ? "≈ " : ""}${formatPrice(vwapAt.value, symbol)}` : "";
           const weeklyAt = bar ? param.seriesData.get(weeklyVwapSeries) as { value?: number } | undefined : undefined;
-          const weeklyText = weeklyAt?.value != null ? `  ·  W VWAP ${latest.current.weeklyVwapApproximate ? "≈ " : ""}${formatPrice(weeklyAt.value, symbol)}` : "";
+          const weeklyText = weeklyAt?.value != null && latest.current.indicatorStyle?.weeklyVwap?.labels !== false ? `  ·  W VWAP ${latest.current.weeklyVwapApproximate ? "≈ " : ""}${formatPrice(weeklyAt.value, symbol)}` : "";
           const emaAt = bar ? param.seriesData.get(emaSeries) as { value?: number } | undefined : undefined;
-          const emaText = emaAt?.value != null ? `  ·  200 EMA ${latest.current.emaApproximate ? "≈ " : ""}${formatPrice(emaAt.value, symbol)}` : "";
-          target.textContent = bar ? `O ${formatPrice(bar.open, symbol)}  H ${formatPrice(bar.high, symbol)}  L ${formatPrice(bar.low, symbol)}  C ${formatPrice(bar.close, symbol)}  ·  ${formatPoints(bar.close - latest.current.trade.entry_price, symbol)} vs entry${vwapText}${weeklyText}${emaText}` : "";
+          const emaText = emaAt?.value != null && latest.current.indicatorStyle?.ema?.labels !== false ? `  ·  ${latest.current.indicatorStyle?.ema?.params.length ?? 200} EMA ${latest.current.emaApproximate ? "≈ " : ""}${formatPrice(emaAt.value, symbol)}` : "";
+          const extraText = bar ? [...state.extraSeries.values()].flatMap((item) => {
+            const at = param.seriesData.get(item.series) as { value?: number } | undefined;
+            return at?.value == null || !item.labels ? [] : [`  ·  ${item.label} ${item.approximate ? "≈ " : ""}${formatPrice(at.value, symbol)}`];
+          }).join("") : "";
+          target.textContent = bar ? `O ${formatPrice(bar.open, symbol)}  H ${formatPrice(bar.high, symbol)}  L ${formatPrice(bar.low, symbol)}  C ${formatPrice(bar.close, symbol)}  ·  ${formatPoints(bar.close - latest.current.trade.entry_price, symbol)} vs entry${vwapText}${weeklyText}${emaText}${extraText}` : "";
           target.parentElement?.toggleAttribute("data-tracking", !!bar);
         }
       });
@@ -716,7 +807,10 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       const resize = new ResizeObserver(() => {
         chart.applyOptions({ width: host.clientWidth, height: host.clientHeight });
         const p = latest.current;
-        if (p.theme) paintVolumePane(chart, state.volumeSeries, p.bars, p.theme, p.showVolume, host.clientHeight);
+        if (p.theme) {
+          const style = fillSlot(p.indicatorStyle?.volume, "bars");
+          paintVolumePane(chart, state.volumeSeries, p.bars, p.theme, p.showVolume, host.clientHeight, style ? { color: style.color === "theme:volume" ? undefined : indicatorColor(style.color, p.theme, "volume"), opacity: style.opacity } : undefined);
+        }
         applyLevelRightOffset(state);
         requestAnimationFrame(placeGrip);
         if (!state.userPanned && state.heldDefaultRange) {
@@ -755,7 +849,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, levels, vwap, vwapBands, weeklyVwap, weeklyVwapBands, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, neighbourTrades, levelMode]);
+  }, [trade, bars, timeframe, marks, levels, vwap, vwapBands, weeklyVwap, weeklyVwapBands, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, neighbourTrades, levelMode, indicatorStyle, extraIndicatorLines, extraIndicatorBands]);
 
   return <><div
     ref={hostRef}

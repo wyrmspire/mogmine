@@ -59,7 +59,7 @@ Chris: drop the always-on text labels. The price axis already shows the price; a
 
 ## 4. Remember the Session VWAP choice
 
-**IN-1.** A new pref `vwapAnchor: "off" | "rth" | "globex"`, default `"off"` (the anchor default stays open under `OD-18`). The View toggle reads and writes it. It syncs with the other prefs (the `prefs` singleton, #191). Drill, review and playbook charts keep VWAP off (they pass no VWAP today).
+**IN-1 (legacy shape; migrated by IK-2).** The original pref was `vwapAnchor: "off" | "rth" | "globex"`. IK-2 migrates it into a VWAP indicator instance without losing the anchor or visibility. Drill, review and playbook charts keep VWAP off unless they explicitly receive instances.
 
 `lib/prefs-sanitize.ts` gains `vwapAnchor`, `levelLabels` (§3), `ema200` (§6) and `reviewCardOrientation` ([06](06-daily-review-and-review-cards.md) §4) in one package (`IN-1`), so this shared file changes once.
 
@@ -91,7 +91,7 @@ Coarse volume contributes only its residual after volumes from finer bars inside
 | Data | 1m: about 700 minutes (12 h). The levels loader's prior session plus today covers it. 5m: about 3,500 minutes (about 2.5 sessions), so two extra day-mode windows, 5m (Yahoo keeps 60 days). Older than 30 days: 1m is gone, so the 1m EMA is unavailable; say so. |
 | Gaps | The EMA runs bar to bar over the bars that exist. Coverage reports missing bars. When the warm-up window misses more than 3% of bars, draw it dashed with "≈". |
 | Rendering | A line series in a new token `--ind-ema200`, 1 px, below the candles' wicks in visual weight. Value in the crosshair HUD. |
-| Toggle | View → **200 EMA** Off/On, remembered (`ema200` pref). Off by default. |
+| Instance | **EMA** in the Indicators sheet, remembered as an ordered instance. The legacy `ema200` pref migrates to a 200/close instance with the same visibility. |
 | Server | Pure function in `lib/session-indicators.ts` (or a sibling `lib/ema.ts`) so the agent API ([07](07-agent-api.md) §3.4) returns the same values. |
 | Included by `IK-1` | Volume-weighted standard-deviation bands (default 1σ and 2σ, optional canvas fill) and weekly VWAP anchored at Sunday 18:00 ET, using the same mixed-resolution coverage rule. "BE" remains undefined and out of scope. |
 
@@ -106,3 +106,12 @@ Coarse volume contributes only its residual after volumes from finer bars inside
 - The Thursday sim trade (`/trades/sim-trade-20261119-a`) is checked by eye at 390×844 (still owed from the 11/23 deep dive).
 - VWAP choice survives navigation between trades and a reload.
 - Headless check `scripts/check-session-levels.mjs` updated: in `tap` mode it asserts 0 pills, ≤ 3 axis tags and rays present; in `always` mode, the existing cap of 8.
+
+## 8. Indicator kit (`IK-2`, owner feedback 2026-11-26)
+
+The chart toolbar has one **Indicators** button. It opens a mobile sheet with ordered active instances and a searchable, category-grouped picker. An instance can be hidden, edited, reordered, removed or reset. Several instances of one definition are valid: for example 20 and 200 EMA, or RTH and Globex VWAP.
+
+- `lib/indicator-kit.ts` is the pure registry and sanitizer. A definition owns typed/ranged inputs, line style slots, fill/background slots and its label default. The same slot grammar supports ADR and zones in IK-3; those definitions are deliberately not registered in IK-2.
+- `Prefs.indicators` is the persisted ordered list. When absent, the sanitizer migrates the legacy VWAP anchor/bands/fill/weekly choice, `ema200`, `showVolume`, `levelLabels` and session-level visibility.
+- Inputs: VWAP anchor (`rth`, `globex`, `week`) and band multiples; EMA length and source; level label mode. Style: theme or custom hex colour, width 1–4, solid/dashed/dotted line, visibility, fill opacity and labels.
+- Every instance renders through lightweight-charts series or Canvas primitives. There are no chart-positioned HTML overlays. Theme colours resolve at paint time, including the blue/orange colour-blind palette.

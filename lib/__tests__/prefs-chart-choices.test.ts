@@ -9,6 +9,7 @@ import { createJournalCommands } from "../commands/journal-commands.ts";
 import { createLocalAdapter, createMemoryCandleStore, createMemoryKeyValueStore } from "../persistence/local-adapter.ts";
 import { DEFAULT_OWNER_USER_ID } from "../trades.ts";
 import { installDevice } from "./sync-test-helpers.ts";
+import { createIndicatorInstance } from "../indicator-kit.ts";
 
 const CHOICES = {
   vwapAnchor: "globex",
@@ -19,6 +20,7 @@ const CHOICES = {
   levelLabels: "always",
   ema200: true,
   reviewCardOrientation: "landscape",
+  indicators: [createIndicatorInstance("ema", "ema-custom")],
 } satisfies Partial<Prefs>;
 
 const LEGACY = {
@@ -46,6 +48,7 @@ test("defaults: empty and legacy prefs populate the locked defaults", () => {
   assert.equal(DEFAULT_PREFS.levelLabels, "tap");
   assert.equal(DEFAULT_PREFS.ema200, false);
   assert.equal(DEFAULT_PREFS.reviewCardOrientation, "portrait");
+  assert.deepEqual(DEFAULT_PREFS.indicators.map(({ instanceId }) => instanceId), ["session-levels-default", "vwap-session", "ema-200", "volume-default"]);
   assert.deepEqual(sanitizePrefs({}), DEFAULT_PREFS);
   assert.deepEqual(sanitizePrefs(LEGACY), { ...DEFAULT_PREFS, ...LEGACY, ...expected } as Prefs);
   assert.deepEqual(sanitizePrefs(null), DEFAULT_PREFS);
@@ -55,6 +58,7 @@ test("valid non-default choices survive sanitize", () => {
   assert.deepEqual(sanitizePrefs(CHOICES), { ...DEFAULT_PREFS, ...CHOICES } as Prefs);
   assert.equal(sanitizePrefs({ vwapAnchor: "rth" }).vwapAnchor, "rth");
   assert.equal(sanitize({ ...DEFAULT_PREFS, ...CHOICES }).reviewCardOrientation, "landscape");
+  assert.equal(sanitizePrefs(CHOICES).indicators[0].instanceId, "ema-custom");
 });
 
 test("setPrefs stores the choices and getPrefs returns them", () => {
@@ -66,6 +70,7 @@ test("setPrefs stores the choices and getPrefs returns them", () => {
   assert.equal(getPrefs().levelLabels, "always");
   assert.equal(getPrefs().ema200, true);
   assert.equal(getPrefs().reviewCardOrientation, "landscape");
+  assert.equal(getPrefs().indicators[0].instanceId, "ema-custom");
 });
 
 test("choices round-trip through localStorage hydration", () => {
@@ -78,6 +83,7 @@ test("choices round-trip through localStorage hydration", () => {
   assert.equal(getPrefs().levelLabels, "always");
   assert.equal(getPrefs().ema200, true);
   assert.equal(getPrefs().reviewCardOrientation, "landscape");
+  assert.equal(getPrefs().indicators[0].instanceId, "ema-custom");
 });
 
 test("choices round-trip through the singleton command layer", async () => {

@@ -2,7 +2,7 @@
 // live Yahoo traffic and no journal data is read.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EMA_CALC_VERSION, computeEma200, ema200Status, emaOnBars, emaUnavailable } from "../ema.ts";
+import { EMA_CALC_VERSION, computeEma, computeEma200, ema200Status, emaOnBars, emaUnavailable } from "../ema.ts";
 import { buildAgentLevels } from "../agent/levels.ts";
 import type { LevelsCandleSource } from "../agent/levels.ts";
 import type { JournalCommands } from "../commands/journal-commands.ts";
@@ -122,6 +122,17 @@ test("emaOnBars keeps only the points on displayed bars", () => {
   const onBars = emaOnBars(result.points, bars.slice(600));
   assert.equal(onBars.length, 51);
   assert.equal(emaOnBars(result.points, bars.slice(0, 100)).length, 0);
+});
+
+test("IK-2 EMA instances own their length and source", () => {
+  const bars = slots(START, 540).map((bar) => ({ ...bar, open: 7100, high: 7200, low: 6900, close: 7000 }));
+  const close20 = computeEma(bars, "1m", 20, "close");
+  const open20 = computeEma(bars, "1m", 20, "open");
+  assert.equal(close20.length, 20);
+  assert.equal(close20.source, "close");
+  assert.equal(close20.points.length, 21);
+  assert.ok(close20.points.every(({ value }) => value === 7000));
+  assert.ok(open20.points.every(({ value }) => value === 7100));
 });
 
 // ---- GET /api/v1/levels: ema200 cut strictly at as_of ---------------------------------------------------------------------

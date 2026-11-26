@@ -624,6 +624,7 @@ test("journal backup round-trips trades (notes, prices, tags, checklist, playboo
     levelLabels: "tap",
     ema200: false,
     reviewCardOrientation: "portrait",
+    indicators: [],
   });
 
   assert.equal(backup.app, "mogmine");

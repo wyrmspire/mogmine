@@ -10,8 +10,8 @@ import { loadDayCandles } from "@/lib/candles";
 import type { DayCandles } from "@/lib/candles";
 import { levelLines, levelsSummary, plannedLineSources, tradeLevelReport, tradeLevelWindows } from "@/lib/chart-levels";
 import type { LevelLine, WithheldLevel } from "@/lib/chart-levels";
-import { EMA_MIN_BARS, computeEma200, emaUnavailable } from "@/lib/ema";
-import type { Ema200Result } from "@/lib/ema";
+import { EMA_WARMUP_EXTRA, computeEma, emaUnavailable } from "@/lib/ema";
+import type { EmaResult, EmaSource } from "@/lib/ema";
 import type { ComputedLevel } from "@/lib/levels";
 import { usePlansStore } from "@/lib/plans-store";
 import { equityIndexSessionBounds, previousRegularSessionDate, sessionDate } from "@/lib/session";
@@ -31,13 +31,14 @@ export interface TradeLevelsState {
   sessionCandles: readonly Candle[];
   sessionTimeframe: Timeframe | null;
   /** IN-3: the 200 EMA on the displayed timeframe, or null when not requested or still loading. */
-  ema200: Ema200Result | null;
+  ema200: EmaResult | null;
+  emas: Readonly<Record<string, EmaResult>>;
 }
 
 const EMPTY: readonly LevelLine[] = [];
 const EMPTY_BARS: readonly Candle[] = [];
 const OFF: TradeLevelsState = {
-  status: "off", lines: EMPTY, withheld: [], planned: 0, summary: "", sessionCandles: EMPTY_BARS, sessionTimeframe: null, ema200: null,
+  status: "off", lines: EMPTY, withheld: [], planned: 0, summary: "", sessionCandles: EMPTY_BARS, sessionTimeframe: null, ema200: null, emas: {},
 };
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -50,23 +51,26 @@ const EMA_MAX_PRIOR_SESSIONS = 10;
 const TOO_OLD_1M = "1m bars older than 30 days are unavailable from Yahoo";
 
 /** Prior regular sessions to load so the displayed timeframe has 700 bars of warm-up (Globex sessions, 23 h each). */
-function priorSessionsForEma(timeframe: Timeframe): number {
-  const sessions = Math.ceil((EMA_MIN_BARS * TIMEFRAME_MINUTES[timeframe]) / SESSION_MINUTES);
+function priorSessionsForEma(timeframe: Timeframe, barsNeeded: number): number {
+  const sessions = Math.ceil((barsNeeded * TIMEFRAME_MINUTES[timeframe]) / SESSION_MINUTES);
   return sessions <= EMA_MAX_PRIOR_SESSIONS ? sessions : 0;
 }
 
 /**
  * @param sessionWanted true when session VWAP is on, so the session window loads even with levels off.
  */
-export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWanted = false, emaTimeframe: Timeframe | null = null): TradeLevelsState {
+export interface EmaRequest { id: string; timeframe: Timeframe; length: number; source: EmaSource }
+
+export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWanted = false, emaRequests: readonly EmaRequest[] = []): TradeLevelsState {
   const key = `${trade.symbol}|${trade.entry_time}`;
   const [computed, setComputed] = useState<{ key: string; levels: readonly ComputedLevel[]; withheld: readonly WithheldLevel[]; session: DayCandles | null; indicators: DayCandles | null } | null>(null);
   // IN-3: earlier sessions for the 200 EMA, keyed by trade and timeframe. `tooOld` marks a 1m request past Yahoo's keep.
   const [priors, setPriors] = useState<{ key: string; days: readonly (DayCandles | null)[]; tooOld: boolean } | null>(null);
   const { plans } = usePlansStore();
   // Demo trades never touch the network (issue #89), so they have no computed levels.
+  const emaTimeframe = emaRequests[0]?.timeframe ?? null;
   const fetches = (enabled || sessionWanted || emaTimeframe !== null) && !trade.is_sample && Number.isFinite(Date.parse(trade.entry_time));
-  const emaId = emaTimeframe ? `${key}|${emaTimeframe}` : null;
+  const emaId = emaTimeframe ? `${key}|${emaRequests.map(({ id, timeframe: tf, length, source }) => `${id}:${tf}:${length}:${source}`).join("|")}` : null;
 
   useEffect(() => {
     if (!fetches) return;
@@ -115,7 +119,8 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
     const tooOld = emaTimeframe === "1m" && Date.now() - entryMs > ONE_MINUTE_MAX_AGE_MS;
     const dates: string[] = [];
     let date = sessionDate(entryMs);
-    for (let i = 0; !tooOld && i < priorSessionsForEma(emaTimeframe); i += 1) {
+    const barsNeeded = Math.max(...emaRequests.map(({ length }) => length + EMA_WARMUP_EXTRA));
+    for (let i = 0; !tooOld && i < priorSessionsForEma(emaTimeframe, barsNeeded); i += 1) {
       date = previousRegularSessionDate(date);
       dates.push(date);
     }
@@ -127,19 +132,22 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
     return () => { alive = false; };
     // The key holds every trade field the warm-up depends on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emaId]);
+  }, [emaId, emaRequests, emaTimeframe, trade.entry_time, trade.is_sample, trade.symbol]);
 
   // The 200 EMA reads the prior sessions and this session (`session`, from 18:00 ET to the close or now).
   const session = fetches && computed?.key === key ? computed.session : null;
-  const ema200 = useMemo<Ema200Result | null>(() => {
-    if (!emaTimeframe || !emaId || !fetches || computed?.key !== key || priors?.key !== emaId) return null;
-    if (priors.tooOld) return emaUnavailable(emaTimeframe, TOO_OLD_1M);
+  const emas = useMemo<Readonly<Record<string, EmaResult>>>(() => {
+    if (!emaTimeframe || !emaId || !fetches || computed?.key !== key || priors?.key !== emaId) return {};
     // A 1m chart reads only 1m history: 5m bars there would be drawn as if they were 1m. Coarser charts aggregate either.
     const days = priors.days.filter((day): day is DayCandles => day !== null);
     const base = computed.session?.baseTimeframe ?? days.at(-1)?.baseTimeframe;
     const history = days.filter((day) => emaTimeframe !== "1m" || day.baseTimeframe === base).flatMap((day) => day.candles);
-    return computeEma200([...history, ...(computed.session?.candles ?? [])], emaTimeframe);
-  }, [emaTimeframe, emaId, fetches, key, computed, priors]);
+    const bars = [...history, ...(computed.session?.candles ?? [])];
+    return Object.fromEntries(emaRequests.map((request) => [request.id, priors.tooOld
+      ? { ...emaUnavailable(request.timeframe, TOO_OLD_1M), calcVersion: `ema-v2-${request.length}-${request.source}`, length: request.length, source: request.source }
+      : computeEma(bars, request.timeframe, request.length, request.source)]));
+  }, [emaTimeframe, emaId, emaRequests, fetches, key, computed, priors]);
+  const ema200 = Object.values(emas)[0] ?? null;
 
   const planned = useMemo(() => (enabled ? plannedLineSources(plans, trade) : []), [enabled, plans, trade]);
   const current = fetches && computed?.key === key ? computed.levels : null;
@@ -150,7 +158,7 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
   const sessionCandles = computed?.key === key ? computed.indicators?.candles ?? EMPTY_BARS : EMPTY_BARS;
   const sessionTimeframe = computed?.key === key ? computed.indicators?.baseTimeframe ?? null : null;
 
-  if (!enabled) return { ...OFF, sessionCandles, sessionTimeframe, ema200 };
+  if (!enabled) return { ...OFF, sessionCandles, sessionTimeframe, ema200, emas };
   const loading = fetches && current == null;
   return {
     status: lines.length ? "ready" : loading ? "loading" : "none",
@@ -161,5 +169,6 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
     sessionCandles,
     sessionTimeframe,
     ema200,
+    emas,
   };
 }

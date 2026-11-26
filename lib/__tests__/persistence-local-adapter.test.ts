@@ -43,6 +43,7 @@ test("local: writes use the keys and shapes the UI stores already read", async (
     shield: true, goldPreset: "bullion", goldIntensity: 0.5, boxOpacity: 0.4, palette: "classic",
     timeZone: "America/New_York", showSamples: true, blindReview: false, riskBudgetUsd: 100,
     vwapAnchor: "off", levelLabels: "tap", ema200: false, reviewCardOrientation: "portrait",
+    indicators: [],
   });
   const mood = JSON.parse(store.getItem("mogmine-mood-v1") ?? "null") as Record<string, unknown>;
   assert.ok(mood.registry && typeof mood.registry === "object", "registry kept in the mood blob");

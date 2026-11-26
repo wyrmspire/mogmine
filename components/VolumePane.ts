@@ -38,12 +38,15 @@ export function paintVolumePane(
   theme: ChartTheme,
   visible: boolean,
   heightPx: number,
+  style?: { color?: string; opacity?: number },
 ) {
   series.applyOptions({ visible });
+  const alpha = Math.round(Math.min(1, Math.max(0, style?.opacity ?? 1)) * 255).toString(16).padStart(2, "0");
+  const custom = style?.color?.match(/^#[0-9a-f]{6}$/i) ? `${style.color}${alpha}` : style?.color;
   series.setData(visible ? volumeHistogramData(bars, theme).map((point) => ({
     time: Math.floor(point.time / 1000) as UTCTimestamp,
     value: point.value,
-    color: point.color,
+    color: custom ?? point.color,
   })) : []);
   chart.priceScale(VOLUME_SCALE_ID).applyOptions({ scaleMargins: volumeScaleMargins(heightPx) });
   chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.14, bottom: candleBottomMargin(heightPx, visible) } });
