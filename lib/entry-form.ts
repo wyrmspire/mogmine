@@ -5,8 +5,11 @@
 import { DEFAULT_TIME_ZONE, formatDateTime, fromZonedInput, toZonedInput } from "./time.ts";
 import { formatPrice } from "./format.ts";
 import { isValidStatedRiskR } from "./r-size.ts";
-import { canonicalSymbol, isExitReason, isWholeQuantity, snapToTick, specFor, tickDecimals, toTicks } from "./trades.ts";
-import type { Candle, TradeDirection, TradeExitReason, TradeStatus } from "./trades.ts";
+import { canonicalSymbol, isExitReason, isStopMoveWidening, isWholeQuantity, snapToTick, specFor, stopPatch, tickDecimals, toTicks } from "./trades.ts";
+import type { Candle, StopMove, TradeDirection, TradeRecord, TradeExitReason, TradeStatus } from "./trades.ts";
+
+/** One optional "I moved my stop" row in manual entry (issue #36 G2): the new stop price and its clock. */
+export interface DraftStopMove { price: string; clock: string }
 
 export interface EntryDraft {
   /** Reused when a blocked-storage save is retried, so recovery cannot create a duplicate trade. */
@@ -43,6 +46,10 @@ export interface EntryDraft {
   exitClock: string;
   /** Optional. One-tap feeling at entry (docs/19 §4, OD-39 c). */
   entryMoodSpoke?: string | null;
+  /** Optional. "I moved my stop" rows, in the order typed. Empty when the stop never moved. */
+  stopMoves?: DraftStopMove[];
+  /** Optional. Quick tags the trader accepted, e.g. "Moved Stop" (UX-33: accepted by a tap, never automatic). */
+  quickTags?: string[];
 }
 
 /** Clock drift allowed before a trade time counts as in the future (Q-11, 02 §2.3). */
@@ -79,6 +86,11 @@ export function zonedParts(instant: Date, zone: string) {
   return splitZonedInput(toZonedInput(instant, zone));
 }
 
+function isDraftStopMove(value: unknown): value is DraftStopMove {
+  const move = value as Partial<DraftStopMove> | null;
+  return move != null && typeof move === "object" && typeof move.price === "string" && typeof move.clock === "string";
+}
+
 /** A new draft: closed, long, 1 MES, entry 30 minutes ago and exit now, on the entry's date. */
 export function freshEntryDraft(now: Date, zone: string): EntryDraft {
   const entry = zonedParts(new Date(now.getTime() - DEFAULT_HOLD_MINUTES * 60_000), zone);
@@ -87,7 +99,7 @@ export function freshEntryDraft(now: Date, zone: string): EntryDraft {
     status: "closed", symbol: "MES", direction: "LONG", quantity: "1",
     entryPrice: "", exitPrice: "", exitReason: null, stopPrice: "", targetPrice: "", statedRiskR: "",
     date: entry.date, entryClock: entry.clock, exitClock: exit.clock,
-    entryMoodSpoke: null,
+    entryMoodSpoke: null, stopMoves: [], quickTags: [],
   };
 }
 
@@ -122,6 +134,8 @@ export function upgradeDraft(raw: unknown, now: Date, zone: string): EntryDraft 
     entryClock: text(old.entryClock, entry?.clock || fresh.entryClock),
     exitClock: text(old.exitClock, exit?.clock || fresh.exitClock),
     entryMoodSpoke: typeof old.entryMoodSpoke === "string" ? old.entryMoodSpoke : null,
+    stopMoves: Array.isArray(old.stopMoves) ? (old.stopMoves as unknown[]).filter(isDraftStopMove).map(({ price, clock }) => ({ price, clock })) : [],
+    quickTags: Array.isArray(old.quickTags) ? old.quickTags.filter((tag: unknown): tag is string => typeof tag === "string") : [],
   };
 }
 
@@ -249,4 +263,63 @@ export function suggestionPatch(draft: Pick<EntryDraft, "status" | "entryEdited"
     if (force) patch.exitEdited = false;
   }
   return patch;
+}
+
+// ── "I moved my stop" rows (issue #36 G2, R-10, SM-3) ─────────────────────────────────────────────
+
+export interface ResolvedStopMoves {
+  /** The first row problem, shown inline and blocking save. Null when every filled row is valid. */
+  error: string | null;
+  /** Time-sorted stop moves for the saved trade. Empty when no row is filled. */
+  moves: StopMove[];
+  /** The stop the trade is left at: the last move, or the initial stop when none. */
+  workingStopPrice: number | null;
+  /** True when a move sits farther on the risk side than the initial stop or the move before it. */
+  widened: boolean;
+}
+
+/**
+ * Validate the optional stop-move rows. Blank rows are ignored. A filled row needs the initial stop
+ * first, a tick-grid price, and a clock read on `date` (the next day when earlier than the entry clock,
+ * as `entryTimes` reads the exit) that falls within [entry, exit]. Pure.
+ */
+export function resolveDraftStopMoves(params: {
+  stopMoves: readonly DraftStopMove[]; initialStopPrice: number | null; entryPrice: number | null; direction: TradeDirection;
+  symbol: string; date: string; entryMs: number; exitMs: number | null; zone: string;
+}): ResolvedStopMoves {
+  const { stopMoves, initialStopPrice, direction, symbol, date, entryMs, exitMs, zone } = params;
+  const rows = stopMoves.filter((row) => row.price.trim() !== "" || row.clock.trim() !== "");
+  const fail = (error: string): ResolvedStopMoves => ({ error, moves: [], workingStopPrice: initialStopPrice, widened: false });
+  if (rows.length === 0) return { error: null, moves: [], workingStopPrice: initialStopPrice, widened: false };
+  if (initialStopPrice == null) return fail("Enter the initial stop first");
+  if (!Number.isFinite(entryMs)) return fail("Pick the entry time first");
+  const entryClock = zonedParts(new Date(entryMs), zone).clock;
+  const moves: StopMove[] = [];
+  for (const row of rows) {
+    const price = priceOrNull(row.price);
+    if (price == null || !Number.isFinite(price) || !(price > 0) || toTicks(price, symbol) == null) return fail("Enter the moved stop on the tick grid");
+    if (!/^\d{2}:\d{2}$/.test(row.clock)) return fail("Pick the time the stop moved");
+    const at = fromZonedInput(`${addCalendarDays(date, row.clock < entryClock ? 1 : 0)}T${row.clock}`, zone).getTime();
+    if (!Number.isFinite(at)) return fail("Pick the time the stop moved");
+    if (at < entryMs) return fail("A stop move cannot be before the entry");
+    if (exitMs != null && at > exitMs) return fail("A stop move cannot be after the exit");
+    moves.push({ price, time: new Date(at).toISOString() });
+  }
+  moves.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+  let prior = initialStopPrice;
+  let widened = false;
+  for (const move of moves) {
+    if (isStopMoveWidening(prior, move.price, direction, symbol)) widened = true;
+    prior = move.price;
+  }
+  return { error: null, moves, workingStopPrice: moves[moves.length - 1]?.price ?? initialStopPrice, widened };
+}
+
+/**
+ * The stop fields a saved trade gets. No moves: the stop as before (R-10 freezes the first one). With
+ * moves: the stop is frozen at entry, and the trade is left at the last move (SM-3: stop_loss_price === last move).
+ */
+export function entryStopFields(stopPrice: number | null, resolved: Pick<ResolvedStopMoves, "moves" | "workingStopPrice">, entryIso: string, nowIso: string): Partial<TradeRecord> {
+  if (resolved.moves.length === 0) return stopPatch({ initial_stop_price: null }, stopPrice, nowIso);
+  return { initial_stop_price: stopPrice, initial_stop_set_at: entryIso, stop_loss_price: resolved.workingStopPrice, stop_moves: resolved.moves };
 }
