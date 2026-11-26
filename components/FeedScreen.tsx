@@ -34,7 +34,7 @@ export function FeedScreen() {
 
   const all = withSamples(journal.trades, prefs.showSamples);
   const shown = applyFilters(all, filters);
-  const groups = groupByDay(shown);
+  const groups = groupByDay(shown, { accounts: accounts.accounts, prefs });
   const filtered = hasActiveFilters(filters);
   const lookup: FilterLookup = { accountName: (id) => accounts.accounts.find((account) => account.id === id)?.name ?? null };
   const chips = describeFilterParts(filters, lookup).filter((part) => part.key !== "status");

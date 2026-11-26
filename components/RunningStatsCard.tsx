@@ -1,8 +1,10 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import { useAccounts } from "@/lib/accounts-store";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import { playbookName } from "@/lib/playbooks";
+import { usePrefs } from "@/lib/prefs";
 import { usePlaybooks } from "@/lib/playbooks-store";
 import { runningStats } from "@/lib/selectors";
 import type { SummaryStats } from "@/lib/selectors";
@@ -158,7 +160,9 @@ export function RunningStatsCard({
   const { playbooks } = usePlaybooks();
   const [activeWindow, setActiveWindow] = useState<Window>("last20");
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
-  const stats = useMemo(() => runningStats(trades, now), [trades, now]);
+  const accounts = useAccounts();
+  const prefs = usePrefs();
+  const stats = useMemo(() => runningStats(trades, now, { accounts: accounts.accounts, prefs }), [trades, now, accounts.accounts, prefs]);
   const hasClosedTrades = stats.overall.tradeCount > 0;
   const rows = breakdown === "playbook"
     ? stats.byPlaybook.map((summary) => ({

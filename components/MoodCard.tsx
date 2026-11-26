@@ -6,7 +6,9 @@ import { MoodAxes, MoodShape, MoodShapeLayer, useTradeMood } from "./MoodShape";
 import { formatR } from "@/lib/format";
 import { MIN_MOOD_SAMPLE, describeMood, knownCount, moodOutcomeStats, similarTrades, spokeById } from "@/lib/mood";
 import type { RSummary } from "@/lib/mood";
+import { useAccounts } from "@/lib/accounts-store";
 import { useMood } from "@/lib/mood-store";
+import { usePrefs } from "@/lib/prefs";
 import { useJournal } from "@/lib/store";
 import type { TradeRecord } from "@/lib/trades";
 
@@ -34,7 +36,10 @@ export function MoodCard({ trade, onEdit }: { trade: TradeRecord; onEdit: () => 
   const journal = useJournal();
   const mood = useMood();
   const vector = useTradeMood(trade);
-  const similar = useMemo(() => similarTrades(trade, journal.trades, mood.records, mood.registry), [trade, journal.trades, mood.records, mood.registry]);
+  const accounts = useAccounts();
+  const prefs = usePrefs();
+  const rSize = useMemo(() => ({ accounts: accounts.accounts, prefs }), [accounts.accounts, prefs]);
+  const similar = useMemo(() => similarTrades(trade, journal.trades, mood.records, mood.registry, { rSize }), [trade, journal.trades, mood.records, mood.registry, rSize]);
   const scored = knownCount(vector);
   const pending = mood.suggestions[trade.id];
 
@@ -84,8 +89,14 @@ export function MoodCard({ trade, onEdit }: { trade: TradeRecord; onEdit: () => 
  */
 export function MoodStatsCard({ trades }: { trades: TradeRecord[] }) {
   const mood = useMood();
+  const accounts = useAccounts();
+  const prefs = usePrefs();
   const [preExit, setPreExit] = useState(false);
-  const stats = useMemo(() => moodOutcomeStats(trades, mood.records, mood.registry, { phase: preExit ? "pre_exit" : "any" }), [trades, mood.records, mood.registry, preExit]);
+  const rSize = useMemo(() => ({ accounts: accounts.accounts, prefs }), [accounts.accounts, prefs]);
+  const stats = useMemo(
+    () => moodOutcomeStats(trades, mood.records, mood.registry, { phase: preExit ? "pre_exit" : "any", rSize }),
+    [trades, mood.records, mood.registry, preExit, rSize],
+  );
   const size = 168;
   const padding = 34;
   const labels = mood.registry.spokes.map((spoke) => spoke.short);

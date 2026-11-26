@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { PlaybookCard } from "./PlaybookCard";
 import { useDrills } from "@/lib/drills-store";
 import { binderView, playbookSampleLine, playbookTileStats } from "@/lib/playbook-binder";
+import { useAccounts } from "@/lib/accounts-store";
 import { usePlaybooks } from "@/lib/playbooks-store";
 import { usePrefs } from "@/lib/prefs";
 import { useJournal } from "@/lib/store";
@@ -26,11 +27,15 @@ export function PlaybookBinder() {
   const playbooks = usePlaybooks();
   const { records } = useDrills();
   const prefs = usePrefs();
+  const accounts = useAccounts();
   const [openId, setOpenId] = useState<string | null>(null);
   // Read once, like the drill screen, so the numbers do not shift while the binder is open.
   const [now] = useState(() => Date.now());
 
-  const view = useMemo(() => binderView(playbooks.playbooks, journal.trades, records, now), [playbooks.playbooks, journal.trades, records, now]);
+  const view = useMemo(
+    () => binderView(playbooks.playbooks, journal.trades, records, now, { accounts: accounts.accounts, prefs }),
+    [playbooks.playbooks, journal.trades, records, now, accounts.accounts, prefs],
+  );
   const byId = useMemo(() => new Map(journal.trades.map((trade) => [trade.id, trade])), [journal.trades]);
 
   if (!journal.hydrated || !playbooks.hydrated) {
