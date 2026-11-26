@@ -58,6 +58,26 @@ function createTagSync(overrides: Partial<SingletonSyncOptions<TagRegistry>> = {
 
 let tagSync: SingletonSync = createTagSync();
 
+// Cross-tab (docs/26 §8.4 #7): another open tab writes TAGS_STORAGE_KEY. Adopt its copy so this tab never overwrites it.
+let storageListener: ((event: StorageEvent) => void) | null = null;
+
+function listenForStorage() {
+  if (storageListener || typeof window === "undefined") return;
+  storageListener = (event: StorageEvent) => {
+    if (event.key !== TAGS_STORAGE_KEY) return;
+    try {
+      set({ registry: event.newValue ? sanitizeTagRegistry(JSON.parse(event.newValue)) : freshRegistry() });
+      tagSync.changed();
+    } catch { /* malformed: keep this tab's copy */ }
+  };
+  window.addEventListener("storage", storageListener);
+}
+
+function stopListeningForStorage() {
+  if (storageListener && typeof window !== "undefined") window.removeEventListener?.("storage", storageListener);
+  storageListener = null;
+}
+
 /** Reads the device copy once per page load and starts the background sync. Safe to call again. */
 export function hydrateTagRegistry() {
   if (state.hydrated || typeof window === "undefined") return;
@@ -69,6 +89,7 @@ export function hydrateTagRegistry() {
     // Unreadable copy: keep the seeds. The next change rewrites it.
   }
   set({ registry, hydrated: true });
+  listenForStorage();
   tagSync.start();
 }
 
@@ -129,6 +150,7 @@ export function restoreTagRegistry(registry: TagRegistry) {
 
 /** Test hook: back to unhydrated seeds and the default (disabled) syncer. */
 export function resetTagRegistryForTests() {
+  stopListeningForStorage();
   state = empty();
   setTagRegistry(null);
   tagSync.dispose();
