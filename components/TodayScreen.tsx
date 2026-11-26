@@ -13,6 +13,7 @@ import { useAccounts } from "@/lib/accounts-store";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { groupByDay, parseSessionDateParam, resolveViewedDate, stepRegularSessionDate, withSamples } from "@/lib/selectors";
+import { isPreOpenWarmupWindow } from "@/lib/drills";
 import type { DayGroup } from "@/lib/selectors";
 import { dayTradeCounts, formatDayTradeHeader, formatReviewQueueSummary } from "@/lib/day-counts";
 import { formatSessionDate, sessionDate } from "@/lib/session";
@@ -72,6 +73,8 @@ function TodayView() {
   const rolledOver = viewingToday && todayDate > closedDate;
 
   const trades = withSamples(journal.trades, prefs.showSamples);
+  // docs/23 §7: a quiet link to the 5-card warm-up before the 09:30 ET open (today only, never on a past day).
+  const preOpen = viewingToday && isPreOpenWarmupWindow(journal.trades, now).show;
   const groups = groupByDay(trades, { accounts: accounts.accounts, prefs });
   const focus = groups.find((group) => group.date === viewedDate);
   const previous = groups.find((group) => group.date < viewedDate);
@@ -133,6 +136,12 @@ function TodayView() {
           )}
 
           {/* Account balances and challenges describe now, so they only show on Today. */}
+          {preOpen && (
+            <Link href="/drills" className="card card-pad" aria-label="Pre-open warm-up: five-card Take it deck" style={{ display: "flex", alignItems: "center", minHeight: 44, margin: "0 0 14px", fontSize: 13 }}>
+              <span>Pre-open warm-up · 5-card Take it? deck →</span>
+            </Link>
+          )}
+
           {viewingToday && <AccountCards shield={prefs.shield} />}
 
           {focus && <DaySummary group={focus} shield={prefs.shield} />}

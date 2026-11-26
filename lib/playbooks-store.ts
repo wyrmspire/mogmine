@@ -12,7 +12,7 @@ import { NO_SETUP_ID, PLAYBOOK_LIMITS, PLAYBOOK_SEEDS, setPlaybookRegistry } fro
 import type { Playbook, PlaybookRule } from "./playbooks.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
 import type { TradeStyle } from "./trades.ts";
-import { STYLES, clonePlaybook, trimText, sanitizePlaybooks } from "./playbooks-sanitize.ts";
+import { STYLES, clonePlaybook, pinnedExampleId, trimText, sanitizePlaybooks, withPinnedExample } from "./playbooks-sanitize.ts";
 import { createCollectionSync, fingerprint } from "./persistence/store-sync.ts";
 import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
 export { sanitizePlaybook, sanitizePlaybooks, sanitizePlaybooksBackup } from "./playbooks-sanitize.ts";
@@ -201,6 +201,23 @@ export function setPlaybookArchived(id: string, archived: boolean): PlaybookResu
   }
   const playbook = { ...current, archived };
   set({ playbooks: state.playbooks.map((item) => (item.id === id ? playbook : item)) });
+  persist();
+  playbooksSync.changed();
+  return { ok: true, playbook };
+}
+
+/**
+ * docs/23 §9: pin a closed trade as the playbook's teaching example, or clear the pin with `null`. The card checks
+ * the trade on read, so a pin to a deleted, reassigned or open trade falls back to the automatic example.
+ */
+export function setPlaybookPinnedExample(playbookId: string, tradeId: string | null): PlaybookResult {
+  hydratePlaybooks();
+  const current = state.playbooks.find((item) => item.id === playbookId);
+  if (!current) return { ok: false, error: "That playbook no longer exists on this device." };
+  const next = pinnedExampleId(tradeId);
+  if (tradeId != null && !next) return { ok: false, error: "Pick a saved trade to pin." };
+  const playbook = withPinnedExample(current, next);
+  set({ playbooks: state.playbooks.map((item) => (item.id === playbookId ? playbook : item)) });
   persist();
   playbooksSync.changed();
   return { ok: true, playbook };

@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { TradeChart } from "./TradeChart";
 import type { StoredCandles } from "@/lib/candles";
-import { DRILL_HIDDEN, DRILL_SCORE_MIN_ANSWERS, cutAtEntry, drillSkipReason, isMiss, missesDeck, playbookDeck, takeVsPass, warmupDeck } from "@/lib/drills";
+import { DRILL_HIDDEN, DRILL_SCORE_MIN_ANSWERS, cutAtEntry, drillRevealRuleNote, drillSkipReason, isMiss, missesDeck, playbookDeck, takeVsPass, warmupDeck } from "@/lib/drills";
 import type { Deck, DrillAnswer, DrillSkip } from "@/lib/drills";
 import { addDrillAnswer, useDrills } from "@/lib/drills-store";
 import { formatR } from "@/lib/format";
@@ -157,6 +157,8 @@ function DrillCard({ trade, stored, answer, showPlaybook, zone, privacy, onAnswe
   const r = resultR(trade, resolveRSize(trade, accounts.accounts, prefs));
   const process = processRead(trade);
   const miss = answer ? isMiss(answer, trade, { accounts: accounts.accounts, prefs }) : null;
+  // docs/23 §9: teach the frozen rule on the reveal, whichever deck dealt the trade.
+  const ruleNote = drillRevealRuleNote(trade);
 
   return (
     <div className="specular-card drill-card">
@@ -196,6 +198,14 @@ function DrillCard({ trade, stored, answer, showPlaybook, zone, privacy, onAnswe
               {process && <span> · rules {process === "clean" ? "followed (clean)" : "broken"}</span>}
               <span> · you said {ANSWERS.find(([value]) => value === answer)?.[1]}</span>
             </p>
+            {ruleNote.kind !== "none" && (
+              <p className="drill-rule num">
+                {ruleNote.kind === "broken"
+                  ? <>Broken rule: <b>{ruleNote.ruleLabel}</b> ({ruleNote.followed}/{ruleNote.total} followed)</>
+                  : <>All {ruleNote.total} rules followed</>}
+              </p>
+            )}
+            {playbookName(trade.playbook_id) && <p className="muted drill-playbook-name">{playbookName(trade.playbook_id)}</p>}
             {miss && (
               <p className="drill-miss" role="alert">
                 <span aria-hidden="true">⚠️ </span>
