@@ -101,9 +101,11 @@ A drill is BET-03 made repeatable. The Review queue's blind review ([ReviewScree
 
 After 30+ answered *Take it?* drills: average R of trades answered *Take it* against trades answered *Pass*, with `n` for each. If *Pass* trades did as well as *Take it* trades, the trader's read of their setups is not adding edge. Shown on the playbook card (§5) and the drill screen.
 
-**Built (CD-2a, `lib/drills.ts`):** the sealed front keeps only bars that closed by the entry, so the entry bar is hidden too: its high, low and close include prices after the fill. A miss is *Take it* on a losing trade that broke its rules, or *Pass* on a winning trade that followed them. The take-vs-pass averages use each trade's latest answer and `rMultiple`, and trades without a stop are counted apart.
+**Built (CD-2a, `lib/drills.ts`):** the sealed front keeps only bars that closed by the entry, so the entry bar is hidden too: its high, low and close include prices after the fill. A miss is *Take it* on a losing trade that broke its rules, or *Pass* on a winning trade that followed them. The take-vs-pass averages use each trade's latest answer and `resultR` (account R), and trades without a stop are counted apart.
 
 **Built (CD-2c, `/drills`):** decks for warm-up, due misses and one playbook, opened from Review. The front is drawn as an open trade on the cut bars, with no marks. The reveal shows the full chart with marks, R and the rules read. It does not yet play the bars forward or show the Trade Card front. Bars come only from the candle cache.
+
+**Built (R3-14): reveal rule note.** The reveal shows the first relevant frozen checklist rule, with the evidence available at the decision (`drillRevealRuleNote` in `lib/drills.ts`).
 
 **Split for PRs:** `CD-2a` pure deck selection, eligibility, cut-off and scoring + tests; `CD-2b` local store + backup; `CD-2c` drill screen with flip and reveal.
 
@@ -121,9 +123,11 @@ Ordered rules from the playbook (R-07 store), a **Skip when…** list (new optio
 
 ### 5.3 Numbers
 
-From `R-08a` selectors only: excludes `is_sample` and `open`, skips `rMultiple === null` and prints the skip count, gross only. Minimum sample for any rate: 10 trades (interim; `OD-46` e).
+From `R-08a` selectors only: excludes `is_sample` and `open`, skips trades whose `resultR` is `null` and prints the skip count, gross only. `resultR` is account R (`lib/r-size.ts`), not the old `rMultiple`. Minimum sample for any rate: 10 trades (interim; `OD-46` e).
 
 Built as `playbookCardData` in `lib/playbook-card.ts` (CD-3a). Win rate and average R stay empty below 10 trades. The trade count and R skips always print. A blind *Take it* means `take_again: "yes"`. The **Skip when…** list waits for `OD-46` (d).
+
+**Built (R3-14): pinned example.** A trader's pinned example trade (`playbookExample`, basis `pinned`) replaces the automatic pick while it is still a real, closed trade of this playbook.
 
 ### 5.4 Uses
 
@@ -137,11 +141,11 @@ Glance before the session; a **binder** view (grid of all playbook cards); share
 
 ## 6. Later cards
 
-Each is a layout on the §2 frame. None is in the queue yet; each waits on the work named.
+Each is a layout on the §2 frame. **Built:** the Day card as the Review Card grid (`DR-3`, `components/ReviewCard.tsx`, `/review/day/[date]`). The rest are not in the queue yet; each waits on the work named.
 
 | Card | Shows | Waits on |
 | :--- | :--- | :--- |
-| **Day card** | Planned levels against where trades happened (ladder), net R, rules %, mood, missed moves | BET-02, docs/12 markup |
+| **Day card** (built as `DR-3`) | Planned levels against where trades happened (ladder), net R, rules %, mood, missed moves | BET-02, docs/12 markup |
 | **Plan card** (pre-market) | Levels, zones, bias, max loss, if/then lines; `9:16` for the lock screen | docs/12, `OD-19` |
 | **Mistake card** | One recurring tag or broken rule, 3 small example charts, the rule that prevents it; feeds the Misses deck | `R-08a` per-tag stats |
 | **Challenge card share** | Finished Clean Run or Drawdown Defender as a shareable image; progress, not P&L | Existing `ChallengeCard`, `CD-1a` frame |
@@ -153,7 +157,7 @@ Each is a layout on the §2 frame. None is in the queue yet; each waits on the w
 
 - **Gallery:** any list (feed, playbook, tag) can switch to a grid of card fronts. Thumbnails are generated and cached; list queries still never select `bars` (B-42).
 - **Side by side:** two cards of the same playbook, one well executed and one not, on one screen.
-- **Warm-up before the open:** Today offers the 5-card warm-up deck before 09:30 ET.
+- **Warm-up before the open:** Today offers the 5-card warm-up deck before 09:30 ET. *Built (R3-14): a quiet link on Today, today only.*
 - **Sharing:** mentor or study group, Shield on.
 - **Assistant context:** a card's content object (`shareCardContent` and its siblings) is the natural bounded unit for `R-06` / `OD-19`. Read-only.
 - **Print:** a playbook binder exported as a multi-page PDF (later; not in queue).

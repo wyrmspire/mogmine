@@ -60,7 +60,7 @@ Per [docs/22 — Development Mode and Backend Boundary](22-development-mode-and-
 
 Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CONTRIBUTING.md` §3):
 
-1. **`R-08a` — Pure running stats (`lib/selectors.ts` + tests), done:** Cross-day, per-playbook, per-tag, rolling windows (last 20, week, month). Exclude `is_sample` and `open`; skip `rMultiple === null` and count skipped; gross only.
+1. **`R-08a` — Pure running stats (`lib/selectors.ts` + tests), done:** Cross-day, per-playbook, per-tag, rolling windows (last 20, week, month). Exclude `is_sample` and `open`; skip trades whose `resultR` is `null` and count them; gross only. *Current state (`R-08a`, `R-08b`): done, with `resultR` (account R) in place of `rMultiple`.*
 2. **`R-08b` — Running stats UI, done:** Summary card on Today, `390×844` + desktop, Shield-safe, gross-labelled.
 3. **`TD-1` (Issue `#35` pure) — `observeTrade` (`docs/15` §3.3), done:** Bar observer over `DerivedTrade` + golden tests on `fixtures/trades/ex-*.json`. The chart flags and text equivalents remain part of the display-list integration.
 4. **`TD-2` (Issue `#34` pure) — `buildMarks` (`docs/15` §3.4), done:** Display list builder for the `D-010` fills-only look, with exact marks on all seven trade fixtures at 1m and 5m.
@@ -69,13 +69,13 @@ Work top-to-bottom in small slices (**aim under ~400 changed lines per PR**, `CO
 7. **Done — `R-07b` — Playbook editor (`components/PlaybookEditor.tsx` in Tune):** Add, rename, reorder rules, archive (no hard delete; frozen trade checklists stay intact).
 8. **`UI-1` — Chart OHLC HUD & honest freshness, done (`components/TradeDetail.tsx`, `app/globals.css`, `lib/freshness.ts`, `OD-40`, #114):** Pin OHLC readout top-left inside `.chart-frame`; keep `.chart-source` visible; add `Delayed · Xm` / `Cached` / `Offline` pill.
 9. **`UI-2` — Desktop 3-column workstation & toolbar polish, done (`components/TradeDetail.tsx`, `app/globals.css`, `docs/19`, `docs/24 §6`, `#114`):** Refine `>=1024px` workspace with compact levels ribbon and balanced chart frame clamp without hiding `.trade-levels-card`; move mobile edge controls (`1m`, change-target chip, after-the-exit note, mood button) >= 20px off edges to avoid back-swipe conflicts.
-10. **`UI-3` — Mood at Entry (`OD-39` c, `docs/19` §4):** Optional 1-tap pre-exit mood capture in `AddTradeSheet` / open `TradeDetail`.
-11. **`MD-1` (Issue `#90` `AC-07`) — Expected window coverage in `/api/market-data` & `lib/candles.ts`:** Check `expectedInsideBarTimes` instead of `candles.length >= 4`.
+10. **`UI-3` — Mood at Entry (`OD-39` c, `docs/19` §4), done:** Optional 1-tap pre-exit mood capture in `AddTradeSheet` / open `TradeDetail`.
+11. **`MD-1` (Issue `#90` `AC-07`), done — Expected window coverage in `/api/market-data` & `lib/candles.ts`:** Check `expectedInsideBarTimes` instead of `candles.length >= 4`.
 12. **`CD-1a` — Card frame & Trade Card layout, done (`lib/shareCard.ts` + tests, [docs/23](23-card-system.md) §2–3, `OD-46`, #41):** Shared frame, `4:5` / `9:16` / `1:1` layout tables, chart at 55–60%, hero R with rules seal, Shield copy tested for all sizes.
 13. **`CD-1b` — Trade Card sheet controls, done (`components/TradeCardSheet.tsx`, `components/TradeDetail.tsx`, `lib/shareCard.ts`):** Size picker (`4:5`, `9:16`, `1:1`), front/back flip toggle, canvas back-side journal rendering, default Shield on open, and `390×844` mobile check.
-14. **`CD-2a` — Drill decks, pure (`lib/drills.ts` + tests, docs/23 §4):** Eligibility (closed, not sample, bars cached, older than 7 days), warm-up / playbook / misses decks, chart cut at entry, scoring.
-15. **`CD-2b` — Drill store & backup (`lib/drill-store.ts`, `lib/store.ts`):** `mogmine-drills-v1` + `user_id`, in journal backup/restore, never writes `take_again`.
-16. **`CD-2c` — Drill screen:** Sealed front, *Take it / Smaller / Pass*, reveal (instant under reduced motion), missing-bars skip count.
+14. **`CD-2a` — Drill decks, pure (`lib/drills.ts` + tests, docs/23 §4), done:** Eligibility (closed, not sample, bars cached, older than 7 days), warm-up / playbook / misses decks, chart cut at entry, scoring.
+15. **`CD-2b` — Drill store & backup (`lib/drills-store.ts`, `lib/store.ts`), done:** `mogmine-drills-v1` + `user_id`, in journal backup/restore, never writes `take_again`.
+16. **`CD-2c` — Drill screen, done:** Sealed front, *Take it / Smaller / Pass*, reveal (instant under reduced motion), missing-bars skip count.
 17. **`CD-3` — Playbook card (docs/23 §5):** `CD-3a` data done (`lib/playbook-card.ts`). `CD-3b` in-app card and `/playbooks` binder done (`components/PlaybookCard.tsx`, `components/PlaybookBinder.tsx`, `lib/playbook-binder.ts`). `CD-3c` PNG export on the shared frame done (`lib/playbook-card-image.ts`, `components/PlaybookCardSheet.tsx`).
 
 ---
@@ -186,9 +186,9 @@ Invariant: `status === "open"` ⇔ `exit_time === null` ⇔ `exit_price === null
 
 **Do it in three PRs, in this order.**
 
-**R-03a — Types and math (no UI change).**
+**R-03a — Types and math (no UI change). Done.** *Current state: the function is `resultR` in `lib/r-size.ts` (account R), not `rMultiple`; `riskMultiple` in `lib/trades.ts` is the stop-width ratio.*
 - Add `TradeStatus`, make the two exit fields nullable, add `isOpen(trade)` to `lib/trades.ts`.
-- Every money function returns `null` for an open trade: `tradeTicks`, `tradePoints`, `tradePnl`, `rMultiple`, `excursions`, `isScratch` (`false`), `exitFlagReason` (`null`). `initialRiskUsd` and `plannedR` do not need the exit and keep working.
+- Every money function returns `null` for an open trade: `tradeTicks`, `tradePoints`, `tradePnl`, `resultR` (was `rMultiple`), `excursions`, `isScratch` (`false`), `exitFlagReason` (`null`). `initialRiskUsd` and `plannedR` do not need the exit and keep working.
 - `holdSeconds(trade, now)` uses `now` for an open trade. `classifyTrade` and `defaultTimeframe` use that.
 - `candleSignature` uses the literal string `open` in place of the exit time, so closing the trade changes the signature and reloads candles.
 - `lib/store.ts` line 299: accept a record with `status === "open"` and null exits; still drop a `closed` record with a missing exit.
@@ -283,8 +283,8 @@ So an AI assistant can read the journal. Scope and authorisation are `OD-19` ([d
 
 **Rules:**
 - **Read-only.** No route creates, edits or deletes a trade. Drafts-from-assistants is a later step.
-- **Every number comes from code** (`tradePnl`, `rMultiple`, `excursions`, …). The response carries the computed value; the model never calculates one (guardrail 11).
-- Units are explicit in field names: `pnl_usd`, `points`, `ticks`, `r_multiple`. `r_multiple` is `null` without a stop, never `0`.
+- **Every number comes from code** (`tradePnl`, `resultR`, `riskMultiple`, `excursions`, …). The response carries the computed value; the model never calculates one (guardrail 11).
+- Units are explicit in field names: `pnl_usd`, `points`, `ticks`, `r_multiple`. `r_multiple` is `resultR` (account R), `null` only when P&L cannot be computed. `risk_multiple` is `riskMultiple`, `null` without a stop.
 - Times are UTC ISO strings, plus the session date in `America/New_York` (guardrail 5).
 - Shield mode does not apply to the API, but the token page says so plainly.
 - Nothing here talks to the broker (guardrail 1).
@@ -312,7 +312,7 @@ Extend `lib/selectors.ts`. Pure functions with tests (`R-08a`), then a screen/ca
 - All-time breakdowns per playbook and per quick tag: trade count, win rate, average R, total R, rule adherence (`adherence()` in `lib/trades.ts`). A trade counts once per tag.
 - Rolling windows: last 20 by exit time (ties by id), this session week (Monday to Friday), this session month. The caller passes the current instant to `runningStats(trades, now)`. Calendar windows use the New York session date at exit. A closed trade with an invalid exit timestamp stays in all-time totals and is counted as undated for the rolling windows (`OD-47`).
 - **Excluded always:** sample trades (`is_sample`), open trades (`R-03`).
-- R-based numbers skip trades for which `rMultiple` is `null` and show the skip count. A scratch with a valid stop contributes `0R`.
+- R-based numbers skip trades for which `resultR` is `null` and show the skip count. A scratch with a valid stop contributes `0R`.
 - Report gross figures and label them gross (issue #61). Win rate uses priced trades. Show the priced denominator and an incomplete indication when any trade could not be priced. If no trade can be priced, display `—` for both gross P&L and win rate. Shield hides gross dollars in the summaries and breakdowns (UX-64).
 
 ---
@@ -336,14 +336,14 @@ Fixed constraints:
 
 > **Merged** in #118. The price-first form ([docs/20](20-price-first-entry.md) §2) saves its stop through the same `stopPatch`, risk chips use it too, and a backup restore keeps the device's initial stop (`keepInitialStop`).
 
-**Problem.** `components/AddTradeSheet.tsx` saves every trade with `stop_loss_price: null`. The stop is added later on Trade Detail and stays editable, so `rMultiple` and `initialRiskUsd` can change after the trade is over. Nothing records what the risk was when the trade was taken. Any R-based stat or challenge is only as honest as that edit.
+**Problem.** `components/AddTradeSheet.tsx` saves every trade with `stop_loss_price: null`. The stop is added later on Trade Detail and stays editable, so the R numbers and `initialRiskUsd` can change after the trade is over. Nothing records what the risk was when the trade was taken. Any R-based stat or challenge is only as honest as that edit.
 
 **Change.**
 1. `lib/trades.ts` `TradeRecord`: add `initial_stop_price: number | null` and `initial_stop_set_at: string | null`. `normalizeTrade` defaults both to `null` for records saved before this change.
 2. `AddTradeSheet.tsx`: add an **optional** `Stop` price field, validated by the existing `validateTradeInput` stop-side rule (below the entry for a long, above for a short, on the tick grid). Empty is allowed.
 3. On save with a stop: set `stop_loss_price` and `initial_stop_price` to it, and `initial_stop_set_at` to the save time.
 4. A trade saved without a stop: the **first** time a stop is set on Trade Detail (`TradeLevelEditor.tsx`), copy it to `initial_stop_price` and stamp `initial_stop_set_at`. Later edits change `stop_loss_price` only.
-5. Add `initialRMultiple(trade)` beside `rMultiple`: the same math on `initial_stop_price`, `null` without one. Do not change what `rMultiple` returns.
+5. Add `initialRMultiple(trade)` beside `rMultiple`: the same math on `initial_stop_price`, `null` without one. Do not change what `rMultiple` returns. *Current state: `rMultiple` no longer exists. The initial-stop ratio shipped as `initialRiskMultiple` in `lib/trades.ts`.*
 6. Trade Detail shows "Initial stop 6841.25, set 09:42" as a quiet fact when the current stop differs from the initial one.
 
 **Do not:**
