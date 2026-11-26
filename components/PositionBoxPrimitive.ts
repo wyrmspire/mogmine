@@ -10,6 +10,7 @@ import { separateLabels } from "../lib/label-stack.ts";
 import type { ChartTheme } from "../lib/theme.ts";
 import type { FlagMark, Mark, SegmentMark } from "../lib/trade-marks.ts";
 import type { NeighbourTradeProjection } from "../lib/neighbour-trades.ts";
+import { buildActualLotEnvelopes, type ActualLotZone } from "../lib/lot-envelope.ts";
 
 export interface ArchivedBoxRect {
   tradeId: string;
@@ -221,16 +222,19 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         return right > left && bottom > top && Math.max(ya, yb) >= 0
           ? { x: left, y: top, width: right - left, height: bottom - top } : null;
       };
-      // Actual zones are collected first, so plan fills can be cut around them (08 §4.4).
-      const actualRects: Area[] = [];
-      if (fills) {
-        for (const mark of this.marks) {
-          if (mark.kind !== "zone" || mark.layer !== "actual") continue;
-          const [xa, xb, ya, yb] = [x(mark.t0), x(mark.t1), y(mark.p0), y(mark.p1)];
-          const area = xa == null || xb == null || ya == null || yb == null ? null : bounds(xa, xb, ya, yb);
-          if (area) actualRects.push(area);
-        }
-      }
+      // Actual lots become envelopes first, so plan fills can be cut around them (08 §4.4, §5).
+      const lotZones = this.marks.flatMap((mark): ActualLotZone[] => {
+        if (mark.kind !== "zone" || mark.layer !== "actual") return [];
+        const [xa, xb, ya, yb] = [x(mark.t0), x(mark.t1), y(mark.p0), y(mark.p1)];
+        const rect = xa == null || xb == null || ya == null || yb == null ? null : bounds(xa, xb, ya, yb);
+        return rect && ya != null && yb != null ? [{ tone: mark.tone, rect, y0: ya, y1: yb, label: mark.label, approximate: mark.approximate, opacityMultiplier: mark.opacityMultiplier }] : [];
+      });
+      const envelopes = buildActualLotEnvelopes(lotZones), actualRects = envelopes.flatMap((envelope) => envelope.slices);
+      // Zone chips sit just outside the zone's right edge, flipping inside only at the price axis (08 §4.3).
+      const zoneLabel = (label: string, tone: Tone, { x: left, y: top, width, height }: Area) => {
+        const outside = left + width + 4;
+        if (height >= 13) text(label, outside + measureChip(label) <= pane.width ? outside : left + width - 4 - measureChip(label), top + height / 2, chipFor(tone));
+      };
 
       const paint = (mark: Mark) => {
         if (mark.kind === "flag" || mark.kind === "label" || mark.kind === "bracket") {
@@ -366,21 +370,15 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
             ctx.setLineDash([...DASH.cancelled]);
             ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
             ctx.restore();
-          } else if (mark.layer !== "archived") {
-            const actual = mark.layer === "actual";
+          } else if (mark.layer === "plan") {
             ctx.save();
-            ctx.globalAlpha *= actual ? CHART_TOKENS.zone.edgeActual : CHART_TOKENS.zone.edgePlan;
-            setDash(ctx, actual ? "solid" : "dashed");
+            ctx.globalAlpha *= CHART_TOKENS.zone.edgePlan;
+            setDash(ctx, "dashed");
             const edgeY = crisp(y1, dpr);
             strokeLine(ctx, left, edgeY, left + width, edgeY);
             ctx.restore();
           }
-          // Zone chips sit just outside the zone's right edge, flipping inside only at the price axis (08 §4.3).
-          if (mark.label && height >= 13) {
-            const outside = left + width + 4;
-            const chipX = outside + measureChip(mark.label) <= pane.width ? outside : left + width - measureChip(mark.label) - 4;
-            text(mark.label, chipX, top + height / 2, chipFor(mark.tone));
-          }
+          if (mark.label) zoneLabel(mark.label, mark.tone, area);
         } else {
           // Zone fills: one tier per area. Actual zones fade from entry to far price; plan fills are flat and
           // are cut out wherever an actual zone sits, so no two translucent fills stack (08 §3.3).
@@ -396,22 +394,18 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
             ctx.setLineDash([...DASH.archived]);
             ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
             ctx.restore();
-          } else if (mark.layer === "plan") {
+          } else {
             const factor = mark.style === "dotted" ? CHART_TOKENS.zone.cancelledFactor : CHART_TOKENS.zone.planFactor;
             ctx.fillStyle = withAlpha(color, zoneAlpha(factor, strength));
             for (const piece of subtractRects({ x: left, y: top, width, height }, actualRects)) {
               ctx.fillRect(piece.x, piece.y, piece.width, piece.height);
             }
-          } else {
-            ctx.fillStyle = zoneGradient(ctx, y0, y1, color,
-              zoneAlpha(CHART_TOKENS.zone.nearFactor, strength), zoneAlpha(CHART_TOKENS.zone.farFactor, strength));
-            ctx.fillRect(left, top, width, height);
           }
         }
       };
 
       for (const mark of this.marks) {
-        if (fills && mark.kind !== "zone") continue;
+        if ((fills && mark.kind !== "zone") || (mark.kind === "zone" && mark.layer === "actual")) continue; // envelopes below
         ctx.save();
         ctx.lineWidth = 1;
         if ("tone" in mark) ctx.fillStyle = ctx.strokeStyle = zoneColor(mark.tone);
@@ -419,6 +413,22 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         paint(mark);
         ctx.restore();
       }
+
+      // Envelopes (08 §5): one shared gradient fill, a 1 px far edge and lot separators. No per-lot opacity steps.
+      ctx.save(); ctx.lineWidth = 1;
+      for (const env of envelopes) {
+        const base = env.approximate ? 0.72 : 1;
+        ctx.globalAlpha = base; ctx.strokeStyle = zoneColor(env.tone);
+        if (fills) {
+          const strength = theme.boxOpacity * env.opacityMultiplier * base;
+          ctx.fillStyle = zoneGradient(ctx, env.entryY, env.farY, zoneColor(env.tone), zoneAlpha(CHART_TOKENS.zone.nearFactor, strength), zoneAlpha(CHART_TOKENS.zone.farFactor, strength));
+          for (const s of env.slices) ctx.fillRect(s.x, s.y, s.width, s.height);
+        } else {
+          if (env.label) zoneLabel(env.label, env.tone, env.rect);
+          for (const seg of [...env.farEdges, ...env.separators]) { ctx.globalAlpha = base * seg.alpha; strokeLine(ctx, seg.x0, crisp(seg.y, dpr), seg.x1, crisp(seg.y, dpr)); }
+        }
+      }
+      ctx.restore();
 
       if (fills) {
         this.archivedRects = recordedArchived;
