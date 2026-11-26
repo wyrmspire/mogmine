@@ -2,7 +2,7 @@
 // renderers: no Next, no SDK, no DOM, no journal text. The discovery document, the OpenAPI spec, the setup block and
 // GET /api/v1/guide all read from here, so the rules cannot drift between them.
 
-export const HOUSE_RULES_VERSION = "2026-11-24.1";
+export const HOUSE_RULES_VERSION = "2026-11-26.1";
 
 export interface HouseRule {
   id: `HR-${number}`;
@@ -68,13 +68,13 @@ export const HOUSE_RULES: readonly HouseRule[] = [
   },
   {
     id: "HR-5",
-    title: "exit_reason must match the exit price",
-    summary: "stop and trail exit at the working stop; target at the target; breakeven at the entry; manual at market.",
+    title: "exit_reason names the trigger; the fill can slip",
+    summary: "stop and trail mean the working stop triggered; exit_price is the actual fill, which may slip past it. Never move the stop to hide slippage.",
     rule:
-      "`exit_reason` changes the chart. `stop` and `trail` mean the exit filled at the working stop; `target` means the target; `breakeven` means the entry; `manual` means market. Pick the reason that happened, and the exit price must agree with it.",
-    why: "Exit reasons did not match the exit prices, so the chart drew the exit in the wrong place.",
-    badExample: "exit_reason: \"target\" with exit_price equal to the stop",
-    goodExample: "exit_reason: \"stop\" with exit_price equal to the working stop at the time of exit",
+      "`exit_reason` changes the chart. `stop` and `trail` mean the working stop (`stop_loss_price`, or the last `stop_moves` price) was triggered. `exit_price` is the actual execution fill, which may fill worse than the stop by adverse slippage. Record the true `exit_price` and the true `stop_loss_price`; never move `stop_loss_price` to hide slippage. If the trade left on the favorable or untriggered side before price reached the stop, the reason is `manual` (or `target`), not `stop`. `target` means the target; `breakeven` means the entry; `manual` means market.",
+    why: "A stop that filled a few ticks past the stop was saved at the stop price, which hid the real slippage. A trade closed in profit before the stop was touched was logged as a stop.",
+    badExample: "stop_loss_price: 5000.00, exit_reason: \"stop\", exit_price: 5001.25 (price never reached 5000.00)",
+    goodExample: "stop_loss_price: 5000.00, exit_reason: \"stop\", exit_price: 4999.50 (the stop triggered and filled 2 ticks adverse; both true prices kept)",
     appliesTo: ["trades"],
   },
   {
@@ -124,12 +124,12 @@ export const HOUSE_RULES: readonly HouseRule[] = [
   {
     id: "HR-10",
     title: "Never write derived values",
-    summary: "Never write net_pnl, r_multiple, hold_seconds, mae_price, mfe_price or risk_cents. Read them back, do not send them.",
+    summary: "Never write pnl_cents, result_r, risk_cents, risk_r, r_size_cents, hold_seconds or session_date. Read them back with ?include=derived.",
     rule:
-      "Never write derived values: `net_pnl`, `r_multiple`, `hold_seconds`, `mae_price`, `mfe_price`, `risk_cents`, `resultR` or `riskR`. The server computes them. Read them back from the record once the app returns them; until then, do not expect them in responses.",
+      "Derived values are never sent in write bodies: `pnl_cents`, `result_r`, `risk_cents`, `risk_r`, `r_size_cents`, `hold_seconds` and `session_date`. The server computes them on read. Read them back with `?include=derived` on `GET /api/v1/records/trades` or `GET /api/v1/records/accounts`, or from the `derived` block of `POST /api/v1/checks/trade`.",
     why: "Hand-typed derived values disagreed with the fills and the app's own math.",
-    badExample: "{\"net_pnl\": 75, \"r_multiple\": 0.25}",
-    goodExample: "{\"entry_price\": 5012.25, \"exit_price\": 5010.00} and let the app compute the PnL",
+    badExample: "{\"pnl_cents\": 7500, \"result_r\": 0.25}",
+    goodExample: "{\"entry_price\": 5012.25, \"exit_price\": 5010.00} and then GET with ?include=derived to read the PnL",
     appliesTo: ["trades", "daily_reviews"],
   },
   {

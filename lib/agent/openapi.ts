@@ -55,7 +55,7 @@ export function vocabularyUrl(origin: string): string {
 /** Rule reminders repeated on record writes, so an agent meets the rules that matter where it writes (07 §2.1 item 2). */
 const writeRuleReminder = (origin: string) =>
   "House rules to follow on this write: HR-1 notes are commentary only; HR-2 verify fill times against 1-minute candles; " +
-  "HR-3 vocabulary names only; HR-4 stop moves carry times; HR-5 exit_reason must match the exit price; " +
+  "HR-3 vocabulary names only; HR-4 stop moves carry times; HR-5 stop and trail mean the working stop triggered (the fill may slip); " +
   "HR-7 keep stated_risk_r as the trader said it; HR-9 daily reviews go in daily_reviews; HR-10 never write derived values. " +
   `Read the full rules at ${guideUrl(origin)}.`;
 
