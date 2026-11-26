@@ -9,6 +9,12 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ---
 
+### 2026-11-26 — Codex — Strategy Lab trade management, branch `feat/tm-1-2`
+Did:      TM-1/TM-2 only: ManagePlan types/validator/eight fresh presets, additive recipe management, and lookahead-safe closed 5m/15m candle facts/helpers with conservative missing-minute handling.
+Verified: `node --experimental-strip-types --test --test-concurrency=2 lib/__tests__/strategy-lab-{manage,htf}.test.ts` — 7/7 pass; focused strict `tsc` on touched Strategy Lab sources — clean; `git diff --check` — clean.
+Left:     TM-3 engine and all UI are intentionally untouched. Full project typecheck could not run because this worktree has no `node_modules`; a shared compiler showed only missing-dependency/project-wide noise, then the focused source check passed.
+Watch:    `knownAt` is candle close and the first acting bar opens at that timestamp; incomplete candles are returned flagged, but dependent helpers return false/null.
+
 ## Current state (2026-11-22)
 
 - **`main` holds UI Phases 1–5, Challenges (`R-09a`–`R-09d`), open trades (`R-03a`–`R-03c`), frozen initial stop (`R-10`), price-first entry & price-axis stretch (`docs/20`), accounts & running totals (`docs/21`), Mood Shape (`docs/18`), and `deriveTrade` (`lib/trade-document.ts`, PR #124).**

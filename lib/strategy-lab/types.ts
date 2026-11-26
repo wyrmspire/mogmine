@@ -120,6 +120,50 @@ export type LevelKey =
   | "week_high" | "week_low" | "vwap_globex" | "vwap_rth"
   | "or_high" | "or_low" | "or_mid";
 
+export type CandlePattern =
+  | "engulfing-against"
+  | "close-against-prior-low"
+  | "inside-bar-break-against";
+
+export type ManageTrigger =
+  | { kind: "always" }
+  | { kind: "profitR"; atLeast: number }
+  | { kind: "profitPoints"; atLeast: number }
+  | { kind: "afterMinutes"; minutes: number }
+  | { kind: "scaledOut" }
+  | { kind: "candle"; tf: "5m" | "15m"; pattern: CandlePattern }
+  | { kind: "closeBeyond"; tf: "1m" | "5m" | "15m"; ref: "vwap" | "ema" | LevelKey }
+  | { kind: "volumeClimax"; tf: "1m" | "5m"; multiple: number; against: boolean };
+
+export type TrailSpec =
+  | { mode: "givebackPct"; pct: number }
+  | { mode: "pricePct"; pct: number }
+  | { mode: "points"; points: number }
+  | { mode: "r"; r: number }
+  | { mode: "candleLow"; tf: "1m" | "5m" | "15m"; bars: number; ticks: number }
+  | { mode: "wick"; tf: "5m" | "15m"; part: "extreme" | "half"; ticks: number }
+  | { mode: "ref"; ref: "vwap" | "ema"; ticks: number };
+
+export type ManageAction =
+  | { kind: "scaleOut"; fraction: number }
+  | { kind: "exitAll" }
+  | { kind: "stopTo"; to: "breakeven"; offsetTicks?: number }
+  | { kind: "trail"; by: TrailSpec };
+
+export interface ManageRule {
+  when: ManageTrigger;
+  then: ManageAction;
+  once?: boolean;
+}
+
+export interface ManagePlan {
+  schema: "mogmine.manage-plan.v1";
+  id: string;
+  version: number;
+  name: string;
+  rules: ManageRule[];
+}
+
 export interface LabLevel {
   key: LevelKey;
   value: number;
@@ -201,10 +245,11 @@ export interface Recipe {
   stop:
     | { type: "points"; points: number }
     | { type: "beyond-swing"; ticks: number; lookbackBars: number; maxPoints: number };
-  target:
+  target?:
     | { type: "points"; points: number }
     | { type: "rr"; multiple: number }
     | { type: "level"; level: LevelKey; fallbackPoints: number };
+  manage?: ManagePlan | null;
   maxHoldMinutes: number;
   flatAtEt?: string;
   sizing: { mode: "risk-r"; riskR: number } | { mode: "contracts"; qty: number };

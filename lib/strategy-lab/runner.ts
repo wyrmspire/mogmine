@@ -117,6 +117,7 @@ function buildTrade(recipe: Recipe, series: BarSeries, i: number, levels: LevelB
   const stopPoints = stopDistance * tick;
   if (stopCap !== null && stopPoints > stopCap) return { ok: false, path: "stop", reason: "bad-params" };
 
+  if (!recipe.target) return { ok: false, path: "target", reason: "bad-params" }; // TM-3 handles targetless managed plans.
   let targetTicks: number;
   if (recipe.target.type === "points") {
     targetTicks = entryTicks + sign * Math.round(recipe.target.points / tick);

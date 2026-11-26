@@ -3,6 +3,7 @@
 // path ("trigger.all[1].op") so the editor (SL-12) can point at the field. Defaults are filled in here.
 
 import { LEVEL_KEYS } from "./levels.ts";
+import { validateManagePlan } from "./manage.ts";
 import { getSkill, SKILLS } from "./registry.ts";
 import type { SkillRegistry } from "./registry.ts";
 import type {
@@ -319,7 +320,10 @@ export function validateRecipe(input: unknown, registry: SkillRegistry = SKILLS)
     err("entry.at", 'entry.at must be "trigger-close"');
   }
   const stop = checkStop(input.stop, errors);
-  const target = checkTarget(input.target, errors);
+  const manageResult = input.manage === undefined || input.manage === null ? null : validateManagePlan(input.manage);
+  if (manageResult && !manageResult.ok) manageResult.errors.forEach((issue) => err(`manage${issue.path ? `.${issue.path}` : ""}`, issue.message));
+  const manage = manageResult?.ok ? manageResult.plan : null;
+  const target = input.target === undefined && manage ? undefined : checkTarget(input.target, errors);
   if (!isInt(input.maxHoldMinutes ?? DEFAULT_MAX_HOLD_MINUTES, 1, MAX_HOLD_MINUTES)) err("maxHoldMinutes", "maxHoldMinutes must be a whole number from 1 to 1440");
   const flatAtEt = input.flatAtEt ?? DEFAULT_FLAT_AT_ET;
   if (parseEtMinute(flatAtEt) === null) err("flatAtEt", 'flatAtEt must be "HH:MM" ET');
@@ -347,7 +351,7 @@ export function validateRecipe(input: unknown, registry: SkillRegistry = SKILLS)
   }
   const measure = checkMeasure(input.measure, errors);
 
-  if (errors.length > 0 || !window || !stop || !target || !sizing || !dedupe || !measure) {
+  if (errors.length > 0 || !window || !stop || (!target && !manage) || !sizing || !dedupe || !measure) {
     return { ok: false, errors: errors.length > 0 ? errors : [{ path: "", message: "Recipe is incomplete" }] };
   }
   const recipe = {
@@ -363,7 +367,8 @@ export function validateRecipe(input: unknown, registry: SkillRegistry = SKILLS)
     trigger: cloneJson(input.trigger) as Condition,
     entry: { at: "trigger-close" as const },
     stop,
-    target,
+    ...(target ? { target } : {}),
+    manage,
     maxHoldMinutes: (input.maxHoldMinutes ?? DEFAULT_MAX_HOLD_MINUTES) as number,
     flatAtEt: flatAtEt as string,
     sizing,
