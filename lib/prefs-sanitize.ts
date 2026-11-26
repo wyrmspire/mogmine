@@ -25,6 +25,14 @@ export interface Prefs {
   riskBudgetUsd: number;
   /** Session VWAP anchor the trader last chose on the trade chart (IND-1). */
   vwapAnchor: VwapAnchorPref;
+  /** Draw volume-weighted standard-deviation bands with session/weekly VWAP. */
+  vwapBands?: boolean;
+  /** Positive band multipliers; defaults to 1σ and 2σ. */
+  vwapBandMultiples?: number[];
+  /** Fill between each upper/lower band pair in the chart canvas. */
+  vwapBandFill?: boolean;
+  /** Sunday 18:00 ET anchored weekly VWAP. */
+  weeklyVwap?: boolean;
   /** Level label mode on the trade chart (D-D). */
   levelLabels: LevelLabelsMode;
   /** Draw the 200 EMA on the trade chart (IN-3, D-G). */
@@ -46,6 +54,10 @@ export const DEFAULT_PREFS: Prefs = {
   blindReview: false,
   riskBudgetUsd: 250,
   vwapAnchor: "off",
+  vwapBands: true,
+  vwapBandMultiples: [1, 2],
+  vwapBandFill: false,
+  weeklyVwap: false,
   levelLabels: "tap",
   ema200: false,
   showVolume: true,
@@ -63,6 +75,9 @@ export function sanitizePrefs(raw: unknown): Prefs {
 }
 
 export function sanitize(raw: Partial<Prefs>): Prefs {
+  const multiples = Array.isArray(raw.vwapBandMultiples)
+    ? [...new Set(raw.vwapBandMultiples.filter((value) => typeof value === "number" && Number.isFinite(value) && value > 0 && value <= 10))].sort((a, b) => a - b).slice(0, 4)
+    : [];
   return {
     shield: raw.shield === true,
     goldPreset: GOLD_PRESETS.includes(raw.goldPreset as GoldPreset) ? raw.goldPreset as GoldPreset : DEFAULT_PREFS.goldPreset,
@@ -74,6 +89,10 @@ export function sanitize(raw: Partial<Prefs>): Prefs {
     blindReview: raw.blindReview === true,
     riskBudgetUsd: clamp(raw.riskBudgetUsd, 10, 100_000, DEFAULT_PREFS.riskBudgetUsd),
     vwapAnchor: raw.vwapAnchor === "rth" || raw.vwapAnchor === "globex" ? raw.vwapAnchor : DEFAULT_PREFS.vwapAnchor,
+    vwapBands: raw.vwapBands !== false,
+    vwapBandMultiples: multiples.length ? multiples : [...DEFAULT_PREFS.vwapBandMultiples!],
+    vwapBandFill: raw.vwapBandFill === true,
+    weeklyVwap: raw.weeklyVwap === true,
     levelLabels: raw.levelLabels === "always" ? "always" : DEFAULT_PREFS.levelLabels,
     ema200: raw.ema200 === true,
     showVolume: raw.showVolume !== false,

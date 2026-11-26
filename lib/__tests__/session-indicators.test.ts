@@ -44,9 +44,11 @@ test("RTH VWAP weights HLC3 from the anchor through the last completed bar", () 
   assert.deepEqual(result.vwap, [
     { time: rth + 2 * minute, value: 101 }, { time: rth + 3 * minute, value: 102 }, { time: rth + 4 * minute, value: 102 },
   ]);
-  assert.deepEqual(result.coverage.anchored, {
-    from: rth, to: asOf, expectedBars: 4, presentBars: 4, complete: true, missingBars: 0, longestGapMin: 0, rthMissingBars: 0, approximate: false,
-  });
+  assert.deepEqual({
+    expectedBars: result.coverage.anchored.expectedBars, presentBars: result.coverage.anchored.presentBars,
+    complete: result.coverage.anchored.complete, missingBars: result.coverage.anchored.missingBars,
+    longestGapMin: result.coverage.anchored.longestGapMin, approximate: result.coverage.anchored.approximate,
+  }, { expectedBars: 4, presentBars: 4, complete: true, missingBars: 0, longestGapMin: 0, approximate: false });
   assert.deepEqual(prices(result), { poc: 101, val: 101, vah: 104 }); // 2 / 3 alone falls short of 70%.
   assert.equal(candles[0].time, rth + 4 * minute, "input order is unchanged");
 });
@@ -268,7 +270,7 @@ const elevenTwentyThree = (offset: number) => offset < 10 || (offset >= 77 && of
 const globexCalc = (candles: readonly Candle[], gapPolicy?: SessionIndicatorOptions["gapPolicy"]) =>
   calculate(candles, globexEnd, { anchor: "globex", ...(gapPolicy ? { gapPolicy } : {}) });
 
-test("11/23 Globex gaps (23 of 1,380, longest 12 min) draw only under globex-tolerant", () => {
+test("unfilled 11/23 Globex gaps withhold VWAP even under the legacy tolerant policy", () => {
   const candles = globexBars(elevenTwentyThree);
   const strict = globexCalc(candles);
   assert.deepEqual(strict.vwap, []);
@@ -276,28 +278,19 @@ test("11/23 Globex gaps (23 of 1,380, longest 12 min) draw only under globex-tol
   assert.equal(strict.coverage.anchored.missingBars, 23);
 
   const tolerant = globexCalc(candles, "globex-tolerant");
-  assert.ok(tolerant.vwap.length > 0);
-  assert.equal(tolerant.coverage.anchored.approximate, true);
+  assert.deepEqual(tolerant.vwap, []);
+  assert.equal(tolerant.coverage.anchored.approximate, false);
   assert.equal(tolerant.coverage.anchored.missingBars, 23);
-  assert.equal(tolerant.coverage.anchored.longestGapMin, 12);
-  assert.equal(tolerant.coverage.anchored.rthMissingBars, 0);
-  assert.equal(tolerant.vwap.at(-1)!.value, 100, "VWAP uses only the bars that exist");
-  // Levels stay strict under either policy: no POC, VAH or VAL from an incomplete session.
-  assert.deepEqual(prices(tolerant), prices(strict));
-  assert.equal(prices(tolerant).poc, undefined);
 });
 
-test("a longest overnight gap of 16 min withholds Globex VWAP, and 15 min still draws", () => {
+test("any uncovered overnight gap withholds Globex VWAP", () => {
   assert.deepEqual(globexCalc(globexBars((offset) => offset >= 100 && offset < 116), "globex-tolerant").vwap, []);
-  const fifteen = globexCalc(globexBars((offset) => offset >= 100 && offset < 115), "globex-tolerant");
-  assert.ok(fifteen.vwap.length > 0);
-  assert.equal(fifteen.coverage.anchored.longestGapMin, 15);
+  assert.deepEqual(globexCalc(globexBars((offset) => offset >= 100 && offset < 115), "globex-tolerant").vwap, []);
 });
 
-test("missing bars above 3% of the expected overnight bars withhold Globex VWAP", () => {
-  // 41 isolated gaps are 2.97% of 1,380 and draw. 45 gaps are 3.26% and do not.
+test("isolated uncovered bars withhold regardless of missing share", () => {
   const isolated = (count: number) => (offset: number) => offset % 20 === 0 && offset / 20 < count;
-  assert.ok(globexCalc(globexBars(isolated(41)), "globex-tolerant").vwap.length > 0);
+  assert.deepEqual(globexCalc(globexBars(isolated(41)), "globex-tolerant").vwap, []);
   const over = globexCalc(globexBars(isolated(45)), "globex-tolerant");
   assert.deepEqual(over.vwap, []);
   assert.equal(over.coverage.anchored.missingBars, 45);

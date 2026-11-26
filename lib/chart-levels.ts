@@ -150,10 +150,12 @@ export function tradeLevelReport(
 ): { levels: ComputedLevel[]; withheld: WithheldLevel[] } | null {
   const symbol = trade.symbol.toUpperCase();
   if (symbol !== "MES" && symbol !== "MNQ") return null;
-  // Both windows must be one native series and timeframe. Mixing 1m and 5m would mis-read coverage.
-  if (today && today.baseTimeframe !== prior.baseTimeframe) return null;
-  // Earlier week days on another timeframe are dropped: they stay not-loaded (withheld), and PDH/PDL/ONH/ONL still compute.
-  const matchingEarlier = (earlierWeek ?? []).filter((day): day is LevelCandles => day !== null && day.baseTimeframe === prior.baseTimeframe);
+  // IK-1 mixed rows carry their own native widths, so session windows may have different finest intervals.
+  // Legacy uniform rows still require matching timeframes to avoid reading a 5m bar as one minute.
+  const isTagged = (day: LevelCandles) => day.candles.every((bar) => "minutes" in bar && "fillFrom" in bar);
+  if (today && today.baseTimeframe !== prior.baseTimeframe && (!isTagged(today) || !isTagged(prior))) return null;
+  const matchingEarlier = (earlierWeek ?? []).filter((day): day is LevelCandles => day !== null
+    && (day.baseTimeframe === prior.baseTimeframe || (isTagged(day) && isTagged(prior))));
   const windows = tradeLevelWindows(trade.entry_time);
   const inputs = extractSessionInputsFromCandles({
     symbol,

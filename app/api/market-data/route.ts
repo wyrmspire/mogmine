@@ -6,6 +6,7 @@ import { YahooFinanceProvider } from "@/lib/market-data/yahoo";
 import { anchorsTradeWindow, coversTradeWindow, tradeWindowCoverage } from "@/lib/market-data/coverage";
 import { noCandlesResponse, windowInFuture } from "@/lib/market-data/outcome";
 import type { Candle } from "@/lib/trades";
+import { fetchMixedResolution } from "@/lib/mixed-resolution";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,19 @@ export async function GET(request: NextRequest) {
     }
     if (windowInFuture(from, Date.now())) return noCandles("future");
     const to = Math.min(requestedTo, Date.now());
+    // IK-1 session mode: preserve 1m where Yahoo serves it, then fill only its holes with real
+    // 5m/15m/1h observations. The entry finder keeps requesting one uniform native interval.
+    if (request.nextUrl.searchParams.get("mixed") === "1") {
+      const result = await fetchMixedResolution(provider, symbol, from, to);
+      if (result.candles.length) {
+        return NextResponse.json({
+          ...result,
+          source: "Yahoo Finance",
+          ticker: provider.resolveProviderSymbol(symbol),
+        });
+      }
+      return noCandles("no-data");
+    }
     const failed = { any: false };
     for (const { timeframe } of ATTEMPTS) {
       const candles = await fetchAttempt({ symbol, timeframe, from: new Date(from), to: new Date(to) }, failed);

@@ -25,8 +25,8 @@ import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
 import { useTradeLevels } from "./useTradeLevels";
-import { joinSessionBars, tradeSessionVwapReport, vwapOnBars } from "@/lib/chart-indicators";
-import type { VwapPoint } from "@/lib/chart-indicators";
+import { joinSessionBars, tradeSessionVwapReport, vwapBandsOnBars, vwapOnBars } from "@/lib/chart-indicators";
+import type { VwapBandPoint, VwapPoint } from "@/lib/chart-indicators";
 import { ema200Status, emaOnBars } from "@/lib/ema";
 import { hasRealVolume } from "@/lib/volume";
 import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withheld";
@@ -62,6 +62,7 @@ import { StopFacts } from "./StopFacts";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
 
 const NO_VWAP: readonly VwapPoint[] = [];
+const NO_VWAP_BANDS: readonly (readonly VwapBandPoint[])[] = [];
 
 export function TradeDetail({ id }: { id: string }) {
   const journal = useJournal();
@@ -383,13 +384,20 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   });
   // Computed session levels (LV-1 / LV-2, docs/24 §5, OD-15): the prior session and this session up to
   // entry, read from the chart's own series. The trade's candle window alone never holds the prior session.
-  const levels = useTradeLevels(trade, showLevels, vwapAnchor !== "off", prefs.ema200 ? timeframe : null);
-  const sessionVwapReport = useMemo(() => (ready && vwapAnchor !== "off" ? tradeSessionVwapReport(trade,
+  const indicatorWanted = vwapAnchor !== "off" || prefs.weeklyVwap === true;
+  const levels = useTradeLevels(trade, showLevels, indicatorWanted, prefs.ema200 ? timeframe : null);
+  const sessionVwapReport = useMemo(() => (ready && indicatorWanted ? tradeSessionVwapReport(trade,
     joinSessionBars(levels.sessionCandles, levels.sessionTimeframe, candles.candles, candles.baseTimeframe),
-    candles.baseTimeframe, vwapAnchor) : null), [ready, candles, trade, vwapAnchor, levels.sessionCandles, levels.sessionTimeframe]);
-  const sessionVwap = sessionVwapReport?.points ?? null;
+    candles.baseTimeframe, vwapAnchor === "off" ? "globex" : vwapAnchor, prefs.vwapBandMultiples ?? [1, 2]) : null), [ready, indicatorWanted, candles, trade, vwapAnchor, prefs.vwapBandMultiples, levels.sessionCandles, levels.sessionTimeframe]);
+  const sessionVwap = vwapAnchor !== "off" ? sessionVwapReport?.points ?? null : null;
   const vwapLine = useMemo(() => (sessionVwap && displayedBars ? vwapOnBars(sessionVwap, displayedBars, timeframe) : NO_VWAP),
     [sessionVwap, displayedBars, timeframe]);
+  const vwapBands = useMemo(() => (prefs.vwapBands && vwapAnchor !== "off" && sessionVwapReport && displayedBars
+    ? vwapBandsOnBars(sessionVwapReport.bands, displayedBars, timeframe) : NO_VWAP_BANDS), [prefs.vwapBands, vwapAnchor, sessionVwapReport, displayedBars, timeframe]);
+  const weeklyVwapLine = useMemo(() => (prefs.weeklyVwap && sessionVwapReport && displayedBars
+    ? vwapOnBars(sessionVwapReport.weeklyPoints, displayedBars, timeframe) : NO_VWAP), [prefs.weeklyVwap, sessionVwapReport, displayedBars, timeframe]);
+  const weeklyVwapBands = useMemo(() => (prefs.weeklyVwap && prefs.vwapBands && sessionVwapReport && displayedBars
+    ? vwapBandsOnBars(sessionVwapReport.weeklyBands, displayedBars, timeframe) : NO_VWAP_BANDS), [prefs.weeklyVwap, prefs.vwapBands, sessionVwapReport, displayedBars, timeframe]);
   // IN-3: the 200 EMA on the displayed bars (View → 200 EMA, prefs.ema200).
   const emaLine = useMemo(() => (prefs.ema200 && levels.ema200 && displayedBars ? emaOnBars(levels.ema200.points, displayedBars) : []), [prefs.ema200, levels.ema200, displayedBars]);
   // VOL-1: the volume band (View → Volume) needs real traded volume. Sample bars carry none, so it is hidden there.
@@ -530,6 +538,16 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                         </button>
                       ))}
                     </div>
+                    <div className="view-menu-toggle-group" role="group" aria-label="VWAP standard deviation bands">
+                      <button type="button" aria-pressed={prefs.vwapBands !== false} onClick={() => setPrefs({ vwapBands: prefs.vwapBands === false })}><span>Bands</span><small>{(prefs.vwapBandMultiples ?? [1, 2]).map((value) => `${value}σ`).join(" · ")}</small></button>
+                      <button type="button" aria-pressed={prefs.vwapBandFill === true} disabled={prefs.vwapBands === false} onClick={() => setPrefs({ vwapBandFill: prefs.vwapBandFill !== true })}><span>Fill</span><small>Between bands</small></button>
+                    </div>
+                    <div className="view-menu-toggle-group" role="group" aria-label="VWAP band multiples">
+                      {[1, 2].map((multiple) => { const selected = (prefs.vwapBandMultiples ?? [1, 2]).includes(multiple); return <button key={multiple} type="button" aria-pressed={selected} onClick={() => { const current = prefs.vwapBandMultiples ?? [1, 2]; const next = selected ? current.filter((value) => value !== multiple) : [...current, multiple]; setPrefs({ vwapBandMultiples: next.length ? next : [multiple] }); }}><span>{multiple}σ</span></button>; })}
+                    </div>
+                    <button type="button" className="view-menu-item" role="menuitemcheckbox" aria-checked={prefs.weeklyVwap === true} onClick={() => setPrefs({ weeklyVwap: prefs.weeklyVwap !== true })}>
+                      <span>{prefs.weeklyVwap ? "Weekly VWAP ✓" : "Weekly VWAP"}</span><small>{sessionVwapReport?.weeklyReason ?? "Sunday 18:00 ET"}</small>
+                    </button>
                   </div>
                   <div className="view-menu-section">
                     <span className="view-menu-label">200 EMA{prefs.ema200 ? ema200Status(levels.ema200) : ""}</span>
@@ -589,7 +607,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} highlightedLineTick={highlightedTick} vwap={vwapLine} vwapApproximate={sessionVwapReport?.approximate} showVolume={volumeReal && prefs.showVolume} ema={emaLine} emaApproximate={levels.ema200?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} highlightedLineTick={highlightedTick} vwap={vwapLine} vwapBands={vwapBands} vwapApproximate={sessionVwapReport?.approximate} weeklyVwap={weeklyVwapLine} weeklyVwapBands={weeklyVwapBands} weeklyVwapApproximate={sessionVwapReport?.weeklyApproximate} vwapBandFill={prefs.vwapBandFill} showVolume={volumeReal && prefs.showVolume} ema={emaLine} emaApproximate={levels.ema200?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>

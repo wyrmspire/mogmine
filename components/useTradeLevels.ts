@@ -27,7 +27,7 @@ export interface TradeLevelsState {
   planned: number;
   /** Every level with its exact price, including those whose pill did not fit on the chart. */
   summary: string;
-  /** This session's bars from 18:00 ET to the close or now (VW-1). Empty until fetched. Levels never read past entry. */
+  /** Current-week bars through this session's close/now, for session and Sunday-open weekly VWAP. */
   sessionCandles: readonly Candle[];
   sessionTimeframe: Timeframe | null;
   /** IN-3: the 200 EMA on the displayed timeframe, or null when not requested or still loading. */
@@ -60,7 +60,7 @@ function priorSessionsForEma(timeframe: Timeframe): number {
  */
 export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWanted = false, emaTimeframe: Timeframe | null = null): TradeLevelsState {
   const key = `${trade.symbol}|${trade.entry_time}`;
-  const [computed, setComputed] = useState<{ key: string; levels: readonly ComputedLevel[]; withheld: readonly WithheldLevel[]; session: DayCandles | null } | null>(null);
+  const [computed, setComputed] = useState<{ key: string; levels: readonly ComputedLevel[]; withheld: readonly WithheldLevel[]; session: DayCandles | null; indicators: DayCandles | null } | null>(null);
   // IN-3: earlier sessions for the 200 EMA, keyed by trade and timeframe. `tooOld` marks a 1m request past Yahoo's keep.
   const [priors, setPriors] = useState<{ key: string; days: readonly (DayCandles | null)[]; tooOld: boolean } | null>(null);
   const { plans } = usePlansStore();
@@ -80,21 +80,28 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
       let levels: readonly ComputedLevel[] = [];
       let withheld: readonly WithheldLevel[] = [];
       let session: DayCandles | null = null;
+      let indicators: DayCandles | null = null;
       try {
         const [prior, today, earlierWeek] = await Promise.all([
-          loadDayCandles(trade.symbol, windows.prior.from, windows.prior.to),
-          windows.today ? loadDayCandles(trade.symbol, bounds.open, Math.min(bounds.close, nowMinute)).catch(() => null) : null,
+          loadDayCandles(trade.symbol, windows.prior.from, windows.prior.to, undefined, true),
+          windows.today ? loadDayCandles(trade.symbol, bounds.open, Math.min(bounds.close, nowMinute), undefined, true).catch(() => null) : null,
           // Earlier week days (Mon to the day before prior) for week_high / week_low. A failed day is null: that level is withheld.
-          Promise.all(windows.earlierWeek.map((w) => loadDayCandles(trade.symbol, w.from, w.to).catch(() => null))),
+          Promise.all(windows.earlierWeek.map((w) => loadDayCandles(trade.symbol, w.from, w.to, undefined, true).catch(() => null))),
         ]);
         session = today;
+        const indicatorDays = [...earlierWeek.filter((day): day is DayCandles => day !== null), prior, ...(today ? [today] : [])];
+        indicators = indicatorDays.length ? {
+          candles: indicatorDays.flatMap((day) => day.candles),
+          baseTimeframe: today?.baseTimeframe ?? prior.baseTimeframe,
+          fetchedAt: Math.min(...indicatorDays.map((day) => day.fetchedAt)),
+        } : null;
         // Levels cut at entry (the as-of rule): bars after entry never reach the level calculation.
         const todayAtEntry = today && { candles: today.candles.filter(({ time }) => time < entryMs), baseTimeframe: today.baseTimeframe };
         const report = tradeLevelReport(trade, prior, todayAtEntry, earlierWeek);
         levels = report?.levels ?? [];
         withheld = report?.withheld ?? [];
       } catch { /* no bars: no computed levels */ }
-      if (alive) setComputed({ key, levels, withheld, session });
+      if (alive) setComputed({ key, levels, withheld, session, indicators });
     })();
     return () => { alive = false; };
     // The key holds every trade field the computed levels depend on.
@@ -140,8 +147,8 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
     () => levelLines([...(current ?? []), ...planned], trade.entry_price, trade.symbol),
     [current, planned, trade.entry_price, trade.symbol],
   );
-  const sessionCandles = session?.candles ?? EMPTY_BARS;
-  const sessionTimeframe = session?.baseTimeframe ?? null;
+  const sessionCandles = computed?.key === key ? computed.indicators?.candles ?? EMPTY_BARS : EMPTY_BARS;
+  const sessionTimeframe = computed?.key === key ? computed.indicators?.baseTimeframe ?? null : null;
 
   if (!enabled) return { ...OFF, sessionCandles, sessionTimeframe, ema200 };
   const loading = fetches && current == null;

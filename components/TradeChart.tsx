@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, useSyncExternalStore } from "react";
 import type { Ref, RefObject } from "react";
 import { PositionBoxPrimitive } from "./PositionBoxPrimitive";
+import { IndicatorBandsPrimitive } from "./IndicatorBandsPrimitive";
 import { addVolumePane, paintVolumePane, type VolumeSeries } from "./VolumePane";
 import { SessionLevelsPrimitive, levelPillColumnPx } from "./SessionLevelsPrimitive";
 import { DEFAULT_RIGHT_OFFSET_BARS, MIN_BAR_SPACING_PX, effectiveRightOffsetBars } from "@/lib/chart-chrome";
@@ -22,7 +23,7 @@ import { computeExportDimensions } from "@/lib/chart-export";
 import { resolveTapAction, type LevelHit } from "@/lib/level-hit-test";
 import { usePrefs } from "@/lib/prefs";
 import type { LevelLabelsMode } from "@/lib/prefs-sanitize";
-import type { VwapPoint } from "@/lib/chart-indicators";
+import type { VwapBandPoint, VwapPoint } from "@/lib/chart-indicators";
 import type { EmaPoint } from "@/lib/ema";
 import { STRETCH_DEAD_ZONE_PX, isDoubleTap, stretchPriceRange, wheelToDragPx } from "@/lib/price-scale";
 import type { PriceSpan, TapPoint } from "@/lib/price-scale";
@@ -63,8 +64,13 @@ interface Props {
   levels?: readonly LevelLine[];
   /** IND-1: session VWAP on the displayed bars. Empty hides it. */
   vwap?: readonly VwapPoint[];
+  vwapBands?: readonly (readonly VwapBandPoint[])[];
   /** IN-2: true when Globex VWAP includes tolerated overnight gaps (HUD prefixes ≈). */
   vwapApproximate?: boolean;
+  weeklyVwap?: readonly VwapPoint[];
+  weeklyVwapBands?: readonly (readonly VwapBandPoint[])[];
+  weeklyVwapApproximate?: boolean;
+  vwapBandFill?: boolean;
   /** VOL-1: draw the volume band under the candles. The caller withholds it when the bars carry no real volume. */
   showVolume?: boolean;
   /** IN-3: the 200 EMA on the displayed bars (View → 200 EMA). Empty hides it. */
@@ -119,11 +125,14 @@ interface Live {
   volumeSeries: VolumeSeries;
   primitive: PositionBoxPrimitive;
   levelsPrimitive: SessionLevelsPrimitive;
+  indicatorBandsPrimitive: IndicatorBandsPrimitive;
   /** Labels of the pills drawn this frame: they size the `rightOffset` reserve (OD-55a). */
   levelLabels: string[];
   levelRightOffset: number;
   vwapSeries: LineSeries;
   renderedVwap: readonly VwapPoint[] | null;
+  weeklyVwapSeries: LineSeries;
+  renderedWeeklyVwap: readonly VwapPoint[] | null;
   emaSeries: LineSeries;
   renderedEma: readonly EmaPoint[] | null;
   fitRange: { from: number; to: number } | null;
@@ -234,9 +243,10 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
 
 const NO_LEVELS: readonly LevelLine[] = [];
 const NO_VWAP: readonly VwapPoint[] = [];
+const NO_VWAP_BANDS: readonly (readonly VwapBandPoint[])[] = [];
 const NO_EMA: readonly EmaPoint[] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapApproximate = false, showVolume = false, ema = NO_EMA, emaApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapBands = NO_VWAP_BANDS, vwapApproximate = false, weeklyVwap = NO_VWAP, weeklyVwapBands = NO_VWAP_BANDS, weeklyVwapApproximate = false, vwapBandFill = false, showVolume = false, ema = NO_EMA, emaApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
@@ -246,11 +256,11 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   const levelMode: LevelLabelsMode = levelLabelsMode ?? prefs.levelLabels;
   // The open level card (LB-6). `fromList`: opened by a focused list row, so leaving the row closes it.
   const [openLevel, setOpenLevel] = useState<{ hit: LevelHit; fromList: boolean } | null>(null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapApproximate, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapApproximate, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel }; });
   const closeLevel = useCallback(() => {
     setOpenLevel(null);
     latest.current.onSelectLevel?.(null);
@@ -414,6 +424,16 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       setProgrammaticRange(l, () => { l.vwapSeries.setData(p.vwap.map((point) => ({ time: toTime(point.time), value: point.value }))); });
       l.renderedVwap = p.vwap;
     }
+    const weeklyColor = t.weeklyVwap ?? t.vwap;
+    l.weeklyVwapSeries.applyOptions({ color: weeklyColor, visible: p.weeklyVwap.length > 0, lineStyle: l.lwc.LineStyle.Dashed });
+    if (l.renderedWeeklyVwap !== p.weeklyVwap) {
+      setProgrammaticRange(l, () => { l.weeklyVwapSeries.setData(p.weeklyVwap.map((point) => ({ time: toTime(point.time), value: point.value }))); });
+      l.renderedWeeklyVwap = p.weeklyVwap;
+    }
+    l.indicatorBandsPrimitive.update([
+      { bands: p.vwapBands, color: t.vwap, dashed: p.vwapApproximate },
+      { bands: p.weeklyVwapBands, color: weeklyColor, dashed: true },
+    ], p.vwapBandFill);
     // IN-3: the 200 EMA is 1 px and dashed while approximate. Like VWAP, it never sets the price scale.
     l.emaSeries.applyOptions({ color: t.ema200 ?? "#38bdf8", visible: p.ema.length > 0, lineStyle: p.emaApproximate ? l.lwc.LineStyle.Dashed : l.lwc.LineStyle.Solid });
     if (l.renderedEma !== p.ema) {
@@ -477,11 +497,18 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       // Levels attach first so their rays sit under the Position Box.
       const levelsPrimitive = new SessionLevelsPrimitive();
       series.attachPrimitive(levelsPrimitive);
+      const indicatorBandsPrimitive = new IndicatorBandsPrimitive();
+      series.attachPrimitive(indicatorBandsPrimitive);
       const primitive = new PositionBoxPrimitive();
       series.attachPrimitive(primitive);
       // VWAP never widens the price scale: the trade's candles set it (docs/12 §5 rule for overlays).
       const vwapSeries = chart.addSeries(lwc.LineSeries, {
         // No axis tag: the series' last value is the session close, not the line in view. The crosshair readout shows it.
+        lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+        crosshairMarkerVisible: false, autoscaleInfoProvider: () => null,
+        priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
+      });
+      const weeklyVwapSeries = chart.addSeries(lwc.LineSeries, {
         lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
         crosshairMarkerVisible: false, autoscaleInfoProvider: () => null,
         priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
@@ -493,7 +520,8 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         priceFormat: { type: "price", precision: 2, minMove: specFor(trade.symbol)?.tickSize ?? 0.01 },
       });
       const state: Live = {
-        lwc, host, chart, series, volumeSeries, primitive, levelsPrimitive, levelLabels: [], levelRightOffset: DEFAULT_RIGHT_OFFSET_BARS, vwapSeries, renderedVwap: null,
+        lwc, host, chart, series, volumeSeries, primitive, levelsPrimitive, indicatorBandsPrimitive, levelLabels: [], levelRightOffset: DEFAULT_RIGHT_OFFSET_BARS, vwapSeries, renderedVwap: null,
+        weeklyVwapSeries, renderedWeeklyVwap: null,
         emaSeries, renderedEma: null,
         fitRange: null, renderedBars: [], renderedTimeframe: null, extraBefore: 0, extraAfter: 0,
         baseFitRange: null, barCount: 0,
@@ -511,9 +539,11 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
           const symbol = latest.current.trade.symbol;
           const vwapAt = bar ? param.seriesData.get(vwapSeries) as { value?: number } | undefined : undefined;
           const vwapText = vwapAt?.value != null ? `  ·  VWAP ${latest.current.vwapApproximate ? "≈ " : ""}${formatPrice(vwapAt.value, symbol)}` : "";
+          const weeklyAt = bar ? param.seriesData.get(weeklyVwapSeries) as { value?: number } | undefined : undefined;
+          const weeklyText = weeklyAt?.value != null ? `  ·  W VWAP ${latest.current.weeklyVwapApproximate ? "≈ " : ""}${formatPrice(weeklyAt.value, symbol)}` : "";
           const emaAt = bar ? param.seriesData.get(emaSeries) as { value?: number } | undefined : undefined;
           const emaText = emaAt?.value != null ? `  ·  200 EMA ${latest.current.emaApproximate ? "≈ " : ""}${formatPrice(emaAt.value, symbol)}` : "";
-          target.textContent = bar ? `O ${formatPrice(bar.open, symbol)}  H ${formatPrice(bar.high, symbol)}  L ${formatPrice(bar.low, symbol)}  C ${formatPrice(bar.close, symbol)}  ·  ${formatPoints(bar.close - latest.current.trade.entry_price, symbol)} vs entry${vwapText}${emaText}` : "";
+          target.textContent = bar ? `O ${formatPrice(bar.open, symbol)}  H ${formatPrice(bar.high, symbol)}  L ${formatPrice(bar.low, symbol)}  C ${formatPrice(bar.close, symbol)}  ·  ${formatPoints(bar.close - latest.current.trade.entry_price, symbol)} vs entry${vwapText}${weeklyText}${emaText}` : "";
           target.parentElement?.toggleAttribute("data-tracking", !!bar);
         }
       });
@@ -725,7 +755,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, levels, vwap, showVolume, ema, emaApproximate, zone, privacy, theme, neighbourTrades, levelMode]);
+  }, [trade, bars, timeframe, marks, levels, vwap, vwapBands, weeklyVwap, weeklyVwapBands, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, neighbourTrades, levelMode]);
 
   return <><div
     ref={hostRef}

@@ -4,6 +4,8 @@ import { computeSessionIndicators } from "./session-indicators.ts";
 import { equityIndexSessionBounds, sessionDate } from "./session.ts";
 import { TIMEFRAME_MINUTES } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
+import { asMixedCandle } from "./mixed-resolution.ts";
+import type { MixedCandle, ResolutionUsage } from "./mixed-resolution.ts";
 
 export type VwapAnchor = "rth" | "globex";
 
@@ -13,6 +15,12 @@ export interface VwapPoint {
   value: number;
 }
 
+export interface VwapBandPoint extends VwapPoint {
+  multiple: number;
+  upper: number;
+  lower: number;
+}
+
 export interface TradeSessionVwapReport {
   points: { time: number; value: number }[];
   /** True when Globex VWAP was drawn over a window with missing bars (VW-2). */
@@ -20,6 +28,29 @@ export interface TradeSessionVwapReport {
   missingBars: number;
   /** Visible note for an approximate line, e.g. "≈ 23 min missing overnight"; null when exact. */
   reason: string | null;
+  bands: VwapBandPoint[][];
+  weeklyPoints: VwapPoint[];
+  weeklyBands: VwapBandPoint[][];
+  weeklyApproximate: boolean;
+  weeklyReason: string | null;
+}
+
+const clock = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/** Compact visible provenance, e.g. "23:00–23:08 from 5m/1h" (end minute inclusive). */
+export function formatResolutionUsage(usage: readonly ResolutionUsage[]): string | null {
+  if (!usage.length) return null;
+  const groups: Array<{ from: number; to: number; sources: Set<string> }> = [];
+  for (const stretch of usage) {
+    const previous = groups.at(-1);
+    if (previous?.to === stretch.from) {
+      previous.to = stretch.to;
+      previous.sources.add(stretch.fillFrom);
+    } else groups.push({ from: stretch.from, to: stretch.to, sources: new Set([stretch.fillFrom]) });
+  }
+  return groups.map(({ from, to, sources }) =>
+    `${clock.format(new Date(from))}–${clock.format(new Date(to - 60_000))} from ${[...sources].join("/")}`,
+  ).join(" · ");
 }
 
 /**
@@ -33,23 +64,30 @@ export function tradeSessionVwapReport(
   candles: readonly Candle[],
   baseTimeframe: Timeframe,
   anchor: VwapAnchor,
+  bandMultiples: readonly number[] = [1, 2],
 ): TradeSessionVwapReport | null {
   const symbol = trade.symbol.toUpperCase();
   const entry = Date.parse(trade.entry_time);
   if ((symbol !== "MES" && symbol !== "MNQ") || !Number.isFinite(entry) || !candles.length) return null;
   const barMs = TIMEFRAME_MINUTES[baseTimeframe] * 60_000;
-  const lastClose = Math.max(...candles.map((bar) => bar.time)) + barMs;
+  const lastClose = Math.max(...candles.map((bar) => bar.time + ("minutes" in bar && typeof bar.minutes === "number" ? bar.minutes * 60_000 : barMs)));
   const asOf = Math.min(lastClose, equityIndexSessionBounds(sessionDate(entry)).close);
   const gapPolicy = anchor === "globex" ? "globex-tolerant" : "complete";
-  const result = computeSessionIndicators(candles, { symbol, timeframe: baseTimeframe, asOf, anchor, gapPolicy });
-  if (!result || !result.vwap.length) return null;
-  const { approximate, missingBars } = result.coverage.anchored;
-  const missingMinutes = missingBars * TIMEFRAME_MINUTES[baseTimeframe];
+  const result = computeSessionIndicators(candles, { symbol, timeframe: baseTimeframe, asOf, anchor, gapPolicy, bandMultiples });
+  if (!result || (!result.vwap.length && !result.weeklyVwap.length)) return null;
+  const { approximate, missingBars, usage } = result.coverage.anchored;
+  const reason = formatResolutionUsage(usage);
+  const weeklyReason = formatResolutionUsage(result.weeklyUsage);
   return {
     points: result.vwap,
     approximate,
     missingBars,
-    reason: approximate ? `≈ ${missingMinutes} min missing overnight` : null,
+    reason: approximate && reason ? `≈ ${reason}` : null,
+    bands: result.vwapBands,
+    weeklyPoints: result.weeklyVwap,
+    weeklyBands: result.weeklyVwapBands,
+    weeklyApproximate: result.weeklyUsage.length > 0,
+    weeklyReason: weeklyReason ? `≈ ${weeklyReason}` : null,
   };
 }
 
@@ -73,10 +111,18 @@ export function joinSessionBars(
   bars: readonly Candle[],
   timeframe: Timeframe,
 ): Candle[] {
-  if (sessionTimeframe !== timeframe) return [...bars];
-  const byTime = new Map<number, Candle>();
-  for (const bar of [...session, ...bars]) byTime.set(bar.time, bar);
-  return [...byTime.values()].sort((a, b) => a.time - b.time);
+  const nativeTagged = session.every((bar) => "minutes" in bar && "fillFrom" in bar);
+  if (sessionTimeframe !== timeframe && !nativeTagged) return [...bars];
+  if (!session.length) return [...bars];
+  const taggedSession = session.map((bar) => "minutes" in bar && "fillFrom" in bar
+    ? bar as MixedCandle : asMixedCandle(bar, sessionTimeframe ?? timeframe));
+  const byTimeAndWidth = new Map<string, MixedCandle>();
+  for (const bar of taggedSession) byTimeAndWidth.set(`${bar.time}:${bar.minutes}`, bar);
+  for (const bar of bars) {
+    const tagged = asMixedCandle(bar, timeframe);
+    byTimeAndWidth.set(`${tagged.time}:${tagged.minutes}`, tagged);
+  }
+  return [...byTimeAndWidth.values()].sort((a, b) => a.time - b.time || a.minutes - b.minutes);
 }
 
 /**
@@ -98,4 +144,22 @@ export function vwapOnBars(
     if (known && known.time > bar.time) line.push({ time: bar.time, value: known.value });
   }
   return line;
+}
+
+/** Map cumulative standard-deviation bands to displayed bar opens with the same close-time rule as VWAP. */
+export function vwapBandsOnBars(
+  bands: readonly (readonly VwapBandPoint[])[], bars: readonly Pick<Candle, "time">[], timeframe: Timeframe,
+): VwapBandPoint[][] {
+  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
+  return bands.map((series) => {
+    const line: VwapBandPoint[] = [];
+    let i = 0;
+    for (const bar of bars) {
+      const close = bar.time + barMs;
+      while (i < series.length && series[i].time <= close) i += 1;
+      const known = series[i - 1];
+      if (known && known.time > bar.time) line.push({ ...known, time: bar.time });
+    }
+    return line;
+  });
 }

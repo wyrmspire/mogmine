@@ -12,10 +12,14 @@ import { installDevice } from "./sync-test-helpers.ts";
 
 const CHOICES = {
   vwapAnchor: "globex",
+  vwapBands: true,
+  vwapBandMultiples: [0.5, 1, 2],
+  vwapBandFill: true,
+  weeklyVwap: true,
   levelLabels: "always",
   ema200: true,
   reviewCardOrientation: "landscape",
-} as const;
+} satisfies Partial<Prefs>;
 
 const LEGACY = {
   shield: false,
@@ -37,7 +41,7 @@ afterEach(() => {
 });
 
 test("defaults: empty and legacy prefs populate the locked defaults", () => {
-  const expected = { vwapAnchor: "off", levelLabels: "tap", ema200: false, reviewCardOrientation: "portrait" };
+  const expected = { vwapAnchor: "off", vwapBands: true, vwapBandMultiples: [1, 2], vwapBandFill: false, weeklyVwap: false, levelLabels: "tap", ema200: false, reviewCardOrientation: "portrait" };
   assert.equal(DEFAULT_PREFS.vwapAnchor, "off");
   assert.equal(DEFAULT_PREFS.levelLabels, "tap");
   assert.equal(DEFAULT_PREFS.ema200, false);
@@ -57,6 +61,8 @@ test("setPrefs stores the choices and getPrefs returns them", () => {
   resetPrefsForTests();
   setPrefs({ ...CHOICES });
   assert.equal(getPrefs().vwapAnchor, "globex");
+  assert.deepEqual(getPrefs().vwapBandMultiples, [0.5, 1, 2]);
+  assert.equal(getPrefs().weeklyVwap, true);
   assert.equal(getPrefs().levelLabels, "always");
   assert.equal(getPrefs().ema200, true);
   assert.equal(getPrefs().reviewCardOrientation, "landscape");
@@ -67,6 +73,8 @@ test("choices round-trip through localStorage hydration", () => {
   resetPrefsForTests();
   hydratePrefs();
   assert.equal(getPrefs().vwapAnchor, "globex");
+  assert.equal(getPrefs().vwapBandFill, true);
+  assert.equal(getPrefs().weeklyVwap, true);
   assert.equal(getPrefs().levelLabels, "always");
   assert.equal(getPrefs().ema200, true);
   assert.equal(getPrefs().reviewCardOrientation, "landscape");
@@ -84,8 +92,9 @@ test("choices round-trip through the singleton command layer", async () => {
 });
 
 test("invalid values sanitize back to defaults", () => {
-  const bad = sanitizePrefs({ vwapAnchor: "weekly", levelLabels: "none", ema200: "yes", reviewCardOrientation: "square" } as unknown as Partial<Prefs>);
+  const bad = sanitizePrefs({ vwapAnchor: "weekly", vwapBandMultiples: [0, -1, Infinity], levelLabels: "none", ema200: "yes", reviewCardOrientation: "square" } as unknown as Partial<Prefs>);
   assert.equal(bad.vwapAnchor, "off");
+  assert.deepEqual(bad.vwapBandMultiples, [1, 2]);
   assert.equal(bad.levelLabels, "tap");
   assert.equal(bad.ema200, false);
   assert.equal(bad.reviewCardOrientation, "portrait");

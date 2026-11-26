@@ -1,9 +1,10 @@
 import {
-  equityIndexSessionBounds, indexSessionCandles, offsetSessionDate, previousRegularSessionDate,
-  readSessionWindow, sessionDate, sessionWeekMonday,
+  equityIndexSessionBounds, offsetSessionDate, previousRegularSessionDate, sessionDate, sessionWeekMonday,
 } from "./session.ts";
 import { snapToTick, specFor, TIMEFRAME_MINUTES } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
+import { asMixedCandle, minuteCoverage, readMixedWindow, resolutionUsage } from "./mixed-resolution.ts";
+import type { MixedCandle } from "./mixed-resolution.ts";
 
 type Anchor = "globex" | "rth";
 
@@ -13,10 +14,7 @@ interface SettlementCandle extends Pick<Candle, "close"> {
   availableAt: number;
 }
 
-/**
- * `complete` (default) draws VWAP only over a complete anchored window. `globex-tolerant` also draws Globex
- * VWAP over the bars that exist when the overnight gaps are small (VW-2, D-F). Levels stay strict either way.
- */
+/** Kept for stored/caller compatibility. IK-1 now requires complete mixed-resolution coverage for either value. */
 export type GapPolicy = "complete" | "globex-tolerant";
 
 export interface SessionIndicatorOptions {
@@ -26,13 +24,13 @@ export interface SessionIndicatorOptions {
   anchor: Anchor;
   settlement?: SettlementCandle;
   gapPolicy?: GapPolicy;
+  /** Standard-deviation band multiples. Defaults to 1 and 2. */
+  bandMultiples?: readonly number[];
 }
 
 const MINUTE_MS = 60_000;
 const VALUE_AREA_FRACTION = 0.7;
 /** VW-2: Globex VWAP tolerance. Missing expected bars must stay within this share, in one run of at most this many minutes. */
-const GLOBEX_MAX_MISSING_SHARE = 0.03;
-const GLOBEX_MAX_GAP_MIN = 15;
 const LABELS = {
   pdh: "PDH", pdl: "PDL", pdc: "PDC", onh: "ONH", onl: "ONL",
   week_high: "Wk high", week_low: "Wk low", poc: "POC", vah: "VAH", val: "VAL",
@@ -50,12 +48,18 @@ interface Level {
   availableAt: number;
 }
 
-type Window = ReturnType<typeof readSessionWindow>;
+type Window = ReturnType<typeof readMixedWindow>;
 
 interface VwapPoint {
   /** The candle close time in UTC milliseconds, when its OHLCV becomes usable. */
   time: number;
   value: number;
+}
+
+export interface VwapBandPoint extends VwapPoint {
+  multiple: number;
+  upper: number;
+  lower: number;
 }
 
 function mergeWindows(windows: readonly Window[]): Window {
@@ -67,6 +71,9 @@ function mergeWindows(windows: readonly Window[]): Window {
       to: coverages[coverages.length - 1].to,
       expectedBars: coverages.reduce((sum, coverage) => sum + coverage.expectedBars, 0),
       presentBars: coverages.reduce((sum, coverage) => sum + coverage.presentBars, 0),
+      expectedMinutes: coverages.reduce((sum, coverage) => sum + coverage.expectedMinutes, 0),
+      presentMinutes: coverages.reduce((sum, coverage) => sum + coverage.presentMinutes, 0),
+      missingMinutes: coverages.reduce((sum, coverage) => sum + coverage.missingMinutes, 0),
       complete: coverages.every((coverage) => coverage.complete),
     },
   };
@@ -80,43 +87,59 @@ interface GapMetrics {
 }
 
 /** Walks the expected grid, so a bar that is present but malformed counts as missing. */
-function gapMetrics({ bars, coverage }: Window, barMs: number, rthOpen: number, rthEnd: number): GapMetrics {
-  const present = new Set(bars.map(({ time }) => time));
-  const first = Math.ceil(coverage.from / barMs) * barMs;
+function gapMetrics({ bars, coverage }: Window, symbol: string, rthOpen: number, rthEnd: number): GapMetrics {
+  const slots = minuteCoverage(bars, symbol, coverage.from, coverage.to);
   let missingBars = 0;
   let rthMissingBars = 0;
   let run = 0;
   let longestRun = 0;
-  for (let i = 0; i < coverage.expectedBars; i += 1) {
-    const time = first + i * barMs;
-    if (present.has(time)) {
+  for (const { time, bar } of slots) {
+    if (bar) {
       run = 0;
       continue;
     }
     missingBars += 1;
     run += 1;
     longestRun = Math.max(longestRun, run);
-    if (time >= rthOpen && time + barMs <= rthEnd) rthMissingBars += 1;
+    if (time >= rthOpen && time + MINUTE_MS <= rthEnd) rthMissingBars += 1;
   }
-  return { missingBars, longestGapMin: longestRun * barMs / MINUTE_MS, rthMissingBars };
+  return { missingBars, longestGapMin: longestRun, rthMissingBars };
 }
 
 function typicalPrice(bar: Candle): number {
   return (bar.high + bar.low + bar.close) / 3;
 }
 
-function sessionVwap(bars: readonly Candle[], barMs: number): VwapPoint[] {
+function sessionVwap(bars: readonly MixedCandle[], bandMultiples: readonly number[]) {
   let volume = 0;
   let value = 0;
+  let m2 = 0;
   const points: VwapPoint[] = [];
-  for (const bar of bars) {
+  const bands = new Map(bandMultiples.map((multiple) => [multiple, [] as VwapBandPoint[]]));
+  const ordered = [...bars].sort((a, b) => (a.time + a.minutes * MINUTE_MS) - (b.time + b.minutes * MINUTE_MS) || a.minutes - b.minutes);
+  for (const bar of ordered) {
     if (bar.volume > 0) {
-      volume += bar.volume;
-      value += (typicalPrice(bar) - value) * (bar.volume / volume);
+      const price = typicalPrice(bar);
+      const nextVolume = volume + bar.volume;
+      const delta = price - value;
+      value += delta * (bar.volume / nextVolume);
+      m2 += bar.volume * delta * (price - value);
+      volume = nextVolume;
     }
-    if (volume > 0) points.push({ time: bar.time + barMs, value });
+    if (volume > 0) {
+      const time = bar.time + bar.minutes * MINUTE_MS;
+      const point = { time, value };
+      if (points.at(-1)?.time === time) points[points.length - 1] = point;
+      else points.push(point);
+      const deviation = Math.sqrt(Math.max(0, m2 / volume));
+      for (const [multiple, series] of bands) {
+        const band = { ...point, multiple, upper: value + deviation * multiple, lower: value - deviation * multiple };
+        if (series.at(-1)?.time === time) series[series.length - 1] = band;
+        else series.push(band);
+      }
+    }
   }
-  return points;
+  return { points, bands: [...bands.values()] };
 }
 
 /** OHLCV estimate using a single HLC3 tick per bar and an outward expansion from POC. */
@@ -149,18 +172,23 @@ function volumeProfile(bars: readonly Candle[], tickSize: number) {
  * The regular weekday calendar withholds values when holiday or early-close bars are absent.
  */
 export function computeSessionIndicators(candles: readonly Candle[], options: SessionIndicatorOptions) {
-  const { symbol, timeframe, asOf, anchor, settlement, gapPolicy = "complete" } = options;
+  const { symbol, timeframe, asOf, anchor, settlement, bandMultiples = [1, 2] } = options;
   const spec = specFor(symbol);
   const barMs = TIMEFRAME_MINUTES[timeframe] * MINUTE_MS;
   if (!spec || !barMs || !Number.isFinite(new Date(asOf).getTime())) return null;
 
-  const index = indexSessionCandles(candles);
+  const tagged = candles.every((bar) => "minutes" in bar && "fillFrom" in bar);
+  const converted = candles.map((bar) => "minutes" in bar && "fillFrom" in bar
+    ? bar as MixedCandle : asMixedCandle(bar, timeframe));
+  const duplicateKeys = new Set(converted.flatMap((bar, index) => converted.some((other, otherIndex) => otherIndex !== index
+    && other.time === bar.time && other.minutes === bar.minutes) ? [`${bar.time}:${bar.minutes}`] : []));
+  const mixed = converted.filter((bar) => !duplicateKeys.has(`${bar.time}:${bar.minutes}`));
   const date = sessionDate(asOf);
   const monday = sessionWeekMonday(date);
   const priorDate = previousRegularSessionDate(date);
   const today = equityIndexSessionBounds(date);
   const prior = equityIndexSessionBounds(priorDate);
-  const read = (from: number, to: number) => readSessionWindow(index, from, to, asOf, barMs);
+  const read = (from: number, to: number) => readMixedWindow(mixed, symbol, from, to, asOf, tagged ? 1 : TIMEFRAME_MINUTES[timeframe]);
   const previousDay = read(prior.open, prior.close);
   const overnight = read(today.open, today.rthOpen);
   const anchored = anchor === "rth" ? read(today.rthOpen, today.rthClose) : read(today.open, today.close);
@@ -180,7 +208,7 @@ export function computeSessionIndicators(candles: readonly Candle[], options: Se
     if (!coverage.complete || !bars.length) return;
     const high = bars.reduce((max, bar) => bar.high > max.high ? bar : max);
     const low = bars.reduce((min, bar) => bar.low < min.low ? bar : min);
-    const availableAt = bars[bars.length - 1].time + barMs;
+    const availableAt = Math.max(...bars.map((bar) => bar.time + bar.minutes * MINUTE_MS));
     add(highKey, high.high, high.time, availableAt);
     add(lowKey, low.low, low.time, availableAt);
   };
@@ -191,14 +219,14 @@ export function computeSessionIndicators(candles: readonly Candle[], options: Se
     add("pdc", settlement.close, settlement.availableAt);
   }
 
-  const gaps = gapMetrics(anchored, barMs, today.rthOpen, Math.min(today.rthClose, asOf));
+  const gaps = gapMetrics(anchored, symbol, today.rthOpen, Math.min(today.rthClose, asOf));
   const volumesUsable = anchored.bars.every(({ volume }) => Number.isFinite(volume) && volume >= 0);
-  // VW-2: Globex VWAP may use a window with small overnight gaps. Levels never do.
-  const tolerated = anchor === "globex" && gapPolicy === "globex-tolerant" && anchored.coverage.expectedBars > 0
-    && gaps.missingBars / anchored.coverage.expectedBars <= GLOBEX_MAX_MISSING_SHARE
-    && gaps.longestGapMin <= GLOBEX_MAX_GAP_MIN && gaps.rthMissingBars === 0;
-  const approximate = tolerated && gaps.missingBars > 0;
-  const vwap = (anchored.coverage.complete || tolerated) && volumesUsable ? sessionVwap(anchored.bars, barMs) : [];
+  const anchoredUsage = resolutionUsage(anchored.bars, symbol, anchored.coverage.from, anchored.coverage.to);
+  const approximate = anchoredUsage.length > 0;
+  const session = anchored.coverage.complete && volumesUsable ? sessionVwap(anchored.bars, bandMultiples) : { points: [], bands: [] };
+  const weekVolumesUsable = week.bars.every(({ volume }) => Number.isFinite(volume) && volume >= 0);
+  const weekly = week.coverage.complete && weekVolumesUsable ? sessionVwap(week.bars, bandMultiples) : { points: [], bands: [] };
+  const vwap = session.points;
   const strictUsable = anchored.coverage.complete && volumesUsable;
   const profile = strictUsable ? volumeProfile(anchored.bars, spec.tickSize) : null;
   const lastBar = anchored.bars.at(-1);
@@ -210,13 +238,15 @@ export function computeSessionIndicators(candles: readonly Candle[], options: Se
   }
 
   return {
-    calcVersion: "session-indicators-v1",
+    calcVersion: "session-indicators-v2-mixed-bands",
     symbol, sessionDate: date, previousSessionDate: priorDate, asOf, anchor, timeframe,
     coverage: {
-      anchored: { ...anchored.coverage, ...gaps, approximate },
+      anchored: { ...anchored.coverage, ...gaps, approximate, usage: anchoredUsage },
       previousDay: previousDay.coverage, overnight: overnight.coverage, week: week.coverage,
     },
-    vwap, levels,
+    vwap, vwapBands: session.bands, weeklyVwap: weekly.points, weeklyVwapBands: weekly.bands,
+    weeklyUsage: resolutionUsage(week.bars, symbol, week.coverage.from, week.coverage.to),
+    levels,
   };
 }
 

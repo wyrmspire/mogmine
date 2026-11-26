@@ -54,7 +54,7 @@ test("IND-1: a 5m chart takes the value known at each bar's close, never earlier
   ]);
 });
 
-test("VW-2: a Globex session with 23 overnight gaps draws approximately, with the reason", () => {
+test("IK-1: uncovered Globex gaps withhold; complete 1m coverage stays exact", () => {
   const open = equityIndexSessionBounds("2026-11-24").open; // 18:00 ET on 11/23
   const close = equityIndexSessionBounds("2026-11-24").close; // 17:00 ET on 11/24
   const missing = (offset: number) => offset < 10 || (offset >= 77 && offset < 89) || offset === 359;
@@ -63,12 +63,8 @@ test("VW-2: a Globex session with 23 overnight gaps draws approximately, with th
     .map((offset) => bar(open + offset * minute, 100, 100, 100, 1));
   const gapTrade = { symbol: "MES", entry_time: "2026-11-24T15:00:00Z" };
   const report = tradeSessionVwapReport(gapTrade, candles, "1m", "globex");
-  assert.ok(report);
-  assert.equal(report.approximate, true);
-  assert.equal(report.missingBars, 23);
-  assert.equal(report.reason, "≈ 23 min missing overnight");
-  assert.equal(report.points.at(-1)!.time, close);
-  // RTH is whole in this session, so RTH VWAP draws exactly: the tolerance is Globex-only.
+  assert.equal(report, null);
+  // RTH is whole in this session, so RTH VWAP still draws exactly.
   assert.equal(tradeSessionVwapReport(gapTrade, candles, "1m", "rth")?.approximate, false);
 
   const full = Array.from({ length: 1380 }, (_, offset) => bar(open + offset * minute, 100, 100, 100, 1));

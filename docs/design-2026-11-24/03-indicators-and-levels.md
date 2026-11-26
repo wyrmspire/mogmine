@@ -63,23 +63,23 @@ Chris: drop the always-on text labels. The price axis already shows the price; a
 
 `lib/prefs-sanitize.ts` gains `vwapAnchor`, `levelLabels` (§3), `ema200` (§6) and `reviewCardOrientation` ([06](06-daily-review-and-review-cards.md) §4) in one package (`IN-1`), so this shared file changes once.
 
-## 5. Globex VWAP with small Yahoo gaps
+## 5. VWAP with Yahoo gaps
 
 **VW-1 Data window** (package `IN-2`). VWAP needs bars from the anchor (18:00 ET for Globex, 09:30 ET for RTH) to the right edge of the chart. Today it reads the trade's candle set, which may start too late. Use the day-mode windows the levels loader already fetches (`components/useTradeLevels.ts` → `loadDayCandles`), extending its "today" window from "up to entry" to "up to the session close or now". Levels still cut at the entry (as-of rule), so their values do not change. One cached window serves both, with no extra request in most cases.
 
-**VW-2 Gap tolerance** (package `IN-2`). VWAP is cumulative Σ(price × volume) ÷ Σ volume. A few missing overnight minutes change it very little; overnight minutes Yahoo leaves out are thin. Proposal:
+**VW-2 Multi-resolution gap fill** (superseded by owner rule `IK-1`, 2026-11-26). VWAP is cumulative Σ(price × volume) ÷ Σ volume. Fetch `1m` first, then request `5m`, `15m` and `1h` only for uncovered stretches. Keep every native bar's real width and source; never manufacture minute bars.
 
 | Anchored window | Draw VWAP when | Show |
 | :--- | :--- | :--- |
-| RTH (09:30 ET on) | Complete, as today | Normal line |
-| Globex (18:00 ET on) | Missing bars ≤ **3%** of expected bars, **and** the longest gap ≤ **15 min**, **and** no missing bar after 09:30 ET | The line, plus "≈" before the HUD value and "Globex VWAP · ≈ 23 min missing overnight" in the View row |
+| RTH (09:30 ET on) | Every minute is covered by `1m`, `5m`, `15m` or `1h` | Normal line when all bars are 1m; `≈` with lower-resolution provenance otherwise |
+| Globex (18:00 ET on) | Every minute is covered by `1m`, `5m`, `15m` or `1h` | The line; `≈` only when a lower resolution supplied a stretch, with visible provenance such as "23:00–23:08 from 5m/1h" |
 | Either | Beyond those limits | Nothing drawn, "unavailable" with the reason (today's behaviour, with the count) |
 
-The 11/23 Globex session (23 missing of about 1,380 expected, longest gap 12 min) would draw with "≈". Values are computed only from bars that exist. Never fill gaps with synthetic bars (issue #28), and never mix in 5m bars (`OD-55` b is for levels).
+Coarse volume contributes only its residual after volumes from finer bars inside the same span are subtracted (never below zero). Coarse highs/lows are exact inputs for session extremes. Withhold only when no supported resolution covers a minute. Cached sessions with interior holes receive one bounded repair attempt on their next load.
 
-`computeSessionIndicators` (`lib/session-indicators.ts`) gains a `gapPolicy` parameter. The default stays `"complete"`, so the API and other callers are unchanged until they opt in. The coverage block reports `missingBars`, `longestGapMin` and `approximate: true`.
+`computeSessionIndicators` (`lib/session-indicators.ts`) reads the mixed native-width series. The coverage block reports missing coverage and the exact lower-resolution stretches.
 
-*(Decision D-F: accept these thresholds for Globex VWAP. `OD-18` covers the formula; this only covers tolerance.)*
+*`IK-1` supersedes the earlier `D-F` percentage/longest-gap tolerance. `OD-18` remains open only for indicator choices not explicitly settled here.*
 
 ## 6. 200 EMA (package `IN-3`; build waits for `OD-18`)
 
@@ -93,7 +93,7 @@ The 11/23 Globex session (23 missing of about 1,380 expected, longest gap 12 min
 | Rendering | A line series in a new token `--ind-ema200`, 1 px, below the candles' wicks in visual weight. Value in the crosshair HUD. |
 | Toggle | View → **200 EMA** Off/On, remembered (`ema200` pref). Off by default. |
 | Server | Pure function in `lib/session-indicators.ts` (or a sibling `lib/ema.ts`) so the agent API ([07](07-agent-api.md) §3.4) returns the same values. |
-| Not included | Bands, weekly VWAP, "BE" (`OD-18` says not to invent it) |
+| Included by `IK-1` | Volume-weighted standard-deviation bands (default 1σ and 2σ, optional canvas fill) and weekly VWAP anchored at Sunday 18:00 ET, using the same mixed-resolution coverage rule. "BE" remains undefined and out of scope. |
 
 ## 7. Acceptance (390×844 and desktop)
 

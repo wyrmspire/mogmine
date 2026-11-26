@@ -1,10 +1,11 @@
 // LV-1, docs/12 §3A and docs/24 §5. All session boundaries use America/New_York.
 import {
-  equityIndexSessionBounds, indexSessionCandles, offsetSessionDate, previousRegularSessionDate,
-  readSessionWindow, sessionWeekMonday,
+  equityIndexSessionBounds, offsetSessionDate, previousRegularSessionDate, sessionWeekMonday,
 } from "./session.ts";
 import { snapToTick, specFor, TIMEFRAME_MINUTES, toTicks } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
+import { asMixedCandle, readMixedWindow } from "./mixed-resolution.ts";
+import type { MixedCandle } from "./mixed-resolution.ts";
 
 const LABELS = {
   pdh: "PDH", pdl: "PDL", pdc: "PDC", rth_open: "RTH open", rth_high: "RTH high",
@@ -197,18 +198,22 @@ export function extractSessionInputsFromCandles(options: {
   if (provider === "yahoo_finance" && providerSymbol !== spec?.yahooTicker) {
     throw new RangeError(`Expected ${spec?.yahooTicker} candles for ${symbol}, received ${providerSymbol}`);
   }
-  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
   const priorDate = previousRegularSessionDate(sessionDate);
   const prior = equityIndexSessionBounds(priorDate);
   const today = equityIndexSessionBounds(sessionDate);
-  const index = indexSessionCandles(candles);
-  const read = (from: number, to: number) => readSessionWindow(index, from, to, asOf, barMs);
+  const tagged = candles.every((bar) => "minutes" in bar && "fillFrom" in bar);
+  const converted = candles.map((bar) => "minutes" in bar && "fillFrom" in bar
+    ? bar as MixedCandle : asMixedCandle(bar, timeframe));
+  const duplicateKeys = new Set(converted.flatMap((bar, index) => converted.some((other, otherIndex) => otherIndex !== index
+    && other.time === bar.time && other.minutes === bar.minutes) ? [`${bar.time}:${bar.minutes}`] : []));
+  const mixed = converted.filter((bar) => !duplicateKeys.has(`${bar.time}:${bar.minutes}`));
+  const read = (from: number, to: number) => readMixedWindow(mixed, symbol, from, to, asOf, tagged ? 1 : TIMEFRAME_MINUTES[timeframe]);
   const previous = read(prior.open, prior.close);
   const rth = read(prior.rthOpen, prior.rthClose);
   const overnight = read(today.open, today.rthOpen);
-  const rthOpen = read(prior.rthOpen, prior.rthOpen + barMs).bars[0];
-  const globexOpen = read(today.open, today.open + barMs).bars[0];
-  const rthClose = timeframe === "1m" ? read(prior.rthClose - barMs, prior.rthClose).bars[0] : undefined;
+  const rthOpen = mixed.find((bar) => bar.time === prior.rthOpen);
+  const globexOpen = mixed.find((bar) => bar.time === today.open);
+  const rthClose = mixed.find((bar) => bar.time + bar.minutes * 60_000 === prior.rthClose);
   const on = overnight.coverage.complete ? extremes(overnight.bars) : undefined;
   const weekWindows = [];
   for (let day = sessionWeekMonday(sessionDate); day <= sessionDate; day = offsetSessionDate(day, 1)) {
@@ -250,7 +255,7 @@ export function extractSessionInputsFromCandles(options: {
     },
   };
   return {
-    symbol, provider, providerSymbol, calcVersion: "levels-v1", sessionDate, timeframe, asOf, inputs,
+    symbol, provider, providerSymbol, calcVersion: "levels-v2-mixed-resolution", sessionDate, timeframe, asOf, inputs,
     coverage: { previous: previous.coverage, rth: rth.coverage, overnight: overnight.coverage, week: weekWindows.map(({ coverage }) => coverage) },
   };
 }
