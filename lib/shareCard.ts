@@ -8,6 +8,7 @@ import { sessionDate } from "./session.ts";
 import { getTheme } from "./theme.ts";
 import type { ChartTheme } from "./theme.ts";
 import { CHART_TOKENS } from "./chart-paint.ts";
+import { computeSnapshotDrawBox } from "./chart-export.ts";
 import { formatDateTime } from "./time.ts";
 import { adherence, holdSeconds, tradePnl, tradePoints } from "./trades.ts";
 import type { RSizeOptions } from "./trades.ts";
@@ -449,12 +450,13 @@ export function renderCardCanvas(
   if (side === "front") {
     const availW = layout.main.width - layout.main.innerMargin * 2;
     const availH = layout.main.height - layout.main.innerMargin * 2;
-    const scale = Math.min(availW / snapshot.width, availH / snapshot.height);
-    const dw = snapshot.width * scale;
-    const dh = snapshot.height * scale;
-    const dx = layout.main.x + (layout.main.width - dw) / 2;
-    const dy = layout.main.y + (layout.main.height - dh) / 2;
-    ctx.drawImage(snapshot, dx, dy, dw, dh);
+    // UX-E4: high-quality filtering so a >= 2x export bitmap downscales cleanly (08 §2 F-9).
+    const box = computeSnapshotDrawBox(layout.main.x + layout.main.innerMargin, layout.main.y + layout.main.innerMargin, availW, availH, snapshot.width, snapshot.height);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(snapshot, box.dx, box.dy, box.dw, box.dh);
+    ctx.restore();
   } else {
     // Back side: full thesis, management and post-exit notes, full rule list (docs/23 §3)
     let backY = layout.main.y + 36;

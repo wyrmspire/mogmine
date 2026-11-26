@@ -16,6 +16,7 @@ import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
 import type { NeighbourTradeProjection } from "@/lib/neighbour-trades";
 import { levelPills, tradeAnchors, type LevelLine, type LevelPill } from "@/lib/chart-levels";
+import { computeExportDimensions } from "@/lib/chart-export";
 import { resolveTapAction, type LevelHit } from "@/lib/level-hit-test";
 import { usePrefs } from "@/lib/prefs";
 import type { LevelLabelsMode } from "@/lib/prefs-sanitize";
@@ -193,6 +194,17 @@ function setProgrammaticRange(state: Live, apply: () => void) {
   }, 160);
 }
 
+// UX-E4: resize the chart for the >= 2x export bitmap, then put the same logical and price view back.
+type ExportView = { logical: { from: number; to: number } | null; auto: boolean; prices: PriceSpan | null };
+function sizeForExport(l: Live, width: number, height: number, view: ExportView) {
+  setProgrammaticRange(l, () => {
+    l.chart.resize(width, height);
+    if (view.logical) l.chart.timeScale().setVisibleLogicalRange(view.logical);
+    l.chart.priceScale("right").applyOptions({ autoScale: view.auto });
+    if (!view.auto && view.prices) l.chart.priceScale("right").setVisibleRange(view.prices);
+  });
+}
+
 function writeVisibleCount(state: Live, range: { from: number; to: number } | null) {
   if (!range) {
     delete state.host.dataset.visibleCount;
@@ -309,9 +321,15 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       paintLevels(l, paint, "always", exportPills);
       l.levelLabels = exportPills.map((pill) => pill.label);
       applyLevelRightOffset(l);
+      const exp = computeExportDimensions(l.host.clientWidth, l.host.clientHeight, window.devicePixelRatio || 1);
+      const view: ExportView = { logical: l.chart.timeScale().getVisibleLogicalRange(), auto: l.chart.priceScale("right").options().autoScale, prices: l.chart.priceScale("right").getVisibleRange() };
+      l.primitive.setExportMode(true);
       try {
+        if (exp.resize) sizeForExport(l, exp.width, exp.height, view);
         return l.chart.takeScreenshot(true, false);
       } finally {
+        l.primitive.setExportMode(false);
+        if (exp.resize) sizeForExport(l, l.host.clientWidth, l.host.clientHeight, view);
         paintLevels(l, paint, "tap", livePills);
         l.levelLabels = [];
         applyLevelRightOffset(l);
