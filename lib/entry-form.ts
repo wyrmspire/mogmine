@@ -7,8 +7,6 @@ import { isExitReason, snapToTick, specFor, tickDecimals, toTicks } from "./trad
 import type { TradeDirection, TradeExitReason, TradeStatus } from "./trades.ts";
 
 export interface EntryDraft {
-  /** Reused when a blocked-storage save is retried, so recovery cannot create a duplicate trade. */
-  pendingTradeId?: string;
   /** `open`: still running, no exit yet (R-03b). */
   status: TradeStatus;
   /** The trader set the entry time by hand: switching to Still open keeps it, and the bar finder never overwrites it. */
@@ -79,7 +77,6 @@ export function upgradeDraft(raw: unknown, now: Date, zone: string): EntryDraft 
   const entry = old.entryTime ? splitZonedInput(old.entryTime) : null;
   const exit = old.exitTime ? splitZonedInput(old.exitTime) : null;
   return {
-    ...(typeof old.pendingTradeId === "string" ? { pendingTradeId: old.pendingTradeId } : {}),
     status: old.status === "open" ? "open" : "closed",
     entryEdited: old.entryEdited === true,
     exitEdited: old.exitEdited === true,
@@ -98,11 +95,6 @@ export function upgradeDraft(raw: unknown, now: Date, zone: string): EntryDraft 
     exitClock: text(old.exitClock, exit?.clock || fresh.exitClock),
     entryMoodSpoke: typeof old.entryMoodSpoke === "string" ? old.entryMoodSpoke : null,
   };
-}
-
-/** A durable save clears the form; a session-only save keeps an idempotent draft for retry. */
-export function entryDraftAfterSave(draft: EntryDraft, tradeId: string, saved: boolean): EntryDraft | null {
-  return saved ? null : { ...draft, pendingTradeId: tradeId };
 }
 
 /** `YYYY-MM-DD` plus `days` calendar days. Empty for an invalid date. */
