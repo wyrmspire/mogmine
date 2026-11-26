@@ -47,6 +47,9 @@ Notes are never lost: the planning session uses the same save-on-type and "Saved
 - **Authored levels** from the day's planning sessions are drawn on the same chart as computed ones. Each has a right-edge label.
 - **Drawing** uses a Canvas `SessionLevelsPrimitive` (Invariant 1). It reads colours from CSS variables (Invariant 5) and draws only levels from the same instrument as the chart (`OD-15`). A toggle in the chart view options controls it.
 - **Indicators.** Session VWAP comes first. Every indicator records its calculation version and covered bars ([11 §4](11-product-workflows-and-api-context.md#4-indicator-context-is-reproducible)).
+- **Persisted chart choices (`IN-1`).** `vwapAnchor` (`off`, `rth` or `globex`), `levelLabels`, `ema200` and `reviewCardOrientation` are saved in prefs, so a reload keeps the chart as the trader left it.
+- **Session VWAP tolerance (`IN-2`, `D-F`).** The Globex VWAP can use the `globex-tolerant` gap policy: small overnight gaps draw over the bars that exist. Levels stay strict either way.
+- **200 EMA on the displayed timeframe (`IN-3`, `D-G`).** The 200 EMA follows the timeframe on screen across the chart, HUD, prefs and `/levels`.
 
 ## 4. After-session review
 
@@ -58,7 +61,7 @@ Pick a planning session or a time window, for example "Pre-market → Pre-power 
 
 The review ends with one lesson for the next session. A session with no trades is a valid review.
 
-Built as `sessionReview` in `lib/session-review.ts` (PS-4a). The window runs from the checkpoint's anchor (or its creation time for an event preset) to the next checkpoint's anchor or the 17:00 ET close. Levels and the watch list are read as the plan stood at each entry. A plan with a `symbol` reviews only that instrument's trades. The lesson is stored on the plan (`lesson`, 280 characters) and adds no revision.
+Built as `sessionReview` in `lib/session-review.ts` (PS-4a). The window runs from the checkpoint's anchor (or its creation time for an event preset) to the next checkpoint's anchor or the 17:00 ET close. **Whole-day window (`UX-A`):** an unanchored plan written after the close reviews the whole session, 18:00 ET the prior day to 17:00 ET, and the sheet says so. Levels and the watch list are read as the plan stood at each entry. A plan with a `symbol` reviews only that instrument's trades. The lesson is stored on the plan (`lesson`, 280 characters) and adds no revision.
 
 ## 5. Build slices (in order, after `TD-2` and `TD-3`)
 

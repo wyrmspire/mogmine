@@ -15,6 +15,7 @@ interface TradingAccount {
   id: string; user_id: string;            // invariant 7
   name: string;                           // "Topstep 50K Combine", "Personal"
   starting_balance_cents: number;
+  r_size_cents: number | null;           // fixed 1R dollar unit, integer cents (standard $300); null falls back to prefs, then $250
   rules: {
     max_loss_cents: number | null;        // null: no loss limit
     drawdown: "static" | "trailing" | "trailing_eod";
@@ -26,6 +27,7 @@ interface TradingAccount {
 ```
 
 - A trade has `account_id: string | null`. Null means it is not assigned and counts toward no total. Records saved before this field read as null.
+- `r_size_cents` is the account's fixed 1R dollar unit, in integer cents. It is not derived from any trade's stop. The standard unit is $300. An account without one falls back to the prefs risk budget, then $250 (`lib/r-size.ts`, `resolveRSize`). A trade's `TradeRecord.r_size_cents` is frozen at save (`D-B`), so a later edit to the account does not move saved R.
 - Rules are configurable per account, not hardcoded to one firm. They are informational only: a breached limit changes nothing about any trade (docs/17 §2.9).
 
 ## 2. The running total

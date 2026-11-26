@@ -76,6 +76,8 @@ The stop is a **stepped line**, not a box edge. It is 1.5 px, dashed, in the mut
 - A dot marks each move. At High detail the dot carries the time and the new price.
 - A stop moved **away** from the entry (risk widened) is drawn in the risk colour from that step on and labelled `WIDENED`. That is the "Moved Stop" tag in the journal, detected instead of typed.
 
+> **Built (2026-11-26, `SM-2`).** A stop move on a closed trade takes the `"untimed"` basis at exit. Its time is the exit instant and is never taken from `initial_stop_set_at`. It draws dashed, as an approximate step, and never as a false stop touch.
+
 ### 2.3 The cases
 
 Dollar figures use the examples in §3.5: 2 contracts, 5-point stop, $5 a point, no fees. The design note's first draft used five contracts, so its dollar figures were off by a factor of 2.5. These are the corrected ones.
@@ -267,6 +269,8 @@ The results were checked by hand against the examples: for example, ex-ignored i
 | **CSV (parked, `D-009`)** | Usually fills only | `fill` events (broker basis) | Actual only, plus "No stop or target on record → Add plan" |
 | **Broker pull, `Trade/search` (parked)** | Legs, no orders (B-07) | `fill` events per leg, `void` for voided legs | Same as CSV |
 | **Broker stream, `GatewayUserOrder` and `GatewayUserTrade` (parked)** | Orders with stop and limit prices, type, status, update time, and legs | `order`, `modify`, `cancel`, `fill` | Everything, with `broker` basis: real stop path, real cancels, real exit reasons |
+
+**Current state (2026-11-26).** `fromLegacy` (`lib/trade-document.ts`) maps `partial_targets` to `plan` targets with their `qty` (`R3-07`), and each `partial_exits` leg to an exit `fill` with its reason (`R3-07`, `R3-13`). A closed trade's stop move takes the `"untimed"` basis at exit, as in §2.2 (`SM-2`). The R ruler draws only at High detail (`D-V2`).
 
 Manual entry needs two small additions to the form: **"How did it end?"** (`Target · Stop · Trailed · Breakeven · Market`, one tap) and **"I moved my stop"** (add a row: new price, time). Both are optional. A trade entered with neither still renders, as plan and actual with an unlabelled exit.
 

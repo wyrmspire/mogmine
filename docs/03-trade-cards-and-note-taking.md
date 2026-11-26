@@ -20,7 +20,7 @@ From any trade view, tapping the **`Trade Card`** button generates a high-craft,
 +---------------------------------------------------------------+
 |  [ Chart Canvas Snapshot: 5m ES=F ]                           |
 |   - Candlestick price action (pre-entry -> post-exit)         |
-|   - Translucent Emerald/Gold Profit Box + Crimson Risk Box    |
+|   - Reward price-edge fill (--zone-reward) + risk fill (--zone-risk)|
 |   - Dashed Execution Path + Key Levels (ONL, VWAP, ORB)       |
 |   - Companion Badge: [⚡ SMT Divergence vs NQ=F @ 09:45]      |
 +---------------------------------------------------------------+

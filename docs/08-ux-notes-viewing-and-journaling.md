@@ -48,12 +48,17 @@ How to hit them:
 | Screen | URL | Notes |
 | :--- | :--- | :--- |
 | Today | `/` | Current trading day, including no-trade days; show the previous trading day's summary separately and label its date. |
-| Feed | `/feed?status=unreviewed` | Grouped by trading day with a sticky day header. Built filter: `status` = `unreviewed` or `flagged`. The `?style=` filter was removed with the session-length labels (`OD-24`); a `?playbook=` filter is not built. |
+| Feed | `/feed?status=unreviewed` | Grouped by trading day with a sticky day header. Built filters (`NAV-1`, all in the URL): `?status=` (`unreviewed` or `flagged`), `?date=` (session date), `?account=`, `?playbook=` and `?tag=`. The `?style=` filter was removed with the session-length labels (`OD-24`). |
 | Trade Detail | `/trades/[id]?tf=5m&companion=NQ` | The deep-link target for toasts, pushes and shared links between your own devices. |
 | Review Queue | `/review` | Card stack of trades that still need tags or review. |
 | Playbooks | `/playbooks` | The binder: one card per active playbook (docs/23 §5). Opened from Tune → Playbooks and not in the dock. Editing stays in Tune. |
 | Drills | `/drills` | *Take it?* drills on older trades (docs/23 §4), opened from Review. |
 | Tune | `/tune` | Visual tuning, time zone, privacy, playbook editor, accounts, backup. |
+| Playbook Lab | `/playbooks/lab` | Playbook Lab, opened from the playbook binder. |
+| Day review | `/review/day/[date]` | One trading day's review cards (`DR-3`). |
+| Strategy Lab | `/strategy-lab` | Strategy Lab workspace. Separate from the journal. |
+| Assistant settings | `/settings/agent` | Settings for the assistant. |
+| Sign-in | `/login` | Sign-in page. |
 
 The dock is Today, Feed, Add (the centre button), Review and Tune.
 

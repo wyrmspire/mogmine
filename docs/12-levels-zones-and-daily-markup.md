@@ -164,6 +164,12 @@ Thursday examples:
 | Lock | Published levels are locked. Editing creates a new revision (LV-11). |
 | Colour-blind preset | The label text also carries the role. In the colour-blind preset, support and resistance swap to blue and orange (UX-80). |
 
+**Built (2026-11-26):**
+- **Labels behind candles (`LB-A`).** A label that falls over candles is drawn solid behind them, at the `0.95` alpha token, with the right-edge `rightOffset` and a quiet right edge (`Q-7`).
+- **Tap mode is the default (`LB-B1`, `D-D`).** The `tap` label mode shows no pills, at most `3` price-only axis tags, and a `hitLevel` hit test. Tapping a level opens the `LevelCard` popover (`LB-B2`), which is accessible.
+- **Export groups (`LB-B2`, `D-E`).** A share or export shows at most `4` labelled groups.
+- **Week loading (`R3-06`).** The Monday-to-prior-week sessions load, so `week_high` and `week_low` resolve from Tuesday to Friday.
+
 **Detail presets** (`OD-17`, [11 §2](11-product-workflows-and-api-context.md#2-detail-and-full-chart-mode-are-separate)):
 
 | Preset | Levels shown |
