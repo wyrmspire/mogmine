@@ -15,7 +15,7 @@ export interface PlaybookCardData {
   name: string;
   rules: string[];
   /** §5.1: the best example trade, and why it was chosen. Null prints "No example yet". */
-  example: { trade_id: string; basis: "clean_take" | "clean" } | null;
+  example: { trade_id: string; basis: "pinned" | "clean_take" | "clean" } | null;
   stats: {
     trades: number;
     /** Null below the minimum sample, so a 2-trade 100% never prints. */
@@ -36,10 +36,14 @@ const isClean = (trade: TradeRecord) => {
 };
 
 /**
- * §5.1: the most recent real, closed trade with every rule followed and a blind *Take it* (`take_again`
- * "yes"); else the most recent with every rule followed; else none.
+ * §5.1: the trader's pinned example (docs/23 §9) when it is still a real, closed trade of this playbook; else the
+ * most recent real, closed trade with every rule followed and a blind *Take it* (`take_again` "yes"); else the
+ * most recent with every rule followed; else none.
  */
-export function playbookExample(playbookId: string, trades: readonly TradeRecord[]): PlaybookCardData["example"] {
+export function playbookExample(playbookId: string, trades: readonly TradeRecord[], pinnedTradeId?: string | null): PlaybookCardData["example"] {
+  const usable = (trade: TradeRecord) => trade.playbook_id === playbookId && !trade.is_sample && !isOpen(trade);
+  const pinned = pinnedTradeId ? trades.find((trade) => trade.id === pinnedTradeId && usable(trade)) : undefined;
+  if (pinned) return { trade_id: pinned.id, basis: "pinned" };
   const candidates = trades
     .filter((trade) => trade.playbook_id === playbookId && !trade.is_sample && !isOpen(trade) && isClean(trade))
     .sort((a, b) => Date.parse(b.entry_time) - Date.parse(a.entry_time));
@@ -49,7 +53,7 @@ export function playbookExample(playbookId: string, trades: readonly TradeRecord
 }
 
 export function playbookCardData(
-  playbook: Pick<Playbook, "id" | "name" | "checklist_rules">,
+  playbook: Pick<Playbook, "id" | "name" | "checklist_rules" | "pinned_example_trade_id">,
   trades: readonly TradeRecord[],
   drills: readonly DrillRecord[],
   now: number,
@@ -62,7 +66,7 @@ export function playbookCardData(
     playbook_id: playbook.id,
     name: playbook.name,
     rules: playbook.checklist_rules.map((rule) => rule.label),
-    example: playbookExample(playbook.id, trades),
+    example: playbookExample(playbook.id, trades, playbook.pinned_example_trade_id),
     stats: {
       trades: count,
       winRate: belowMinimum ? null : summary?.winRate ?? null,

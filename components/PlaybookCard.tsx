@@ -14,6 +14,8 @@ import type { TradeChartHandle } from "./TradeChart";
 import type { StoredCandles } from "@/lib/candles";
 import { idbGet } from "@/lib/idb";
 import { playbookDrillLine, playbookExampleCaption, playbookSampleLine, playbookStatCells } from "@/lib/playbook-binder";
+import { usePlaybooks, setPlaybookPinnedExample } from "@/lib/playbooks-store";
+import { useJournal } from "@/lib/store";
 import type { PlaybookCardData } from "@/lib/playbook-card";
 import { buildPlaybookCard } from "@/lib/playbook-card-image";
 import type { CardSide, CardSize } from "@/lib/shareCard";
@@ -24,7 +26,8 @@ import { resolveRSize, riskR } from "@/lib/r-size";
 import { observeTrade } from "@/lib/trade-bar-validation";
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
 import { buildMarks } from "@/lib/trade-marks";
-import { TIMEFRAME_MINUTES, candleCacheKey } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, candleCacheKey, isOpen } from "@/lib/trades";
+import { formatListTime } from "@/lib/time";
 import type { TradeRecord } from "@/lib/trades";
 
 type Bars = { state: "loading" } | { state: "none" } | { state: "ready"; stored: StoredCandles };
@@ -38,6 +41,14 @@ export function PlaybookCard({ data, example, shield, zone }: {
 }) {
   const [side, setSide] = useState<"front" | "back">("front");
   const cells = playbookStatCells(data, shield);
+  // docs/23 §9: the pinned teaching example. Closed, real trades of this playbook are the only choices offered.
+  const pinnedId = usePlaybooks().playbooks.find((item) => item.id === data.playbook_id)?.pinned_example_trade_id ?? null;
+  const journal = useJournal();
+  const choices = useMemo(() => journal.trades
+    .filter((trade) => trade.playbook_id === data.playbook_id && !trade.is_sample && !isOpen(trade))
+    .sort((a, b) => Date.parse(b.entry_time) - Date.parse(a.entry_time)), [journal.trades, data.playbook_id]);
+  const isPinned = data.example?.basis === "pinned";
+  const pinSelect = pinnedId && choices.some((trade) => trade.id === pinnedId) ? pinnedId : "";
 
   // Export state. The sheet opens with Shield on whatever the app's setting is (docs/23 §1.3).
   const [exporting, setExporting] = useState(false);
@@ -98,7 +109,34 @@ export function PlaybookCard({ data, example, shield, zone }: {
         {side === "front" ? (
           <>
             <ExampleChart key={example?.id ?? "none"} ref={chartRef} example={example} shield={chartPrivacy} zone={zone} onRendered={onRendered} />
-            {data.example && <p className="playbook-card-caption">{playbookExampleCaption(data)}</p>}
+            {data.example && <p className="playbook-card-caption">{isPinned ? "Pinned teaching example" : playbookExampleCaption(data)}</p>}
+            {(example || choices.length > 0) && (
+              <div className="playbook-card-pin">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  aria-pressed={isPinned}
+                  disabled={!example}
+                  onClick={() => example && setPlaybookPinnedExample(data.playbook_id, isPinned ? null : example.id)}
+                  style={{ minHeight: 44 }}
+                >
+                  {isPinned ? "Pinned example" : "Pin example"}
+                </button>
+                {choices.length > 0 && (
+                  <select
+                    aria-label="Choose the pinned teaching example"
+                    value={pinSelect}
+                    onChange={(event) => setPlaybookPinnedExample(data.playbook_id, event.target.value || null)}
+                    style={{ minHeight: 44 }}
+                  >
+                    <option value="">Automatic</option>
+                    {choices.map((trade) => (
+                      <option key={trade.id} value={trade.id}>{trade.direction === "LONG" ? "Long" : "Short"} {trade.symbol} · {formatListTime(trade.entry_time, zone)}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
             {cells.length ? (
               <div className="stat-row playbook-card-stats" role="region" aria-label="Playbook performance statistics">
                 {cells.map((cell) => (
