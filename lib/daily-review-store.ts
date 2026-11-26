@@ -67,6 +67,26 @@ function createDailyReviewsSync(overrides: Partial<CollectionSyncOptions<DailyRe
 
 let dailyReviewsSync: CollectionSync = createDailyReviewsSync();
 
+// Cross-tab (docs/26 §8.4 #7): another open tab writes this key. Adopt its copy so this tab never overwrites it.
+let storageListener: ((event: StorageEvent) => void) | null = null;
+
+function listenForStorage() {
+  if (storageListener || typeof window === "undefined") return;
+  storageListener = (event: StorageEvent) => {
+    if (event.key !== DAILY_REVIEWS_STORAGE_KEY || !event.newValue) return;
+    try {
+      set({ reviews: sanitizeDailyReviews(JSON.parse(event.newValue)) });
+      dailyReviewsSync.changed();
+    } catch { /* malformed: keep this tab's copy */ }
+  };
+  window.addEventListener("storage", storageListener);
+}
+
+function stopListeningForStorage() {
+  if (storageListener && typeof window !== "undefined") window.removeEventListener?.("storage", storageListener);
+  storageListener = null;
+}
+
 export function hydrateDailyReviews() {
   if (state.hydrated || typeof window === "undefined") return;
   let reviews: DailyReview[] = [];
@@ -78,6 +98,7 @@ export function hydrateDailyReviews() {
     saved = false;
   }
   set({ reviews, hydrated: true, saved });
+  listenForStorage();
   dailyReviewsSync.start();
 }
 
@@ -176,6 +197,7 @@ export function restoreDailyReviews(reviews: readonly DailyReview[] | null | und
 
 /** Test hook: back to unhydrated and empty, and the default (disabled) syncer. */
 export function resetDailyReviewsForTests() {
+  stopListeningForStorage();
   state = empty();
   dailyReviewsSync.dispose();
   dailyReviewsSync = createDailyReviewsSync();

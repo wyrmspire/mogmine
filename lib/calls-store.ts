@@ -73,6 +73,27 @@ function createCallsSyncs(overrides: CallsSyncOverrides = {}): CallsSyncs {
 
 let syncs: CallsSyncs = createCallsSyncs();
 
+// Cross-tab (docs/26 §8.4 #7): another open tab writes this key. Adopt its copy so this tab never overwrites it.
+let storageListener: ((event: StorageEvent) => void) | null = null;
+
+function listenForStorage() {
+  if (storageListener || typeof window === "undefined") return;
+  storageListener = (event: StorageEvent) => {
+    if (event.key !== CALLS_STORAGE_KEY || !event.newValue) return;
+    try {
+      set(sanitizeCalls(JSON.parse(event.newValue)));
+      syncs.calls.changed();
+      syncs.dismissals.changed();
+    } catch { /* malformed: keep this tab's copy */ }
+  };
+  window.addEventListener("storage", storageListener);
+}
+
+function stopListeningForStorage() {
+  if (storageListener && typeof window !== "undefined") window.removeEventListener?.("storage", storageListener);
+  storageListener = null;
+}
+
 /** Dispose the current syncers (timers, listeners, registry entries) and build new ones. */
 function replaceSyncs(overrides?: CallsSyncOverrides): CallsSyncs {
   syncs.calls.dispose();
@@ -92,6 +113,7 @@ export function hydrateCalls() {
     saved = false;
   }
   set({ ...stored, hydrated: true, saved });
+  listenForStorage();
   syncs.calls.start();
   syncs.dismissals.start();
 }
@@ -167,6 +189,7 @@ export function restoreCalls(backup: CallsBackup | null | undefined) {
 
 /** Test hook. Disposes the syncers, so no sync timer or listener outlives the test that started it. */
 export function resetCallsForTests() {
+  stopListeningForStorage();
   replaceSyncs();
   state = empty();
 }

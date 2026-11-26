@@ -34,6 +34,28 @@ function createPrefsSync(overrides: Partial<SingletonSyncOptions<Prefs>> = {}): 
 
 let prefsSync: SingletonSync = createPrefsSync();
 
+// Cross-tab (docs/26 §8.4 #7): another open tab writes PREFS_KEY; adopt its copy so this tab never overwrites it.
+let storageListener: ((event: StorageEvent) => void) | null = null;
+
+function listenForStorage() {
+  if (storageListener || typeof window === "undefined") return;
+  storageListener = (event: StorageEvent) => {
+    if (event.key !== PREFS_KEY) return;
+    try {
+      prefs = event.newValue ? sanitize(JSON.parse(event.newValue) as Partial<Prefs>) : DEFAULT_PREFS;
+      apply();
+      listeners.forEach((listener) => listener());
+      prefsSync.changed();
+    } catch { /* malformed: keep this tab's copy */ }
+  };
+  window.addEventListener("storage", storageListener);
+}
+
+function stopListeningForStorage() {
+  if (storageListener && typeof window !== "undefined") window.removeEventListener?.("storage", storageListener);
+  storageListener = null;
+}
+
 function apply() {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -54,6 +76,7 @@ export function hydratePrefs() {
   } catch { /* defaults */ }
   apply();
   listeners.forEach((listener) => listener());
+  listenForStorage();
   prefsSync.start();
 }
 
@@ -71,6 +94,7 @@ export function setPrefs(patch: Partial<Prefs>) {
 
 /** Test hook: restore the unhydrated defaults and a fresh (disabled by default) syncer. */
 export function resetPrefsForTests() {
+  stopListeningForStorage();
   prefsSync.dispose();
   prefsSync = createPrefsSync();
   prefs = DEFAULT_PREFS;
