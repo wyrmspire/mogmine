@@ -215,14 +215,14 @@ function AgentKeys() {
             {keys.rows.map((row) => (
               <li key={row.id} style={{ borderTop: "1px solid var(--border-strong)", paddingTop: 10, display: "grid", gap: 6 }}>
                 <strong>{row.label}</strong>
-                <span className="muted" style={MONO}>{row.token_prefix}…</span>
-                <span className="muted" style={{ fontSize: "0.8125rem" }}>
+                <span className="muted" style={{ ...MONO, minWidth: 0 }}>{row.token_prefix}…</span>
+                <span className="muted" style={{ fontSize: "0.8125rem", fontVariantNumeric: "tabular-nums" }}>
                   {scopeText(row.scopes)} · Created {fmt(row.created_at)} · {row.last_used_at ? `Last used ${fmt(row.last_used_at)}` : "Never used"}
                 </span>
                 {row.revoked_at ? (
                   <span style={TAG}>Revoked</span>
                 ) : (
-                  <button type="button" className="btn-secondary" style={{ ...TOUCH, justifySelf: "start" }} onClick={() => void onRevoke(row)}>
+                  <button type="button" className="btn-secondary" style={{ ...TOUCH, justifySelf: "start" }} aria-label={`${armed === row.id ? "Confirm revoke" : "Revoke"} ${row.label}`} onClick={() => void onRevoke(row)}>
                     {armed === row.id ? "Tap again to revoke" : "Revoke"}
                   </button>
                 )}
@@ -246,9 +246,9 @@ function AgentKeys() {
           <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}>
             {audit.rows.map((row) => (
               <li key={row.id} style={{ fontSize: "0.8125rem", display: "grid", gap: 2 }}>
-                <span className="muted">{fmt(row.at)}</span>
+                <span className="muted" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(row.at)}</span>
                 <span style={MONO}>{row.method} {row.path}</span>
-                <span className="muted">{row.status} · {row.outcome}</span>
+                <span className="muted" style={{ fontVariantNumeric: "tabular-nums" }}>{row.status} · {row.outcome}</span>
               </li>
             ))}
           </ol>

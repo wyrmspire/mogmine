@@ -122,7 +122,7 @@ export function TagRegistryEditor() {
             )}
             {retired.length > 0 && (
               <details className="advanced" style={{ marginTop: 12 }}>
-                <summary>Retired <span className="num">{retired.length}</span></summary>
+                <summary style={{ minHeight: 44, display: "flex", alignItems: "center", gap: 6 }}>Retired <span className="num">{retired.length}</span></summary>
                 <ul className="playbook-list">
                   {retired.map((def) => (
                     <li key={def.id} className="playbook-row archived">
@@ -174,12 +174,12 @@ function TagForm({ editing, playbooks, onChange, onSave, onCancel, onRetire }: {
         ))}
       </fieldset>
 
-      {error && <p role="alert" style={{ color: "var(--danger, #f87171)", margin: 0, fontSize: 13 }}>{error}</p>}
+      {error && <p role="alert" style={{ color: "var(--loss-text)", margin: 0, fontSize: 13 }}>{error}</p>}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button type="submit" className="btn-primary" style={{ minHeight: 44 }}>Save</button>
         <button type="button" className="btn-secondary" onClick={onCancel} style={{ minHeight: 44 }}>Cancel</button>
-        {onRetire && <button type="button" className="btn-secondary" onClick={onRetire} style={{ minHeight: 44 }}>Retire</button>}
+        {onRetire && <button type="button" className="btn-secondary" onClick={onRetire} style={{ minHeight: 44 }} aria-label={`Retire tag ${draft.label || "this tag"}`}>Retire</button>}
       </div>
     </form>
   );

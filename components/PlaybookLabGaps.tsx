@@ -26,7 +26,7 @@ export function PlaybookLabGaps({ view }: { view: LabView }) {
       )}
       <ul className="lab-grid lab-list" aria-label="Gap counts">
         <li>
-          <Link className="lab-row" href={g.noPlaybookHref}>
+          <Link className="lab-row" style={{ minHeight: 44 }} href={g.noPlaybookHref}>
             <span className="lab-row-head">
               <span>Trades with no playbook</span>
               <span className="num">{g.noPlaybook.length}</span>
@@ -34,7 +34,7 @@ export function PlaybookLabGaps({ view }: { view: LabView }) {
           </Link>
         </li>
         <li>
-          <Link className="lab-row" href={g.noSetupTagHref}>
+          <Link className="lab-row" style={{ minHeight: 44 }} href={g.noSetupTagHref}>
             <span className="lab-row-head">
               <span>Trades with a playbook but no setup tag</span>
               <span className="num">{g.noSetupTag.length}</span>
@@ -42,7 +42,7 @@ export function PlaybookLabGaps({ view }: { view: LabView }) {
           </Link>
         </li>
         <li>
-          <Link className="lab-row" href={g.impulseHref}>
+          <Link className="lab-row" style={{ minHeight: 44 }} href={g.impulseHref}>
             <span className="lab-row-head">
               <span>No Setup / Impulse</span>
               <span className="num">

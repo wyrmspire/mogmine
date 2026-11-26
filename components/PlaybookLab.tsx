@@ -107,6 +107,7 @@ export function PlaybookLab() {
         aria-checked={includeSamples}
         aria-label="Include samples"
         className="lab-switch"
+        style={{ minHeight: 44 }}
         onClick={() => setIncludeSamples((on) => !on)}
       >
         <span>
@@ -116,7 +117,7 @@ export function PlaybookLab() {
         <span className="switch" data-checked={includeSamples} aria-hidden="true" />
       </button>
 
-      <div className="lab-counts">
+      <div className="lab-counts" style={{ fontVariantNumeric: "tabular-nums" }}>
         <span><b>{c.playbooks}</b> playbooks ({c.archived} archived) · <b>{c.setupTags}</b> setup tags · <b>{c.executionTags}</b> execution tags</span>
         <span>
           <b>{c.trades}</b> trades · <b>{c.withPlaybook}</b> with a playbook · <b>{c.withSetupTag}</b> with a setup tag
@@ -126,7 +127,7 @@ export function PlaybookLab() {
 
       <nav className="lab-tabs" aria-label="Lab sections">
         {TABS.map(([id, label]) => (
-          <Link key={id} href={`/playbooks/lab?tab=${id}`} aria-current={tab === id ? "page" : undefined}>{label}</Link>
+          <Link key={id} href={`/playbooks/lab?tab=${id}`} aria-current={tab === id ? "page" : undefined} style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}>{label}</Link>
         ))}
       </nav>
 
@@ -164,7 +165,7 @@ function PlaybookList({ view }: { view: LabView }) {
       </ul>
       {archived.length > 0 && (
         <details className="lab-archived">
-          <summary>{plural(archived.length, "archived playbook")}</summary>
+          <summary style={{ minHeight: 44, display: "flex", alignItems: "center" }}>{plural(archived.length, "archived playbook")}</summary>
           <ul className="lab-grid lab-list">
             {archived.map((facet) => <PlaybookRow key={facet.playbookId} facet={facet} />)}
           </ul>
@@ -181,7 +182,7 @@ function PlaybookRow({ facet }: { facet: PlaybookFacet }) {
   const ends = exitLine(facet.shape.exitReasons);
   return (
     <li>
-      <Link className="lab-row" href={`/playbooks/lab?tab=playbooks&playbook=${encodeURIComponent(facet.playbookId)}`}>
+      <Link className="lab-row" style={{ minHeight: 44 }} href={`/playbooks/lab?tab=playbooks&playbook=${encodeURIComponent(facet.playbookId)}`}>
         <span className="lab-row-head">
           <span>{facet.name}{facet.archived && <span className="lab-badge"> · archived</span>}</span>
           <span className="num lab-meta">{plural(facet.n, "trade")} · {facet.lastUsedAt ? `last ${fmtDate(facet.lastUsedAt)}` : "not used yet"}</span>
@@ -222,7 +223,7 @@ function PlaybookDetail({ facet, byId }: { facet: PlaybookFacet; byId: Map<strin
           <ul className="lab-bars" aria-label="Co-occurring tags">
             {tagRows.map((row) => (
               <li key={`${row.kind}-${row.tag}`}>
-                <Link className="lab-bar" href={row.feedHref}>
+                <Link className="lab-bar" style={{ minHeight: 44 }} href={row.feedHref}>
                   <span>{row.tag} <span className="lab-meta">{row.kind.toLowerCase()}</span></span>
                   <b className="num">{row.n}</b>
                   <span className="lab-bar-track"><span className="lab-bar-fill" style={{ "--share": row.n / max } as CSSProperties} /></span>
@@ -271,7 +272,7 @@ function Examples({ refs, byId }: { refs: LabExampleRef[]; byId: Map<string, Tra
   return (
     <div className="lab-examples">
       {rows.map(({ ref, trade }) => (
-        <Link key={ref.tradeId} className="lab-example" href={`/trades/${encodeURIComponent(trade.id)}`}>
+        <Link key={ref.tradeId} className="lab-example" style={{ minHeight: 44 }} href={`/trades/${encodeURIComponent(trade.id)}`}>
           <Sparkline points={trade.sparkline} />
           <span>{EXAMPLE_LABEL[ref.reason]} · {trade.symbol} {trade.direction === "LONG" ? "long" : "short"}</span>
         </Link>
@@ -294,7 +295,7 @@ function TagsPanel({ view, byId }: { view: LabView; byId: Map<string, TradeRecor
           <ul className="lab-examples">
             {view.unknownTags.map((row) => (
               <li key={row.label}>
-                <Link className="lab-example" href={row.feedHref}>
+                <Link className="lab-example" style={{ minHeight: 44 }} href={row.feedHref}>
                   <span className="num">{row.label}</span>
                   <span className="num lab-meta">{plural(row.n, "trade")}</span>
                 </Link>
