@@ -275,7 +275,8 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
           if (query.parentId !== undefined && slot.parentOf?.(item) !== query.parentId) return false;
           return true;
         });
-        if (query.limit !== undefined) items = items.slice(0, Math.max(0, query.limit));
+        const start = Math.max(0, Math.floor(query.offset ?? 0));
+        items = items.slice(start, query.limit !== undefined ? start + Math.max(0, query.limit) : undefined);
         return { ok: true, value: items };
       },
 

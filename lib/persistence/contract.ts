@@ -76,6 +76,8 @@ export interface ListQuery {
   /** Children of one parent (e.g. a trade's mood records, an account's balance checks). */
   parentId?: RecordId;
   limit?: number;
+  /** 0-based row offset, applied before `limit`. Pages through a collection in `created_at, id` order. */
+  offset?: number;
 }
 
 /** Many rows per owner, keyed by `id`. `put` is an upsert of the whole record (no partial patches at this layer). */
