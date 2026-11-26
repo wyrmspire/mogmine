@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createJournalCommands } from "../commands/journal-commands.ts";
-import { fromLegacy, deriveTrade } from "../trade-document.ts";
+import { fromLegacy, deriveTrade, isTradeDocument } from "../trade-document.ts";
 import { FUTURES_SPECS, normalizeTrade, riskMultiple, tradePnl, tradePoints } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 import { resultR } from "../r-size.ts";
@@ -73,6 +73,19 @@ test("sanitizers keep valid items, sort exits by time, and return undefined when
   assert.equal(sanitizePartialExits(undefined, "MES"), undefined);
   assert.deepEqual(sanitizePartialTargets([T1, { key: "", price: 1, qty: 1 }], "MES"), [T1]);
   assert.equal(sanitizePartialTargets("nope", "MES"), undefined);
+});
+
+test("malformed optional partial-exit fields fail closed instead of disappearing", () => {
+  const malformed = { ...EXIT_T1, reason: 42 };
+  assert.equal(sanitizePartialExits([malformed], "MES"), undefined);
+  assert.match(validateTradePartials({ partial_exits: [malformed] }, fixtureSeven()) ?? "", /partial exit/i);
+});
+
+test("the TradeDocument guard validates partial annotation shapes", () => {
+  const doc = fromLegacy(fixtureSeven());
+  assert.equal(isTradeDocument(doc), true);
+  assert.equal(isTradeDocument({ ...doc, annotations: { ...doc.annotations, partial_exits: [{}] } }), false);
+  assert.equal(isTradeDocument({ ...doc, annotations: { ...doc.annotations, partial_targets: [{}] } }), false);
 });
 
 test("validateTradePartials: a valid fixture 7 passes, and each broken rule names itself", () => {

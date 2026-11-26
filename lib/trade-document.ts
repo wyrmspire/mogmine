@@ -11,7 +11,7 @@ import {
   tickDecimals,
   toTicks,
 } from "./trades.ts";
-import { chronologicalSeq } from "./partials-record.ts";
+import { chronologicalSeq, isPartialExit, isPartialTarget } from "./partials-record.ts";
 import type {
   ChecklistItem,
   FuturesContractSpec,
@@ -1805,6 +1805,6 @@ function isAnnotations(value: unknown): value is TradeDocAnnotations {
     (value.candle_source === undefined || value.candle_source === "Yahoo Finance" || value.candle_source === "Demo fixture") &&
     (value.fixture_version === undefined || typeof value.fixture_version === "number") &&
     (value.annotations_modified === undefined || typeof value.annotations_modified === "boolean") &&
-    (value.partial_exits === undefined || (Array.isArray(value.partial_exits) && value.partial_exits.every(isRecord))) &&
-    (value.partial_targets === undefined || (Array.isArray(value.partial_targets) && value.partial_targets.every(isRecord)));
+    (value.partial_exits === undefined || (Array.isArray(value.partial_exits) && value.partial_exits.every(isPartialExit))) &&
+    (value.partial_targets === undefined || (Array.isArray(value.partial_targets) && value.partial_targets.every(isPartialTarget)));
 }
