@@ -283,10 +283,7 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
         const clean = slot.read(slot.write({}, records));
         if (clean.length !== records.length) return { ok: false, error: ERRORS.invalid(key, "Some records did not pass validation. Nothing was replaced.") };
         const saved = save(blob.value, clean);
-        if (saved.ok) {
-          for (const metaKey of [...meta.keys()]) if (metaKey.startsWith(key + ":")) meta.delete(metaKey);
-          for (const item of clean) stamp(key, item.id);
-        }
+        if (saved.ok) for (const item of clean) stamp(key, item.id);
         return saved;
       },
     };
@@ -344,8 +341,7 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
   const promptRepo: SingletonRepository<PromptLibraryV1> = {
     async get(who) {
       if (foreign(who) || !promptLibrary) return { ok: true, value: null };
-      const row = rowMeta("prompt_library", "singleton");
-      return { ok: true, value: { record: promptLibrary, meta: { user_id: owner, created_at: row.created_at, updated_at: row.updated_at } } };
+      return { ok: true, value: { record: promptLibrary, meta: { user_id: owner, created_at: EPOCH, updated_at: EPOCH } } };
     },
     async put(who, value) {
       if (foreign(who)) return { ok: false, error: ERRORS.forbidden("prompt_library", "This record belongs to another owner.") };

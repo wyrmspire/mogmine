@@ -47,9 +47,9 @@ _Added 2026-11-22: Supabase-ready wave (`D-012`). Dependency order: #173 first, 
 
 | 18 | #173 | Persistence contract + database-readiness checklist (every record type in `lib/`) | #173, docs/22, docs/06, `D-012` | M | done (docs/26, `lib/persistence/`) |
 | 19 | #174 | AI-operable command layer (typed create/read/update, no UI) | #174, after #173 | M | ready |
-| 20 | #175 | Local/mock adapter implementing the contract (env flag to stay on mocks) | #175, after #173, parallel with #174 | M | done (`lib/persistence/local-adapter.ts`, `NEXT_PUBLIC_PERSISTENCE_ADAPTER`) |
+| 20 | #175 | Local/mock adapter implementing the contract (env flag to stay on mocks) | #175, after #173, parallel with #174 | M | ready |
 | 21 | #176 | Supabase adapter: `mogmine_` migrations, RLS, shared tests on `showmob-dev` | #176, after #173–#175, `D-012` | L | ready |
-| 22 | #177 | Line-count deviation rule in `AGENTS.md` (report/justify files over the target) | #177, may run in parallel | S | done (AGENTS.md §6.12, `npm run check:file-length`) |
+| 22 | #177 | Line-count deviation rule in `AGENTS.md` (report/justify files over the target) | #177, may run in parallel | S | ready |
 
 **Open on GitHub but already built here (owner: close them):** #10, #11, #12, #13, #14 (fitted chart window, bar floor, timeframe from duration, style labels gone, tests), #18 (backup), #20 (icons and hint; a real iOS check is still owed), #25 (no price ladder), #27 (`MES=F`), #28 (no synthetic candles), #29 (bar validator), #90 (`MD-1`), #91 (D-010 restatement), #165 (`CD-2a`–`CD-2c`). #26 and #114 are umbrellas: what is left of them is rows 15 and 16 above.
 

@@ -8,8 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"lib/__tests__/*.test.ts\"",
-    "check:file-length": "node scripts/check-file-length.mjs"
+    "test": "node --test \"lib/__tests__/*.test.ts\""
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.17",
