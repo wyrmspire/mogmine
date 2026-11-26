@@ -1,13 +1,19 @@
 /**
- * Strategy Lab bar loader (SL-2, docs/design-2026-11-24/09 §10.2, §7.2).
- * One session at a time from `/api/market-data`, cleaned, cached on the device when settled,
- * and graded for volume. Never throws: every failure is an excluded session with a reason.
+ * Strategy Lab bar loader (SL-2, docs/design-2026-11-24/09 §10.2; SL-15b additive coverage). A settled session comes from
+ * the device store, then `mogmine_bars_1m`, then Yahoo for missing minutes only. Bars merge and are never replaced.
+ * Never throws: every failure is an excluded session with a reason.
  */
 import { idbGet, idbSet } from "../idb.ts";
 import { equityIndexSessionBounds, previousRegularSessionDate } from "../session.ts";
+import {
+  cleanCandles, computeMissingRanges, defaultCoverageStorage, mergeBars1m, mergeCoveredRanges, recordSessionCoverage,
+  type CleanStats, type CoveredRange,
+} from "./bar-coverage.ts";
+import { readRemoteSessionBars1m } from "./bars-cache.ts";
 import { buildBarSeries } from "./series.ts";
 import type { BarSeries, SourceBar } from "./types.ts";
 
+export { cleanCandles, type CleanStats };
 export const LAB_SYMBOL = "MES";
 export const SESSION_CONCURRENCY = 3;
 /** A session is cached only once its 17:00 ET close is at least this far in the past. */
@@ -15,16 +21,17 @@ export const CACHE_SETTLE_MS = 60 * 60_000;
 /** Volume grade limit: at most this share of RTH bars may lack volume for `degraded`. */
 export const VOLUME_DEGRADED_LIMIT = 0.02;
 export const CACHE_SCHEMA = "strategy-lab.session.v1";
+/** Yahoo serves 1m bars for about the last 30 days. Older windows never reach the network. */
+export const YAHOO_1M_SAFE_MS = 29 * 86_400_000;
 
 export type ExclusionReason = "not-1m" | "no-data" | "upstream" | "bad-response";
 export type VolumeGrade = "ok" | "degraded" | "missing";
+export type LoadSource = "cache" | "supabase" | "network";
 
 export interface SessionWindow { date: string; from: number; to: number }
 
-export interface CleanStats { droppedRows: number; outsideWindow: number }
-
 export type SessionLoad =
-  | { date: string; status: "loaded"; source: "cache" | "network"; bars: SourceBar[]; clean: CleanStats }
+  | { date: string; status: "loaded"; source: LoadSource; bars: SourceBar[]; clean: CleanStats }
   | { date: string; status: "excluded"; reason: ExclusionReason; detail: string; baseTimeframe: string | null };
 
 export interface HttpResponseLike {
@@ -43,6 +50,8 @@ export interface BarLoaderDeps {
   fetch?: (url: string) => Promise<HttpResponseLike>;
   /** Defaults to the IndexedDB helper, which is a miss outside a browser. */
   cache?: SessionCache;
+  /** Server bars for one session (`mogmine_bars_1m`). Defaults to `readRemoteSessionBars1m`. Null when unavailable. */
+  remoteBars?: (window: SessionWindow) => Promise<SourceBar[] | null>;
   now?: () => number;
   /** Prefix for the relative `/api/market-data` URL. Empty in the browser. */
   origin?: string;
@@ -67,15 +76,19 @@ export interface LabBarData {
   volume: VolumeIntegrity[];
 }
 
-interface CachedSession {
+export interface CachedSession {
   schema: typeof CACHE_SCHEMA;
   date: string;
   baseTimeframe: "1m";
   bars: SourceBar[];
+  /** Minutes known to be complete, as half-open ranges. Legacy entries without it cover the whole session. */
+  coveredRanges?: CoveredRange[];
 }
 
 const MINUTE_MS = 60_000;
-const DEFAULT_CACHE: SessionCache = { get: (key) => idbGet(key), set: (key, value) => idbSet(key, value) };
+const NO_CLEAN: CleanStats = { droppedRows: 0, outsideWindow: 0 };
+/** The device cache: IndexedDB. A miss or a write failure outside a browser only means "not cached". */
+export const defaultSessionCache: SessionCache = { get: (key) => idbGet(key), set: (key, value) => idbSet(key, value) };
 
 /** The session's window in UTC ms: 18:00 ET the previous day to 17:00 ET (DST-correct, never a fixed offset). */
 export function sessionWindow(date: string): SessionWindow {
@@ -101,97 +114,169 @@ export function marketDataUrl(window: SessionWindow, origin = ""): string {
   return `${origin}/api/market-data?${params.toString()}`;
 }
 
-const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
-
-/**
- * Keep only rows with numeric prices and times inside the window (`to` is exclusive, as Yahoo's period2).
- * Volume that is not a finite number becomes null; the series treats 0 and null alike as missing.
- */
-export function cleanCandles(raw: unknown, window: SessionWindow): { bars: SourceBar[]; clean: CleanStats } {
-  const bars: SourceBar[] = [];
-  const clean: CleanStats = { droppedRows: 0, outsideWindow: 0 };
-  if (!Array.isArray(raw)) return { bars, clean };
-  for (const row of raw) {
-    if (!row || typeof row !== "object") { clean.droppedRows += 1; continue; }
-    const r = row as Record<string, unknown>;
-    if (![r.time, r.open, r.high, r.low, r.close].every(isFiniteNumber)) { clean.droppedRows += 1; continue; }
-    const time = r.time as number;
-    if (time < window.from || time >= window.to) { clean.outsideWindow += 1; continue; }
-    bars.push({
-      time,
-      open: r.open as number,
-      high: r.high as number,
-      low: r.low as number,
-      close: r.close as number,
-      volume: isFiniteNumber(r.volume) ? r.volume : null,
-    });
-  }
-  return { bars, clean };
-}
-
 function excluded(date: string, reason: ExclusionReason, detail: string, baseTimeframe: string | null = null): SessionLoad {
   return { date, status: "excluded", reason, detail, baseTimeframe };
 }
 
-async function readCache(cache: SessionCache, window: SessionWindow): Promise<SourceBar[] | null> {
+/** The server read: bars when `mogmine_bars_1m` has any for the window, else null. Never throws. */
+export async function defaultRemoteBars(window: SessionWindow): Promise<SourceBar[] | null> {
+  try {
+    const result = await readRemoteSessionBars1m(LAB_SYMBOL, window);
+    return result.ok && result.value?.length ? result.value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The device entry: cleaned bars and covered minutes. Null on a miss or a corrupt entry. */
+export async function readSessionEntry(cache: SessionCache, window: SessionWindow): Promise<{ bars: SourceBar[]; covered: CoveredRange[] } | null> {
   try {
     const value = await cache.get(cacheKey(window.date)) as Partial<CachedSession> | undefined;
     if (!value || value.schema !== CACHE_SCHEMA || value.date !== window.date || value.baseTimeframe !== "1m") return null;
     const { bars } = cleanCandles(value.bars, window);
-    return bars.length ? bars : null;
+    // Legacy entries (no coveredRanges) cover the whole session; an entry with no bars covers nothing.
+    const covered = bars.length === 0 ? [] : Array.isArray(value.coveredRanges) ? mergeCoveredRanges(value.coveredRanges) : [[window.from, window.to] as CoveredRange];
+    return { bars, covered };
   } catch {
     return null;
   }
+}
+
+/** Writes the session entry and the coverage index. A failed write only means "not cached". */
+export async function writeSessionEntry(
+  cache: SessionCache,
+  window: SessionWindow,
+  bars: SourceBar[],
+  covered: readonly CoveredRange[],
+  now: number,
+): Promise<void> {
+  const merged = mergeCoveredRanges(covered);
+  const record: CachedSession = { schema: CACHE_SCHEMA, date: window.date, baseTimeframe: "1m", bars, coveredRanges: merged };
+  try { await cache.set(cacheKey(window.date), record); } catch { /* not cached */ }
+  recordSessionCoverage(defaultCoverageStorage(), LAB_SYMBOL, window.date, merged, bars.length, now);
+}
+
+type RangeFetch = { ok: true; bars: SourceBar[]; clean: CleanStats } | { ok: false; load: SessionLoad };
+
+/**
+ * One `/api/market-data` call for `[from, to)` of a session. Only 1m answers are usable; a 5m or 1h answer, an empty
+ * answer, or any failure comes back as `ok: false` with the excluded reason. Never throws.
+ */
+export async function fetchRangeBars(window: SessionWindow, range: CoveredRange, deps: BarLoaderDeps = {}): Promise<RangeFetch> {
+  const sub: SessionWindow = { date: window.date, from: range[0], to: range[1] };
+  const fetchImpl = deps.fetch ?? ((url: string) => globalThis.fetch(url));
+  let response: HttpResponseLike;
+  try {
+    response = await fetchImpl(marketDataUrl(sub, deps.origin));
+  } catch {
+    return { ok: false, load: excluded(window.date, "upstream", "network error") };
+  }
+  if (response.status === 404) return { ok: false, load: excluded(window.date, "no-data", "nothing served for this window") };
+  if (!response.ok) return { ok: false, load: excluded(window.date, "upstream", `HTTP ${response.status}`) };
+
+  let body: { candles?: unknown; baseTimeframe?: unknown } | null;
+  try {
+    body = await response.json() as { candles?: unknown; baseTimeframe?: unknown } | null;
+  } catch {
+    return { ok: false, load: excluded(window.date, "bad-response", "body is not JSON") };
+  }
+  if (!body || typeof body !== "object" || !Array.isArray(body.candles)) {
+    return { ok: false, load: excluded(window.date, "bad-response", "no candles array") };
+  }
+  const timeframe = typeof body.baseTimeframe === "string" ? body.baseTimeframe : null;
+  if (body.candles.length > 0 && timeframe === null) {
+    return { ok: false, load: excluded(window.date, "bad-response", "no base timeframe") };
+  }
+  if (timeframe !== null && timeframe !== "1m") {
+    // Empty answers are normal (weekends, future). A served 5m or 1h set is not usable for MVP skills.
+    if (body.candles.length === 0) return { ok: false, load: excluded(window.date, "no-data", "empty window", timeframe) };
+    return { ok: false, load: excluded(window.date, "not-1m", `only ${timeframe} left at Yahoo`, timeframe) };
+  }
+  const { bars, clean } = cleanCandles(body.candles, sub);
+  if (!bars.length) return { ok: false, load: excluded(window.date, "no-data", "empty window", timeframe) };
+  return { ok: true, bars, clean };
+}
+
+export interface FillOutcome {
+  bars: SourceBar[];
+  covered: CoveredRange[];
+  source: LoadSource;
+  /** Why the first missing range could not be filled, if one could not. */
+  failure: SessionLoad | null;
+  clean: CleanStats;
+  changed: boolean;
+}
+
+/**
+ * Additive fill of one session up to `to` (exclusive): device entry, then `mogmine_bars_1m` (settled only), then Yahoo
+ * for missing sub-ranges. A still-open range is covered only up to its last fetched minute. Writes when changed.
+ */
+export async function fillSessionBars(
+  window: SessionWindow,
+  to: number,
+  deps: BarLoaderDeps,
+  cache: SessionCache,
+  now: number,
+): Promise<FillOutcome> {
+  const entry = await readSessionEntry(cache, window);
+  let bars = entry?.bars ?? [];
+  let covered = entry?.covered ?? [];
+  let source: LoadSource = "cache";
+  let changed = false;
+  let clean = NO_CLEAN;
+  let failure: SessionLoad | null = null;
+
+  if (isCacheable(window.date, now) && computeMissingRanges({ from: window.from, to }, covered).length > 0) {
+    const remote = await (deps.remoteBars ?? defaultRemoteBars)(window);
+    const cleanRemote = remote ? cleanCandles(remote, window).bars : [];
+    if (cleanRemote.length) {
+      bars = mergeBars1m(bars, cleanRemote, window);
+      covered = mergeCoveredRanges([...covered, [window.from, window.to]]);
+      source = "supabase";
+      changed = true;
+    }
+  }
+
+  for (const range of computeMissingRanges({ from: window.from, to }, covered)) {
+    if (now - window.to > YAHOO_1M_SAFE_MS) {
+      failure ??= excluded(window.date, "no-data", "older than Yahoo's 30-day 1m history");
+      break;
+    }
+    const fetched = await fetchRangeBars(window, range, deps);
+    if (!fetched.ok) {
+      failure ??= fetched.load;
+      continue;
+    }
+    bars = mergeBars1m(bars, fetched.bars, window);
+    clean = { droppedRows: clean.droppedRows + fetched.clean.droppedRows, outsideWindow: clean.outsideWindow + fetched.clean.outsideWindow };
+    // Settled ranges are complete. A range still open is covered only up to its last fetched minute.
+    const lastBar = fetched.bars[fetched.bars.length - 1].time;
+    const coveredTo = range[1] <= now - CACHE_SETTLE_MS ? range[1] : Math.min(range[1], lastBar + MINUTE_MS);
+    covered = mergeCoveredRanges([...covered, [range[0], coveredTo]]);
+    source = "network";
+    changed = true;
+  }
+
+  if (changed && bars.length) await writeSessionEntry(cache, window, bars, covered, now);
+  return { bars, covered, source, failure, clean, changed };
 }
 
 /** Load one session. Never throws. */
 export async function loadSession(date: string, deps: BarLoaderDeps = {}): Promise<SessionLoad> {
   const window = sessionWindow(date);
   const now = (deps.now ?? Date.now)();
-  const cache = deps.cache ?? DEFAULT_CACHE;
-  const cacheable = isCacheable(date, now);
 
-  if (cacheable) {
-    const bars = await readCache(cache, window);
-    if (bars) return { date, status: "loaded", source: "cache", bars, clean: { droppedRows: 0, outsideWindow: 0 } };
+  // Unsettled: never cached, never read from the server store. Fetch the whole window.
+  if (!isCacheable(date, now)) {
+    const fetched = await fetchRangeBars(window, [window.from, window.to], deps);
+    return fetched.ok
+      ? { date, status: "loaded", source: "network", bars: fetched.bars, clean: fetched.clean }
+      : fetched.load;
   }
 
-  const fetchImpl = deps.fetch ?? ((url: string) => globalThis.fetch(url));
-  let response: HttpResponseLike;
-  try {
-    response = await fetchImpl(marketDataUrl(window, deps.origin));
-  } catch {
-    return excluded(date, "upstream", "network error");
-  }
-  if (response.status === 404) return excluded(date, "no-data", "nothing served for this window");
-  if (!response.ok) return excluded(date, "upstream", `HTTP ${response.status}`);
-
-  let body: { candles?: unknown; baseTimeframe?: unknown } | null;
-  try {
-    body = await response.json() as { candles?: unknown; baseTimeframe?: unknown } | null;
-  } catch {
-    return excluded(date, "bad-response", "body is not JSON");
-  }
-  if (!body || typeof body !== "object" || !Array.isArray(body.candles)) {
-    return excluded(date, "bad-response", "no candles array");
-  }
-  const timeframe = typeof body.baseTimeframe === "string" ? body.baseTimeframe : null;
-  if (body.candles.length > 0 && timeframe === null) {
-    return excluded(date, "bad-response", "no base timeframe");
-  }
-  if (timeframe !== null && timeframe !== "1m") {
-    // Empty answers are normal (weekends, future). A served 5m or 1h set is not usable for MVP skills.
-    if (body.candles.length === 0) return excluded(date, "no-data", "empty window", timeframe);
-    return excluded(date, "not-1m", `only ${timeframe} left at Yahoo`, timeframe);
-  }
-  const { bars, clean } = cleanCandles(body.candles, window);
-  if (!bars.length) return excluded(date, "no-data", "empty window", timeframe);
-
-  if (cacheable) {
-    const record: CachedSession = { schema: CACHE_SCHEMA, date, baseTimeframe: "1m", bars };
-    try { await cache.set(cacheKey(date), record); } catch { /* not cached */ }
-  }
-  return { date, status: "loaded", source: "network", bars, clean };
+  const outcome = await fillSessionBars(window, window.to, deps, deps.cache ?? defaultSessionCache, now);
+  if (!outcome.bars.length) return outcome.failure ?? excluded(date, "no-data", "empty window");
+  return { date, status: "loaded", source: outcome.source, bars: outcome.bars, clean: outcome.clean };
 }
 
 /** Run `task` over `items` with at most `limit` in flight. Results keep input order. */
@@ -237,9 +322,7 @@ export function volumeIntegrity(series: BarSeries, date: string): VolumeIntegrit
     else if (Number.isNaN(series.volume[index])) volumeMissing += 1;
   }
   const missingRatio = rthBars === 0 ? 1 : volumeMissing / rthBars;
-  const grade: VolumeGrade = volumeMissing === 0
-    ? "ok"
-    : missingRatio <= VOLUME_DEGRADED_LIMIT ? "degraded" : "missing";
+  const grade: VolumeGrade = volumeMissing === 0 ? "ok" : missingRatio <= VOLUME_DEGRADED_LIMIT ? "degraded" : "missing";
   return { date, rthBars, absent, volumeMissing, missingRatio, grade };
 }
 

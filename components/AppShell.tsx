@@ -25,6 +25,7 @@ import { hydrateDrills } from "@/lib/drills-store";
 import { hydrateCalls } from "@/lib/calls-store";
 import { hydrateDailyReviews } from "@/lib/daily-review-store";
 import { dismissToast, useToast } from "@/lib/toast";
+import { useBarStoreAutoTopUp } from "@/lib/strategy-lab/use-lab-persistence";
 import { openAddTrade, useOnline, useUi } from "@/lib/ui";
 
 const icons = {
@@ -50,6 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const toast = useToast();
   const online = useOnline();
   const save = useHeaderSaveLabel(journal.saveState);
+  useBarStoreAutoTopUp(journal.trades, journal.hydrated, online);
 
   useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); hydrateTagRegistry(); hydratePlans(); hydrateDrills(); hydrateCalls(); hydrateDailyReviews(); }, []);
 
