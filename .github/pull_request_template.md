@@ -19,4 +19,3 @@
 - [ ] No secrets, account ids or real balances in code, fixtures or screenshots
 - [ ] At most one migration, and no applied migration was edited
 - [ ] UI: checked at 390×844 against `AGENTS.md` §4 and `docs/08` §16
-- [ ] Over-target files (`AGENTS.md` §6.12, `npm run check:file-length`): every file over 450 lines that this PR touches or grows is listed under Evidence with its line count before and after, and justified or split. Write "none" if there are none.

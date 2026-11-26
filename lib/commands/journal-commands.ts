@@ -8,14 +8,14 @@ import type {
   PersistResult, RecordId, RecordTypeKey, SingletonKey, SingletonRecordTypes, SingletonRepository, Stored, UserId,
 } from "../persistence/contract.ts";
 import { RECORD_CONTRACTS, contractFor } from "../persistence/registry.ts";
-import { DEFAULT_OWNER_USER_ID, isStopMove, normalizeTrade, toTicks, validateTradeInput } from "../trades.ts";
+import { DEFAULT_OWNER_USER_ID, isStopMove, normalizeTrade, validateTradeInput } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 import { sanitizeAccounts, sanitizeBalanceChecks } from "../accounts.ts";
 import type { BalanceCheck, TradingAccount } from "../accounts.ts";
 import { sanitizeMoodRecords, sanitizeRegistry } from "../mood.ts";
 import { sanitizeCandidates } from "../mood-store.ts";
 import { sanitizePlaybook } from "../playbooks-store.ts";
-import { sanitizePlannedLevel, sanitizePlanningSession, sanitizePlanRevision } from "../plans-store.ts";
+import { sanitizePlanningSession } from "../plans-store.ts";
 import { sanitizeDrillRecord } from "../drills-store.ts";
 import { sanitizeCall, sanitizeDismissal } from "../calls-store.ts";
 import { sanitizeChallenge } from "../challenge-store.ts";
@@ -43,22 +43,8 @@ const oneOfList = <T>(sanitize: (raw: unknown) => T[], message: string): Parser<
 
 const isObject = (raw: unknown): raw is Record<string, unknown> => !!raw && typeof raw === "object" && !Array.isArray(raw);
 
-function derivedFieldIn(key: RecordTypeKey, raw: unknown): string | null {
-  if (!isObject(raw)) return null;
-  return contractFor(key).derivedNeverStored.find((field) => Object.hasOwn(raw, field)) ?? null;
-}
-
-/** Old rows may contain a now-derived field. Never carry it into a new whole-record write. */
-function withoutDerived<T>(key: RecordTypeKey, record: T): T {
-  if (!isObject(record)) return record;
-  const clean = { ...record };
-  for (const field of contractFor(key).derivedNeverStored) delete clean[field];
-  return clean as T;
-}
-
 function parseTrade(raw: unknown): Parsed<TradeRecord> {
   if (!isObject(raw) || typeof raw.id !== "string" || !raw.id.trim()) return bad("A trade needs an id.");
-  if (raw.direction !== "LONG" && raw.direction !== "SHORT") return bad("A trade direction is LONG or SHORT.");
   // The sanitizer drops a bad stop move silently. Here a bad one rejects the whole trade, so nothing is lost unnoticed.
   if (raw.stop_moves !== undefined && (!Array.isArray(raw.stop_moves) || !raw.stop_moves.every(isStopMove))) {
     return bad("Every stop move needs a numeric price and a valid time.");
@@ -69,39 +55,21 @@ function parseTrade(raw: unknown): Parsed<TradeRecord> {
   } catch (error) {
     return bad(error instanceof Error ? error.message : "This trade is not valid.");
   }
-  const entryAt = Date.parse(trade.entry_time);
-  const exitAt = Date.parse(trade.exit_time ?? "");
-  if (!Number.isFinite(entryAt)) return bad("Entry time must be a valid date and time.");
-  if (trade.status === "closed" && !Number.isFinite(exitAt)) return bad("Exit time must be a valid date and time.");
-  if (trade.status === "closed" && exitAt <= entryAt) return bad("Exit time must be after entry time.");
-  const hasInitialStop = trade.initial_stop_price != null;
-  const hasInitialStopTime = trade.initial_stop_set_at != null;
-  if (hasInitialStop !== hasInitialStopTime) return bad("Initial stop price and set time go together.");
-  if (hasInitialStopTime && !Number.isFinite(Date.parse(trade.initial_stop_set_at ?? ""))) {
-    return bad("Initial stop set time must be a valid date and time.");
-  }
-  // Price, tick, quantity and entry-stop-side rules are the same ones the entry form enforces. A working stop with
-  // movement history may legitimately lock profit on the other side of entry, so it gets only the tick check below.
-  const stopAtEntry = trade.initial_stop_price ?? (trade.stop_moves?.length ? null : trade.stop_loss_price);
+  if (!Number.isFinite(Date.parse(trade.entry_time))) return bad("Entry time must be a valid date and time.");
+  if (trade.status === "closed" && !Number.isFinite(Date.parse(trade.exit_time ?? ""))) return bad("Exit time must be a valid date and time.");
+  // Price, tick, quantity and stop-side rules are the same ones the entry form enforces.
   const errors = validateTradeInput({
     symbol: trade.symbol,
     direction: trade.direction,
     quantity: trade.quantity,
     entry_price: trade.entry_price,
     exit_price: trade.status === "open" ? null : trade.exit_price,
-    stop_loss_price: stopAtEntry,
+    stop_loss_price: trade.stop_loss_price,
     planned_target_price: trade.planned_target_price,
     key_level_price: trade.key_level_price,
   });
   const firstError = Object.values(errors)[0];
-  if (firstError) return bad(firstError);
-  if (trade.stop_loss_price != null && toTicks(trade.stop_loss_price, trade.symbol) == null) {
-    return bad("The working stop must be a finite price on the contract's tick grid.");
-  }
-  if (trade.stop_moves?.some((move) => toTicks(move.price, trade.symbol) == null)) {
-    return bad("Every stop move price must sit on the contract's tick grid.");
-  }
-  return good(trade);
+  return firstError ? bad(firstError) : good(trade);
 }
 
 /** Money is integer cents. The sanitizer rounds a fractional amount silently, so the command layer refuses it first. */
@@ -120,35 +88,6 @@ const balanceCheckParser = (raw: unknown): Parsed<BalanceCheck> => {
   return oneOfList(sanitizeBalanceChecks, "A balance check needs an account, a time and a balance.")(raw);
 };
 
-const planParser: Parser<CollectionRecordTypes["plans"]> = (raw) => {
-  if (isObject(raw) && raw.levels !== undefined
-    && (!Array.isArray(raw.levels) || raw.levels.some((level) => !sanitizePlannedLevel(level)))) {
-    return bad("Every planned level needs a finite price and an integer tick price.");
-  }
-  if (isObject(raw) && raw.revisions !== undefined) {
-    if (!Array.isArray(raw.revisions)) return bad("Plan revisions must be a list.");
-    for (const revision of raw.revisions) {
-      if (!sanitizePlanRevision(revision)) return bad("Every plan revision needs an id and a valid saved time.");
-      if (isObject(revision) && revision.levels !== undefined
-        && (!Array.isArray(revision.levels) || revision.levels.some((level) => !sanitizePlannedLevel(level)))) {
-        return bad("Every revised level needs a finite price and an integer tick price.");
-      }
-    }
-  }
-  return one(sanitizePlanningSession, "A plan needs an id, a session date and a name.")(raw);
-};
-
-const callParser: Parser<CollectionRecordTypes["calls"]> = (raw) => {
-  if (isObject(raw)) {
-    const hasPrice = raw.price != null;
-    const hasPriceTicks = raw.price_ticks != null;
-    if (hasPrice !== hasPriceTicks) return bad("A call's price and price in ticks go together.");
-    if (hasPrice && (typeof raw.price !== "number" || !Number.isFinite(raw.price))) return bad("A call price must be finite.");
-    if (hasPriceTicks && !Number.isSafeInteger(raw.price_ticks)) return bad("A call's price in ticks must be a whole number.");
-  }
-  return one(sanitizeCall, "This call does not match its kind (for example, a flip needs a signal direction).")(raw);
-};
-
 /** Validation for every collection type. Each entry is the existing sanitizer for that record. */
 const COLLECTION_PARSERS: { [K in CollectionKey]: Parser<CollectionRecordTypes[K]> } = {
   trades: parseTrade,
@@ -158,23 +97,15 @@ const COLLECTION_PARSERS: { [K in CollectionKey]: Parser<CollectionRecordTypes[K
   balance_checks: balanceCheckParser,
   challenges: one(sanitizeChallenge, "This challenge definition is not valid."),
   playbooks: one(sanitizePlaybook, "A playbook needs an id, a name and a list of rules."),
-  plans: planParser,
+  plans: one(sanitizePlanningSession, "A plan needs an id, a session date and a name."),
   drills: one(sanitizeDrillRecord, "A drill record needs a trade, a kind, an answer and a time."),
-  calls: callParser,
+  calls: one(sanitizeCall, "This call does not match its kind (for example, a flip needs a signal direction)."),
   prompt_dismissals: one(sanitizeDismissal, "A dismissal needs a trade, a prompt, a reason and a time."),
 };
 
 /** Singletons: one document per owner. Prompt library has no sanitizer yet, so only its shape is checked. */
 const SINGLETON_PARSERS: { [K in SingletonKey]: Parser<SingletonRecordTypes[K]> } = {
-  prefs: (raw) => {
-    if (!isObject(raw)) return bad("Preferences must be an object.");
-    if (raw.riskBudgetUsd !== undefined
-      && (typeof raw.riskBudgetUsd !== "number" || !Number.isFinite(raw.riskBudgetUsd)
-        || raw.riskBudgetUsd < 10 || raw.riskBudgetUsd > 100_000)) {
-      return bad("Risk budget must be between $10 and $100,000.");
-    }
-    return good(sanitizePrefs(raw));
-  },
+  prefs: (raw) => (isObject(raw) ? good(sanitizePrefs(raw)) : bad("Preferences must be an object.")),
   mood_registry: (raw) => (isObject(raw) ? good(sanitizeRegistry(raw)) : bad("The mood spoke registry must be an object.")),
   prompt_library: (raw) => (
     isObject(raw) && raw.schema === PROMPT_LIBRARY_SCHEMA && Array.isArray(raw.prompts) && typeof raw.seeds_version === "number"
@@ -227,8 +158,6 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
 
   const commands: JournalCommands = {
     async create(key, raw) {
-      const derived = derivedFieldIn(key, raw);
-      if (derived) return fail("forbidden", `${derived} is derived and cannot be stored.`, key, idOf(raw));
       const parsed = COLLECTION_PARSERS[key](raw);
       if (!parsed.ok) return fail("invalid", parsed.message, key, idOf(raw));
       const existing = await repoFor(key).get(owner, idOf(parsed.value));
@@ -246,26 +175,20 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
     },
 
     async update(key, id, patch) {
-      const derived = derivedFieldIn(key, patch);
-      if (derived) return fail("forbidden", `${derived} is derived and cannot be stored.`, key, id);
       const current = await repoFor(key).get(owner, id);
       if (!current.ok) return current;
-      const candidate = withoutDerived(key, { ...current.value.record, ...patch, id });
-      const parsed = COLLECTION_PARSERS[key](candidate);
+      const parsed = COLLECTION_PARSERS[key]({ ...current.value.record, ...patch, id });
       if (!parsed.ok) return fail("invalid", parsed.message, key, id);
       return write(key, parsed.value, current.value.meta.updated_at);
     },
 
     async archive(key, id) {
       if (contractFor(key).deletePolicy !== "archive") return fail("forbidden", `${key} records are removed, not archived.`, key, id);
-      const current = await repoFor(key).get(owner, id);
-      if (!current.ok) return current;
-      const candidate = withoutDerived(key, { ...current.value.record, archived: true, id });
-      const parsed = COLLECTION_PARSERS[key](candidate);
-      if (!parsed.ok) return fail("invalid", parsed.message, key, id);
-      // A record whose sanitizer refuses to archive it (the impulse playbook) must fail before any write.
-      if ((parsed.value as { archived?: unknown }).archived !== true) return fail("invalid", "This record cannot be archived.", key, id);
-      return write(key, parsed.value, current.value.meta.updated_at);
+      const result = await commands.update(key, id, { archived: true });
+      if (!result.ok) return result;
+      // A record whose sanitizer refuses to archive it (the impulse playbook) comes back unarchived.
+      if ((result.value.record as { archived?: unknown }).archived !== true) return fail("invalid", "This record cannot be archived.", key, id);
+      return result;
     },
 
     async remove(key, id) {

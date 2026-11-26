@@ -117,38 +117,6 @@ test("money rules fail closed: a long stop above entry and an off-tick entry are
   const offTick = await commands.create("trades", trade({ entry_price: 7600.3 }));
   assert.equal(offTick.ok, false);
   assert.match(offTick.ok ? "" : offTick.error.message, /tick/);
-
-  const badDirection = await commands.create("trades", trade({ direction: "SIDEWAYS" }));
-  assert.equal(!badDirection.ok && badDirection.error.code, "invalid");
-});
-
-test("a working stop may lock profit, but initial and moved stops stay tick-valid", async () => {
-  const commands = createJournalCommands(memoryRepos());
-  const locked = await commands.create("trades", trade({
-    initial_stop_price: 7598.25,
-    initial_stop_set_at: "2026-11-20T15:00:00Z",
-    stop_loss_price: 7601.25,
-    stop_moves: [{ price: 7601.25, time: "2026-11-20T15:10:00Z" }],
-  }));
-  assert.equal(locked.ok, true);
-
-  const offTickMove = await commands.create("trades", trade({
-    id: "t-2",
-    stop_moves: [{ price: 7601.3, time: "2026-11-20T15:10:00Z" }],
-  }));
-  assert.equal(!offTickMove.ok && offTickMove.error.code, "invalid");
-});
-
-test("derived fields are forbidden on create and update", async () => {
-  const commands = createJournalCommands(memoryRepos());
-  const created = await commands.create("trades", trade({ net_pnl: 40 }));
-  assert.equal(!created.ok && created.error.code, "forbidden");
-  const afterCreate = await commands.list("trades");
-  assert.equal(afterCreate.ok && afterCreate.value.length, 0);
-
-  await commands.create("trades", trade());
-  const updated = await commands.update("trades", "t-1", { r_multiple: 2 });
-  assert.equal(!updated.ok && updated.error.code, "forbidden");
 });
 
 test("update re-validates the whole record and keeps the stored one when the patch is bad", async () => {
@@ -200,12 +168,8 @@ test("playbooks need a name, and the impulse bucket cannot be archived", async (
   assert.equal(!nameless.ok && nameless.error.code, "invalid");
 
   await commands.create("playbooks", { id: "no-setup", name: "No setup", default_style: "scalp", checklist_rules: [], archived: false });
-  const before = await commands.read("playbooks", "no-setup");
   const archived = await commands.archive("playbooks", "no-setup");
   assert.equal(!archived.ok && archived.error.code, "invalid");
-  const after = await commands.read("playbooks", "no-setup");
-  assert.equal(before.ok && after.ok && after.value.meta.updated_at, before.ok ? before.value.meta.updated_at : "");
-  assert.equal(after.ok && after.value.record.archived, false);
 });
 
 test("calls must match their kind: a flip without a signal direction is invalid", async () => {
@@ -214,21 +178,12 @@ test("calls must match their kind: a flip without a signal direction is invalid"
   assert.equal(!flip.ok && flip.error.code, "invalid");
   const cut = await commands.create("calls", { id: "c-2", kind: "cut", made_at: "2026-11-20T15:00:00Z", recorded_at: "2026-11-20T15:01:00Z", trade_id: "t-1" });
   assert.equal(cut.ok, true);
-
-  const halfPrice = await commands.create("calls", { id: "c-3", kind: "cut", made_at: "2026-11-20T15:00:00Z", recorded_at: "2026-11-20T15:01:00Z", trade_id: "t-1", price: 7600.25 });
-  assert.equal(!halfPrice.ok && halfPrice.error.code, "invalid");
 });
 
 test("plans need a session date", async () => {
   const commands = createJournalCommands(memoryRepos());
   const result = await commands.create("plans", { id: "p-1", name: "Open plan" });
   assert.equal(!result.ok && result.error.code, "invalid");
-
-  const badLevel = await commands.create("plans", {
-    id: "p-2", name: "Open plan", session_date: "2026-11-20",
-    levels: [{ id: "l-1", label: "Shelf", price: 7600.25, price_ticks: 1.5 }], revisions: [],
-  });
-  assert.equal(!badLevel.ok && badLevel.error.code, "invalid");
 });
 
 test("removing a trade removes its cascade children first", async () => {
@@ -249,9 +204,6 @@ test("singletons: null before the first write, then sanitized; a bad prompt libr
   const written = await commands.writeSingleton("prefs", { shield: true, goldPreset: "not-a-preset" });
   assert.equal(written.ok && written.value.record.shield, true);
   assert.equal(written.ok && written.value.record.goldPreset, "bullion");
-
-  const badRisk = await commands.writeSingleton("prefs", { riskBudgetUsd: Number.NaN });
-  assert.equal(!badRisk.ok && badRisk.error.code, "invalid");
 
   const library = await commands.writeSingleton("prompt_library", { schema: "something-else", prompts: [] } as unknown);
   assert.equal(!library.ok && library.error.code, "invalid");

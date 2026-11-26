@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { dayWindow, entryDraftAfterSave, entryTimes, priceOrNull, stepPriceText, suggestionPatch, upgradeDraft, zonedParts } from "@/lib/entry-form";
+import { dayWindow, entryTimes, priceOrNull, stepPriceText, suggestionPatch, upgradeDraft, zonedParts } from "@/lib/entry-form";
 import { loadDayCandles } from "@/lib/candles";
 import { inferTradeTimes } from "@/lib/infer-times";
 import type { InferResult } from "@/lib/infer-times";
@@ -15,7 +15,7 @@ import { defaultAccountId } from "@/lib/accounts";
 import { useAccounts } from "@/lib/accounts-store";
 import { ONE_TAP_MOOD_SCORE, spokeChipLabel } from "@/lib/mood";
 import { recordUserMood, useMood } from "@/lib/mood-store";
-import { addTradeAndFlush, useJournal } from "@/lib/store";
+import { addTrade, useJournal } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
 import { EXIT_REASONS, FUTURES_SPECS, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedR, rMultiple, specFor, stopPatch, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
@@ -230,7 +230,7 @@ export function AddTradeSheet() {
       : exitPrice == null || !exit ? null : { status: "closed" as const, exit_time: exit.toISOString(), exit_price: exitPrice };
     if (!exitFields) return;
     const trade = normalizeTrade({
-      id: draft.pendingTradeId ?? crypto.randomUUID(), symbol: draft.symbol, direction: draft.direction, quantity,
+      id: crypto.randomUUID(), symbol: draft.symbol, direction: draft.direction, quantity,
       entry_time: entry.toISOString(), ...exitFields,
       entry_price: entryPrice,
       exit_reason: !isOpenDraft ? (draft.exitReason ?? null) : null,
@@ -241,7 +241,7 @@ export function AddTradeSheet() {
       note: "",
       account_id: accountId,
     });
-    const saved = addTradeAndFlush(trade);
+    addTrade(trade);
     if (draft.entryMoodSpoke) {
       const nowIso = new Date().toISOString();
       recordUserMood(
@@ -252,13 +252,9 @@ export function AddTradeSheet() {
         nowIso,
       );
     }
-    const nextDraft = entryDraftAfterSave(draft, trade.id, saved);
-    keepDraft(DRAFT_KEY, nextDraft);
-    if (nextDraft) setDraft(nextDraft);
+    keepDraft(DRAFT_KEY, null);
     closeAddTrade();
-    showToast(saved
-      ? isOpenDraft ? "Open trade saved on this device" : "Trade saved on this device"
-      : "Trade kept for this session — storage is blocked. Draft kept for retry.");
+    showToast(isOpenDraft ? "Open trade saved on this device" : "Trade saved on this device");
     router.push(`/trades/${trade.id}`);
   };
 

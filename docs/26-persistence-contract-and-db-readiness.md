@@ -1,7 +1,7 @@
 # 26 — Persistence Contract and Database-Readiness Checklist
 
 **Issue:** #173 · **Decision:** [D-012](../DECISIONS.md) · **Boundary:** [docs/22](22-development-mode-and-backend-boundary.md)  
-**Status:** Contract (#173). Command layer (#174): `lib/commands/journal-commands.ts`. Local/mock adapter (#175): `lib/persistence/local-adapter.ts` and `lib/persistence/select.ts`, selected by `NEXT_PUBLIC_PERSISTENCE_ADAPTER`. No migration, no UI change. The UI stores still read the device keys directly.
+**Status:** Contract only. No adapter, no migration, no UI, no behaviour change.
 
 Code: [`lib/persistence/contract.ts`](../lib/persistence/contract.ts) (types) and [`lib/persistence/registry.ts`](../lib/persistence/registry.ts) (this checklist as data, pinned by `lib/__tests__/persistence-contract.test.ts`). When this page and the registry disagree, fix both in one PR.
 
@@ -91,5 +91,5 @@ Computed, never stored: session review, challenge results while live, call grade
 ## 6. For the next issues
 
 - **#174 command layer (built):** [`lib/commands/journal-commands.ts`](../lib/commands/journal-commands.ts) `createJournalCommands(repos, owner)` exposes `create` / `read` / `list` / `update` / `archive` / `remove` for every collection key and `readSingleton` / `writeSingleton` for the three singletons. It calls `JournalRepositories` only, validates every write with the existing sanitizers (money must be whole cents or a tick-valid price; a bad stop move rejects the whole trade), returns `PersistError`s and never throws for expected failures. Archive-policy types (`accounts`, `playbooks`) are archived, not removed; `remove` deletes `cascade_parent` children first. `candles` is not part of the command set. Tests: `lib/__tests__/journal-commands.test.ts`.
-- **#175 local/mock adapter (done):** the adapter reads and writes the §3 device keys with the existing sanitizers and synthesizes `RowMeta` (see the adapter header). `NEXT_PUBLIC_PERSISTENCE_ADAPTER` picks `local` (default) / `mock` / `supabase` (stub, `unavailable`). The shared suite is `lib/__tests__/persistence-contract-suite.ts`.
+- **#175 local/mock adapter:** wrap the existing stores and keys in §3 without changing them; synthesize `RowMeta`; an env flag picks `local` / `mock` / `supabase`.
 - **#176 Supabase adapter:** one migration per table in §3 marked v1, all `mogmine_`, RLS on every table before data, shared contract tests run against both adapters.
