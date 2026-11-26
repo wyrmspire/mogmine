@@ -223,6 +223,9 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
     return { user_id: owner, created_at: created_at ?? at, updated_at: at };
   };
 
+  /** The row metadata a read reports for one record, with the owner stamped. */
+  const metaFor = (typeKey: RecordTypeKey, id: string): RowMeta => ({ user_id: owner, ...rowMeta(typeKey, id) });
+
   /** Read one device key. `null` = nothing stored yet. Unreadable JSON is an error: the stored value is never overwritten. */
   function readKey(typeKey: RecordTypeKey, key: string): PersistResult<unknown> {
     let text: string | null;
@@ -264,20 +267,31 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
     };
     const save = (blob: unknown, items: Row[]): PersistResult<void> => writeKey(key, slot.storageKey, slot.write(blob, items));
 
+    /** The rows one `list` / `listStored` call asks for: filters and paging, shared by both. */
+    const pick = (query: ListQuery): PersistResult<Row[]> => {
+      const loaded = load();
+      if (!loaded.ok) return loaded;
+      const items = loaded.value.items.filter((item) => {
+        if (query.includeSamples === false && slot.isSample?.(item)) return false;
+        if (query.includeArchived === false && slot.isArchived?.(item)) return false;
+        if (query.parentId !== undefined && slot.parentOf?.(item) !== query.parentId) return false;
+        return true;
+      });
+      const start = Math.max(0, Math.floor(query.offset ?? 0));
+      return { ok: true, value: items.slice(start, query.limit !== undefined ? start + Math.max(0, query.limit) : undefined) };
+    };
+
     return {
       async list(who, query: ListQuery = {}) {
         if (foreign(who)) return { ok: true, value: [] };
-        const loaded = load();
-        if (!loaded.ok) return loaded;
-        let items = loaded.value.items.filter((item) => {
-          if (query.includeSamples === false && slot.isSample?.(item)) return false;
-          if (query.includeArchived === false && slot.isArchived?.(item)) return false;
-          if (query.parentId !== undefined && slot.parentOf?.(item) !== query.parentId) return false;
-          return true;
-        });
-        const start = Math.max(0, Math.floor(query.offset ?? 0));
-        items = items.slice(start, query.limit !== undefined ? start + Math.max(0, query.limit) : undefined);
-        return { ok: true, value: items };
+        return pick(query);
+      },
+
+      async listStored(who, query: ListQuery = {}) {
+        if (foreign(who)) return { ok: true, value: [] };
+        const picked = pick(query);
+        if (!picked.ok) return picked;
+        return { ok: true, value: picked.value.map((item) => ({ record: item, meta: metaFor(key, item.id) })) };
       },
 
       async get(who, id) {
@@ -286,8 +300,7 @@ export function createLocalAdapter(options: LocalAdapterOptions): PersistenceAda
         if (!loaded.ok) return loaded;
         const record = loaded.value.items.find((item) => item.id === id);
         if (!record) return { ok: false, error: { code: "not_found", message: "Not found.", recordType: key, id } };
-        const row = rowMeta(key, id);
-        return { ok: true, value: { record, meta: { user_id: owner, created_at: row.created_at, updated_at: row.updated_at } } };
+        return { ok: true, value: { record, meta: metaFor(key, id) } };
       },
 
       async put(who, record, options: WriteOptions = {}) {

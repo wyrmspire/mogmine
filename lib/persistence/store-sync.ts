@@ -4,15 +4,17 @@
 //
 // Merge rules (see the pull algorithm below): a clean local record takes the server copy; a dirty one (edited since the
 // server last saw it) is kept and pushed; a record the server dropped is dropped locally only when it was clean;
-// nothing dirty is ever lost. Last write wins on push (no expectedUpdatedAt).
+// nothing dirty is ever lost. A push is conditional on the row's last-known `updated_at` (expectedUpdatedAt): a conflict
+// re-reads the row once and retries once on top of it, or re-creates it when the server deleted it (R3-05).
 import { getPersistence, chooseAdapter } from "./select.ts";
 import type { KeyValueStore } from "./local-adapter.ts";
-import type { CollectionKey, CollectionRepository, PersistError, PersistenceAdapter, UserId } from "./contract.ts";
+import type { CollectionKey, CollectionRepository, PersistError, PersistenceAdapter, PersistResult, Stored, UserId } from "./contract.ts";
 import { fingerprint } from "./sync-fingerprint.ts";
 import {
-  backoffDelay, browserStorage, keepOrphans, readBase, readDeviceOwner, scopedBase, writeBase, writeDeviceOwner,
+  backoffDelay, browserStorage, keepOrphans, listAllRemote, readBase, readDeviceOwner, scopedBase, writeBase, writeDeviceOwner,
 } from "./sync-storage.ts";
 import type { SyncBase } from "./sync-storage.ts";
+export { MAX_PULL_PAGES, REMOTE_ROW_CAP } from "./sync-storage.ts";
 
 export { fingerprint };
 
@@ -72,41 +74,25 @@ function sameRecords<T extends { id: string }>(key: CollectionKey, a: readonly T
 const SIGNED_OUT_MESSAGE = "Sign in to sync your journal.";
 const FLUSH_BLOCKED = new Set<PersistError["code"]>(["unauthenticated", "unavailable", "unknown"]);
 const PULL_IDLE_REFRESH_MS = 60_000;
-/** Supabase PostgREST default `max-rows`. */
-export const REMOTE_ROW_CAP = 1000;
-/** Pages per pull: 50 × REMOTE_ROW_CAP = 50,000 rows per collection. Stops a buggy source from looping forever. */
-export const MAX_PULL_PAGES = 50;
-
 /**
- * Every row of one collection, page by page (`offset` steps of `REMOTE_ROW_CAP`). `maybeTruncated` means the pull
- * could not prove it saw the whole history: the page budget ran out, or a full page repeated rows already read
- * (a source that ignores `offset`, e.g. a filler mock). Duplicates are dropped, keeping first-seen order.
+ * A write refused as `conflict`: the server row changed since the last pull or push. Read it once and make its
+ * `updated_at` the base. The device copy goes on top once, with that `updated_at`, unless the server already holds the
+ * same record. A row the server deleted while it was edited here is re-created, never dropped (docs/26 §8.2).
  */
-async function listAllRemote<T extends { id: string }>(
+async function resolveConflict<T extends { id: string }>(
+  key: CollectionKey,
   repo: CollectionRepository<T>,
   owner: UserId,
-): Promise<{ ok: true; value: { remote: T[]; maybeTruncated: boolean } } | { ok: false; error: PersistError }> {
-  const byId = new Map<string, T>();
-  let offset = 0;
-  let pages = 0;
-  let truncated = false;
-  for (;;) {
-    const page = await repo.list(owner, { includeSamples: true, includeArchived: true, limit: REMOTE_ROW_CAP, offset });
-    if (!page.ok) return page;
-    pages += 1;
-    if (page.value.length >= REMOTE_ROW_CAP && page.value.every((record) => byId.has(record.id))) {
-      truncated = true; // the same full page again: `offset` was ignored, so nothing more can be read
-      break;
-    }
-    for (const record of page.value) if (!byId.has(record.id)) byId.set(record.id, record);
-    if (page.value.length < REMOTE_ROW_CAP) break; // a short page is the last one
-    if (pages >= MAX_PULL_PAGES) {
-      truncated = true;
-      break;
-    }
-    offset += REMOTE_ROW_CAP;
-  }
-  return { ok: true, value: { remote: [...byId.values()], maybeTruncated: truncated } };
+  record: T,
+  ids: Map<string, string>,
+  updatedAt: Map<string, string>,
+): Promise<PersistResult<Stored<T>>> {
+  const fresh = await repo.get(owner, record.id);
+  if (!fresh.ok) return fresh.error.code === "not_found" ? repo.put(owner, record) : fresh;
+  ids.set(record.id, fingerprint(key, fresh.value.record));
+  updatedAt.set(record.id, fresh.value.meta.updated_at);
+  if (fingerprint(key, fresh.value.record) === fingerprint(key, record)) return fresh;
+  return repo.put(owner, record, { expectedUpdatedAt: fresh.value.meta.updated_at }); // once: a second conflict stops here
 }
 
 interface Timer { handle: unknown; armed: boolean }
@@ -197,7 +183,7 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
 
     // PostgREST caps a response at `max-rows` (1000 on Supabase by default), so the pull pages through the whole
     // history. Only a pull that could not finish paging may not read a missing row as "the server deleted it".
-    const { remote, maybeTruncated } = listed.value;
+    const { remote, updatedAt: serverAt, maybeTruncated } = listed.value;
     const current = options.getLocal();
     const base = scopedBase(readBase(storage, key), owner);
     const deviceOwner = readDeviceOwner(storage, key);
@@ -248,7 +234,7 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
       merged.set(id, record);
       track(record);
     }
-    const savedBase: SyncBase = { owner, ids: Object.fromEntries(next), gone: [...gone] };
+    const savedBase: SyncBase = { owner, ids: Object.fromEntries(next), gone: [...gone], updatedAt: Object.fromEntries([...serverAt].filter(([id]) => next.has(id))) };
     writeBase(storage, key, savedBase);
     const result = [...merged.values()];
     if (!sameRecords(key, current, result)) options.apply(result);
@@ -290,6 +276,7 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
 
     const base = scopedBase(readBase(storage, key), owner);
     const ids = new Map(Object.entries(base.ids));
+    const updatedAt = new Map(Object.entries(base.updatedAt ?? {}));
     const gone = new Set(base.gone);
     const syncable = options.getLocal().filter((record) => include(record));
     const present = new Set(syncable.map((record) => record.id));
@@ -306,10 +293,14 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
     let blocked: PersistError | null = null;
     try {
       for (const record of writes) {
-        const result = await repo.put(owner, record); // last write wins: no expectedUpdatedAt
+        const expected = updatedAt.get(record.id); // absent for a brand-new device record: a plain upsert
+        let result = await repo.put(owner, record, expected ? { expectedUpdatedAt: expected } : undefined);
+        if (disposed) return false;
+        if (!result.ok && result.error.code === "conflict") result = await resolveConflict(key, repo, owner, record, ids, updatedAt);
         if (disposed) return false;
         if (result.ok) {
           ids.set(record.id, fingerprint(key, record)); // what was sent, not what came back: never loops
+          if (result.value?.meta?.updated_at) updatedAt.set(record.id, result.value.meta.updated_at);
           continue;
         }
         if (FLUSH_BLOCKED.has(result.error.code)) {
@@ -336,7 +327,7 @@ export function createCollectionSync<T extends { id: string }>(options: Collecti
         }
       }
     } finally {
-      writeBase(storage, key, { owner, ids: Object.fromEntries(ids), gone: [...gone] });
+      writeBase(storage, key, { owner, ids: Object.fromEntries(ids), gone: [...gone], updatedAt: Object.fromEntries([...updatedAt].filter(([id]) => ids.has(id))) });
     }
 
     if (blocked) {
