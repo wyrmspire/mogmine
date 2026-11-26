@@ -13,8 +13,10 @@ import type { Candle } from "../trades.ts";
 const MIN = 60_000;
 const SESSION = "2026-11-25";
 const PRIOR = previousRegularSessionDate(SESSION);
+const MONDAY = previousRegularSessionDate(PRIOR);
 const today = equityIndexSessionBounds(SESSION);
 const prior = equityIndexSessionBounds(PRIOR);
+const monday = equityIndexSessionBounds(MONDAY);
 // 10:15 ET is 15:15 UTC (EST, after the 1 November change). The bar closes at 10:16 ET.
 const TEN_FIFTEEN = Date.parse("2026-11-25T15:15:00.000Z");
 const TEN_THIRTY = Date.parse("2026-11-25T15:30:00.000Z");
@@ -95,6 +97,7 @@ test("B-14: today's window is requested only up to as_of, never past it", async 
   assert.deepEqual(calls, [
     { from: prior.open, to: prior.close },
     { from: today.open, to: TEN_FIFTEEN + 30_000 },
+    { from: monday.open, to: monday.close },
   ]);
 });
 
@@ -113,7 +116,7 @@ test("withheld reasons: prior-session gaps withhold PDH and PDL, overnight gaps 
     [["gaps", 5], ["gaps", 5], ["gaps", 5], ["gaps", 5]],
   );
   assert.equal(withheld.onh?.window, "overnight");
-  assert.equal(withheld.week_high?.reason, "not-loaded", "earlier days of the week are not in the two windows this endpoint loads");
+  assert.equal(withheld.week_high?.reason, "not-loaded", "Monday has no bars in sessionBars(), so week levels stay not-loaded");
 
   const computed = payload.computed.map((level) => level.key);
   for (const key of ["pdh", "pdl", "onh", "onl", "week_high"]) {
@@ -179,7 +182,10 @@ test("before today's open there is no VWAP, and no today bars are requested", as
   assert.ok(result.ok);
   assert.deepEqual(result.value.vwap.rth, { value: null, approximate: false, unavailable_reason: "not-yet", coverage: null });
   assert.deepEqual(result.value.vwap.globex, { value: null, approximate: false, unavailable_reason: "not-yet", coverage: null });
-  assert.equal(calls.length, 1, "only the prior session is read");
+  assert.deepEqual(calls, [
+    { from: prior.open, to: prior.close },
+    { from: monday.open, to: monday.close },
+  ], "only prior and earlier-week sessions are read, never today");
 });
 
 test("invalid symbol, session_date or as_of is refused as invalid (422)", async () => {
