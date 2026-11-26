@@ -48,18 +48,18 @@ import { showToast } from "@/lib/toast";
 import { observeTrade, validateTradeAgainstBars } from "@/lib/trade-bar-validation";
 import { deriveTrade, fromLegacy } from "@/lib/trade-document";
 import { buildMarks } from "@/lib/trade-marks";
-import type { Mark } from "@/lib/trade-marks";
+import type { DetailLevel, Mark } from "@/lib/trade-marks";
 import { TIMEFRAMES, TIMEFRAME_MINUTES, aggregateCandles, defaultTimeframe, isOpen, excursions, fillInsideBar, holdSeconds, processRead, tradePnl, tradePoints } from "@/lib/trades";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 import type { Timeframe, TradeRecord } from "@/lib/trades";
 import { useListContext, useOnline } from "@/lib/ui";
 import { getCandleFreshness } from "@/lib/freshness";
 import { DataNotesChip } from "./DataNotesChip";
+import { PartialsCard, PlanVsActualSection } from "./PartialsCard";
 import { collectDataNotes } from "@/lib/data-notes";
 import { checkExitStopConsistency } from "@/lib/stop-facts";
 import { StopFacts } from "./StopFacts";
 import { buildHindsight, hindsightCollapsedText, hindsightExpandedText } from "@/lib/hindsight";
-import type { ChartDetailLevel } from "@/lib/hindsight";
 
 const NO_VWAP: readonly VwapPoint[] = [];
 
@@ -120,7 +120,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [highlightedTick, setHighlightedTick] = useState<number | null>(null);
   // IND-1: the VWAP anchor is remembered in prefs (default "off"); drill, review and playbook charts do not read it.
   const vwapAnchor = prefs.vwapAnchor;
-  const [detailLevel, setDetailLevel] = useState<ChartDetailLevel>("medium");
+  const [detailLevel, setDetailLevel] = useState<DetailLevel>("medium");
   const [extension, setExtension] = useState<ChartExtension>({ before: 0, after: 0, canBefore: true, canAfter: true });
   const [hindsightOpen, setHindsightOpen] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -307,7 +307,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     const candleTimes = displayedBars.map(({ time }) => time);
     const accountRiskR = riskR(trade, resolveRSize(trade, accountsState.accounts, prefs));
     const marks = buildMarks(derived, observation, timeframe, detailLevel, renderPrivacy, {
-      candleTimes, continuationEdges: { before: showEarlier }, showRuler: true, accountRiskR,
+      candleTimes, continuationEdges: { before: showEarlier }, showRuler: detailLevel === "high", accountRiskR,
     });
     if (keyPrice != null) {
       const keyLevel: Mark = {
@@ -341,14 +341,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const ex = useMemo(() => (ready ? excursions(trade, candles.candles, baseMinutes) : null), [ready, candles, trade, baseMinutes]);
   const mae = ex ? (ex.maePrice - trade.entry_price) * sign : null;
   const mfe = ex ? (ex.mfePrice - trade.entry_price) * sign : null;
-  const exitEff = useMemo(
-    () => calculateExitEfficiency(trade, mfe, { accounts: accountsState.accounts, prefs }),
-    [trade, mfe, accountsState.accounts, prefs],
-  );
-  const planVsActual = useMemo(
-    () => derivePlanVsActual(trade, { accounts: accountsState.accounts, prefs }),
-    [trade, accountsState.accounts, prefs],
-  );
+  const exitEff = useMemo(() => calculateExitEfficiency(trade, mfe, { accounts: accountsState.accounts, prefs }), [trade, mfe, accountsState.accounts, prefs]);
+  const planVsActual = useMemo(() => derivePlanVsActual(trade, { accounts: accountsState.accounts, prefs }), [trade, accountsState.accounts, prefs]);
   // Do the fills sit inside the bars they are drawn on? If not, say so instead of looking like a bug (B-12).
   // A missing bar is a coverage issue, not a fill-alignment issue: only test bars that exist (issue #60).
   const misaligned = useMemo(() => {
@@ -623,7 +617,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               <button type="button" className="tool-button" aria-expanded={hindsightOpen} onClick={() => setHindsightOpen((open) => !open)}>
                 After the exit — hindsight
               </button>
-              <span>{hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, detailLevel)}</span>
+              <span>{hindsightOpen ? hindsightExpandedText(hindsight) : hindsightCollapsedText(hindsight, "medium")}</span>
             </div>
           )}
           </div>
@@ -701,39 +695,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             }
           />
 
-          {planVsActual.hasPlan && planVsActual.rows.length > 0 && (
-            <div className="plan-vs-actual-card" style={{ marginTop: 14, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span className="eyebrow" style={{ fontSize: 10, letterSpacing: "0.08em", color: "var(--gold-mid, #d4af37)" }}>PLAN VS ACTUAL</span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: planVsActual.fidelity === "Executed to Plan" ? "#34d399" : planVsActual.fidelity === "Widened Stop" ? "#f87171" : "var(--text-dim)" }}>
-                  {planVsActual.fidelity}
-                </span>
-              </div>
-              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
-                <thead>
-                  <tr style={{ color: "var(--text-dim)", textAlign: "left", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                    <th style={{ padding: "4px 0", fontWeight: 500 }}>Item</th>
-                    <th style={{ padding: "4px 0", fontWeight: 500 }}>Plan</th>
-                    <th style={{ padding: "4px 0", fontWeight: 500 }}>Actual</th>
-                    <th style={{ padding: "4px 0", fontWeight: 500, textAlign: "right" }}>Delta</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {planVsActual.rows.map((row) => (
-                    <tr key={row.label} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                      <td style={{ padding: "6px 0", color: "var(--text-dim)" }}>{row.label}</td>
-                      <td style={{ padding: "6px 0" }}>{row.planned}</td>
-                      <td style={{ padding: "6px 0" }}>{row.actual}</td>
-                      <td style={{ padding: "6px 0", textAlign: "right", color: row.tone === "positive" ? "#34d399" : row.tone === "negative" ? "#f87171" : "inherit" }}>
-                        {row.deltaDisplay}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--text-dim)" }}>{planVsActual.fidelityNote}</p>
-            </div>
-          )}
+          <PartialsCard trade={trade} rSize={rSize} shield={prefs.shield} zone={zone} />
+          <PlanVsActualSection comparison={planVsActual} />
         </div>
 
         {undatedExit || candles?.status === "none" ? null : (
