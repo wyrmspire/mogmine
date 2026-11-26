@@ -33,6 +33,8 @@ export function DrillScreen() {
   const journal = useJournal();
   const { records } = useDrills();
   const prefs = usePrefs();
+  const accounts = useAccounts();
+  const rSize = useMemo(() => ({ accounts: accounts.accounts, prefs }), [accounts.accounts, prefs]);
   const [bars, setBars] = useState<Map<string, StoredCandles> | null>(null);
   const [deck, setDeck] = useState<(Deck & { name: string; playbook: string | null }) | null>(null);
   const [position, setPosition] = useState(0);
@@ -57,8 +59,8 @@ export function DrillScreen() {
   const hasBars = useMemo(() => (id: string) => Boolean(bars?.has(id)), [bars]);
   const byId = useMemo(() => new Map(journal.trades.map((trade) => [trade.id, trade])), [journal.trades]);
   const playbooks = useMemo(() => [...new Set(journal.trades.flatMap((trade) => (trade.playbook_id ? [trade.playbook_id] : [])))], [journal.trades]);
-  const misses = useMemo(() => (bars ? missesDeck(journal.trades, records, now, hasBars) : null), [bars, journal.trades, records, now, hasBars]);
-  const score = useMemo(() => takeVsPass(records, journal.trades), [records, journal.trades]);
+  const misses = useMemo(() => (bars ? missesDeck(journal.trades, records, now, hasBars, rSize) : null), [bars, journal.trades, records, now, hasBars, rSize]);
+  const score = useMemo(() => takeVsPass(records, journal.trades, rSize), [records, journal.trades, rSize]);
 
   if (!journal.hydrated || !bars) {
     return (
@@ -154,7 +156,7 @@ function DrillCard({ trade, stored, answer, showPlaybook, zone, privacy, onAnswe
   }, [answer, trade, stored, timeframe, privacy, accounts.accounts, prefs]);
   const r = resultR(trade, resolveRSize(trade, accounts.accounts, prefs));
   const process = processRead(trade);
-  const miss = answer ? isMiss(answer, trade) : null;
+  const miss = answer ? isMiss(answer, trade, { accounts: accounts.accounts, prefs }) : null;
 
   return (
     <div className="specular-card drill-card">

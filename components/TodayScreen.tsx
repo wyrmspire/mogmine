@@ -9,6 +9,7 @@ import { DayHeader } from "./DayHeader";
 import { PlanCard } from "./PlanCard";
 import { RunningStatsCard } from "./RunningStatsCard";
 import { TradeRow } from "./TradeRow";
+import { useAccounts } from "@/lib/accounts-store";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { groupByDay, parseSessionDateParam, resolveViewedDate, stepRegularSessionDate, withSamples } from "@/lib/selectors";
@@ -51,6 +52,7 @@ export function TodayScreen() {
 function TodayView() {
   const journal = useJournal();
   const prefs = usePrefs();
+  const accounts = useAccounts();
   const { date: todayDate, closed, now } = useToday();
   const router = useRouter();
   const requestedDate = useSearchParams().get("date");
@@ -70,7 +72,7 @@ function TodayView() {
   const rolledOver = viewingToday && todayDate > closedDate;
 
   const trades = withSamples(journal.trades, prefs.showSamples);
-  const groups = groupByDay(trades);
+  const groups = groupByDay(trades, { accounts: accounts.accounts, prefs });
   const focus = groups.find((group) => group.date === viewedDate);
   const previous = groups.find((group) => group.date < viewedDate);
   const onlySamples = journal.trades.every((trade) => trade.is_sample);
