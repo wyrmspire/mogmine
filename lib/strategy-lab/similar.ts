@@ -55,6 +55,11 @@ function sliceCandidates(side: "long" | "short"): SkillOutputRef[] {
     ref("contextRanges", "pdcSide"),
     ref("contextRanges", "overnightTrend"),
     ref("contextRanges", "yesterdayDirection"),
+    // Batch-2 regime, EMA and profile slices sit before the lower-priority clock and VWAP slices (§10.4).
+    ref("rangeRegime", "regime"),
+    ref("emaRelation", "side200"),
+    ref("profileRelation", "location"),
+    ref("gapOpen", "direction"),
     ref("openingRange", "widthBucket", { minutes: 15 }),
     ref("sessionClock", "todBucket"),
     ref("vwapRelation", "side", { anchor: "rth" }),
