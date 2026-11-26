@@ -18,7 +18,7 @@ import { TIMEFRAME_MINUTES, alignTradeToBars, defaultVisibleRange, fitWindow, in
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 import type { Mark } from "@/lib/trade-marks";
 import type { NeighbourTradeProjection } from "@/lib/neighbour-trades";
-import { levelPills, tradeAnchors, type LevelLine, type LevelPill } from "@/lib/chart-levels";
+import { levelPills, tradeAnchors, type LevelLine, type LevelPill, type LevelZone } from "@/lib/chart-levels";
 import { computeExportDimensions } from "@/lib/chart-export";
 import { resolveTapAction, type LevelHit } from "@/lib/level-hit-test";
 import { usePrefs } from "@/lib/prefs";
@@ -63,6 +63,8 @@ interface Props {
   marks: readonly Mark[];
   /** LV-2: computed session levels as drawable lines. Empty hides them. */
   levels?: readonly LevelLine[];
+  /** IK-3: planned, merged and ADR rectangles painted by the same Canvas primitive. */
+  levelZones?: readonly LevelZone[];
   /** IND-1: session VWAP on the displayed bars. Empty hides it. */
   vwap?: readonly VwapPoint[];
   vwapBands?: readonly (readonly VwapBandPoint[])[];
@@ -114,11 +116,21 @@ interface Props {
 /** What one paint of the level primitive needs from the latest props. */
 interface LevelPaint {
   levels: readonly LevelLine[];
+  zones: readonly LevelZone[];
   theme: ChartTheme;
   bars: Candle[];
   timeframe: Timeframe;
   trade: TradeRecord;
   style?: IndicatorInstance;
+}
+
+function zonePills(zones: readonly LevelZone[], symbol: string, rank = 0): LevelPill[] {
+  return zones.map((zone, index) => ({
+    price: (zone.priceLow + zone.priceHigh) / 2,
+    label: `${formatPrice(zone.priceLow, symbol)}–${formatPrice(zone.priceHigh, symbol)} ${zone.label}`,
+    role: zone.role, tone: null, rank: rank + index,
+    lineTicks: zone.lines?.flatMap(({ price_ticks }) => [price_ticks]) ?? [],
+  }));
 }
 
 /** Pushes pills and a mode to the level primitive. Shared by the live draw and the export snapshot (D-E). */
@@ -128,7 +140,7 @@ function paintLevels(state: Live, paint: LevelPaint, mode: LevelLabelsMode, pill
   const line = slot?.kind === "line" ? slot : undefined;
   state.levelsPrimitive.update(line?.visible === false ? [] : paint.levels, paint.theme, TIMEFRAME_MINUTES[paint.timeframe] * 60_000, line?.visible === false ? [] : pills, {
     lastBarTime: bars[bars.length - 1].time, mode, symbol: tr.symbol, entryPrice: tr.entry_price,
-    lineStyle: line?.style, lineWidth: line?.width, color: line && line.color !== "theme:role" ? indicatorColor(line.color, paint.theme, "levels") : null, labels: paint.style?.labels,
+    lineStyle: line?.style, lineWidth: line?.width, color: line && line.color !== "theme:role" ? indicatorColor(line.color, paint.theme, "levels") : null, labels: paint.style?.labels, zones: paint.zones,
   });
 }
 
@@ -139,6 +151,8 @@ function indicatorColor(color: string | undefined, theme: ChartTheme, fallback: 
   if (key === "ema") return theme.ema200 ?? "#38bdf8";
   if (key === "support") return theme.levelSupport;
   if (key === "resistance") return theme.levelResistance;
+  if (key === "adr") return theme.levelAdr;
+  if (key === "neutral" || key === "role") return theme.levelNeutral;
   if (key === "gold") return theme.goldMid;
   if (fallback === "weekly") return theme.weeklyVwap ?? theme.vwap;
   if (fallback === "ema") return theme.ema200 ?? "#38bdf8";
@@ -287,13 +301,14 @@ function applyHeldDefaultRange(state: Live, range: { from: number; to: number })
 }
 
 const NO_LEVELS: readonly LevelLine[] = [];
+const NO_ZONES: readonly LevelZone[] = [];
 const NO_VWAP: readonly VwapPoint[] = [];
 const NO_VWAP_BANDS: readonly (readonly VwapBandPoint[])[] = [];
 const NO_EMA: readonly EmaPoint[] = [];
 const NO_EXTRA_LINES: readonly NonNullable<Props["extraIndicatorLines"]>[number][] = [];
 const NO_EXTRA_BANDS: readonly NonNullable<Props["extraIndicatorBands"]>[number][] = [];
 
-export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, vwap = NO_VWAP, vwapBands = NO_VWAP_BANDS, vwapApproximate = false, weeklyVwap = NO_VWAP, weeklyVwapBands = NO_VWAP_BANDS, weeklyVwapApproximate = false, vwapBandFill = false, showVolume = false, ema = NO_EMA, emaApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null, indicatorStyle, extraIndicatorLines = NO_EXTRA_LINES, extraIndicatorBands = NO_EXTRA_BANDS }: Props) {
+export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEVELS, levelZones = NO_ZONES, vwap = NO_VWAP, vwapBands = NO_VWAP_BANDS, vwapApproximate = false, weeklyVwap = NO_VWAP, weeklyVwapBands = NO_VWAP_BANDS, weeklyVwapApproximate = false, vwapBandFill = false, showVolume = false, ema = NO_EMA, emaApproximate = false, zone, privacy, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelLabelsMode, onSelectLevel, highlightedLineTick = null, indicatorStyle, extraIndicatorLines = NO_EXTRA_LINES, extraIndicatorBands = NO_EXTRA_BANDS }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const live = useRef<Live | null>(null);
@@ -303,11 +318,11 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   const levelMode: LevelLabelsMode = levelLabelsMode ?? prefs.levelLabels;
   // The open level card (LB-6). `fromList`: opened by a focused list row, so leaving the row closes it.
   const [openLevel, setOpenLevel] = useState<{ hit: LevelHit; fromList: boolean } | null>(null);
-  const latest = useRef({ trade, bars, timeframe, marks, levels, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel, indicatorStyle, extraIndicatorLines, extraIndicatorBands });
+  const latest = useRef({ trade, bars, timeframe, marks, levels, levelZones, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel, indicatorStyle, extraIndicatorLines, extraIndicatorBands });
   const renderTimer = useRef<number | undefined>(undefined);
   const diagnosticWindow = fitWindow(trade.entry_time, boxEnd(trade, bars), timeframe);
 
-  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel, indicatorStyle, extraIndicatorLines, extraIndicatorBands }; });
+  useEffect(() => { latest.current = { trade, bars, timeframe, marks, levels, levelZones, vwap, vwapBands, vwapApproximate, weeklyVwap, weeklyVwapBands, weeklyVwapApproximate, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, readout, onRendered, onFitChange, onExtensionChange, onSelectNeighbour, neighbourTrades, levelMode, onSelectLevel, indicatorStyle, extraIndicatorLines, extraIndicatorBands }; });
   const closeLevel = useCallback(() => {
     setOpenLevel(null);
     latest.current.onSelectLevel?.(null);
@@ -373,10 +388,11 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       const l = live.current;
       if (!l) return null;
       const p = latest.current;
-      if (!p.theme || !p.bars.length || !p.levels.length || p.levelMode !== "tap") return l.chart.takeScreenshot(true, false);
+      if (!p.theme || !p.bars.length || (!p.levels.length && !p.levelZones.length) || p.levelMode !== "tap") return l.chart.takeScreenshot(true, false);
       // D-E: the PNG carries at most four labelled groups. Live "tap" mode is restored before this returns.
-      const paint: LevelPaint = { levels: p.levels, theme: p.theme, bars: p.bars, timeframe: p.timeframe, trade: p.trade, style: p.indicatorStyle?.levels };
-      const livePills = levelPills(p.levels, tradeAnchors(p.trade), p.trade.symbol, p.trade.entry_price);
+      const paint: LevelPaint = { levels: p.levels, zones: p.levelZones, theme: p.theme, bars: p.bars, timeframe: p.timeframe, trade: p.trade, style: p.indicatorStyle?.levels };
+      const rayPills = levelPills(p.levels, tradeAnchors(p.trade), p.trade.symbol, p.trade.entry_price);
+      const livePills = [...rayPills, ...zonePills(p.levelZones, p.trade.symbol, rayPills.length)];
       const exportPills = selectExportLevelPills(livePills, p.trade.entry_price, p.trade.key_level_price ?? null);
       paintLevels(l, paint, "always", exportPills);
       l.levelLabels = exportPills.map((pill) => pill.label);
@@ -463,8 +479,9 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
     const alignment = alignTradeToBars(times, tr.entry_time, end, barTimeframe);
     const entryBar = alignment?.entryBar ?? null;
     l.primitive.update(p.marks, t, p.neighbourTrades);
-    const pills = p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : [];
-    paintLevels(l, { levels: p.levels, theme: t, bars, timeframe: barTimeframe, trade: tr, style: p.indicatorStyle?.levels }, p.levelMode, pills);
+    const rayPills = p.levels.length ? levelPills(p.levels, tradeAnchors(tr), tr.symbol, tr.entry_price) : [];
+    const pills = [...rayPills, ...zonePills(p.levelZones, tr.symbol, rayPills.length)];
+    paintLevels(l, { levels: p.levels, zones: p.levelZones, theme: t, bars, timeframe: barTimeframe, trade: tr, style: p.indicatorStyle?.levels }, p.levelMode, pills);
     // Tap mode draws no pills, so only the breathing room applies (LB-6, F-10).
     l.levelLabels = p.levelMode === "tap" ? [] : pills.map((pill) => pill.label);
     applyLevelRightOffset(l);
@@ -849,7 +866,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
   // Redraw in place for candle refreshes, timeframe changes, edits and appearance changes.
   useEffect(() => {
     draw.current();
-  }, [trade, bars, timeframe, marks, levels, vwap, vwapBands, weeklyVwap, weeklyVwapBands, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, neighbourTrades, levelMode, indicatorStyle, extraIndicatorLines, extraIndicatorBands]);
+  }, [trade, bars, timeframe, marks, levels, levelZones, vwap, vwapBands, weeklyVwap, weeklyVwapBands, vwapBandFill, showVolume, ema, emaApproximate, zone, privacy, theme, neighbourTrades, levelMode, indicatorStyle, extraIndicatorLines, extraIndicatorBands]);
 
   return <><div
     ref={hostRef}

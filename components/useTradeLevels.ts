@@ -8,19 +8,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadDayCandles } from "@/lib/candles";
 import type { DayCandles } from "@/lib/candles";
-import { levelLines, levelsSummary, plannedLineSources, tradeLevelReport, tradeLevelWindows } from "@/lib/chart-levels";
-import type { LevelLine, WithheldLevel } from "@/lib/chart-levels";
+import { levelLines, levelsSummary, mergeLevelZones, plannedLineSources, plannedZones, tradeLevelReport, tradeLevelWindows } from "@/lib/chart-levels";
+import type { LevelLine, LevelZone, WithheldLevel } from "@/lib/chart-levels";
+import { adrRequiredSessionDates, buildAdrIndicator } from "@/lib/adr-indicator";
 import { EMA_WARMUP_EXTRA, computeEma, emaUnavailable } from "@/lib/ema";
 import type { EmaResult, EmaSource } from "@/lib/ema";
 import type { ComputedLevel } from "@/lib/levels";
+import { computeLevelsFromInputs, extractSessionInputsFromCandles } from "@/lib/levels";
+import { buildSessionLevelIndicator } from "@/lib/session-level-indicator";
+import type { IndicatorInstance } from "@/lib/indicator-kit";
 import { usePlansStore } from "@/lib/plans-store";
 import { equityIndexSessionBounds, previousRegularSessionDate, sessionDate } from "@/lib/session";
-import { TIMEFRAME_MINUTES } from "@/lib/trades";
+import { TIMEFRAME_MINUTES, specFor } from "@/lib/trades";
 import type { Candle, Timeframe, TradeRecord } from "@/lib/trades";
 
 export interface TradeLevelsState {
   status: "off" | "loading" | "none" | "ready";
   lines: readonly LevelLine[];
+  zones: readonly LevelZone[];
   /** Candle levels withheld, each with its reason (OD-55). */
   withheld: readonly WithheldLevel[];
   /** How many drawn levels came from planning sessions. */
@@ -38,7 +43,7 @@ export interface TradeLevelsState {
 const EMPTY: readonly LevelLine[] = [];
 const EMPTY_BARS: readonly Candle[] = [];
 const OFF: TradeLevelsState = {
-  status: "off", lines: EMPTY, withheld: [], planned: 0, summary: "", sessionCandles: EMPTY_BARS, sessionTimeframe: null, ema200: null, emas: {},
+  status: "off", lines: EMPTY, zones: [], withheld: [], planned: 0, summary: "", sessionCandles: EMPTY_BARS, sessionTimeframe: null, ema200: null, emas: {},
 };
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -61,15 +66,18 @@ function priorSessionsForEma(timeframe: Timeframe, barsNeeded: number): number {
  */
 export interface EmaRequest { id: string; timeframe: Timeframe; length: number; source: EmaSource }
 
-export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWanted = false, emaRequests: readonly EmaRequest[] = []): TradeLevelsState {
+export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWanted = false, emaRequests: readonly EmaRequest[] = [], indicatorInstances: readonly IndicatorInstance[] = []): TradeLevelsState {
   const key = `${trade.symbol}|${trade.entry_time}`;
-  const [computed, setComputed] = useState<{ key: string; levels: readonly ComputedLevel[]; withheld: readonly WithheldLevel[]; session: DayCandles | null; indicators: DayCandles | null } | null>(null);
+  const [computed, setComputed] = useState<{ key: string; levels: readonly ComputedLevel[]; withheld: readonly WithheldLevel[]; session: DayCandles | null; indicators: DayCandles | null; indicatorDays: readonly { sessionDate: string; day: DayCandles }[] } | null>(null);
   // IN-3: earlier sessions for the 200 EMA, keyed by trade and timeframe. `tooOld` marks a 1m request past Yahoo's keep.
   const [priors, setPriors] = useState<{ key: string; days: readonly (DayCandles | null)[]; tooOld: boolean } | null>(null);
   const { plans } = usePlansStore();
   // Demo trades never touch the network (issue #89), so they have no computed levels.
   const emaTimeframe = emaRequests[0]?.timeframe ?? null;
-  const fetches = (enabled || sessionWanted || emaTimeframe !== null) && !trade.is_sample && Number.isFinite(Date.parse(trade.entry_time));
+  const adrInstances = useMemo(() => indicatorInstances.filter((instance) => instance.indicatorId === "adr" && instance.visible), [indicatorInstances]);
+  const sessionLevelInstance = useMemo(() => indicatorInstances.find((instance) => instance.indicatorId === "session-levels" && instance.visible), [indicatorInstances]);
+  const indicatorKey = useMemo(() => indicatorInstances.map((instance) => `${instance.instanceId}:${instance.visible}:${JSON.stringify(instance.params)}:${JSON.stringify(instance.style)}`).join("|"), [indicatorInstances]);
+  const fetches = (enabled || sessionWanted || emaTimeframe !== null || adrInstances.length > 0) && !trade.is_sample && Number.isFinite(Date.parse(trade.entry_time));
   const emaId = emaTimeframe ? `${key}|${emaRequests.map(({ id, timeframe: tf, length, source }) => `${id}:${tf}:${length}:${source}`).join("|")}` : null;
 
   useEffect(() => {
@@ -85,19 +93,35 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
       let withheld: readonly WithheldLevel[] = [];
       let session: DayCandles | null = null;
       let indicators: DayCandles | null = null;
+      let loadedIndicatorDays: readonly { sessionDate: string; day: DayCandles }[] = [];
       try {
-        const [prior, today, earlierWeek] = await Promise.all([
+        const historyDates = adrRequiredSessionDates(windows.sessionDate, adrInstances);
+        const levelDaysBack = Math.trunc(Number(sessionLevelInstance?.params.daysBack ?? 1));
+        for (let index = 0; index <= levelDaysBack; index += 1) {
+          let date = windows.sessionDate;
+          for (let step = 0; step < index; step += 1) date = previousRegularSessionDate(date);
+          if (!historyDates.includes(date)) historyDates.push(date);
+        }
+        for (const week of windows.earlierWeek) if (!historyDates.includes(week.sessionDate)) historyDates.push(week.sessionDate);
+        const [prior, today, earlierWeek, historyDays] = await Promise.all([
           loadDayCandles(trade.symbol, windows.prior.from, windows.prior.to, undefined, true),
           windows.today ? loadDayCandles(trade.symbol, bounds.open, Math.min(bounds.close, nowMinute), undefined, true).catch(() => null) : null,
           // Earlier week days (Mon to the day before prior) for week_high / week_low. A failed day is null: that level is withheld.
           Promise.all(windows.earlierWeek.map((w) => loadDayCandles(trade.symbol, w.from, w.to, undefined, true).catch(() => null))),
+          Promise.all(historyDates.map(async (date) => {
+            const dayBounds = equityIndexSessionBounds(date);
+            const to = date === windows.sessionDate ? Math.min(dayBounds.close, nowMinute) : dayBounds.close;
+            const day = await loadDayCandles(trade.symbol, dayBounds.open, to, undefined, true).catch(() => null);
+            return day ? { sessionDate: date, day } : null;
+          })),
         ]);
         session = today;
-        const indicatorDays = [...earlierWeek.filter((day): day is DayCandles => day !== null), prior, ...(today ? [today] : [])];
-        indicators = indicatorDays.length ? {
-          candles: indicatorDays.flatMap((day) => day.candles),
+        loadedIndicatorDays = historyDays.filter((item): item is { sessionDate: string; day: DayCandles } => item !== null);
+        const sessionDays = [...earlierWeek.filter((day): day is DayCandles => day !== null), prior, ...(today ? [today] : [])];
+        indicators = sessionDays.length ? {
+          candles: sessionDays.flatMap((day) => day.candles),
           baseTimeframe: today?.baseTimeframe ?? prior.baseTimeframe,
-          fetchedAt: Math.min(...indicatorDays.map((day) => day.fetchedAt)),
+          fetchedAt: Math.min(...sessionDays.map((day) => day.fetchedAt)),
         } : null;
         // Levels cut at entry (the as-of rule): bars after entry never reach the level calculation.
         const todayAtEntry = today && { candles: today.candles.filter(({ time }) => time < entryMs), baseTimeframe: today.baseTimeframe };
@@ -105,12 +129,12 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
         levels = report?.levels ?? [];
         withheld = report?.withheld ?? [];
       } catch { /* no bars: no computed levels */ }
-      if (alive) setComputed({ key, levels, withheld, session, indicators });
+      if (alive) setComputed({ key, levels, withheld, session, indicators, indicatorDays: loadedIndicatorDays });
     })();
     return () => { alive = false; };
     // The key holds every trade field the computed levels depend on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetches, key]);
+  }, [fetches, key, indicatorKey]);
 
   useEffect(() => {
     if (!emaTimeframe || !emaId || trade.is_sample || !Number.isFinite(Date.parse(trade.entry_time))) return;
@@ -151,18 +175,61 @@ export function useTradeLevels(trade: TradeRecord, enabled: boolean, sessionWant
 
   const planned = useMemo(() => (enabled ? plannedLineSources(plans, trade) : []), [enabled, plans, trade]);
   const current = fetches && computed?.key === key ? computed.levels : null;
-  const lines = useMemo(
-    () => levelLines([...(current ?? []), ...planned], trade.entry_price, trade.symbol),
-    [current, planned, trade.entry_price, trade.symbol],
-  );
+  const sessionDays = useMemo(() => {
+    if (!sessionLevelInstance || computed?.key !== key || (trade.symbol !== "MES" && trade.symbol !== "MNQ")) return [];
+    const allCandles = computed.indicatorDays.flatMap(({ day }) => day.candles);
+    const count = Math.max(1, Math.min(10, Math.trunc(Number(sessionLevelInstance.params.daysBack))));
+    let date = sessionDate(Date.parse(trade.entry_time));
+    return Array.from({ length: count }, (_, index) => {
+      if (index > 0) date = previousRegularSessionDate(date);
+      return date;
+    }).flatMap((date, index) => {
+      const row = computed.indicatorDays.find(({ sessionDate: item }) => item === date);
+      if (!row) return [];
+      const bounds = equityIndexSessionBounds(date);
+      const asOf = index === 0 ? Date.parse(trade.entry_time) : bounds.rthOpen;
+      try {
+        const snapshot = extractSessionInputsFromCandles({
+          symbol: trade.symbol as "MES" | "MNQ", provider: "yahoo_finance", providerSymbol: specFor(trade.symbol)?.yahooTicker ?? "",
+          sessionDate: date, candles: allCandles, timeframe: row.day.baseTimeframe, asOf,
+        });
+        return [{ sessionDate: date, from: bounds.open, to: bounds.close,
+          levels: computeLevelsFromInputs({ symbol: trade.symbol, sessionDate: date, inputs: snapshot.inputs }) }];
+      } catch { return []; }
+    });
+  }, [sessionLevelInstance, computed, key, trade.entry_time, trade.symbol]);
+  const sessionOutput = useMemo(() => sessionLevelInstance
+    ? buildSessionLevelIndicator(sessionLevelInstance, sessionDays, trade.entry_price, trade.symbol, false)
+    : { lines: levelLines(current ?? [], trade.entry_price, trade.symbol), zones: [] },
+  [sessionLevelInstance, sessionDays, current, trade.entry_price, trade.symbol]);
+  const adrOutput = useMemo(() => {
+    if (computed?.key !== key || (trade.symbol !== "MES" && trade.symbol !== "MNQ")) return { lines: [] as LevelLine[], zones: [] as LevelZone[] };
+    const days = computed.indicatorDays.map(({ sessionDate: date, day }) => ({ sessionDate: date, candles: day.candles, timeframe: day.baseTimeframe }));
+    const results = adrInstances.map((instance) => buildAdrIndicator(instance, trade.symbol as "MES" | "MNQ", sessionDate(Date.parse(trade.entry_time)), days));
+    return { lines: results.flatMap(({ lines: value }) => value), zones: results.flatMap(({ zones: value }) => value) };
+  }, [computed, key, adrInstances, trade.entry_time, trade.symbol]);
+  const plannedZoneRows = useMemo(() => enabled ? plannedZones(plans, trade, trade.entry_price) : [], [enabled, plans, trade]);
+  const rawLines = useMemo(() => [...sessionOutput.lines, ...levelLines(planned, trade.entry_price, trade.symbol), ...adrOutput.lines],
+    [sessionOutput.lines, planned, adrOutput.lines, trade.entry_price, trade.symbol]);
+  const merged = useMemo(() => sessionLevelInstance ? mergeLevelZones(rawLines, Number(sessionLevelInstance.params.mergeTolerance))
+    : { lines: rawLines, zones: [] as LevelZone[] }, [rawLines, sessionLevelInstance]);
+  const lines = merged.lines;
+  const zones = useMemo(() => {
+    const fill = sessionLevelInstance?.style.zoneFill;
+    const mergedZones = merged.zones.map((zone) => ({ ...zone,
+      ...(fill?.kind === "fill" ? { color: fill.color, fillOpacity: fill.visible ? fill.opacity : 0 } : {}),
+    }));
+    return [...mergedZones, ...sessionOutput.zones, ...plannedZoneRows, ...adrOutput.zones];
+  }, [merged.zones, sessionOutput.zones, plannedZoneRows, adrOutput.zones, sessionLevelInstance]);
   const sessionCandles = computed?.key === key ? computed.indicators?.candles ?? EMPTY_BARS : EMPTY_BARS;
   const sessionTimeframe = computed?.key === key ? computed.indicators?.baseTimeframe ?? null : null;
 
-  if (!enabled) return { ...OFF, sessionCandles, sessionTimeframe, ema200, emas };
+  if (!enabled && adrInstances.length === 0) return { ...OFF, sessionCandles, sessionTimeframe, ema200, emas };
   const loading = fetches && current == null;
   return {
-    status: lines.length ? "ready" : loading ? "loading" : "none",
+    status: lines.length || zones.length ? "ready" : loading ? "loading" : "none",
     lines,
+    zones,
     withheld: current && computed ? computed.withheld : [],
     planned: planned.length,
     summary: levelsSummary(lines),

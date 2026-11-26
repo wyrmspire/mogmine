@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { levelLines, levelRole, missingCandleLevels, stackLabels, tradeLevelWindows, tradeLevels } from "../chart-levels.ts";
+import { levelLines, levelRole, mergeLevelZones, missingCandleLevels, plannedZones, sessionDaySpans, stackLabels, tradeLevelWindows, tradeLevels } from "../chart-levels.ts";
 import { computeLevelsFromInputs } from "../levels.ts";
 import type { Candle } from "../trades.ts";
 import fixture from "../../fixtures/levelsets/MES-2026-11-12.json" with { type: "json" };
@@ -36,6 +36,26 @@ test("levels at one tick share one pill, highest price first, ADR wins the colou
   const shared = lines.find((line) => line.price === 7593)!;
   assert.equal(shared.role, "adr");
   assert.deepEqual(shared.keys.sort(), ["adr_inner_low", "rth_low"]);
+});
+
+test("LV-07 golden zones merge by nearest edge, label priority and role", () => {
+  const lines = levelLines(nov12, 7594, "MES");
+  const merged = mergeLevelZones(lines, 5);
+  const low = merged.zones.find(({ priceLow, priceHigh }) => priceLow === 7545.75 && priceHigh === 7547.5)!;
+  assert.equal(low.label, "ADR Low / PDL");
+  assert.equal(low.role, "adr");
+  const high = merged.zones.find(({ priceLow, priceHigh }) => priceLow === 7687.25 && priceHigh === 7692.25)!;
+  assert.equal(high.label, "ADR High / R1");
+  assert.equal(high.role, "adr");
+  assert.equal(merged.zones.some(({ priceLow, priceHigh }) => priceLow === 7593 && priceHigh === 7598.75), false, "5.75 points stays separate");
+});
+
+test("days-back drawings have DST-aware, non-overlapping day spans", () => {
+  const spans = sessionDaySpans("2026-11-02", 3);
+  assert.deepEqual(spans.map(({ sessionDate }) => sessionDate), ["2026-11-02", "2026-10-30", "2026-10-29"]);
+  assert.equal(new Date(spans[0].from).toISOString(), "2026-11-01T23:00:00.000Z");
+  assert.equal(new Date(spans[1].to).toISOString(), "2026-10-30T21:00:00.000Z");
+  assert.ok(spans.every(({ from, to }) => to - from === 23 * 60 * minute));
 });
 
 test("same-session levels start at the bar that formed them; prior-day levels run from the left edge", () => {
@@ -134,6 +154,17 @@ test("PS-3: only same-instrument, same-session, live plans with a symbol are dra
   assert.equal(plannedLineSources([plan({ symbol: undefined })], entry).length, 0);
   assert.equal(plannedLineSources([plan({ session_date: "2026-11-11" })], entry).length, 0);
   assert.equal(plannedLineSources([plan({ archived: true })], entry).length, 0);
+});
+
+test("IK-3: matching planned zone bounds become one labelled rectangle, not two rays", () => {
+  const low = createPlannedLevel({ id: "zl", price: 7588, symbol: "MES", label: "Demand", kind: "zone_low" })!;
+  const high = createPlannedLevel({ id: "zh", price: 7593, symbol: "MES", label: "Demand", kind: "zone_high" })!;
+  const zoned = plan({ levels: [low, high], revisions: [] });
+  assert.equal(plannedLineSources([zoned], entry).length, 0);
+  const zones = plannedZones([zoned], entry, 7600);
+  assert.equal(zones.length, 1);
+  assert.deepEqual({ label: zones[0].label, low: zones[0].priceLow, high: zones[0].priceHigh, role: zones[0].role },
+    { label: "Demand", low: 7588, high: 7593, role: "support" });
 });
 
 test("PS-3: a planned level at a computed tick shares its pill and is coloured by side of price", () => {

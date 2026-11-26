@@ -13,7 +13,7 @@ import { layoutPills } from "../lib/label-stack.ts";
 import { hitLevel, selectAxisTagGroups } from "../lib/level-hit-test.ts";
 import type { LevelHit } from "../lib/level-hit-test.ts";
 import { formatPrice } from "../lib/format.ts";
-import type { LevelLine, LevelPill, LevelRole } from "@/lib/chart-levels";
+import type { LevelLine, LevelPill, LevelRole, LevelZone } from "@/lib/chart-levels";
 import type { ChartTheme } from "@/lib/theme";
 import type { LevelLabelsMode } from "@/lib/prefs-sanitize";
 import type { IndicatorLineStyle } from "@/lib/indicator-kit";
@@ -62,6 +62,7 @@ function roleColor(theme: ChartTheme, role: LevelRole) {
 export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
   private attachment?: SeriesAttachedParameter<Time>;
   private lines: readonly LevelLine[] = [];
+  private zones: readonly LevelZone[] = [];
   private pills: readonly LevelPill[] = [];
   private theme?: ChartTheme;
   private barMs = 60_000;
@@ -91,10 +92,11 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
    * three price-only axis tags for the groups nearest `entryPrice`. `"always"` draws the right-edge pills instead.
    */
   update(lines: readonly LevelLine[], theme: ChartTheme, barMs: number, pills?: readonly LevelPill[], options: {
-    lastBarTime?: number | null; mode?: LevelLabelsMode; symbol?: string; entryPrice?: number | null;
+    lastBarTime?: number | null; mode?: LevelLabelsMode; symbol?: string; entryPrice?: number | null; zones?: readonly LevelZone[];
     lineStyle?: IndicatorLineStyle; lineWidth?: number; color?: string | null; labels?: boolean;
   } = {}) {
     this.lines = lines;
+    this.zones = options.zones ?? [];
     // Rays stop at the last bar (LB-4). Null keeps the full-width ray.
     this.lastBarTime = options.lastBarTime ?? null;
     this.pills = pills ?? lines.map((line, rank) => ({
@@ -135,25 +137,27 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
     const { attachment } = this;
     if (!attachment || !this.labels) return null;
     const pane = attachment.chart.paneSize();
-    return hitLevel(this.lines, [], { x, y }, {
+    return hitLevel(this.lines, this.zones, { x, y }, {
       priceToY: (price) => {
         const raw = attachment.series.priceToCoordinate(price);
         return raw == null || raw < 0 || raw > pane.height ? null : raw;
       },
       raySpanX: (line) => this.raySpan(line, pane.width),
+      zoneSpanX: (zone) => this.timeSpan(zone.startAt ?? null, zone.endAt, pane.width),
     });
   }
 
   /** Where a ray is drawn across the pane: from its start bar (or the left edge) to the last bar + 4 px. Null when empty. */
-  private raySpan(line: LevelLine, paneWidth: number): { x0: number; x1: number } | null {
+  private timeSpan(startAt: number | null, endAt: number | null | undefined, paneWidth: number): { x0: number; x1: number } | null {
     const { attachment } = this;
     if (!attachment) return null;
     const scale = attachment.chart.timeScale();
-    const lastBarX = this.lastBarTime != null ? scale.timeToCoordinate(Math.floor(this.lastBarTime / 1000) as UTCTimestamp) : null;
+    const end = endAt ?? this.lastBarTime;
+    const lastBarX = end != null ? scale.timeToCoordinate(Math.floor(end / 1000) as UTCTimestamp) : null;
     const x1 = lastBarX != null ? Math.min(paneWidth, Math.round(lastBarX + RAY_OVERSHOOT_PX)) : paneWidth;
     let x0 = 0;
-    if (line.startAt != null) {
-      const bar = Math.floor(line.startAt / this.barMs) * this.barMs;
+    if (startAt != null) {
+      const bar = Math.floor(startAt / this.barMs) * this.barMs;
       const x = scale.timeToCoordinate(Math.floor(bar / 1000) as UTCTimestamp);
       // The forming bar is off the loaded data: draw from the edge rather than guess (B-23).
       if (x != null) x0 = Math.max(0, Math.min(paneWidth, x));
@@ -161,9 +165,26 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
     return x1 <= x0 ? null : { x0, x1 };
   }
 
+  private raySpan(line: LevelLine, paneWidth: number) { return this.timeSpan(line.startAt, line.endAt, paneWidth); }
+
+  private paintColor(color: string | undefined, role: LevelRole) {
+    const theme = this.theme!;
+    if (!color || color === "theme:role") return roleColor(theme, role);
+    if (color.startsWith("#")) return color;
+    const key = color.slice(6);
+    if (key === "adr") return theme.levelAdr;
+    if (key === "support") return theme.levelSupport;
+    if (key === "resistance") return theme.levelResistance;
+    if (key === "neutral") return theme.levelNeutral;
+    if (key === "gold") return theme.goldMid;
+    if (key === "vwap") return theme.vwap;
+    if (key === "ema") return theme.ema200 ?? theme.goldMid;
+    return roleColor(theme, role);
+  }
+
   private draw(target: CanvasRenderingTarget2D, layer: "rays" | "labels") {
     const { attachment, theme } = this;
-    if (!attachment || !theme || (!this.lines.length && !this.pills.length)) return;
+    if (!attachment || !theme || (!this.lines.length && !this.pills.length && !this.zones.length)) return;
     // Tap mode draws no pills (LB-6): the labels layer is empty, and no ray fades for a collision.
     const tap = this.mode === "tap";
     if ((tap || !this.labels) && layer === "labels") return;
@@ -178,7 +199,21 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
       ctx.save();
       ctx.font = FONT;
       if (layer === "rays") {
-        ctx.lineWidth = this.lineWidth;
+        for (const zone of this.zones) {
+          const top = attachment.series.priceToCoordinate(zone.priceHigh);
+          const bottom = attachment.series.priceToCoordinate(zone.priceLow);
+          const span = this.timeSpan(zone.startAt ?? null, zone.endAt, pane.width);
+          if (top == null || bottom == null || !span) continue;
+          const color = this.paintColor(zone.color, zone.role);
+          ctx.globalAlpha = zone.fillOpacity ?? 0.14;
+          ctx.fillStyle = color;
+          ctx.fillRect(span.x0, Math.min(top, bottom), span.x1 - span.x0, Math.max(1, Math.abs(bottom - top)));
+          ctx.globalAlpha = 0.8;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = zone.lineWidth ?? 1;
+          ctx.setLineDash(zone.lineStyle === "dashed" ? [4, 4] : zone.lineStyle === "dotted" ? [1, 3] : []);
+          ctx.strokeRect(span.x0 + 0.5, Math.min(top, bottom) + 0.5, Math.max(0, span.x1 - span.x0 - 1), Math.max(1, Math.abs(bottom - top) - 1));
+        }
         for (const line of this.lines) {
           const raw = attachment.series.priceToCoordinate(line.price);
           if (raw == null || raw < 0 || raw > pane.height) continue;
@@ -189,8 +224,10 @@ export class SessionLevelsPrimitive implements ISeriesPrimitive<Time> {
           // Settlement levels (PDC, 3 PM close, settle) are quiet dotted neutral rays (Q-7).
           const settlement = line.settlement === true;
           ctx.globalAlpha = faded ? 0.3 : settlement ? 0.6 : 0.8;
-          ctx.strokeStyle = this.colorOverride ?? (settlement ? theme.levelNeutral : roleColor(theme, line.role));
-          ctx.setLineDash(settlement || this.lineStyle === "dotted" ? [1, 3] : line.proxy || this.lineStyle === "dashed" ? [4, 4] : []);
+          ctx.lineWidth = line.lineWidth ?? this.lineWidth;
+          ctx.strokeStyle = this.colorOverride ?? (settlement ? theme.levelNeutral : this.paintColor(line.color, line.role));
+          const style = line.lineStyle ?? this.lineStyle;
+          ctx.setLineDash(settlement || style === "dotted" ? [1, 3] : line.proxy || style === "dashed" ? [4, 4] : []);
           ctx.beginPath();
           ctx.moveTo(span.x0, y);
           ctx.lineTo(span.x1, y);

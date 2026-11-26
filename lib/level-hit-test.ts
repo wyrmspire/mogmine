@@ -1,15 +1,7 @@
 // LB-5/LB-6 (docs/03 §3): tap-to-read levels and the price-axis tags for `levelLabels: "tap"`. Pure, no DOM or Canvas.
-import type { LevelLine, LevelRole } from "./chart-levels.ts";
+import type { LevelLine, LevelZone } from "./chart-levels.ts";
 import type { LevelPill } from "./chart-levels.ts";
-
-/** A zone band on the price scale (a rectangle with no x extent: it spans the pane). */
-export interface LevelZone {
-  id: string;
-  label: string;
-  priceLow: number;
-  priceHigh: number;
-  role: LevelRole;
-}
+export type { LevelZone } from "./chart-levels.ts";
 
 export interface LevelHit {
   kind: "group" | "zone";
@@ -58,6 +50,7 @@ export function hitLevel(
   project: {
     priceToY: (price: number) => number | null;
     raySpanX?: (line: LevelLine) => { x0: number; x1: number } | null;
+    zoneSpanX?: (zone: LevelZone) => { x0: number; x1: number } | null;
   },
   tolerancePx = LEVEL_HIT_TOLERANCE_PX,
 ): LevelHit | null {
@@ -87,9 +80,13 @@ export function hitLevel(
     const yTop = Math.min(top, bottom);
     const yBottom = Math.max(top, bottom);
     if (point.y < yTop || point.y > yBottom) continue;
+    if (project.zoneSpanX) {
+      const span = project.zoneSpanX(zone);
+      if (!span || point.x < span.x0 || point.x > span.x1) continue;
+    }
     return {
       kind: "zone", price: (zone.priceLow + zone.priceHigh) / 2, y: (yTop + yBottom) / 2, x: point.x,
-      lines: lines.filter((line) => line.price >= zone.priceLow && line.price <= zone.priceHigh),
+      lines: zone.lines?.length ? zone.lines : lines.filter((line) => line.price >= zone.priceLow && line.price <= zone.priceHigh),
       zone,
     };
   }

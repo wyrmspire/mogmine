@@ -3,7 +3,7 @@ import test from "node:test";
 import { INDICATOR_REGISTRY, createIndicatorInstance, migrateLegacyIndicators, resetIndicatorInstance, sanitizeIndicatorInstances } from "../indicator-kit.ts";
 
 test("IK-2 registry describes typed params and line/fill style slots", () => {
-  assert.deepEqual(INDICATOR_REGISTRY.map(({ id }) => id), ["vwap", "ema", "volume", "session-levels"]);
+  assert.deepEqual(INDICATOR_REGISTRY.map(({ id }) => id), ["vwap", "ema", "volume", "adr", "session-levels"]);
   const vwap = INDICATOR_REGISTRY[0];
   assert.equal(vwap.params.anchor.type, "select");
   assert.equal(vwap.params.bandMultiples.type, "number-list");
@@ -27,13 +27,29 @@ test("sanitizer clamps inputs and styles and drops invalid or duplicate instance
   raw.params.length = 900;
   raw.params.source = "median";
   raw.style.main = { kind: "line", title: "wrong", color: "javascript:no", width: 9, style: "dashdot", visible: true } as never;
-  const clean = sanitizeIndicatorInstances([raw, raw, { indicatorId: "adr" }]);
+  const clean = sanitizeIndicatorInstances([raw, raw, { indicatorId: "unknown" }]);
   assert.equal(clean.length, 1);
   assert.equal(clean[0].params.length, 500);
   assert.equal(clean[0].params.source, "close");
   assert.equal(clean[0].style.main.kind, "line");
   assert.equal(clean[0].style.main.width, 4);
   assert.equal(clean[0].style.main.color, "theme:ema");
+});
+
+test("ADR and session-level instances clamp IK-3 inputs independently", () => {
+  const adr7 = createIndicatorInstance("adr", "adr-7");
+  adr7.params.length = 7;
+  adr7.params.daysBack = 99;
+  adr7.params.innerMultiplier = -1;
+  const adr14 = createIndicatorInstance("adr", "adr-14");
+  const levels = createIndicatorInstance("session-levels", "levels");
+  levels.params.mergeTolerance = 999;
+  const clean = sanitizeIndicatorInstances([adr7, adr14, levels]);
+  assert.equal(clean[0].params.length, 7);
+  assert.equal(clean[0].params.daysBack, 10);
+  assert.equal(clean[0].params.innerMultiplier, 0);
+  assert.equal(clean[1].params.length, 14);
+  assert.equal(clean[2].params.mergeTolerance, 50);
 });
 
 test("legacy chart choices migrate without losing visibility, anchor, bands, fill or labels", () => {

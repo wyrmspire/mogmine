@@ -9,6 +9,7 @@ import { specFor } from "./trades.ts";
 import type { Candle, Timeframe } from "./trades.ts";
 import { withheldReasons } from "./level-withheld.ts";
 import type { WithheldLevel } from "./level-withheld.ts";
+import type { IndicatorColor, IndicatorLineStyle } from "./indicator-kit.ts";
 export { stackLabels } from "./label-stack.ts";
 export { withheldText } from "./level-withheld.ts";
 export type { WithheldLevel } from "./level-withheld.ts";
@@ -30,8 +31,29 @@ export interface LevelLine {
   proxy: boolean;
   /** UTC ms where the ray starts. Null runs from the left edge (prior-day levels). */
   startAt: number | null;
+  /** Optional end of a historical day span. Null/absent extends to the latest chart bar. */
+  endAt?: number | null;
   /** A settlement-type level (PDC, 3 PM close, settle): drawn as a quiet 1px dotted ray (Q-7, LB-4). */
   settlement?: boolean;
+  color?: IndicatorColor;
+  lineStyle?: IndicatorLineStyle;
+  lineWidth?: number;
+}
+
+export interface LevelZone {
+  id: string;
+  label: string;
+  priceLow: number;
+  priceHigh: number;
+  role: LevelRole;
+  /** Lines shown by the existing level card when this rectangle is tapped. */
+  lines?: LevelLine[];
+  startAt?: number | null;
+  endAt?: number | null;
+  color?: IndicatorColor;
+  lineStyle?: IndicatorLineStyle;
+  lineWidth?: number;
+  fillOpacity?: number;
 }
 
 // Planned levels named after a settlement read the same as the computed ones (Q-7).
@@ -80,6 +102,58 @@ export function levelLines(levels: readonly LineSource[], referencePrice: number
       settlement: group.some(isSettlement),
     };
   }).sort((a, b) => b.price_ticks - a.price_ticks);
+}
+
+const ZONE_LABEL_RANK = ["adr_", "pdh", "pdl", "pdc", "globex_open", "rth_open", "pp", "r1", "s1", "r2", "s2", "onh", "onl", "rth_", "week_"];
+const zoneRank = (line: LevelLine) => Math.min(...line.keys.map((key) => {
+  const rank = ZONE_LABEL_RANK.findIndex((prefix) => key.includes(prefix));
+  return rank < 0 ? ZONE_LABEL_RANK.length : rank;
+}));
+
+/** LV-07: merge point levels by nearest edge. Singletons remain rays; merged groups become rectangles. */
+export function mergeLevelZones(lines: readonly LevelLine[], tolerancePts: number): { lines: LevelLine[]; zones: LevelZone[] } {
+  const tolerance = Number.isFinite(tolerancePts) ? Math.max(0, tolerancePts) : 0;
+  const bySpan = new Map<string, LevelLine[]>();
+  for (const line of lines) {
+    const key = `${line.startAt ?? "left"}:${line.endAt ?? "right"}`;
+    bySpan.set(key, [...(bySpan.get(key) ?? []), line]);
+  }
+  const rays: LevelLine[] = [];
+  const zones: LevelZone[] = [];
+  for (const groupLines of bySpan.values()) {
+    const ordered = [...groupLines].sort((a, b) => a.price - b.price || zoneRank(a) - zoneRank(b));
+    let group: LevelLine[] = [];
+    const flush = () => {
+      if (group.length < 2) { rays.push(...group); group = []; return; }
+      const members = [...group].sort((a, b) => zoneRank(a) - zoneRank(b) || b.price - a.price);
+      const role: LevelRole = members.some(({ role: item }) => item === "adr") ? "adr"
+        : members.some(({ role: item }) => item === "neutral") ? "neutral" : members[0].role;
+      zones.push({
+        id: `zone:${members.flatMap(({ keys }) => keys).join("+")}`,
+        label: members.map(({ names }) => names).join(" / "),
+        priceLow: Math.min(...members.map(({ price }) => price)), priceHigh: Math.max(...members.map(({ price }) => price)),
+        role, lines: members, startAt: members[0].startAt, endAt: members[0].endAt,
+      });
+      group = [];
+    };
+    for (const line of ordered) {
+      if (group.length && line.price - Math.max(...group.map(({ price }) => price)) > tolerance) flush();
+      group.push(line);
+    }
+    flush();
+  }
+  return { lines: rays.sort((a, b) => b.price - a.price), zones };
+}
+
+/** Exact Globex day spans, newest first. Historical drawings never leak into an adjacent day. */
+export function sessionDaySpans(date: string, daysBack: number) {
+  const count = Math.min(10, Math.max(1, Math.trunc(daysBack)));
+  let sessionDate = date;
+  return Array.from({ length: count }, (_, index) => {
+    if (index > 0) sessionDate = previousRegularSessionDate(sessionDate);
+    const bounds = equityIndexSessionBounds(sessionDate);
+    return { sessionDate, from: bounds.open, to: bounds.close };
+  });
 }
 
 // Levels the trade's own candles can supply. Settlement, pivots and ADR need other inputs (docs/12 §3A).
@@ -185,11 +259,36 @@ export function plannedLineSources(
   const date = sessionDate(asOf);
   return plans
     .filter((plan) => !plan.archived && plan.session_date === date && plan.symbol === symbol)
-    .flatMap((plan) => planLevelsAsOf(plan, asOf).map((level) => ({
+    .flatMap((plan) => planLevelsAsOf(plan, asOf).filter((level) => level.kind === "level").map((level) => ({
       key: `plan:${plan.id}:${level.id}`,
       type: "planned" as const,
       price: level.price,
       price_ticks: level.price_ticks,
       label: level.label,
     })));
+}
+
+/** PS-3 / IK-3: matching zone_low + zone_high plan levels draw as one right-extending rectangle. */
+export function plannedZones(
+  plans: readonly PlanningSession[], trade: { symbol: string; entry_time: string }, referencePrice: number,
+): LevelZone[] {
+  const asOf = Date.parse(trade.entry_time);
+  if (!Number.isFinite(asOf)) return [];
+  const symbol = trade.symbol.toUpperCase();
+  const date = sessionDate(asOf);
+  return plans.filter((plan) => !plan.archived && plan.session_date === date && plan.symbol === symbol).flatMap((plan) => {
+    const levels = planLevelsAsOf(plan, asOf);
+    const byLabel = new Map<string, typeof levels>();
+    for (const item of levels.filter(({ kind }) => kind !== "level")) byLabel.set(item.label, [...(byLabel.get(item.label) ?? []), item]);
+    return [...byLabel].flatMap(([label, bounds]) => {
+      const low = bounds.find(({ kind }) => kind === "zone_low");
+      const high = bounds.find(({ kind }) => kind === "zone_high");
+      if (!low || !high) return [];
+      const priceLow = Math.min(low.price, high.price);
+      const priceHigh = Math.max(low.price, high.price);
+      const role: LevelRole = priceLow > referencePrice ? "resistance" : priceHigh < referencePrice ? "support" : "neutral";
+      const lines = levelLines(bounds.map((item) => ({ key: `plan:${plan.id}:${item.id}`, type: "planned", price: item.price, price_ticks: item.price_ticks, label: item.label })), referencePrice, symbol);
+      return [{ id: `plan-zone:${plan.id}:${label}`, label, priceLow, priceHigh, role, lines, startAt: null }];
+    });
+  });
 }

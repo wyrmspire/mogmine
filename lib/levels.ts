@@ -29,10 +29,27 @@ export interface ComputedLevel {
   formula: string;
 }
 
-interface DailyRange {
+export interface DailyRange {
   session_date: string;
   high: number;
   low: number;
+}
+
+/** One completed Globex range from the same mixed-resolution reader used by session levels. */
+export function dailyRangeFromCandles(
+  symbol: "MES" | "MNQ", sessionDate: string, candles: readonly Candle[], timeframe: Timeframe,
+): DailyRange | null {
+  const bounds = equityIndexSessionBounds(sessionDate);
+  const tagged = candles.every((bar) => "minutes" in bar && "fillFrom" in bar);
+  const mixed = candles.map((bar) => "minutes" in bar && "fillFrom" in bar
+    ? bar as MixedCandle : asMixedCandle(bar, timeframe));
+  const window = readMixedWindow(mixed, symbol, bounds.open, bounds.close, bounds.close, tagged ? 1 : TIMEFRAME_MINUTES[timeframe]);
+  if (!window.coverage.complete || !window.bars.length) return null;
+  return {
+    session_date: sessionDate,
+    high: Math.max(...window.bars.map(({ high }) => high)),
+    low: Math.min(...window.bars.map(({ low }) => low)),
+  };
 }
 
 interface SettlementQuote {

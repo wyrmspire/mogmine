@@ -395,7 +395,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const emaRequests = useMemo(() => prefs.indicators.filter((instance) => instance.indicatorId === "ema" && instance.visible).map((instance) => ({
     id: instance.instanceId, timeframe, length: Number(instance.params.length), source: instance.params.source as EmaSource,
   })), [prefs.indicators, timeframe]);
-  const levels = useTradeLevels(trade, showLevels, indicatorWanted, emaRequests);
+  const levels = useTradeLevels(trade, showLevels, indicatorWanted, emaRequests, prefs.indicators);
   const vwapReports = useMemo(() => {
     if (!ready || !indicatorWanted) return [];
     const joined = joinSessionBars(levels.sessionCandles, levels.sessionTimeframe, candles.candles, candles.baseTimeframe);
@@ -603,7 +603,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} highlightedLineTick={highlightedTick} levelLabelsMode={levelIndicator?.params.labelMode === "always" ? "always" : "tap"} vwap={vwapLine} vwapBands={vwapBands} vwapApproximate={sessionVwapReport?.approximate} weeklyVwap={weeklyVwapLine} weeklyVwapBands={weeklyVwapBands} weeklyVwapApproximate={weeklyVwapReport?.weeklyApproximate} vwapBandFill={sessionVwapIndicator?.style.bandFill.visible === true || weeklyVwapIndicator?.style.bandFill.visible === true} showVolume={volumeReal && Boolean(volumeIndicator)} ema={emaLine} emaApproximate={levels.ema200?.approximate} extraIndicatorLines={extraIndicatorLines} extraIndicatorBands={extraVwapBands} indicatorStyle={indicatorStyle} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} levelZones={levels.zones} highlightedLineTick={highlightedTick} levelLabelsMode={levelIndicator?.params.labelMode === "always" ? "always" : "tap"} vwap={vwapLine} vwapBands={vwapBands} vwapApproximate={sessionVwapReport?.approximate} weeklyVwap={weeklyVwapLine} weeklyVwapBands={weeklyVwapBands} weeklyVwapApproximate={weeklyVwapReport?.weeklyApproximate} vwapBandFill={sessionVwapIndicator?.style.bandFill.visible === true || weeklyVwapIndicator?.style.bandFill.visible === true} showVolume={volumeReal && Boolean(volumeIndicator)} ema={emaLine} emaApproximate={levels.ema200?.approximate} extraIndicatorLines={extraIndicatorLines} extraIndicatorBands={extraVwapBands} indicatorStyle={indicatorStyle} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>

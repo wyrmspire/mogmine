@@ -10,9 +10,9 @@ interface Props {
   onChange(instances: IndicatorInstance[]): void;
 }
 
-const SWATCHES = ["theme:vwap", "theme:ema", "theme:support", "theme:resistance", "theme:gold", "#ffffff", "#a78bfa", "#22d3ee"] as const;
+const SWATCHES = ["theme:vwap", "theme:ema", "theme:adr", "theme:neutral", "theme:role", "theme:support", "theme:resistance", "theme:gold", "#ffffff", "#a78bfa", "#22d3ee"] as const;
 const CATEGORIES = ["Trend", "Volume", "Levels"] as const;
-const SWATCH_VARS: Record<string, string> = { vwap: "--indicator-vwap", ema: "--ind-ema200", support: "--level-support", resistance: "--level-resistance", gold: "--gold-mid" };
+const SWATCH_VARS: Record<string, string> = { vwap: "--indicator-vwap", ema: "--ind-ema200", adr: "--level-adr", neutral: "--level-neutral", role: "--level-neutral", support: "--level-support", resistance: "--level-resistance", gold: "--gold-mid" };
 
 function swatchColor(color: string) {
   if (color.startsWith("#")) return color;
@@ -23,6 +23,7 @@ function instanceTitle(instance: IndicatorInstance) {
   const definition = indicatorDefinition(instance.indicatorId);
   if (instance.indicatorId === "ema") return `${instance.params.length} EMA`;
   if (instance.indicatorId === "vwap") return `${String(instance.params.anchor).toUpperCase()} VWAP`;
+  if (instance.indicatorId === "adr") return `ADR ${instance.params.length}`;
   return definition.title;
 }
 

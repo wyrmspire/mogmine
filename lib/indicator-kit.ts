@@ -1,6 +1,6 @@
 // Pure indicator registry and persisted instance model (IK-2). UI and chart code consume this contract;
 // definitions never import React, lightweight-charts, storage, or browser globals.
-export type IndicatorId = "vwap" | "ema" | "volume" | "session-levels";
+export type IndicatorId = "vwap" | "ema" | "volume" | "adr" | "session-levels";
 export type IndicatorCategory = "Trend" | "Volume" | "Levels";
 export type IndicatorLineStyle = "solid" | "dashed" | "dotted";
 export type IndicatorColor = `theme:${string}` | `#${string}`;
@@ -78,9 +78,44 @@ export const INDICATOR_REGISTRY: readonly IndicatorDefinition[] = [
     style: { bars: { kind: "background", title: "Bars", color: "theme:volume", opacity: 0.56, visible: true } }, labelsDefault: false,
   },
   {
+    id: "adr", title: "ADR bands", category: "Levels", description: "Average daily range bands, anchored to a session open.",
+    params: {
+      length: { type: "number", title: "Length", default: 14, min: 5, max: 30, step: 1 },
+      innerMultiplier: { type: "number", title: "Inner multiplier", default: 0.33, min: 0, max: 1, step: 0.01 },
+      midLine: { type: "boolean", title: "Open / mid line", default: false },
+      anchor: { type: "select", title: "Anchor", default: "session", options: [
+        { value: "session", title: "Session open · 18:00 ET" }, { value: "rth", title: "RTH open · 09:30 ET" },
+      ] },
+      daysBack: { type: "number", title: "Days back", default: 1, min: 1, max: 10, step: 1 },
+    },
+    style: {
+      outer: { kind: "line", title: "Outer bands", color: "theme:adr", width: 1, style: "solid", visible: true },
+      inner: { kind: "line", title: "Inner bands", color: "theme:adr", width: 1, style: "dashed", visible: true },
+      mid: { kind: "line", title: "Mid line", color: "theme:adr", width: 1, style: "dotted", visible: true },
+      bandFill: { kind: "fill", title: "Band fill", color: "theme:adr", opacity: 0.1, visible: true },
+    }, labelsDefault: true,
+  },
+  {
     id: "session-levels", title: "Session levels", category: "Levels", description: "Computed and planned session price levels.",
-    params: { labelMode: { type: "select", title: "Labels", default: "tap", options: [{ value: "tap", title: "Show on tap" }, { value: "always", title: "Always" }] } },
-    style: { rays: { kind: "line", title: "Rays", color: "theme:role", width: 1, style: "solid", visible: true } }, labelsDefault: true,
+    params: {
+      labelMode: { type: "select", title: "Labels", default: "tap", options: [{ value: "tap", title: "Show on tap" }, { value: "always", title: "Always" }] },
+      priorDay: { type: "boolean", title: "Prior day H / L / C", default: true },
+      overnight: { type: "boolean", title: "Overnight H / L", default: true },
+      opens: { type: "boolean", title: "Session and RTH opens", default: true },
+      week: { type: "boolean", title: "Week H / L", default: true },
+      pivots: { type: "boolean", title: "Floor pivots", default: true },
+      midLines: { type: "boolean", title: "Prior-day and overnight mids", default: false },
+      daysBack: { type: "number", title: "Days back", default: 1, min: 1, max: 10, step: 1 },
+      mergeTolerance: { type: "number", title: "Zone tolerance (points)", default: 5, min: 0, max: 50, step: 0.25 },
+    },
+    style: {
+      priorDay: { kind: "line", title: "Prior day", color: "theme:role", width: 1, style: "solid", visible: true },
+      overnight: { kind: "line", title: "Overnight", color: "theme:role", width: 1, style: "solid", visible: true },
+      opens: { kind: "line", title: "Opens", color: "theme:neutral", width: 1, style: "dotted", visible: true },
+      week: { kind: "line", title: "Week", color: "theme:role", width: 1, style: "dashed", visible: true },
+      pivots: { kind: "line", title: "Pivots", color: "theme:neutral", width: 1, style: "dotted", visible: true },
+      zoneFill: { kind: "fill", title: "Zone fill", color: "theme:role", opacity: 0.14, visible: true },
+    }, labelsDefault: true,
   },
 ] as const;
 
