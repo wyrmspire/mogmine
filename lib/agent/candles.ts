@@ -5,6 +5,8 @@ import { canonicalSymbol, expectedInsideBarTimes, TIMEFRAME_MINUTES } from "../t
 import type { Candle } from "../trades.ts";
 import type { MarketDataProvider } from "../market-data/types.ts";
 import { YahooFinanceProvider } from "../market-data/yahoo.ts";
+import { mergeArchiveAndYahoo, readArchiveCandles } from "../market-data/archive.ts";
+import type { ArchiveQuery, ArchiveResult } from "../market-data/archive.ts";
 import { windowInFuture } from "../market-data/outcome.ts";
 import { agentError, agentOk, createRateLimiter, isIsoTimestamp, statusFor } from "./http.ts";
 import type { AgentResponse, RateLimiter } from "./http.ts";
@@ -191,35 +193,60 @@ export function createCandleCache(options: { maxEntries?: number; now?: () => nu
 
 // ---- loading ------------------------------------------------------------------------------------------------------------
 
+export type ArchiveCandleReader = (query: ArchiveQuery) => Promise<ArchiveResult | null>;
+
 export interface CandleLoader {
   provider: MarketDataProvider;
   cache: CandleCache;
   /** Cache misses per limit key (the token id). */
   upstream: RateLimiter;
   now: () => number;
+  /** Authoritative archive checked before hitting upstream Yahoo. Archive hits never consume upstream quota. */
+  archive?: ArchiveCandleReader;
 }
 
-export function createCandleLoader(options: { provider: MarketDataProvider; cache?: CandleCache; upstream?: RateLimiter; now?: () => number }): CandleLoader {
+export function createCandleLoader(options: {
+  provider: MarketDataProvider;
+  cache?: CandleCache;
+  upstream?: RateLimiter;
+  now?: () => number;
+  archive?: ArchiveCandleReader;
+}): CandleLoader {
   const now = options.now ?? (() => Date.now());
   return {
     provider: options.provider,
     cache: options.cache ?? createCandleCache({ now }),
     upstream: options.upstream ?? createRateLimiter({ ...UPSTREAM_LIMIT, now }),
     now,
+    archive: options.archive,
   };
 }
 
 let defaultLoader: CandleLoader | undefined;
 
-/** The shared loader for the server: Yahoo through the provider adapter, one cache per instance. */
+/** The shared loader for the server: Supabase archive first, then Yahoo through the provider adapter. */
 export function defaultCandleLoader(): CandleLoader {
-  if (!defaultLoader) defaultLoader = createCandleLoader({ provider: new YahooFinanceProvider() });
+  if (!defaultLoader) defaultLoader = createCandleLoader({ provider: new YahooFinanceProvider(), archive: readArchiveCandles });
   return defaultLoader;
 }
 
+const cachedProviders = new WeakMap<CandleLoader, Map<string, string>>();
+
+function rememberProvider(loader: CandleLoader, key: string, providerName: string): void {
+  let map = cachedProviders.get(loader);
+  if (!map) {
+    map = new Map();
+    cachedProviders.set(loader, map);
+  } else if (map.size >= CACHE_MAX_ENTRIES * 2) {
+    map.clear();
+  }
+  map.set(key, providerName);
+}
+
 /**
- * Cleaned bars and coverage for one window. A future window is answered without asking the provider. A cache miss takes
- * one upstream slot for `limitKey`; a miss over the limit is `rate_limited`. A provider failure is `unavailable`.
+ * Cleaned bars and coverage for one window. A future window is answered without asking the provider. Archive hits and
+ * cache hits never take an upstream slot for `limitKey`; an upstream miss over the limit is `rate_limited`. A provider
+ * failure is `unavailable`.
  */
 export async function loadAgentCandles(loader: CandleLoader, query: CandleQuery, limitKey: string): Promise<CandleLoad> {
   const now = loader.now();
@@ -228,32 +255,64 @@ export async function loadAgentCandles(loader: CandleLoader, query: CandleQuery,
     symbol,
     ticker: loader.provider.resolveProviderSymbol(symbol),
     timeframe,
-    provider: loader.provider.name,
     from,
     to,
   };
   if (windowInFuture(from, now)) {
-    return { ok: true, value: { ...base, reason: "future", bars: [], coverage: { expected: 0, present: 0, gaps: [] } } };
-  }
-
-  const key = `${symbol}|${timeframe}|${from}|${to}`;
-  let bars = loader.cache.get(key);
-  if (!bars) {
-    const admitted = loader.upstream.take(limitKey);
-    if (!admitted.ok) {
-      return { ok: false, code: "rate_limited", message: "Too many upstream candle requests from this key. Wait and try again.", retryAfterSec: admitted.retryAfterSec };
-    }
-    try {
-      bars = cleanBars(await loader.provider.getCandles({ symbol, timeframe, from: new Date(from), to: new Date(to) }), from, to);
-    } catch {
-      return { ok: false, code: "unavailable", message: "Market data is unavailable. Try again." };
-    }
-    loader.cache.set(key, bars, to <= now ? CLOSED_TTL_MS : RECENT_TTL_MS);
+    return { ok: true, value: { ...base, provider: loader.provider.name, reason: "future", bars: [], coverage: { expected: 0, present: 0, gaps: [] } } };
   }
 
   // Coverage counts only bars that have closed by now, and only regular trading time (the same rule as the trade coverage).
   const barMs = TIMEFRAME_MINUTES[timeframe] * MINUTE_MS;
   const expected = expectedInsideBarTimes(from, Math.min(to, now), barMs, symbol);
+  const key = `${symbol}|${timeframe}|${from}|${to}`;
+  let bars = loader.cache.get(key);
+  let providerName = cachedProviders.get(loader)?.get(key) ?? loader.provider.name;
+  if (!bars) {
+    let archiveBars: Candle[] = [];
+    let archiveProvider: string | null = null;
+    if (loader.archive) {
+      const archive = await loader.archive({ symbol, timeframe, from: new Date(from), to: new Date(to), inclusiveTo: false });
+      if (archive && archive.candles.length > 0) {
+        archiveBars = cleanBars(archive.candles, from, to);
+        if (archiveBars.length > 0) archiveProvider = archive.providerName;
+      }
+    }
+
+    const retentionMs = timeframe === "1m" ? 30 * DAY_MS : 60 * DAY_MS;
+    const firstBar = archiveBars[0]?.time ?? Infinity;
+    const lastBar = archiveBars[archiveBars.length - 1]?.time ?? -Infinity;
+    const needsHead = archiveBars.length === 0 || expected.some((t) => t < firstBar && now - t <= retentionMs);
+    const needsTail = archiveBars.length === 0 || expected.some((t) => t > lastBar && now - t <= retentionMs);
+
+    if (archiveBars.length > 0 && !needsHead && !needsTail) {
+      bars = archiveBars;
+      providerName = archiveProvider!;
+    } else {
+      const admitted = loader.upstream.take(limitKey);
+      if (!admitted.ok) {
+        return { ok: false, code: "rate_limited", message: "Too many upstream candle requests from this key. Wait and try again.", retryAfterSec: admitted.retryAfterSec };
+      }
+      const fetchFrom = archiveBars.length > 0 && !needsHead ? lastBar + barMs : from;
+      const fetchTo = archiveBars.length > 0 && !needsTail ? firstBar : to;
+      try {
+        const yahooBars = cleanBars(
+          await loader.provider.getCandles({ symbol, timeframe, from: new Date(fetchFrom), to: new Date(fetchTo) }),
+          from,
+          to,
+        );
+        bars = archiveBars.length > 0 ? cleanBars(mergeArchiveAndYahoo(archiveBars, yahooBars), from, to) : yahooBars;
+        providerName = archiveBars.length > 0
+          ? (yahooBars.length > 0 ? `${archiveProvider}+${loader.provider.name}` : archiveProvider!)
+          : loader.provider.name;
+      } catch {
+        return { ok: false, code: "unavailable", message: "Market data is unavailable. Try again." };
+      }
+    }
+    loader.cache.set(key, bars, to <= now ? CLOSED_TTL_MS : RECENT_TTL_MS);
+    rememberProvider(loader, key, providerName);
+  }
+
   const present = new Set(bars.map((bar) => bar.time));
   const missing = expected.filter((time) => !present.has(time));
   const reason = bars.length === 0 && expected.length === 0 ? "closed" as const : undefined;
@@ -261,6 +320,7 @@ export async function loadAgentCandles(loader: CandleLoader, query: CandleQuery,
     ok: true,
     value: {
       ...base,
+      provider: providerName,
       ...(reason ? { reason } : {}),
       bars,
       coverage: { expected: expected.length, present: expected.length - missing.length, gaps: gapRuns(missing, barMs) },
