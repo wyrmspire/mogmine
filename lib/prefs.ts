@@ -143,3 +143,18 @@ export function getTuneRiskBudgetDisplay(shield: boolean, riskBudgetUsd: number)
     hint: "Used for accounts without their own R size and trades with no account (default $300).",
   };
 }
+
+/**
+ * Whether sample/demo trades should be shown in general lists.
+ * Once a trader has logged real trades (`hasRealTrades`), demo fixtures auto-hide unless
+ * the trader explicitly opted into keeping samples visible (`userExplicitlySet`).
+ */
+export function shouldShowSamples(
+  prefsShowSamples: boolean,
+  hasRealTrades: boolean,
+  userExplicitlySet = false,
+): boolean {
+  if (!prefsShowSamples) return false;
+  if (hasRealTrades && !userExplicitlySet) return false;
+  return true;
+}

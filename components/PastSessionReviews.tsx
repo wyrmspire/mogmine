@@ -1,12 +1,10 @@
 "use client";
 
-// PS-4c: review a past day's planning sessions. Today's plans open from the Today screen; this lists
-// the last two weeks so an evening missed is still reviewable (docs/24 §4).
+// PS-4c: list planning sessions from the last 14 days so a checkpoint can be reviewed later.
 import { useState } from "react";
 import { SessionReview } from "./SessionReview";
 import { usePlansStore } from "@/lib/plans-store";
-import { usePrefs } from "@/lib/prefs";
-import { withSamples } from "@/lib/selectors";
+import { shouldShowSamples, usePrefs } from "@/lib/prefs";
 import { formatSessionDate } from "@/lib/session";
 import { recentPlanDays } from "@/lib/session-review";
 import { useJournal } from "@/lib/store";
@@ -23,6 +21,9 @@ export function PastSessionReviews() {
   const open = plans.find((plan) => plan.id === openId) ?? null;
   if (!days.length) return null;
 
+  const realTrades = journal.trades.filter((trade) => !trade.is_sample);
+  const reviewTrades = shouldShowSamples(prefs.showSamples, realTrades.length > 0) ? journal.trades : realTrades;
+
   return (
     <section className="card card-pad past-reviews" aria-labelledby="past-reviews-title" style={{ marginTop: 14 }}>
       <span className="eyebrow" id="past-reviews-title">Session reviews</span>
@@ -31,14 +32,21 @@ export function PastSessionReviews() {
           <b>{formatSessionDate(day)}</b>
           <div className="past-reviews-plans">
             {list.map((plan) => (
-              <button key={plan.id} type="button" className="chip" onClick={() => setOpenId(plan.id)} aria-label={`Review ${plan.name}, ${formatSessionDate(day)}`}>
+              <button
+                key={plan.id}
+                type="button"
+                className="chip"
+                style={{ minHeight: 44, minWidth: 44 }}
+                onClick={() => setOpenId(plan.id)}
+                aria-label={`Review ${plan.name}, ${formatSessionDate(day)}`}
+              >
                 {plan.name}{plan.lesson ? " ✓" : ""}
               </button>
             ))}
           </div>
         </div>
       ))}
-      {open && <SessionReview plan={open} trades={withSamples(journal.trades, prefs.showSamples)} zone={prefs.timeZone} onClose={() => setOpenId(null)} />}
+      {open && <SessionReview plan={open} trades={reviewTrades} zone={prefs.timeZone} onClose={() => setOpenId(null)} />}
     </section>
   );
 }
