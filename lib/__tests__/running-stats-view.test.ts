@@ -84,7 +84,7 @@ test("R-08b data: mixed priced, unpriced, open and undated trades", () => {
   // Formatting checks
   assert.equal(formatMoney(stats.overall.grossPnl), "+$100.00");
   assert.equal(formatPercent(stats.overall.winRate), "100%");
-  assert.equal(formatR(stats.overall.totalR), "+0.4R"); // $100 ÷ $250 default R size = +0.40R
+  assert.equal(formatR(stats.overall.totalR), "+0.3R"); // $100 ÷ $300 default R size = +0.33R
 
   assert.equal(stats.thisWeek.tradeCount, 0);
 });

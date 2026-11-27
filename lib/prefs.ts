@@ -140,6 +140,6 @@ export function getTuneRiskBudgetDisplay(shield: boolean, riskBudgetUsd: number)
     inputValue: String(riskBudgetUsd),
     inputAriaLabel: "Default R size in US dollars",
     isEditable: true,
-    hint: "Used for accounts without their own R size and trades with no account (default $250).",
+    hint: "Used for accounts without their own R size and trades with no account (default $300).",
   };
 }

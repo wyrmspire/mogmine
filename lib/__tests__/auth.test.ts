@@ -209,22 +209,26 @@ test("guard: the service-role key never appears in client code", () => {
   }
 });
 
-test("guard (#185a): the service-role key is read only by the server-only agent auth module", () => {
-  const readers = PRODUCTION.filter((file) => read(file).includes("SUPABASE_SERVICE_ROLE_KEY"));
-  assert.deepEqual(readers, ["lib/agent/server-auth.ts"]);
+test("guard (#185a): the service-role key is read only by server-only auth and market-archive modules", () => {
+  const readers = PRODUCTION.filter((file) => read(file).includes("SUPABASE_SERVICE_ROLE_KEY")).sort();
+  assert.deepEqual(readers, ["lib/agent/server-auth.ts", "lib/market-data/archive.ts"]);
+  assert.match(read("lib/market-data/archive.ts").split("\n")[0], /^\/\/ Server only\./);
+  assert.equal(read("lib/market-data/archive.ts").includes("mogmine_trades"), false);
 });
 
-test("guard (#185a): no 'use client' file imports the server-only agent modules", () => {
+test("guard (#185a): no 'use client' file imports server-only auth or archive modules", () => {
   for (const file of PRODUCTION) {
     const source = read(file);
     if (!isClientModule(source)) continue;
-    assert.doesNotMatch(source, /lib\/agent\/(server-auth|handle)|\.\.?\/agent\/(server-auth|handle)/, file);
+    assert.doesNotMatch(source, /lib\/agent\/(server-auth|handle)|\.\.?\/agent\/(server-auth|handle)|market-data\/archive/, file);
   }
   assert.match(read("lib/agent/server-auth.ts").split("\n")[0], /^\/\/ Server only\./);
 });
 
-test("guard: exactly one createClient( call in browser code; every other one is in the agent server-auth module", () => {
-  const browser = PRODUCTION.filter((file) => /\bcreateClient\(/.test(read(file)) && !file.startsWith("lib/agent/"));
+test("guard: exactly one createClient( call in browser code; every other one is in server-only auth or market archive", () => {
+  const browser = PRODUCTION.filter(
+    (file) => /\bcreateClient\(/.test(read(file)) && !file.startsWith("lib/agent/") && file !== "lib/market-data/archive.ts",
+  );
   assert.deepEqual(browser, ["lib/persistence/supabase-client.ts"]);
   assert.equal((read("lib/persistence/supabase-client.ts").match(/\bcreateClient\(/g) ?? []).length, 1);
   const elsewhere = PRODUCTION.filter((file) => /\bcreateClient\(/.test(read(file)) && file.startsWith("lib/agent/"));

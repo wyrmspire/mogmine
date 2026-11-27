@@ -559,7 +559,7 @@ test("R size: omitted or invalid falls back to the repo default; planned account
   const zero = calculatePartials({ symbol: "MES", direction: "LONG", entryPrice: 7600, totalQty: 1, exits: exit, rSizeCents: 0 });
   const defaultCents = resolveRSizeCents();
 
-  assert.equal(defaultCents, 25_000);
+  assert.equal(defaultCents, 30_000);
   assert.equal(fallback.rSizeCents, defaultCents);
   assert.equal(zero.rSizeCents, defaultCents);
   assert.equal(fallback.resultR, 2500 / defaultCents);

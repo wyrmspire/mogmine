@@ -66,7 +66,7 @@ test("CD-3b: a binder tile says 'not enough' once, prints rates at 10, and hides
   const few = playbookCardData(book("orb"), [trade()], [], now);
   assert.equal(playbookTileStats(few, false), "1 trade · not enough for rates yet");
   const ten = playbookCardData(book("orb"), Array.from({ length: 10 }, () => trade({ points: 8 })), [], now);
-  assert.equal(playbookTileStats(ten, false), "Trades 10 · Win rate 100% · Avg R +0.2R");
+  assert.equal(playbookTileStats(ten, false), "Trades 10 · Win rate 100% · Avg R +0.1R");
   assert.equal(playbookTileStats(ten, true), "Results hidden by Shield");
 });
 

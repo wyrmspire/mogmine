@@ -446,21 +446,21 @@ textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px
 .notes-badge { font-size: 0.6875rem; font-weight: 600; color: var(--text-faint); white-space: nowrap; }
 .notes-hint { margin: 0; font-size: 0.75rem; line-height: 1.4; color: var(--text-muted); }
 .takeaway-input {
-  width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px;
+  width: 100%; min-width: 0; min-height: 76px; padding: 10px 12px;
   border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-inset);
-  color: var(--text-primary); font-size: max(16px, 1rem); line-height: 1.4; resize: vertical; outline: none;
+  color: var(--text-primary); font-size: max(16px, 1rem); line-height: 1.45; resize: vertical; outline: none;
 }
 .stage-tabs {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px;
   border-radius: 12px; background: var(--bg-inset); border: 1px solid var(--border-subtle);
 }
 .stage-tab {
-  min-height: 44px; min-width: 0; padding: 6px 6px; border: 1px solid transparent; border-radius: 9px;
-  background: none; color: var(--text-muted); font-size: 0.75rem; font-weight: 750;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px; text-align: center; line-height: 1.2;
+  min-height: 44px; min-width: 0; padding: 6px 4px; border: 1px solid transparent; border-radius: 9px;
+  background: none; color: var(--text-muted); font-size: 0.72rem; font-weight: 750; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; text-align: center; line-height: 1.2;
 }
 .stage-tab[aria-selected="true"] { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-strong); }
-.stage-tab-label { min-width: 0; overflow-wrap: anywhere; }
+.stage-tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .stage-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--border-strong); background: transparent; }
 .stage-dot.filled { border-color: transparent; background: var(--gold-mid); opacity: calc(0.7 + 0.3 * var(--gold-intensity)); }
 .stage-panel { display: grid; gap: 6px; padding: 10px; border-radius: 12px; background: var(--bg-inset); border: 1px solid var(--border-subtle); min-width: 0; }

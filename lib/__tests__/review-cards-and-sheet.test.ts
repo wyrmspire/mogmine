@@ -75,8 +75,11 @@ describe("buildReviewCardCopy (docs/06 §4, D-A)", () => {
     assert.equal(copy.stop, "7119.50 → 7260.00 (moved 08:30)");
     assert.equal(copy.target, "7180.00");
     assert.equal(copy.result, "+2.05R · +$615.00");
-    assert.equal(copy.risk, "0.29R ($87.50) · said 0.25R");
+    // 1 MES at $87.50 vs $75 stated (0.25R): overshoot < 1 micro, valid ceiling sizing -> no "said" mismatch.
+    assert.equal(copy.risk, "0.29R ($87.50)");
     assert.equal(copy.holdAndRules, "35m · rules 3/4");
+    const undersized = buildReviewCardCopy(trade({ stated_risk_r: 0.5 }), R_SIZE, false, ZONE);
+    assert.equal(undersized.risk, "0.29R ($87.50) · said 0.50R");
   });
 
   it("marks an untimed stop move (time?)", () => {
@@ -116,7 +119,9 @@ describe("buildReviewCardCopy (docs/06 §4, D-A)", () => {
     const copy = buildReviewCardCopy(trade(), R_SIZE, true, ZONE);
     assert.equal(copy.header, "LONG · ORB Reclaim");
     assert.equal(copy.result, "+2.05R");
-    assert.equal(copy.risk, "0.29R · said 0.25R");
+    assert.equal(copy.risk, "0.29R");
+    const shieldedDiff = buildReviewCardCopy(trade({ stated_risk_r: 0.5 }), R_SIZE, true, ZONE);
+    assert.equal(shieldedDiff.risk, "0.29R · said 0.50R");
     assert.equal(copy.fills, "7137.00 → 7260.00 · Trailed");
     assert.equal(copy.stop, "7119.50 → 7260.00 (moved 08:30)");
     assert.equal(copy.target, "7180.00");

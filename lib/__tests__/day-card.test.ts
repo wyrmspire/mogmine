@@ -260,11 +260,11 @@ test("CD-4: no-stop trade still has account R (result R); the stop-based risk ra
 
   const data = buildDayCardData("2026-11-10", [tradeNoStop], true);
 
-  // +5 pts x 3 MES x $5 = +$75 => +0.3R at $250; a missing stop does not drop it.
+  // +5 pts x 3 MES x $5 = +$75 => +0.25R at $300; a missing stop does not drop it.
   assert.equal(data.tradeCount, 1);
-  assert.equal(data.netR, 0.3);
+  assert.equal(data.netR, 0.25);
   assert.equal(data.formattedNetR, "+0.3R");
-  assert.equal(data.trades[0].resultR, 0.3);
+  assert.equal(data.trades[0].resultR, 0.25);
   assert.equal(data.trades[0].formattedR, "+0.3R");
   assert.equal(data.formattedNetPoints, "+5.00 pts");
 });

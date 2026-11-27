@@ -85,12 +85,12 @@ test("CD-2a: take vs pass averages R over each trade's latest answer and waits f
   const trades = [trade("a", { points: 8 }), trade("b", { points: -4 }), trade("c", { points: 4 }), trade("d", { stop_loss_price: null })];
   const records = [answer("a", "pass", 9), answer("a", "take", 8), answer("b", "take", 8), answer("c", "pass", 8), answer("d", "take", 8), answer("gone", "take", 8)];
   const score = takeVsPass(records, trades);
-  // Account R at $250 (1 MES, $5/pt): a = +8 pts = +$40 = +0.16R (latest answer: take); b = -4 pts = -$20 = -0.08R;
-  // d = no stop but +4 pts = +$20 = +0.08R, so it now has a result R. c (pass) = +4 pts = +0.08R.
+  // Account R at $300 (1 MES, $5/pt): a = +8 pts = +$40 = +2/15R (latest answer: take); b = -4 pts = -$20 = -1/15R;
+  // d = no stop but +4 pts = +$20 = +1/15R, so it now has a result R. c (pass) = +4 pts = +1/15R.
   assert.equal(score.take.n, 3);
-  assert.ok(Math.abs((score.take.avgR ?? NaN) - 0.16 / 3) < 1e-9);
+  assert.ok(Math.abs((score.take.avgR ?? NaN) - (40 / 300) / 3) < 1e-9);
   assert.equal(score.pass.n, 1);
-  assert.ok(Math.abs((score.pass.avgR ?? NaN) - 0.08) < 1e-9);
+  assert.ok(Math.abs((score.pass.avgR ?? NaN) - 20 / 300) < 1e-9);
   assert.deepEqual(score.smaller, { n: 0, avgR: null });
   assert.equal(score.noR, 0);
   assert.equal(score.ready, false);

@@ -5,7 +5,7 @@ import type { CollectionRepository, JournalRepositories, Stored } from "../persi
 import { makeAccount } from "../accounts.ts";
 import type { TradingAccount } from "../accounts.ts";
 import {
-  DEFAULT_R_SIZE_CENTS, isValidRSizeCents, isValidStatedRiskR, resolveRSize, resultR, riskCents, riskComparison, riskR,
+  DEFAULT_R_SIZE_CENTS, isValidRSizeCents, isValidStatedRiskR, resolveRSize, resultR, riskCents, riskComparison, riskR, sizeContractsAtLeast,
 } from "../r-size.ts";
 import { keepFrozenRSize, normalizeTrade } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
@@ -42,22 +42,28 @@ test("golden A/B/C at $300 (04 §1): risk cents, risk R, result R and stated-vs-
   assert.equal(resultR(TRADE_B, R_300), -0.25);
   assert.ok(Math.abs((resultR(TRADE_C, R_300) ?? NaN) + 0.1333) < 0.0001, "C result is -0.13R");
 
-  assert.equal(riskComparison(TRADE_A, R_300).differs, true);
+  // A is 1 MES at $87.50 vs $75 stated (0.25R): overshoot $12.50 < $87.50 (1 micro), valid under the at-least ceiling rule.
+  assert.equal(riskComparison(TRADE_A, R_300).differs, false);
   assert.equal(riskComparison(TRADE_B, R_300).differs, false);
+  // C is under-sized ($60 vs $75), and 2 micros on A ($175 vs $75) overshoots by >= 1 full micro — both differ.
   assert.equal(riskComparison(TRADE_C, R_300).differs, true);
+  assert.equal(riskComparison({ ...TRADE_A, quantity: 2 }, R_300).differs, true);
   assert.equal(riskComparison(TRADE_B, R_300).stated_r, 0.25, "stated risk is kept as typed, never replaced by stop math");
+  // Ceiling micro sizing: $300 at-least target with a 22-pt MES stop ($110/micro = 88 ticks): 2 micros = $220 -> add 1 micro -> 3 ($330).
+  assert.deepEqual(sizeContractsAtLeast(30_000, 88, "MES"), { contracts: 3, actualRiskCents: 33_000, overshootCents: 3_000 });
+  assert.deepEqual(sizeContractsAtLeast(30_000, 60, "MES"), { contracts: 4, actualRiskCents: 30_000, overshootCents: 0 });
 });
 
 test("the R size resolves trade → account → prefs, and a frozen trade ignores a later account change", () => {
   const accounts = [{ id: "acct", r_size_cents: 50_000 }];
   const onAccount = { account_id: "acct" };
-  assert.deepEqual(resolveRSize({ ...onAccount, r_size_cents: 30_000 }, accounts, { riskBudgetUsd: 250 }), { cents: 30_000, source: "trade", account_id: "acct" });
-  assert.deepEqual(resolveRSize({ ...onAccount, r_size_cents: null }, accounts, { riskBudgetUsd: 250 }), { cents: 50_000, source: "account", account_id: "acct" });
+  assert.deepEqual(resolveRSize({ ...onAccount, r_size_cents: 30_000 }, accounts, { riskBudgetUsd: 300 }), { cents: 30_000, source: "trade", account_id: "acct" });
+  assert.deepEqual(resolveRSize({ ...onAccount, r_size_cents: null }, accounts, { riskBudgetUsd: 300 }), { cents: 50_000, source: "account", account_id: "acct" });
   // No R size on the account: the default budget, labelled with its source (Q-12).
   assert.deepEqual(resolveRSize({ account_id: "bare" }, [{ id: "bare", r_size_cents: null }], { riskBudgetUsd: 400 }), { cents: 40_000, source: "prefs", account_id: "bare" });
-  // Unassigned trades and missing prefs fall back to the $250 default.
+  // Unassigned trades and missing prefs fall back to the $300 default.
   assert.deepEqual(resolveRSize({ account_id: null }, accounts), { cents: DEFAULT_R_SIZE_CENTS, source: "prefs", account_id: null });
-  assert.equal(resolveRSize({ account_id: null }, [], null).cents, 25_000);
+  assert.equal(resolveRSize({ account_id: null }, [], null).cents, 30_000);
 
   // A trade frozen at $300 keeps $300 when its account moves to $500.
   const frozen = closed({ id: "F", account_id: "acct", r_size_cents: 30_000, exit_price: 7602 });

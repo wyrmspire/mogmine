@@ -122,9 +122,9 @@ test("unassigned legacy trade with prefs.riskBudgetUsd 300 reports +0.50R everyw
   assert.ok(describeTrade(unassigned, "America/Chicago", false, { prefs }).includes("plus 0.50 R"));
 });
 
-test("without opts the default R size still applies (existing behaviour unchanged)", () => {
-  // Legacy trade with no account and no prefs falls back to DEFAULT_R_SIZE_CENTS ($250): +$150 is +0.60R.
+test("without opts the default R size still applies ($300 owner default)", () => {
+  // Legacy trade with no account and no prefs uses DEFAULT_R_SIZE_CENTS ($300): +$150 is +0.50R.
   const unassigned = legacy("t1", { account_id: null });
-  assert.equal(dayStats([unassigned]).netR, 0.6);
-  assert.ok(describeTrade(unassigned, "America/Chicago").includes("plus 0.60 R"));
+  assert.equal(dayStats([unassigned]).netR, 0.5);
+  assert.ok(describeTrade(unassigned, "America/Chicago").includes("plus 0.50 R"));
 });

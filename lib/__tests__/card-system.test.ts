@@ -218,8 +218,8 @@ test("CD-1a: Shield copy verification across all sizes", () => {
   assert.doesNotMatch(serialized, /acc-1|default-user/i);
 
   // 2. Process beats outcome: hero R and process seal present.
-  // Account R: +4.75 pts x 3 MES x $5 = $71.25 ÷ $250 default R = 0.285R, formatted (1 dp) as +0.3R.
-  assert.equal(contentShield.heroResult, "+0.3R");
+  // Account R: +4.75 pts x 3 MES x $5 = $71.25 ÷ $300 default R = 0.2375R, formatted (1 dp) as +0.2R.
+  assert.equal(contentShield.heroResult, "+0.2R");
   assert.equal(contentShield.outcomeDetail, "+4.75 pts");
   assert.equal(contentShield.processSeal, "4/4 RULES · TAKE AGAIN ✓");
   assert.equal(contentShield.ruleSeal, "4/4 FOLLOWED");
@@ -314,7 +314,7 @@ test("CD-1a: renderCardCanvas draws specular 1px gold highlight, main chart and 
     assert.ok(textStrings.includes("SHIELD"), `SHIELD badge must be drawn for ${size}`);
     assert.ok(textStrings.includes("ENTRY"), `ENTRY label must be drawn for ${size}`);
     assert.ok(textStrings.includes("EXIT"), `EXIT label must be drawn for ${size}`);
-    assert.ok(textStrings.some((s) => s.includes("+0.3R")), `Hero R must be drawn for ${size}`);
+    assert.ok(textStrings.some((s) => s.includes("+0.2R")), `Hero R must be drawn for ${size}`);
     assert.ok(textStrings.some((s) => s.includes("MES LONG")), `Subject must be drawn for ${size}`);
   }
 });

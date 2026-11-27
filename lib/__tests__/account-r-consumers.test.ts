@@ -157,5 +157,5 @@ test("resolveRSize: the trade snapshot wins, then the account's R size, then the
   // Options passed to a consumer are honoured: an account R size applies when the trade has no snapshot.
   const noSnapshot = trade("nosnap", { account_id: "acc-1", r_size_cents: null, exit_price: 6123 });
   near(dayStats([noSnapshot], { accounts }).netR, 615 / 500);
-  near(dayStats([noSnapshot]).netR, 615 / 250); // default $250 when no options are given
+  near(dayStats([noSnapshot]).netR, 615 / 300); // default $300 when no options are given
 });

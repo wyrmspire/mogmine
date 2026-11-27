@@ -193,10 +193,14 @@ test("warning exit_reason_mismatch: exit_reason stop with the exit 5 ticks from 
   assert.equal(codes(onStop).includes("exit_reason_mismatch"), false);
 });
 
-test("warning stated_risk_differs: actual 0.29R against a stated 0.25R saves and warns (HR-7)", async () => {
+test("warning stated_risk_differs: <1 micro ceiling overshoot does not warn; under-sized or >=1 micro over warns (HR-7)", async () => {
   const commands = await setup();
-  // 8750 cents actual ÷ 30000 R = 0.2917R; stated 0.25R is 1250 cents away, past the 600-cent tolerance.
-  const result = await create(commands, tradeA({ id: "trade-stated", stated_risk_r: 0.25 }));
+  // 1 MES at $87.50 vs $75 stated (0.25R): overshoot $12.50 < $87.50 (1 micro) -> valid ceiling sizing, no warning.
+  const ceiling = await create(commands, tradeA({ id: "trade-ceiling", stated_risk_r: 0.25 }));
+  assert.equal(ceiling.status, 201, JSON.stringify(ceiling.body));
+  assert.equal(codes(ceiling).includes("stated_risk_differs"), false);
+  // 2 MES at $175 vs $75 stated (0.25R): overshoot $100 >= $87.50 (1 micro) -> warns.
+  const result = await create(commands, tradeA({ id: "trade-stated", quantity: 2, stated_risk_r: 0.25 }));
   assert.equal(result.status, 201, JSON.stringify(result.body));
   assert.ok(codes(result).includes("stated_risk_differs"));
 });

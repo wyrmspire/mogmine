@@ -9,7 +9,7 @@ test("DEFAULT_PREFS defines documented default settings", () => {
   assert.equal(DEFAULT_PREFS.goldPreset, "bullion");
   assert.equal(DEFAULT_PREFS.goldIntensity, 0.76);
   assert.equal(DEFAULT_PREFS.palette, "classic");
-  assert.equal(DEFAULT_PREFS.riskBudgetUsd, 250);
+  assert.equal(DEFAULT_PREFS.riskBudgetUsd, 300);
   assert.equal(DEFAULT_PREFS.showSamples, true);
   assert.equal(DEFAULT_PREFS.shield, false);
 });
@@ -164,7 +164,7 @@ test("getTuneRiskBudgetDisplay preserves editable dollar amounts when Shield is 
   assert.equal(unshielded.inputAriaLabel, "Default R size in US dollars");
   assert.equal(
     unshielded.hint,
-    "Used for accounts without their own R size and trades with no account (default $250)."
+    "Used for accounts without their own R size and trades with no account (default $300)."
   );
 
   const custom = getTuneRiskBudgetDisplay(false, 500);

@@ -20,15 +20,15 @@ test("calculateExitEfficiency: calculates R-based efficiency for winning trade",
     quantity: 1,
   });
 
-  // Account R at the default $250 (1 MES = $5/pt): +4 pts = +$20 = +0.08R; MFE +7 pts = +$35 = +0.14R.
+  // Account R at the default $300 (1 MES = $5/pt): +4 pts = +$20 = +0.07R; MFE +7 pts = +$35 = +0.12R.
   // The ratio stays unit-free: 4 ÷ 7 = 57%.
   const eff = calculateExitEfficiency(trade, 7);
   assert.ok(eff);
-  assert.equal(eff.realizedR, 0.08);
-  assert.equal(eff.mfeR, 0.14);
+  assert.ok(Math.abs((eff.realizedR ?? NaN) - 20 / 300) < 1e-12);
+  assert.ok(Math.abs((eff.mfeR ?? NaN) - 35 / 300) < 1e-12);
   assert.equal(eff.efficiencyPercent, 57);
-  assert.equal(eff.summary, "captured +0.08R of +0.14R available (57%)");
-  assert.equal(eff.concise, "+0.08R of +0.14R");
+  assert.equal(eff.summary, "captured +0.07R of +0.12R available (57%)");
+  assert.equal(eff.concise, "+0.07R of +0.12R");
 });
 
 test("calculateExitEfficiency: a trade with no stop still gets account R", () => {
@@ -45,13 +45,13 @@ test("calculateExitEfficiency: a trade with no stop still gets account R", () =>
     quantity: 1,
   });
 
-  // Account R at $250: +5 pts = +$25 = +0.10R; MFE +10 pts = +$50 = +0.20R. Ratio 5 ÷ 10 = 50%.
+  // Account R at $300: +5 pts = +$25 = +0.08R; MFE +10 pts = +$50 = +0.17R. Ratio 5 ÷ 10 = 50%.
   const eff = calculateExitEfficiency(trade, 10);
   assert.ok(eff);
-  assert.equal(eff.realizedR, 0.1);
-  assert.equal(eff.mfeR, 0.2);
+  assert.ok(Math.abs((eff.realizedR ?? NaN) - 25 / 300) < 1e-12);
+  assert.ok(Math.abs((eff.mfeR ?? NaN) - 50 / 300) < 1e-12);
   assert.equal(eff.efficiencyPercent, 50);
-  assert.equal(eff.summary, "captured +0.10R of +0.20R available (50%)");
+  assert.equal(eff.summary, "captured +0.08R of +0.17R available (50%)");
 });
 
 test("calculateExitEfficiency: live account R overrides the prefs fallback for a legacy trade", () => {

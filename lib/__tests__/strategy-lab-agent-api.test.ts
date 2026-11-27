@@ -148,9 +148,9 @@ test("lookahead: a bar after the mark cannot change any at-the-mark row", async 
   assert.equal(atMark(spike), atMark(original), "at-mark values are the same with and without the later spike");
 });
 
-test("R: no account falls back to prefs ($250), and Shield hides every dollar amount in the basis", async () => {
+test("R: no account falls back to prefs ($300), and Shield hides every dollar amount in the basis", async () => {
   const noAccount = unwrap(await build(mark({ accountId: null }), { commands: commandsWith([SIM_EVAL], null) }));
-  assert.equal(noAccount.card.basis, "R = $250 (default risk budget)");
+  assert.equal(noAccount.card.basis, "R = $300 (default risk budget)");
   assert.equal(noAccount.provenance.r_size.source, "default");
 
   const shielded = unwrap(await build(mark({ accountId: null }), { commands: commandsWith([SIM_EVAL], { shield: true }) }));

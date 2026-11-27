@@ -52,8 +52,8 @@ test("CD-3a: no rate prints below 10 trades; the count and R skips always do", (
 
 test("CD-3a: at the minimum, win rate and average R come from the R-08a selector, samples and open trades excluded", () => {
   const ten = [
-    ...Array.from({ length: 6 }, () => trade({ points: 8 })),   // +$40 ÷ $250 = +0.16R each
-    ...Array.from({ length: 4 }, () => trade({ points: -4 })),  // −$20 ÷ $250 = −0.08R each
+    ...Array.from({ length: 6 }, () => trade({ points: 8 })),   // +$40 ÷ $300 = +2/15R each
+    ...Array.from({ length: 4 }, () => trade({ points: -4 })),  // −$20 ÷ $300 = −1/15R each
     trade({ is_sample: true, points: -40 }),
     trade({ exit_time: null, exit_price: null, status: "open" }),
   ];
@@ -62,7 +62,7 @@ test("CD-3a: at the minimum, win rate and average R come from the R-08a selector
   assert.equal(card.stats.trades, 10);
   assert.equal(card.stats.belowMinimum, false);
   assert.equal(card.stats.winRate, 0.6);
-  assert.ok(Math.abs((card.stats.avgR ?? NaN) - 0.064) < 1e-12);
+  assert.ok(Math.abs((card.stats.avgR ?? NaN) - 16 / 300) < 1e-12);
 });
 
 test("CD-3a: the drill result counts only this playbook's real trades", () => {
@@ -70,5 +70,6 @@ test("CD-3a: the drill result counts only this playbook's real trades", () => {
   const other = trade({ playbook_id: "fade", points: -4 });
   const answer = (trade_id: string): DrillRecord => ({ id: `d-${trade_id}`, user_id: "demo-owner", trade_id, kind: "take_it", answer: "take", answered_at: "2026-11-21T10:00:00Z", hidden: [] });
   const card = playbookCardData(playbook, [mine, other], [answer(mine.id), answer(other.id)], now);
-  assert.deepEqual(card.drill.take, { n: 1, avgR: 0.16 });
+  assert.equal(card.drill.take.n, 1);
+  assert.ok(Math.abs((card.drill.take.avgR ?? NaN) - 40 / 300) < 1e-12);
 });

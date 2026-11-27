@@ -87,7 +87,7 @@ test("vocabulary: playbooks are the owner's, active first with archived flagged;
   assert.deepEqual(vocab.value.accounts.map((a) => a.id), ["sim-acct-eval-50k", "acct-plain"], "the archived account is absent");
 });
 
-test("vocabulary: R size is the account's when it has one, else the default from prefs (25 000 cents)", async () => {
+test("vocabulary: R size is the account's when it has one, else the default from prefs (30 000 cents)", async () => {
   const { commands } = setup();
   await seedJournal(commands);
   const vocab = await buildVocabulary(commands);
@@ -95,8 +95,8 @@ test("vocabulary: R size is the account's when it has one, else the default from
   if (!vocab.ok) return;
   const byId = Object.fromEntries(vocab.value.accounts.map((a) => [a.id, a]));
   assert.deepEqual(byId["sim-acct-eval-50k"], { id: "sim-acct-eval-50k", name: "SIM Eval 50K", r_size_cents: 30_000, r_size_source: "account" });
-  assert.deepEqual(byId["acct-plain"], { id: "acct-plain", name: "Plain", r_size_cents: 25_000, r_size_source: "prefs" });
-  assert.equal(vocab.value.default_r_size_cents, 25_000);
+  assert.deepEqual(byId["acct-plain"], { id: "acct-plain", name: "Plain", r_size_cents: 30_000, r_size_source: "prefs" });
+  assert.equal(vocab.value.default_r_size_cents, 30_000);
 });
 
 test("vocabulary: exit reasons, symbols, plan presets and time rules are the app's own lists", async () => {
@@ -152,7 +152,7 @@ test("derived on an open trade: P&L, result R and hold are null; the session is 
   assert.equal(derived.session_date, "2026-11-24");
   assert.equal(derived.risk_cents, 5_000, "a 10-point stop on MES is $50");
   assert.equal(derived.r_size_source, "trade", "the default R size was frozen on the trade when it was saved (D-B)");
-  assert.equal(derived.r_size_cents, 25_000);
+  assert.equal(derived.r_size_cents, 30_000);
 });
 
 test("without include=derived the read is the plain stored wrapper, and nothing is stored", async () => {

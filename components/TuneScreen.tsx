@@ -46,7 +46,7 @@ const PRESET_META: Record<GoldPreset, { label: string; vibe: string; swatch: str
   },
 };
 
-const RISK_SUGGESTIONS = [100, 250, 500, 1000];
+const RISK_SUGGESTIONS = [150, 300, 500, 1000];
 
 export function TuneScreen() {
   const prefs = usePrefs();

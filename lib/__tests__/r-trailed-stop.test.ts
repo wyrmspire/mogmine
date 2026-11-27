@@ -34,8 +34,8 @@ test("without an initial stop, a risk-side current stop still sets R; a trailed 
   assert.equal(riskMultiple(unknown), null);
   assert.equal(stopHistoryText(unknown, time),
     "Stop 7350.00 is not on the risk side of the entry and no initial stop is recorded, so R is not known.");
-  // D-A: describeTrade reports account R (+$450 ÷ $250 = +1.80R) even when stop-width riskMultiple is null.
-  assert.match(describeTrade(unknown, "America/Chicago"), /plus 1\.80 R\.$/);
+  // D-A: describeTrade reports account R (+$450 ÷ $300 = +1.50R) even when stop-width riskMultiple is null.
+  assert.match(describeTrade(unknown, "America/Chicago"), /plus 1\.50 R\.$/);
 });
 
 test("an initial stop on the wrong side (a typo) falls back to the current risk-side stop", () => {
@@ -62,7 +62,7 @@ test("scratch threshold uses the first risk too", () => {
 test("the R strip's 1R axis is the initial stop, not the trailed one", () => {
   assert.equal(stripStop(thursday), 7444);
   const layout = rStripLayout(rStripInputFromTrade(thursday))!;
-  // Account R at the $250 default: 2 lots, 45 pts captured = $450 = +1.8R; 105 pts to plan = +4.2R (RS-3b).
-  assert.equal(rStripCaption(thursday, layout), "Cut early, exit +1.8R, plan +4.2R");
+  // Account R at the $300 default: 2 lots, 45 pts captured = $450 = +1.5R; 105 pts to plan = +3.5R (RS-3b).
+  assert.equal(rStripCaption(thursday, layout), "Cut early, exit +1.5R, plan +3.5R");
   assert.equal(stripStop({ ...thursday, initial_stop_price: null }), null);
 });

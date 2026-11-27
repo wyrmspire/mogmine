@@ -375,10 +375,10 @@ test("labRSize: the account's R size wins; $300 for SIM Eval 50K", () => {
   assert.equal(rBasisLabel(labRSize("sim-eval-50k", accounts, { riskBudgetUsd: 250 }), "SIM Eval 50K"), "R = $300 (SIM Eval 50K)");
 });
 
-test("labRSize: falls back to the prefs risk budget, then $250, when the account has no R size", () => {
+test("labRSize: falls back to the prefs risk budget, then $300, when the account has no R size", () => {
   const accounts = [{ id: "sim", r_size_cents: null }];
   assert.deepEqual(labRSize("sim", accounts, { riskBudgetUsd: 250 }), { usd: 250, source: "default" });
   assert.deepEqual(labRSize(null, [], { riskBudgetUsd: 400 }), { usd: 400, source: "default" });
-  assert.deepEqual(labRSize(null, [], null), { usd: 250, source: "default" });
-  assert.equal(rBasisLabel(labRSize(null, [], null), null), "R = $250 (default risk budget)");
+  assert.deepEqual(labRSize(null, [], null), { usd: 300, source: "default" });
+  assert.equal(rBasisLabel(labRSize(null, [], null), null), "R = $300 (default risk budget)");
 });

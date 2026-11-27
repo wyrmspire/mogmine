@@ -112,12 +112,12 @@ test("dry run: zero writes, samples skipped, accurate sizes, results and proposa
   assert.equal(a.new_risk_r, 0.29);
   assert.equal(a.proposed_stated_risk_r, 0.25);
   assert.equal(a.notes_have_risk_text, true);
-  // B: no account, default $250 (25000 cents). 15 pts = $75 risked, +10 pts = $50 won.
+  // B: no account, default $300 (30000 cents). 15 pts = $75 risked, +10 pts = $50 won.
   assert.equal(b.r_size_source, "prefs");
-  assert.equal(b.r_size_cents, 25000);
+  assert.equal(b.r_size_cents, 30000);
   assert.equal(b.risk_cents, 7500);
-  assert.equal(b.new_result_r, 0.2);
-  assert.equal(b.new_risk_r, 0.3);
+  assert.equal(b.new_result_r, 0.17);
+  assert.equal(b.new_risk_r, 0.25);
   assert.equal(b.proposed_stated_risk_r, "");
   assert.equal(b.notes_have_risk_text, false);
   // D: no stop, so no risk and no risk dollars, but a result still exists.
@@ -143,7 +143,7 @@ test("apply: first run writes R size, risk and confirmed stated risk; notes stay
   assert.equal(a.value.record.risk_cents, 8750);
   assert.equal(a.value.record.stated_risk_r, 0.25);
   const b = (await base.trades.get(OWNER, "B")) as { ok: true; value: { record: TradeRecord } };
-  assert.equal(b.value.record.r_size_cents, 25000);
+  assert.equal(b.value.record.r_size_cents, 30000);
   assert.equal(b.value.record.stated_risk_r, null, "no proposal, nothing stated");
 
   // The same CSV again (its updated_at values are now stale, but nothing needs writing): zero puts.

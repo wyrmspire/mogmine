@@ -1,6 +1,6 @@
 // Strategy Lab R size (docs/design-2026-11-24/09 §6.4, D-A). R is the account's fixed dollar size, never a stop width.
 // Pure: no I/O. It delegates to lib/r-size.ts so the fallback order matches the rest of the app:
-// the account's R size, then prefs.riskBudgetUsd, then the $250 default.
+// the account's R size, then prefs.riskBudgetUsd, then the $300 default.
 
 import type { TradingAccount } from "../accounts.ts";
 import { resolveRSize } from "../r-size.ts";
@@ -8,7 +8,7 @@ import type { Prefs } from "../prefs-sanitize.ts";
 
 export interface LabRSize {
   usd: number;
-  /** "account" when the account's own R size is used; "default" for the prefs or $250 fallback. */
+  /** "account" when the account's own R size is used; "default" for the prefs or $300 default. */
   source: "account" | "default";
 }
 

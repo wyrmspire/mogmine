@@ -36,10 +36,10 @@ test("derivePlanVsActual: full plan executed to target", () => {
   assert.equal(targetRow.deltaDisplay, "—");
 
   const resultRow = comparison.rows.find((r) => r.label === "Result (R)")!;
-  // Account R at the default $250 (1 MES = $5/pt): +10 pts = +$50 = +0.20R. The plan's ratio reads as R:R, never as R.
+  // Account R at the default $300 (1 MES = $5/pt): +10 pts = +$50 = +0.17R. The plan's ratio reads as R:R, never as R.
   assert.equal(resultRow.planned, "R:R 2.0:1 at target");
-  assert.equal(resultRow.actual, "+0.20R");
-  assert.equal(resultRow.deltaDisplay, "+0.00R"); // realised +0.20R − planned +0.20R
+  assert.equal(resultRow.actual, "+0.17R");
+  assert.equal(resultRow.deltaDisplay, "+0.00R"); // realised +0.17R − planned +0.17R
 });
 
 test("derivePlanVsActual: detects premature exit", () => {
@@ -63,8 +63,8 @@ test("derivePlanVsActual: detects premature exit", () => {
   assert.equal(comparison.fidelity, "Premature Exit");
   const targetRow = comparison.rows.find((r) => r.label === "Exit / Target")!;
   assert.equal(targetRow.tone, "negative");
-  // −5 pts = −$25 = −0.10R at $250 (was −1.0R stop-width).
-  assert.equal(targetRow.deltaDisplay, "−5.00 pts (−0.10R)");
+  // −5 pts = −$25 = −0.08R at $300 (was −1.0R stop-width).
+  assert.equal(targetRow.deltaDisplay, "−5.00 pts (−0.08R)");
 });
 
 test("derivePlanVsActual: handles missing plan cleanly", () => {

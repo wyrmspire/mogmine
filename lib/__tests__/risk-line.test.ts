@@ -30,12 +30,20 @@ const tradeNoStopStated = normalizeTrade({
 });
 
 const account300: ResolvedRSize = { cents: 30_000, source: "account", account_id: "acct-1" };
-const prefs250: ResolvedRSize = { cents: 25_000, source: "prefs", account_id: null };
+const prefs300: ResolvedRSize = { cents: 30_000, source: "prefs", account_id: null };
+// Trade C: 12 pt stop = $60 = 0.20R of $300, stated 0.25R ($75) — under-sized, so stated truly differs.
+const tradeC = normalizeTrade({
+  id: "trade-c", symbol: "MES", direction: "LONG", quantity: 1,
+  entry_time: "2026-11-23T15:30:00Z", exit_time: "2026-11-23T15:45:00Z",
+  entry_price: 7137, exit_price: 7129, stop_loss_price: 7125, stated_risk_r: 0.25,
+});
 
-test("formatRiskLine: Trade A at $300 says actual dollars, account R, and the stated R that differs", () => {
-  const { primary, sourceHint } = formatRiskLine(tradeA as TradeRecord, account300, "SIM Eval 50K", false);
-  assert.equal(primary, "Risk $87.50 · 0.29R of $300 · you said 0.25R ($75)");
-  assert.equal(sourceHint, "R size from SIM Eval 50K");
+test("formatRiskLine: Trade A (<1 micro ceiling overshoot) omits mismatch; Trade C (under-sized) shows stated R", () => {
+  const a = formatRiskLine(tradeA as TradeRecord, account300, "SIM Eval 50K", false);
+  assert.equal(a.primary, "Risk $87.50 · 0.29R of $300");
+  assert.equal(a.sourceHint, "R size from SIM Eval 50K");
+  const c = formatRiskLine(tradeC as TradeRecord, account300, "SIM Eval 50K", false);
+  assert.equal(c.primary, "Risk $60 · 0.20R of $300 · you said 0.25R ($75)");
 });
 
 test("formatRiskLine: Trade B at $300 omits the redundant 'you said' suffix when stated matches actual", () => {
@@ -44,22 +52,22 @@ test("formatRiskLine: Trade B at $300 omits the redundant 'you said' suffix when
 });
 
 test("formatRiskLine: Shield strips every dollar amount and keeps the R values", () => {
-  const { primary, sourceHint } = formatRiskLine(tradeA as TradeRecord, account300, "SIM Eval 50K", true);
-  assert.equal(primary, "Risk 0.29R · you said 0.25R");
+  const { primary, sourceHint } = formatRiskLine(tradeC as TradeRecord, account300, "SIM Eval 50K", true);
+  assert.equal(primary, "Risk 0.20R · you said 0.25R");
   assert.ok(!/\$/.test(primary));
-  assert.ok(!/300|250|87\.5|75/.test(primary));
+  assert.ok(!/300|250|60|75/.test(primary));
   assert.ok(!/\$/.test(sourceHint ?? ""));
 });
 
 test("formatRiskLine: an account without its own R size names the default and its amount", () => {
-  const { primary, sourceHint } = formatRiskLine(tradeA as TradeRecord, prefs250, null, false);
-  // Stated R is priced in the trade's own R size: 0.25 × $250 = $62.50.
-  assert.equal(primary, "Risk $87.50 · 0.35R of default $250 · you said 0.25R ($62.50)");
+  const { primary, sourceHint } = formatRiskLine(tradeC as TradeRecord, prefs300, null, false);
+  // Stated R is priced in the trade's own R size: 0.25 × $300 = $75.
+  assert.equal(primary, "Risk $60 · 0.20R of default $300 · you said 0.25R ($75)");
   assert.equal(sourceHint, "No account on this trade · using your default");
 });
 
 test("formatRiskLine: Shield with the default R size has no dollar sign in either string", () => {
-  const { primary, sourceHint } = formatRiskLine(tradeA as TradeRecord, prefs250, "Proton", true);
+  const { primary, sourceHint } = formatRiskLine(tradeA as TradeRecord, prefs300, "Proton", true);
   assert.ok(!/\$/.test(primary));
   assert.ok(!/\$/.test(sourceHint ?? ""));
   assert.equal(sourceHint, "Proton has no R size yet");

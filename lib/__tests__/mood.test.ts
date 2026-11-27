@@ -384,9 +384,9 @@ test("moodOutcomeStats: winner and loser shapes, expectancy by dominant spoke, s
   assert.equal(stats.winners.shape[stats.spokes.indexOf("fear")], null, "nobody scored fear: unknown, not 0");
   const calmGroup = stats.byDominant.find((group) => group.spoke === "calm");
   const fomoGroup = stats.byDominant.find((group) => group.spoke === "fomo");
-  // Account R at $250: winners +$50 = +0.2R, losers -$25 = -0.1R.
-  assert.ok(Math.abs((calmGroup?.summary.meanR ?? NaN) - 0.2) < 1e-9);
-  assert.ok(Math.abs((fomoGroup?.summary.meanR ?? NaN) - -0.1) < 1e-9);
+  // Account R at $300: winners +$50 = +1/6R, losers -$25 = -1/12R.
+  assert.ok(Math.abs((calmGroup?.summary.meanR ?? NaN) - 50 / 300) < 1e-9);
+  assert.ok(Math.abs((fomoGroup?.summary.meanR ?? NaN) - -25 / 300) < 1e-9);
   // Pre-exit only: these records were captured at NOW, after every exit, so nothing qualifies.
   assert.equal(moodOutcomeStats(trades, records, DEFAULT_MOOD_REGISTRY, { phase: "pre_exit" }).used, 0);
 });

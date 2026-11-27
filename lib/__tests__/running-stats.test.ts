@@ -56,8 +56,8 @@ test("runningStats handles empty sets and reports account R (no-stop trades incl
   assert.equal(summary.grossPnl, 50); // 50 - 25 + 0 + 25 = 50
   assert.equal(summary.withR, 4);
   assert.equal(summary.skippedRCount, 0);
-  assert.ok(Math.abs((summary.totalR ?? 0) - 0.2) < 1e-10); // 0.2 - 0.1 + 0 + 0.1 = 0.2
-  assert.ok(Math.abs((summary.avgR ?? 0) - 0.05) < 1e-10); // 0.2 / 4
+  assert.ok(Math.abs((summary.totalR ?? 0) - 50 / 300) < 1e-10); // +$50 ÷ $300 = 1/6R
+  assert.ok(Math.abs((summary.avgR ?? 0) - 50 / 1200) < 1e-10); // (1/6) / 4
 });
 
 test("unpriceable trades are counted without affecting gross or the win-rate denominator", () => {
@@ -248,8 +248,8 @@ test("runningStats groups by playbook and tag with rule adherence", () => {
   assert.equal(orb.losses, 1);
   assert.equal(orb.winRate, 0.5);
   assert.equal(orb.grossPnl, 25);
-  assert.ok(Math.abs((orb.totalR ?? 0) - 0.1) < 1e-10); // 0.2 - 0.1
-  assert.ok(Math.abs((orb.avgR ?? 0) - 0.05) < 1e-10); // 0.1 / 2
+  assert.ok(Math.abs((orb.totalR ?? 0) - 25 / 300) < 1e-10); // +$25 ÷ $300 = 1/12R
+  assert.ok(Math.abs((orb.avgR ?? 0) - 25 / 600) < 1e-10); // (1/12) / 2
   assert.equal(orb.withR, 2);
   assert.equal(orb.skippedRCount, 0);
   assert.deepEqual(orb.ruleAdherence, {
@@ -263,8 +263,8 @@ test("runningStats groups by playbook and tag with rule adherence", () => {
   const vwap = stats.byPlaybook.find((p) => p.playbookId === "vwap-trend-push")!;
   assert.ok(vwap);
   assert.equal(vwap.tradeCount, 1);
-  assert.ok(Math.abs((vwap.totalR ?? 0) - 0.1) < 1e-10);
-  assert.ok(Math.abs((vwap.avgR ?? 0) - 0.1) < 1e-10);
+  assert.ok(Math.abs((vwap.totalR ?? 0) - 25 / 300) < 1e-10);
+  assert.ok(Math.abs((vwap.avgR ?? 0) - 25 / 300) < 1e-10);
   assert.equal(vwap.withR, 1);
   assert.equal(vwap.skippedRCount, 0);
   assert.equal(vwap.ruleAdherence, null);
