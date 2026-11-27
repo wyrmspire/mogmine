@@ -1,10 +1,37 @@
 // Pure list logic: grouping, filtering, day statistics, and running statistics across days (R-08a).
 // Lists never see candles (B-42).
+import { isReplayAccount } from "./accounts.ts";
+import type { TradingAccount } from "./accounts.ts";
 import { formatSessionDate, offsetSessionDate, sessionDate, sessionWeekMonday } from "./session.ts";
 import { SETUP_TAGS, playbookName } from "./playbooks.ts";
 import { adherence, isOpen, tradePnl } from "./trades.ts";
 import type { RSizeOptions, TradeRecord } from "./trades.ts";
 import { resolveRSize, resultR } from "./r-size.ts";
+
+export type AccountScopeFilter = "real" | "replay" | "all";
+
+/** True when a trade belongs to an account whose mode is `"replay"`. */
+export function isReplayTrade(
+  trade: Pick<TradeRecord, "account_id">,
+  accounts: readonly Pick<TradingAccount, "id" | "mode">[],
+): boolean {
+  if (trade.account_id == null) return false;
+  return isReplayAccount(accounts.find((item) => item.id === trade.account_id));
+}
+
+/** Filter trades by account scope: `"real"` (non-replay + unassigned), `"replay"`, or `"all"`. */
+export function filterByAccountScope<T extends Pick<TradeRecord, "account_id">>(
+  trades: readonly T[],
+  accounts: readonly Pick<TradingAccount, "id" | "mode">[],
+  scope: AccountScopeFilter,
+): T[] {
+  if (scope === "all") return [...trades];
+  const replayIds = new Set(accounts.filter(isReplayAccount).map((account) => account.id));
+  return trades.filter((trade) => {
+    const replay = trade.account_id != null && replayIds.has(trade.account_id);
+    return scope === "replay" ? replay : !replay;
+  });
+}
 
 export interface DayStats {
   count: number;
@@ -289,19 +316,19 @@ export interface RunningStats {
   undatedCount: number;
 }
 
-function summarizeTrades(trades: TradeRecord[], opts?: RSizeOptions): SummaryStats {
-  let wins = 0;
-  let losses = 0;
-  let scratches = 0;
-  let grossCents = 0;
-  let pricedCount = 0;
-  let unpriceableCount = 0;
-  let totalR = 0;
-  let withR = 0;
-  let checklistFollowedSum = 0;
-  let checklistTotalSum = 0;
-  let perfectTrades = 0;
-  let gradedTrades = 0;
+export interface RunningStatsOptions {
+  accounts?: readonly (Pick<TradingAccount, "id" | "mode"> & Partial<Pick<TradingAccount, "r_size_cents">>)[];
+  prefs?: RSizeOptions["prefs"];
+  /** Include trades on `mode: "replay"` accounts. Default false (excluded when `accounts` is supplied). */
+  includeReplay?: boolean;
+}
+
+function summarizeTrades(trades: TradeRecord[], opts?: RunningStatsOptions): SummaryStats {
+  const rSizeOpts: RSizeOptions | undefined = opts
+    ? { accounts: opts.accounts as RSizeOptions["accounts"], prefs: opts.prefs }
+    : undefined;
+  let wins = 0, losses = 0, scratches = 0, grossCents = 0, pricedCount = 0, unpriceableCount = 0;
+  let totalR = 0, withR = 0, checklistFollowedSum = 0, checklistTotalSum = 0, perfectTrades = 0, gradedTrades = 0;
 
   for (const trade of trades) {
     const pnl = tradePnl(trade);
@@ -314,89 +341,59 @@ function summarizeTrades(trades: TradeRecord[], opts?: RSizeOptions): SummarySta
     } else {
       unpriceableCount += 1;
     }
-
-    const r = resultR(trade, resolveRSize(trade, opts?.accounts, opts?.prefs));
-    if (r != null) {
-      totalR += r;
-      withR += 1;
-    }
-
+    const r = resultR(trade, resolveRSize(trade, rSizeOpts?.accounts, rSizeOpts?.prefs));
+    if (r != null) { totalR += r; withR += 1; }
     const score = adherence(trade);
     if (score) {
       gradedTrades += 1;
       checklistFollowedSum += score.followed;
       checklistTotalSum += score.total;
-      if (score.followed === score.total) {
-        perfectTrades += 1;
-      }
+      if (score.followed === score.total) perfectTrades += 1;
     }
   }
 
   return {
-    tradeCount: trades.length,
-    wins,
-    losses,
-    scratches,
+    tradeCount: trades.length, wins, losses, scratches,
     winRate: pricedCount > 0 ? wins / pricedCount : null,
-    grossPnl: grossCents / 100,
-    pricedCount,
-    unpriceableCount,
-    incomplete: unpriceableCount > 0,
-    totalR: withR > 0 ? totalR : null,
-    avgR: withR > 0 ? totalR / withR : null,
-    withR,
-    skippedRCount: trades.length - withR,
-    ruleAdherence:
-      gradedTrades > 0
-        ? {
-            followed: checklistFollowedSum,
-            total: checklistTotalSum,
-            ratio: checklistFollowedSum / checklistTotalSum,
-            perfectTrades,
-            gradedTrades,
-          }
-        : null,
+    grossPnl: grossCents / 100, pricedCount, unpriceableCount, incomplete: unpriceableCount > 0,
+    totalR: withR > 0 ? totalR : null, avgR: withR > 0 ? totalR / withR : null,
+    withR, skippedRCount: trades.length - withR,
+    ruleAdherence: gradedTrades > 0
+      ? { followed: checklistFollowedSum, total: checklistTotalSum, ratio: checklistFollowedSum / checklistTotalSum, perfectTrades, gradedTrades }
+      : null,
   };
 }
 
 /**
  * Running statistics across closed real trades (R-08a). The caller supplies the
  * current instant and calendar windows use New York session dates at exit.
+ * Excludes `mode: "replay"` account trades when `opts?.accounts` is passed unless `opts.includeReplay` is true.
  */
 export function runningStats(
   trades: readonly TradeRecord[],
   now: number | string,
-  opts?: RSizeOptions,
+  opts?: RunningStatsOptions,
 ): RunningStats {
-  let excludedSampleCount = 0;
-  let excludedOpenCount = 0;
+  const scoped = !opts?.includeReplay && opts?.accounts?.length
+    ? filterByAccountScope(trades, opts.accounts, "real")
+    : trades;
+  let excludedSampleCount = 0, excludedOpenCount = 0;
   const dated: Array<{ trade: TradeRecord; exitMs: number }> = [];
   const undated: TradeRecord[] = [];
 
-  for (const trade of trades) {
-    if (trade.is_sample) {
-      excludedSampleCount += 1;
-      continue;
-    }
-    if (trade.status === "open" || trade.exit_time == null) {
-      excludedOpenCount += 1;
-      continue;
-    }
+  for (const trade of scoped) {
+    if (trade.is_sample) { excludedSampleCount += 1; continue; }
+    if (trade.status === "open" || trade.exit_time == null) { excludedOpenCount += 1; continue; }
     const exitMs = Date.parse(trade.exit_time);
     if (Number.isFinite(exitMs)) dated.push({ trade, exitMs });
     else undated.push(trade);
   }
 
-  dated.sort((a, b) => {
-    if (a.exitMs !== b.exitMs) return a.exitMs - b.exitMs;
-    if (a.trade.id === b.trade.id) return 0;
-    return a.trade.id < b.trade.id ? -1 : 1;
-  });
+  dated.sort((a, b) => a.exitMs - b.exitMs || (a.trade.id < b.trade.id ? -1 : a.trade.id > b.trade.id ? 1 : 0));
   const refSession = sessionDate(now);
   const week = sessionWeekMonday(refSession);
   const month = refSession.slice(0, 7);
-  const weekTrades: TradeRecord[] = [];
-  const monthTrades: TradeRecord[] = [];
+  const weekTrades: TradeRecord[] = [], monthTrades: TradeRecord[] = [];
   for (const { trade, exitMs } of dated) {
     const date = sessionDate(exitMs);
     if (sessionWeekMonday(date) === week) weekTrades.push(trade);
@@ -405,43 +402,27 @@ export function runningStats(
 
   const datedTrades = dated.map(({ trade }) => trade);
   const eligible = datedTrades.concat(undated);
-
   const playbookGroups = new Map<string | null, TradeRecord[]>();
   const tagGroups = new Map<string, TradeRecord[]>();
   for (const trade of eligible) {
     const key = trade.playbook_id ?? null;
     const list = playbookGroups.get(key);
-    if (list) list.push(trade);
-    else playbookGroups.set(key, [trade]);
-
+    if (list) list.push(trade); else playbookGroups.set(key, [trade]);
     for (const tag of new Set(trade.quick_tags)) {
       const tagged = tagGroups.get(tag);
-      if (tagged) tagged.push(trade);
-      else tagGroups.set(tag, [trade]);
+      if (tagged) tagged.push(trade); else tagGroups.set(tag, [trade]);
     }
   }
   const byPlaybook: PlaybookStats[] = [...playbookGroups.entries()]
-    .map(([playbookId, list]) => ({
-      playbookId,
-      ...summarizeTrades(list, opts),
-    }))
+    .map(([playbookId, list]) => ({ playbookId, ...summarizeTrades(list, opts) }))
     .sort((a, b) => b.tradeCount - a.tradeCount || (a.playbookId ?? "").localeCompare(b.playbookId ?? "", "en"));
   const byTag: TagStats[] = [...tagGroups.entries()]
-    .map(([tag, list]) => ({
-      tag,
-      ...summarizeTrades(list, opts),
-    }))
+    .map(([tag, list]) => ({ tag, ...summarizeTrades(list, opts) }))
     .sort((a, b) => b.tradeCount - a.tradeCount || a.tag.localeCompare(b.tag, "en"));
 
   return {
-    overall: summarizeTrades(eligible, opts),
-    last20: summarizeTrades(datedTrades.slice(-20), opts),
-    thisWeek: summarizeTrades(weekTrades, opts),
-    thisMonth: summarizeTrades(monthTrades, opts),
-    byPlaybook,
-    byTag,
-    excludedSampleCount,
-    excludedOpenCount,
-    undatedCount: undated.length,
+    overall: summarizeTrades(eligible, opts), last20: summarizeTrades(datedTrades.slice(-20), opts),
+    thisWeek: summarizeTrades(weekTrades, opts), thisMonth: summarizeTrades(monthTrades, opts),
+    byPlaybook, byTag, excludedSampleCount, excludedOpenCount, undatedCount: undated.length,
   };
 }

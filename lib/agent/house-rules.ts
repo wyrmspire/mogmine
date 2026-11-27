@@ -16,7 +16,7 @@ export interface HouseRule {
 }
 
 export interface AgentWorkflow {
-  id: "log_trade" | "review_day" | "plan_session";
+  id: "log_trade" | "review_day" | "plan_session" | "pretend_session";
   title: string;
   steps: readonly string[];
 }
@@ -192,6 +192,16 @@ export const AGENT_WORKFLOWS: readonly AgentWorkflow[] = [
       "Create a plan with its preset and anchor.",
       "Levels from GET /levels are computed by the app, so only add typed levels the trader states.",
       "GET the plan back and compare it with what you sent.",
+    ],
+  },
+  {
+    id: "pretend_session",
+    title: "Log a pretend / replay session",
+    steps: [
+      "Pick an existing account with mode \"replay\" from GET /vocabulary, or create one via POST /records/accounts with mode: \"replay\" (e.g. \"Pretend Replay\", r_size_cents: 30000).",
+      "Use the historical chart bar time the trader is replaying as entry_time and exit_time in UTC ISO-8601 (never today's clock time); keep note, pre_trade_thesis, management_notes and post_exit_notes commentary-only (HR-1).",
+      "Verify fills against the 1-minute Databento archive with POST /api/v1/checks/trade before saving, then GET the saved trade back to compare fields (HR-2, HR-11).",
+      "Replay-account trades stay isolated from live/eval running stats and Drawdown Defender unless a challenge is explicitly scoped to that replay account.",
     ],
   },
 ];
