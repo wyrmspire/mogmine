@@ -16,7 +16,7 @@ import type { TradingAccount } from "@/lib/accounts";
 import { useAccounts } from "@/lib/accounts-store";
 import { useDailyReviewsStore } from "@/lib/daily-review-store";
 import { dayTradeCounts, formatDayTradeHeader, formatReviewQueueSummary } from "@/lib/day-counts";
-import { dayStatus } from "@/lib/day-review-screen";
+import { coveringDailyReview } from "@/lib/day-review-screen";
 import { isPreOpenWarmupWindow } from "@/lib/drills";
 import { formatUsdAmount } from "@/lib/format";
 import { usePlansStore } from "@/lib/plans-store";
@@ -117,7 +117,11 @@ function TodayView() {
   const unreviewed = reviewQueue.length;
   const sessionTradesCount = focus?.stats.count ?? 0;
   const sessionPlansCount = plansStore.plans.filter((plan) => plan.session_date === viewedDate && !plan.archived).length;
-  const dayReviewState = dayStatus(dailyReviews.reviews, viewedDate);
+  const dayReview = coveringDailyReview(dailyReviews.reviews, viewedDate, activeAccount?.id ?? null);
+  const dayReviewState = !dayReview ? "none" : dayReview.status === "done" ? "done" : "draft";
+  // Open the review being reported: the whole-day one when it is what covers the account, else the account's own.
+  const dayReviewAccount = dayReview ? dayReview.account_id : activeAccount?.id;
+  const dayReviewHref = `/review/day/${viewedDate}${dayReviewAccount ? `?account=${encodeURIComponent(dayReviewAccount)}` : ""}`;
   const process = (focus?.trades ?? []).reduce((summary, trade) => {
     const state = processRead(trade);
     if (state == null) return summary;
@@ -287,7 +291,7 @@ function TodayView() {
               />
 
               <Link
-                href={`/review/day/${viewedDate}`}
+                href={dayReviewHref}
                 className="specular-card card-pad daily-review-cta"
                 aria-label={`Daily Review for ${formatSessionDate(viewedDate)}: ${sessionTradesCount} ${tradeWord(sessionTradesCount)}, ${sessionPlansCount} ${sessionPlansCount === 1 ? "plan" : "plans"}, ${dayReviewLabel}`}
               >

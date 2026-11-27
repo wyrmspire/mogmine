@@ -1,7 +1,8 @@
 "use client";
 
 import type { TradingAccount } from "@/lib/accounts";
-import { findExistingDailyReview, type DailyReview } from "@/lib/daily-review";
+import type { DailyReview } from "@/lib/daily-review";
+import { coveringDailyReview } from "@/lib/day-review-screen";
 import type { PlanningSession } from "@/lib/plans";
 import type { Prefs } from "@/lib/prefs-sanitize";
 import { selectNextActions, type NextActionSignals } from "@/lib/next-actions";
@@ -27,8 +28,7 @@ export function TodayDecisionCockpit(props: {
   process: { followed: number; total: number } | null;
 }) {
   const connected = useTodayDecisionSignals(props.trades, props.now, props.accounts, props.prefs);
-  const review = findExistingDailyReview(props.reviews, props.sessionDate, props.activeAccountId)
-    ?? findExistingDailyReview(props.reviews, props.sessionDate, null);
+  const review = coveringDailyReview(props.reviews, props.sessionDate, props.activeAccountId);
   const actionSignals: NextActionSignals = {
     ...connected,
     archiveGapDays: connected.archiveGapDays ?? undefined,

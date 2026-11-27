@@ -128,3 +128,7 @@ test("R3-15 #19: PlaybookLabGaps gap links enforce 44px and the section is label
   assert.doesNotMatch(src, /formatMoney|formatUsd|\.quantity|currency/);
   assert.doesNotMatch(src, HARDCODED_COLOUR);
 });
+
+test("agent key page says Shield does not apply to the API (docs/16 §6)", () => {
+  assert.match(readSource("components/AgentKeysScreen.tsx"), /Shield does not apply to the agent API\./);
+});

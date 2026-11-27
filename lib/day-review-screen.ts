@@ -1,4 +1,5 @@
 // Pure helpers for the Days strip and /review/day/[date] actions (DR-2, docs/design-2026-11-24/06 §3, Q-4).
+import { findExistingDailyReview } from "./daily-review.ts";
 import type { DailyReview } from "./daily-review.ts";
 import { stepRegularSessionDate } from "./selectors.ts";
 import type { TradeRecord } from "./trades.ts";
@@ -22,6 +23,11 @@ export function dayStatus(reviews: readonly DailyReview[], date: string): "none"
   const own = reviews.filter((review) => review.session_date === date);
   if (own.some((review) => review.status === "done")) return "done";
   return own.length > 0 ? "draft" : "none";
+}
+
+/** The review Today reports for the active account: its own, else the whole-day review, which covers every account. */
+export function coveringDailyReview(reviews: readonly DailyReview[], date: string, accountId: string | null): DailyReview | undefined {
+  return findExistingDailyReview(reviews, date, accountId) ?? findExistingDailyReview(reviews, date, null);
 }
 
 /**

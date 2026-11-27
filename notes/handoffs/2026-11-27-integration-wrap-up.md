@@ -25,8 +25,7 @@ This note supersedes the five `2026-11-27-next-wave-*.md` handoffs where they di
 
 ## Open
 - Strategy Lab runs discovery only. Held-out validation needs a session-split and frozen-recipe UI (research holdout package).
-- `docs/16` §6 says the agent key page states that Shield does not apply to the API; no such text was found.
-- The Today day-review button still reads status across all accounts.
+- Follow-up: the agent key page now states that Shield does not apply to the API, and the Today day-review button uses the active account (a whole-day review also covers it).
 - Visual redesign checks and the remaining roadmap packages in `ROADMAP.md`; Board and Roadmap statuses are not reconciled against these results.
 
 ## Files over the 450-line target (§6.12), grown by this wave

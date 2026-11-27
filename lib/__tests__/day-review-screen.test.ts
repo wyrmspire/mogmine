@@ -7,7 +7,7 @@ import type { ReviewPoint } from "../daily-review.ts";
 import {
   getDailyReviews, resetDailyReviewsForTests, updateDailyReview, upsertDailyReview,
 } from "../daily-review-store.ts";
-import { dayStatus, markLinkedTradesReviewed, recentTradingDays } from "../day-review-screen.ts";
+import { coveringDailyReview, dayStatus, markLinkedTradesReviewed, recentTradingDays } from "../day-review-screen.ts";
 import { normalizeTrade } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 import type { PlanningSession } from "../plans.ts";
@@ -168,4 +168,13 @@ describe("migrate-1123-daily-review.mjs", () => {
     assert.equal(review.lesson.length, 500);
     assert.ok(warnings.some((w: string) => w.includes("lesson")));
   });
+});
+
+it("coveringDailyReview: the account's own review, else the whole-day one, never another account's", () => {
+  const review = (id: string, account_id: string | null) => ({ id, account_id, session_date: "2026-11-20" }) as Parameters<typeof coveringDailyReview>[0][number];
+  const reviews = [review("whole", null), review("a", "acct-a")];
+  assert.equal(coveringDailyReview(reviews, "2026-11-20", "acct-a")?.id, "a");
+  assert.equal(coveringDailyReview(reviews, "2026-11-20", "acct-b")?.id, "whole");
+  assert.equal(coveringDailyReview([review("a", "acct-a")], "2026-11-20", "acct-b"), undefined);
+  assert.equal(coveringDailyReview([review("a", "acct-a")], "2026-11-20", null), undefined);
 });
