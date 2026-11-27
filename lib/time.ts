@@ -65,14 +65,45 @@ export function toZonedInput(date: Date, zone = DEFAULT_TIME_ZONE) {
   return `${w.year}-${pad(w.month)}-${pad(w.day)}T${pad(w.hour)}:${pad(w.minute)}`;
 }
 
-/** Reads a `datetime-local` value as wall-clock time in the zone, whatever zone the device is in. */
+interface WallTime { year: number; month: number; day: number; hour: number; minute: number; second: number }
+
+/** True when `instant` reads back in the zone as exactly the wall-clock time `wanted`. */
+function readsBackAs(instant: number, zone: string, wanted: WallTime) {
+  const w = wallClock(instant, zone);
+  return w.year === wanted.year && w.month === wanted.month && w.day === wanted.day
+    && w.hour === wanted.hour && w.minute === wanted.minute && w.second === wanted.second;
+}
+
+/**
+ * Reads a `datetime-local` value as wall-clock time in the zone, whatever zone the device is in.
+ * A wall time in the spring-forward gap never happens, and one in the fall-back overlap happens
+ * twice; neither has a single honest reading, so both return an Invalid Date — the same signal
+ * as a malformed value, which every caller already turns into a validation error — instead of
+ * silently shifting to a neighbouring time the user never typed (T-01).
+ */
 export function fromZonedInput(value: string, zone = DEFAULT_TIME_ZONE) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
   if (!match) return new Date(Number.NaN);
   const [, y, mo, d, h, mi, s] = match;
-  const asUtc = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s ?? 0));
+  const wanted: WallTime = {
+    year: Number(y), month: Number(mo), day: Number(d),
+    hour: Number(h), minute: Number(mi), second: Number(s ?? 0),
+  };
+  const asUtc = Date.UTC(wanted.year, wanted.month - 1, wanted.day, wanted.hour, wanted.minute, wanted.second);
   const first = asUtc - zoneOffset(asUtc, zone);
   const second = asUtc - zoneOffset(first, zone);
+  // Gap: the computed instant reads back as a different wall time, so the typed one never occurs.
+  if (!readsBackAs(second, zone, wanted)) return new Date(Number.NaN);
+  // Overlap: an offset from the other side of a nearby transition gives a different instant that
+  // reads back as the same wall time, so the typed time occurs twice and cannot be picked silently.
+  const baseOffset = zoneOffset(second, zone);
+  const hourMs = 3_600_000;
+  for (const probe of [second - 3 * hourMs, second - 2 * hourMs, second - hourMs, second + hourMs, second + 2 * hourMs, second + 3 * hourMs]) {
+    const offset = zoneOffset(probe, zone);
+    if (offset === baseOffset) continue;
+    const other = asUtc - offset;
+    if (other !== second && readsBackAs(other, zone, wanted)) return new Date(Number.NaN);
+  }
   return new Date(second);
 }
 
