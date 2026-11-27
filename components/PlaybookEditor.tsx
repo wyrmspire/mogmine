@@ -10,6 +10,7 @@ import {
   updatePlaybook,
   usePlaybooks,
   validatePlaybookDraft,
+  currentPlaybookVersion,
 } from "@/lib/playbooks-store";
 import type { PlaybookDraft } from "@/lib/playbooks-store";
 import type { TradeStyle } from "@/lib/trades";
@@ -82,7 +83,7 @@ export function PlaybookEditor() {
               <div className="playbook-row">
                 <span>
                   <b>{playbook.name}</b>
-                  <small className="num">{STYLE_LABEL[playbook.default_style]} · {playbook.checklist_rules.length === 0 ? "no rules" : `${playbook.checklist_rules.length} ${playbook.checklist_rules.length === 1 ? "rule" : "rules"}`}</small>
+                  <small className="num">{STYLE_LABEL[playbook.default_style]} · v{currentPlaybookVersion(playbook.id) ?? 1} · {playbook.checklist_rules.length === 0 ? "no rules" : `${playbook.checklist_rules.length} ${playbook.checklist_rules.length === 1 ? "rule" : "rules"}`}</small>
                 </span>
                 <button type="button" className="btn-secondary" disabled={!hydrated} onClick={() => setEditing({ id: playbook.id, draft: toDraft(playbook) })} aria-label={`Edit playbook ${playbook.name}`} style={{ minHeight: 44 }}>Edit</button>
               </div>

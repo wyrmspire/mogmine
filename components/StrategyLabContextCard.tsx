@@ -6,6 +6,9 @@
 import { useState, type ReactNode } from "react";
 import type { CardGroup, CardRow, CardState, ContextCard } from "@/lib/strategy-lab/context-card";
 import type { SkipReason } from "@/lib/strategy-lab/types";
+import {
+  HYPOTHETICAL_CONTEXT_NOTE, HYPOTHETICAL_LABEL, slippageAssumptionText,
+} from "@/lib/strategy-lab/results-view";
 
 export interface ExcludedSession { date: string; reason: string }
 
@@ -18,6 +21,8 @@ export interface StrategyLabContextCardProps {
   onRetry: () => void;
   onFindSimilar?: () => void;
   onSaveAsRecipe?: () => void;
+  /** The recipe's deterministic execution-cost assumption, shown without changing card math. */
+  slippageTicks?: { stop: number; market: number };
 }
 
 const REASON_TEXT: Record<SkipReason | "no-value", string> = {
@@ -91,7 +96,7 @@ function StatusBox({ tone, children }: { tone: "info" | "error"; children: React
 }
 
 export function StrategyLabContextCard({
-  state, card, message, progress, excluded, onRetry, onFindSimilar, onSaveAsRecipe,
+  state, card, message, progress, excluded, onRetry, onFindSimilar, onSaveAsRecipe, slippageTicks,
 }: StrategyLabContextCardProps) {
   if (state === "loading") {
     const detail = progress ? ` ${progress.done} of ${progress.total} sessions` : "";
@@ -126,10 +131,34 @@ export function StrategyLabContextCard({
       {card.missing.map((text) => (
         <p key={text} className="sl-notice" role="status">{text}</p>
       ))}
-      <section className="sl-card" aria-label="Context card">
+      <section
+        className="sl-card"
+        aria-label="Hypothetical simulated context"
+        data-result-kind="hypothetical"
+      >
         <header className="sl-card-head">
-          <h2 className="sl-card-title">{card.header}</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+            <h2 className="sl-card-title" style={{ margin: 0 }}>{card.header}</h2>
+            <span
+              data-result-badge="hypothetical"
+              aria-label="Hypothetical simulated context"
+              style={{
+                border: "1px solid var(--border-strong)",
+                borderRadius: "999px",
+                padding: "3px 8px",
+                color: "var(--text-primary)",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {HYPOTHETICAL_LABEL}
+            </span>
+          </div>
+          <p className="sl-hint" role="note">{HYPOTHETICAL_CONTEXT_NOTE}</p>
           <p className="sl-basis">{card.basis}</p>
+          {slippageTicks && <p className="sl-basis">{slippageAssumptionText(slippageTicks)}</p>}
           <p className="sl-data">{card.dataLine}{state === "partial" ? " · partial" : ""}</p>
         </header>
         {card.groups.map((group) => <GroupView key={group.id} group={group} />)}

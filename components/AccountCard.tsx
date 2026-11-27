@@ -152,13 +152,13 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
   ].filter(Boolean);
 
   return (
-    <section className="specular-card card-pad account-card" aria-label={`Account ${account.name}`}>
+    <section className="specular-card card-pad account-card" aria-labelledby={`account-title-${account.id}`}>
       <div className="card-head">
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
-          <h3>{account.name}</h3>
+          <h3 id={`account-title-${account.id}`}>{account.name}</h3>
           <ModeBadge account={account} />
         </div>
-        <span className="num">
+        <span className="num" aria-label="Account data basis">
           {calmReplay
             ? (shield || !accountRText ? "Pretend / Replay" : `Pretend / Replay · 1R ${accountRText}`)
             : (shield || !accountRText ? "From your journal · gross" : `From your journal · gross · 1R ${accountRText}`)}
@@ -192,9 +192,9 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
       ) : (
         <>
           {shield ? (
-            <p className="account-balance muted">Dollars hidden <span>Shield</span></p>
+            <p className="account-balance muted" role="status">Balance unavailable while Shield is on <span>Shield</span></p>
           ) : (
-            <p className="account-balance num">{formatBalance(summary.balance_cents)}<span>{summary.closedTrades ? `${account.rules.drawdown === "trailing_eod" && account.rules.max_loss_cents ? "high at a close" : "high"} ${formatBalance(summary.peak_cents)}` : "no trades logged yet"}</span></p>
+            <p className="account-balance num">{formatBalance(summary.balance_cents)}<span>{summary.closedTrades ? `${account.rules.drawdown === "trailing_eod" && account.rules.max_loss_cents ? "high at a close" : "high"} ${formatBalance(summary.peak_cents)}` : "No closed trades logged yet"}</span></p>
           )}
           <p className="account-today num">
             Today {shield ? `${summary.today.trades} ${summary.today.trades === 1 ? "trade" : "trades"}` : `${formatCents(summary.today.realized_cents)} · ${summary.today.trades} ${summary.today.trades === 1 ? "trade" : "trades"}`}
@@ -207,26 +207,36 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
       {notes.length > 0 && <p className="account-notes">{notes.join(" · ")}</p>}
 
       {!calmReplay && checking && (
-        <form className="account-check" onSubmit={saveCheck}>
+        <form
+          className="account-check"
+          onSubmit={saveCheck}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setChecking(false);
+            }
+          }}
+          aria-label={`Match broker balance for ${account.name}`}
+        >
           <label className="field"><span>Balance your broker shows ($)</span>
             <input inputMode="decimal" autoFocus value={actual} placeholder={(summary.balance_cents / 100).toFixed(2)} onChange={(event) => setActual(event.target.value)} />
           </label>
           <p className="muted">{actualCents == null ? "The difference is kept as an adjustment, for fees or trades not logged. Old trades are not changed." : `Adjustment: ${formatCents(actualCents - summary.balance_cents)}`}</p>
           <div className="actions">
-            <button type="submit" className="btn-secondary" disabled={actualCents == null}>Save</button>
-            <button type="button" className="btn-ghost" onClick={() => setChecking(false)}>Cancel</button>
+            <button type="submit" className="btn-secondary" disabled={actualCents == null} aria-label="Save broker balance check">Save</button>
+            <button type="button" className="btn-ghost" onClick={() => setChecking(false)} aria-label="Cancel broker balance check">Cancel</button>
           </div>
         </form>
       )}
 
       <div className="actions account-actions">
-        {!replay && !checking && !shield && <button type="button" className="btn-secondary" onClick={() => setChecking(true)}>Match broker balance</button>}
-        <button type="button" className="btn-secondary" onClick={() => setEditing(true)}>Edit</button>
+        {!replay && !checking && !shield && <button type="button" className="btn-secondary" onClick={() => setChecking(true)} aria-label={`Match broker balance for ${account.name}`}>Match broker balance</button>}
+        <button type="button" className="btn-secondary" onClick={() => setEditing(true)} aria-label={`Edit ${account.name}`}>Edit</button>
       </div>
 
       {summary.rows.length > 0 && !shield && (
         <details className="account-history">
-          <summary>History <span>{summary.closedTrades} {summary.closedTrades === 1 ? "trade" : "trades"} · {summary.sessions} {summary.sessions === 1 ? "day" : "days"}</span></summary>
+          <summary aria-label={`Show history for ${account.name}: ${summary.closedTrades} ${summary.closedTrades === 1 ? "trade" : "trades"} across ${summary.sessions} ${summary.sessions === 1 ? "day" : "days"}`}>History <span>{summary.closedTrades} {summary.closedTrades === 1 ? "trade" : "trades"} · {summary.sessions} {summary.sessions === 1 ? "day" : "days"}</span></summary>
           <ol>
             {[...summary.rows].reverse().slice(0, 30).map((row) => {
               const trade = row.kind === "trade" ? byId.get(row.trade_id) : null;
@@ -241,6 +251,8 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
           </ol>
         </details>
       )}
+      {summary.rows.length === 0 && !shield && <p className="account-history muted" role="status">No account history yet.</p>}
+      {summary.rows.length > 0 && shield && <p className="account-history muted" role="status">Account history unavailable while Shield is on.</p>}
       {editing && <AccountSheet account={account} onClose={() => setEditing(false)} />}
     </section>
   );

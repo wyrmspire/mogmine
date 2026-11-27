@@ -163,15 +163,34 @@ Several agents may work on this repo at once. [BOARD.md](BOARD.md) is the work o
 - **Worker bots (`claude-haiku-5-5`, max 3–4 concurrent):** run **only** targeted tests (`node --test lib/__tests__/<touched>.test.ts`) + `npm run typecheck` (+ `npm run check:file-length` if touching a >400-line file). **Never** run full `npm test`, `npm run lint`, or `npm run build` — the wave tester (`gemini-3.8-flash`) runs those once per wave.
 - **Dependencies:** never run `npm ci` or `npm install` unless `package-lock.json` changed; reuse the worktree linked `node_modules`.
 - **CPU & output:** prefix heavy commands (`node --test`, `tsc`, `eslint`, `next build`) with `nice -n 10` and cap tests with `--test-concurrency=2`. Keep handoffs, PR bodies, and logs brief; no dumps or secrets.
-- **Roles & retries:** simple/repetitive work stays on Haiku; one retry max, then escalate to the Gemini planner (`gemini-4-carbon-high`), who owns larger packages, cross-file fixes, conflict resolution, and merges (Codex is paused).
+- **Roles & retries:** simple/repetitive work stays on Haiku; one retry max, then escalate to the Gemini planner (`gemini-4-carbon-high`), who owns larger packages, cross-file fixes, conflict resolution, and merges.
 - **Out-of-lane blocks & coordination:** never edit unlisted files to fix unrelated goldens; open a `[WIP]` PR naming the exact line(s) for the planner. Strategy Lab (`sl-orch`) stays stopped until swarm `ALL-DONE`.
+
+## 6c. How to Run Codex Efficiently on MogMine
+
+Use this operating pattern for substantial repo work. It is optimized for useful code per token and for safe integration in a dirty worktree.
+
+**One lead per wave.** A wave is either Codex-led (this section) or Gemini-led (§6b), never both. Only that lead edits shared shells, schemas and migrations, and merges. Name the lead in the wave's first handoff.
+
+1. **Start with the outcome and constraints.** Read the owner's latest request, this file, the relevant spec, and the current diff before planning. Treat explicit constraints such as “no tests,” “no browsing,” or “no approval stops” as turn-specific overrides; honor them and report the resulting verification gap honestly.
+2. **Inspect narrowly.** Use `rg`, focused `sed` ranges, `git diff -- <paths>`, and `git diff --check`. Do not dump or reread the whole repository, repeatedly print unchanged files, or spend tokens narrating obvious shell activity.
+3. **Keep the critical path local.** The lead Codex agent owns integration, shared interfaces, migrations, cross-cutting safety fixes, and any task that blocks the next step. Begin that work immediately instead of delegating it and waiting.
+4. **Delegate only independent implementation lanes.** When the owner authorizes bots, prefer about 4–5 substantial lanes with disjoint writable files over many tiny tasks. Give each worker a concrete outcome, exact write scope, relevant invariants, and a required handoff. A low-cost/low-reasoning worker such as Luna is appropriate for bounded lanes; keep architecture and integration with the lead.
+5. **Make each worker carry a real package.** Bundle related implementation, local cleanup, and documentation/handoff into one lane. Do not create a bot merely to inspect one file or answer a question the lead can resolve faster.
+6. **Work while workers run.** Continue non-overlapping integration or analysis locally. Wait only when a result is actually needed, review each returned diff once, fix integration centrally, then close completed workers so they stop consuming concurrency.
+7. **Protect the dirty tree.** Assume pre-existing edits belong to the owner. Never reset, overwrite, or “clean up” unrelated files. Before editing an already-dirty shared file, inspect its current diff and patch only the intended section.
+8. **Converge before launching another wave.** After workers return, reconcile behavior across surfaces, trace data from source to UI, check migrations and repository contracts, and resolve contradictions in handoff claims. Prefer one integration pass over another broad swarm.
+9. **Match verification to the owner's instruction.** Normally run the targeted checks required above. If verification is explicitly deferred, do only permitted static checks, never imply tests passed, and list exactly what remains unverified. Do not browse, install tools, or run expensive commands without a task need.
+10. **Finish with evidence, not ceremony.** Give exact changed-file and line counts, summarize the meaningful behavior, identify migrations or deployment steps not applied, list remaining risks, and link the most important files. Keep progress updates short and make the final response self-contained.
+
+For a large design/product wave, a good default split is: visual system, chart integrity, daily-loop/read models, agent/API safety, and learning/research integrity. The lead integrates all five and owns shared shells, schemas, and final reconciliation.
 
 ## 7. Repo Dumps for Chat (printcode / gitrdif)
 
 When the owner asks for a dump or a diff dump, run from the repo root (Windows: `.\printcode.cmd` / `.\gitrdif.cmd`; bash: `./printcode.sh` / `./gitrdif.sh`):
 
-- **Full dump:** `printcode` writes `dump00.md`... with the whole repo and records the baseline commit in `.last-dump-commit`. `--help` lists options (`--area app|components|lib|docs|notes|tests|config`, `--ext`, `--list`, `--head`/`--tail`).
-- **Diff dump:** `gitrdif` writes `gitrdif00.md`... with commits, patch and uncommitted changes since the last full dump.
+- **Full dump:** `printcode` writes `dump00.md`... with the whole repo and records a snapshot of the local files as the baseline in `.last-dump-commit`. `--help` lists options (`--area app|components|lib|docs|notes|tests|config`, `--ext`, `--list`, `--head`/`--tail`).
+- **Diff dump:** `gitrdif` writes `gitrdif00.md`... with everything changed since the last full dump (commits, uncommitted and new files), then runs `printcode`, so each run shows only new changes. Passing a ref only reports.
 - Outputs are git-ignored. Never commit them. Tell the owner which files were written.
 
 <!-- BEGIN:nextjs-agent-rules -->

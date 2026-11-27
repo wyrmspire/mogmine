@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { aggregateCandles } from "../candle-aggregation.ts";
 import { canonicalSymbol, FUTURES_SPECS, specFor, TIMEFRAME_MINUTES } from "../trades.ts";
 import type { Candle, Timeframe } from "../trades.ts";
+import { previousRegularSessionDate, sessionDate } from "../session.ts";
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 60;
@@ -58,6 +59,28 @@ export interface ArchiveReadOptions {
   client?: ArchiveClientLike | null;
 }
 
+export interface ArchiveStatus {
+  state: "server_unconfigured" | "query_failed" | "empty_archive" | "no_archive_job" | "failed_job" | "healthy" | "attention";
+  available: boolean;
+  symbol: string;
+  newestBarIso: string | null;
+  coveredSessions: number;
+  missingRecentSessions: number;
+  missingRecentSessionsProvisional: boolean;
+  lastJob: { status: string; started_at: string | null; finished_at: string | null; bars_upserted: number } | null;
+  warning: string | null;
+}
+
+// Not ArchiveClientLike: the status read queries other tables, whose rows are not candle rows.
+type StatusRow = Record<string, unknown>;
+interface StatusQuery extends PromiseLike<{ data: StatusRow[] | null; error: { message: string } | null }> {
+  select(columns: string): StatusQuery;
+  eq(column: string, value: string): StatusQuery;
+  order(column: string, options: { ascending: boolean }): StatusQuery;
+  range(from: number, to: number): StatusQuery;
+}
+type ArchiveStatusClient = { from(table: string): { select(columns: string): StatusQuery } };
+
 let cachedCreds: { url: string; serviceKey: string } | null = null;
 let cachedClient: ArchiveClientLike | null = null;
 
@@ -71,6 +94,42 @@ function getArchiveClient(): ArchiveClientLike | null {
   cachedCreds = { url, serviceKey };
   cachedClient = createClient(url, serviceKey, { auth: AUTH_OPTIONS }) as unknown as ArchiveClientLike;
   return cachedClient;
+}
+
+function recentSessionLabels(nowMs: number, count: number): string[] {
+  const result: string[] = [];
+  let date = previousRegularSessionDate(sessionDate(nowMs));
+  while (result.length < count) {
+    result.push(date);
+    date = previousRegularSessionDate(date);
+  }
+  return result;
+}
+
+/** Read-only archive health summary. It never throws and returns local mode when server credentials are absent. */
+export async function readArchiveStatus(symbol = "MES=F", nowMs = Date.now(), options: { client?: ArchiveStatusClient | null } = {}): Promise<ArchiveStatus> {
+  const empty: ArchiveStatus = { state: "server_unconfigured", available: false, symbol, newestBarIso: null, coveredSessions: 0, missingRecentSessions: 0, missingRecentSessionsProvisional: false, lastJob: null, warning: null };
+  try {
+    const client = options.client === undefined ? getArchiveClient() as unknown as ArchiveStatusClient | null : options.client;
+    if (!client) return empty;
+    const coverage = await client.from("mogmine_market_coverage").select("session_date,status").eq("symbol", symbol).eq("timeframe", "1m");
+    const jobs = await client.from("mogmine_market_archive_jobs").select("status,started_at,finished_at,bars_upserted").eq("symbol", symbol).order("started_at", { ascending: false }).range(0, 0);
+    const candles = await client.from("mogmine_market_candles").select("ts").eq("symbol", symbol).eq("timeframe", "1m").order("ts", { ascending: false }).range(0, 0);
+    if (coverage.error || jobs.error || candles.error) return { ...empty, state: "query_failed", warning: "Archive status could not be read from the server." };
+    const rows = Array.isArray(coverage.data) ? coverage.data : [];
+    const recent = new Set(recentSessionLabels(nowMs, 5));
+    const covered = new Set(rows.filter((row) => row.status === "complete").map((row) => String(row.session_date)));
+    const missingRecentSessions = [...recent].filter((date) => !covered.has(date)).length;
+    const job = Array.isArray(jobs.data) && jobs.data[0] ? jobs.data[0] : null;
+    const lastJob = job ? { status: String(job.status), started_at: typeof job.started_at === "string" ? job.started_at : null, finished_at: typeof job.finished_at === "string" ? job.finished_at : null, bars_upserted: Number(job.bars_upserted ?? 0) } : null;
+    const newestBarIso = Array.isArray(candles.data) && candles.data[0]?.ts ? String(candles.data[0].ts) : null;
+    const hasArchiveData = rows.length > 0 || newestBarIso !== null;
+    const state = lastJob?.status === "failed" ? "failed_job" : !lastJob && hasArchiveData ? "no_archive_job" : !hasArchiveData ? "empty_archive" : missingRecentSessions > 1 ? "attention" : "healthy";
+    const warning = state === "failed_job" ? "The latest archive job failed." : state === "no_archive_job" ? "Archive data exists, but no archive job has been recorded." : state === "attention" ? `${missingRecentSessions} recent exchange sessions appear missing (provisional; holiday and early-close calendars are not authoritative here).` : null;
+    return { state, available: true, symbol, newestBarIso, coveredSessions: covered.size, missingRecentSessions, missingRecentSessionsProvisional: true, lastJob, warning };
+  } catch {
+    return { ...empty, state: "query_failed", warning: "Archive status could not be read from the server." };
+  }
 }
 
 /** Resolve canonical symbol and all matching archive symbol keys without cross-instrument fallback (OD-15). */

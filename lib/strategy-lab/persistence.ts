@@ -88,8 +88,25 @@ function sanitizeSummary(raw: unknown): PersistedRunSummary | null {
   if (!isObject(raw) || !isObject(raw.data) || !isObject(raw.stats)) return null;
   const list = (value: unknown) => (Array.isArray(value) ? value : []);
   const count = (value: unknown) => (Number.isFinite(num(value)) ? num(value) : 0);
+  const research = isObject(raw.data.research) ? raw.data.research : {};
+  const data = {
+    ...raw.data,
+    research: {
+      mode: research.mode === "validation" ? "validation" : "discovery",
+      conditionsSearched: Array.isArray(research.conditionsSearched) ? research.conditionsSearched.filter((v): v is string => typeof v === "string") : [],
+      variantsSearched: Array.isArray(research.variantsSearched) ? research.variantsSearched.filter((v): v is string => typeof v === "string") : [],
+      independentSessionCount: Math.max(0, Math.trunc(num(research.independentSessionCount))),
+      recipeHash: nonEmpty(research.recipeHash) ?? "unknown",
+      source: typeof research.source === "string" ? research.source : null,
+      roll: typeof research.roll === "string" ? research.roll : null,
+      heldOut: research.mode === "validation" && research.heldOut === true,
+      trialCount: Math.max(1, Math.trunc(num(research.trialCount)) || 1),
+      discoverySessions: Array.isArray(research.discoverySessions) ? research.discoverySessions.filter((v): v is string => typeof v === "string") : [],
+      validationSessions: Array.isArray(research.validationSessions) ? research.validationSessions.filter((v): v is string => typeof v === "string") : [],
+    },
+  };
   return jsonSafe({
-    data: raw.data,
+    data,
     candidates: count(raw.candidates),
     skips: isObject(raw.skips) ? raw.skips : {},
     stats: raw.stats,

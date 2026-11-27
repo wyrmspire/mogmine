@@ -7,7 +7,9 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import type { BarSeries, RunResult, SkillOutputRef } from "@/lib/strategy-lab/types";
 import { rSizeBasis } from "@/lib/strategy-lab/context-card";
 import {
-  comparisonNote, dataLines, defaultSliceLabel, edgeRows, headerLine, statLines, type EdgeRow,
+  comparisonNote, dataLines, defaultSliceLabel, edgeRows, HYPOTHETICAL_LABEL, HYPOTHETICAL_NOTE,
+  headerLine, slippageAssumptionText, statLines, type EdgeRow,
+  researchGovernanceLines,
 } from "@/lib/strategy-lab/results-view";
 import { StrategyLabSplits, StrategyLabTimeOfDay } from "@/components/StrategyLabSplits";
 import { StrategyLabMatches } from "@/components/StrategyLabMatches";
@@ -35,10 +37,12 @@ export interface StrategyLabResultsProps {
   onOpenAt?: (time: number) => void;
   /** Slot for the real-trades overlay (SL-11). */
   overlay?: ReactNode;
+  /** The recipe's deterministic execution-cost assumption, shown without changing run math. */
+  slippageTicks?: { stop: number; market: number };
 }
 
 export function StrategyLabResults({
-  result, title, accountName, shield, labelOf = defaultSliceLabel, series = null, onOpenAt, overlay,
+  result, title, accountName, shield, labelOf = defaultSliceLabel, series = null, onOpenAt, overlay, slippageTicks,
 }: StrategyLabResultsProps) {
   const [tab, setTab] = useState<Tab>("splits");
   const basis = rSizeBasis(
@@ -54,11 +58,39 @@ export function StrategyLabResults({
   const [headline, ...details] = statLines(result.stats);
 
   return (
-    <div className="sl-result" style={{ minWidth: 0 }}>
-      <section className="sl-card" aria-label="Run results">
+    <div
+      className="sl-result"
+      data-result-kind="hypothetical"
+      aria-label="Hypothetical simulated strategy results"
+      style={{ minWidth: 0 }}
+    >
+      <section className="sl-card" aria-label="Hypothetical simulated run results">
         <header className="sl-card-head">
-          <h2 className="sl-card-title">{headerLine(title, result.recipe.version, result.data.sessionsUsed.length, result.data.sessionsRequested)}</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+            <h2 className="sl-card-title" style={{ margin: 0 }}>
+              {headerLine(title, result.recipe.version, result.data.sessionsUsed.length, result.data.sessionsRequested)}
+            </h2>
+            <span
+              data-result-badge="hypothetical"
+              aria-label="Hypothetical simulated result"
+              style={{
+                border: "1px solid var(--border-strong)",
+                borderRadius: "999px",
+                padding: "3px 8px",
+                color: "var(--text-primary)",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {HYPOTHETICAL_LABEL}
+            </span>
+          </div>
+          <p className="sl-hint" role="note">{HYPOTHETICAL_NOTE}</p>
           <p className="sl-basis">{basis}</p>
+          <p className="sl-basis">{slippageAssumptionText(slippageTicks)}</p>
+          {researchGovernanceLines(result.data).map((line) => <p key={line} className="sl-basis">{line}</p>)}
         </header>
         <p className="sl-basis" style={{ color: "var(--text-primary)", fontWeight: 700 }}>{headline}</p>
         {details.map((line) => <p key={line} className="sl-basis">{line}</p>)}

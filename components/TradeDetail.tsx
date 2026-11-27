@@ -600,17 +600,22 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           )}
           <RiskLine trade={trade} rSize={rSize} accountName={accountName} shield={renderPrivacy} />
           {trade.stop_loss_price == null && <RiskChips trade={trade} budgetUsd={rSize.cents / 100} shield={prefs.shield} />}
-          {/* The frozen first stop once the working stop has moved, or why R is blank (R-10). */}
-          {stopHistory && <p className="initial-stop">{stopHistory}</p>}
-          <StopFacts trade={trade} rSize={rSize} />
-          {/* G2 (#36): Interactive stop-move editor & widening suggestion (UX-33) */}
-          <StopMovesEditor
-            trade={trade}
-            onChange={(moves) => updateTrade(trade.id, { stop_moves: moves })}
-            onSuggestMovedStop={!trade.quick_tags.includes("Moved Stop") ? () => updateTrade(trade.id, { quick_tags: [...trade.quick_tags, "Moved Stop"] }) : undefined}
-          />
-          <PartialsCard trade={trade} rSize={rSize} shield={prefs.shield} zone={zone} />
-          <PlanVsActualSection comparison={planVsActual} />
+          {/* Stop facts stay at level one; history and execution detail are progressive disclosure (RM-E6). */}
+          <StopFacts trade={trade} rSize={rSize} initialStopText={stopHistory} />
+          <details className="trade-secondary-disclosure">
+            <summary>More trade evidence</summary>
+            <div className="trade-secondary-content">
+              {/* The frozen first stop once the working stop has moved, or why R is blank (R-10). */}
+              {/* G2 (#36): Interactive stop-move editor & widening suggestion (UX-33) */}
+              <StopMovesEditor
+                trade={trade}
+                onChange={(moves) => updateTrade(trade.id, { stop_moves: moves })}
+                onSuggestMovedStop={!trade.quick_tags.includes("Moved Stop") ? () => updateTrade(trade.id, { quick_tags: [...trade.quick_tags, "Moved Stop"] }) : undefined}
+              />
+              <PartialsCard trade={trade} rSize={rSize} shield={prefs.shield} zone={zone} />
+              <PlanVsActualSection comparison={planVsActual} />
+            </div>
+          </details>
         </div>
 
         {/* Mobile Pit Stop / Quick Takeaway sits right below the levels ribbon before secondary cards */}

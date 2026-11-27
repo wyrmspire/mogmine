@@ -105,7 +105,7 @@ function DrawdownRow({
     if (result.state === "passed") {
       return (
         <div className="challenge-status-passed" role="status">
-          <span>Done: {targetSessions} {targetSessions === 1 ? "day" : "days"} inside {shield ? "the limit" : formatBalance(maxDrawdownCents)}</span>
+          <span>Passed: {targetSessions} {targetSessions === 1 ? "day" : "days"} inside {shield ? "the limit" : formatBalance(maxDrawdownCents)}</span>
           <span className="challenge-badge-check" aria-hidden="true">✓</span>
         </div>
       );
@@ -168,7 +168,7 @@ function DrawdownRow({
         {renderContent()}
       </Link>
       {result.state === "failed" && onRestart && (
-        <button type="button" className="btn-ghost challenge-failed-action" onClick={onRestart} aria-label="Start Drawdown Defender challenge again" style={{ minHeight: 44 }}>
+        <button type="button" className="btn-ghost challenge-failed-action" onClick={onRestart} aria-label="Start Drawdown Defender challenge again" style={{ minHeight: 44, minWidth: 44 }}>
           Start again
         </button>
       )}
@@ -207,7 +207,7 @@ function CleanRunRow({
 
         {result.state === "passed" ? (
           <div className="challenge-status-passed" role="status">
-            <span>Done: {targetTrades} in a row by the rules</span>
+            <span>Passed: {targetTrades} in a row by the rules</span>
             <span className="challenge-badge-check" aria-hidden="true">✓</span>
           </div>
         ) : (
@@ -222,7 +222,7 @@ function CleanRunRow({
         <div className="challenge-grading-note">
           <span>{ungraded.length} {ungraded.length === 1 ? "needs" : "need"} grading</span>
           {ungraded.map(({ trade_id }, index) => (
-            <Link key={trade_id} href={`/trades/${encodeURIComponent(trade_id)}`} aria-label={`Grade trade ${index + 1} for Clean Run`} style={{ display: "inline-flex", alignItems: "center", minHeight: 44, padding: "0 6px" }}>
+            <Link key={trade_id} href={`/trades/${encodeURIComponent(trade_id)}`} aria-label={`Grade trade ${index + 1} for Clean Run`} style={{ display: "inline-flex", alignItems: "center", minHeight: 44, minWidth: 44, padding: "0 8px" }}>
               Grade trade {index + 1}
             </Link>
           ))}
@@ -294,7 +294,7 @@ export function ChallengeCard({ shield }: { shield: boolean }) {
             className="challenge-start-link"
             onClick={() => setSetup({ kind: availableKind ?? "drawdown" })}
             aria-label="Start a trading challenge"
-            style={{ minHeight: 44, display: "inline-flex", alignItems: "center" }}
+            style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center" }}
           >
             Start a challenge →
           </button>
@@ -318,7 +318,7 @@ export function ChallengeCard({ shield }: { shield: boolean }) {
                 className="btn-ghost"
                 onClick={() => setSetup({ kind: availableKind ?? "drawdown" })}
                 aria-label="Start another challenge"
-                style={{ minHeight: 44 }}
+                style={{ minHeight: 44, minWidth: 44 }}
               >
                 ＋ Start another challenge
               </button>
@@ -333,7 +333,7 @@ export function ChallengeCard({ shield }: { shield: boolean }) {
           className="challenge-past-row"
           href={`/challenges/${encodeURIComponent(attempt.id)}`}
           aria-label={`View past ${attempt.rules.kind === "drawdown" ? "Drawdown Defender" : "Clean Run"} attempts`}
-          style={{ minHeight: 44, display: "flex", alignItems: "center" }}
+          style={{ minHeight: 44, minWidth: 44, display: "flex", alignItems: "center" }}
         >
           Past {attempt.rules.kind === "drawdown" ? "Drawdown Defender" : "Clean Run"} attempts
         </Link>

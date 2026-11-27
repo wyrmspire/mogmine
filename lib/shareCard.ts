@@ -10,6 +10,7 @@ import type { ChartTheme } from "./theme.ts";
 import { CHART_TOKENS } from "./chart-paint.ts";
 import { computeSnapshotDrawBox } from "./chart-export.ts";
 import { formatDateTime } from "./time.ts";
+import { DESIGN_CONTRAST } from "./design-contrast.ts";
 import { adherence, holdSeconds, tradePnl, tradePoints } from "./trades.ts";
 import type { RSizeOptions } from "./trades.ts";
 import { resolveRSize, resultR } from "./r-size.ts";
@@ -284,7 +285,7 @@ function drawMood(
   const caption = moodCardCaption(vector);
   if (caption) {
     ctx.fillStyle = theme.textMuted;
-    ctx.font = "650 18px system-ui";
+    ctx.font = `650 18px ${theme.fontSans}`;
     ctx.textAlign = "right";
     ctx.fillText(fitText(ctx, caption, 240), right, top + size + 18);
     ctx.textAlign = "left";
@@ -295,21 +296,21 @@ export const DEFAULT_CARD_THEME: ChartTheme = {
   chartBg: "#07080C",
   gridH: "#161922",
   gridV: "#12141C",
-  chartAxis: "#71788B",
-  chartBorder: "#1B1E2B",
-  crosshair: "#4B5563",
-  candleUp: "#10B981",
-  candleDown: "#EF4444",
-  profit: "#10B981",
-  risk: "#EF4444",
-  profitText: "#10B981",
-  lossText: "#EF4444",
-  boxActual: "#10B981",
+  chartAxis: DESIGN_CONTRAST.chartAxis,
+  chartBorder: "rgba(255,255,255,0.08)",
+  crosshair: "rgba(163,171,189,0.55)",
+  candleUp: "#22B88F",
+  candleDown: "#EC5664",
+  profit: "#22C39A",
+  risk: "#F0545F",
+  profitText: "#34D399",
+  lossText: DESIGN_CONTRAST.lossText,
+  boxActual: "#2DD4BF",
   boxPlanned: "#3B82F6",
   goldMid: "#D4AF37",
   goldLight: "#F3E5AB",
   textPrimary: "#F3F4F6",
-  textMuted: "#9CA3AF",
+  textMuted: DESIGN_CONTRAST.textMuted,
   surface: "#0D0F17",
   elevated: "#131622",
   boxOpacity: 0.28,
@@ -329,8 +330,8 @@ export const DEFAULT_CARD_THEME: ChartTheme = {
   chipNeutral: CHART_TOKENS.chip.neutral,
   chipWarn: CHART_TOKENS.chip.warn,
   chipGhost: CHART_TOKENS.chip.ghost,
-  fontMono: "ui-monospace, SFMono-Regular, Menlo, monospace",
-  fontSans: "ui-sans-serif, system-ui, sans-serif",
+  fontMono: '"JetBrains Mono", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSans: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
 };
 
 export interface RenderCardCanvasOptions {
@@ -382,7 +383,7 @@ export function renderCardCanvas(
   // Header band: TYPE LABEL · subject on left; SHIELD on right
   const headerY = layout.header.y;
   ctx.fillStyle = theme.textMuted;
-  ctx.font = "700 24px system-ui";
+  ctx.font = `700 24px ${theme.fontSans}`;
   const headerTag = side === "back" ? `${content.typeLabel} · ${content.subject} · BACK` : `${content.typeLabel} · ${content.subject}`;
   ctx.fillText(headerTag, layout.paddingX, headerY + 28);
 
@@ -390,7 +391,7 @@ export function renderCardCanvas(
   if (content.playbook) {
     const headerTagWidth = ctx.measureText(headerTag).width;
     const pbTagText = content.playbook.toUpperCase();
-    ctx.font = "700 18px system-ui";
+    ctx.font = `700 18px ${theme.fontSans}`;
     const pbTagWidth = ctx.measureText(pbTagText).width;
     const pillX = layout.paddingX + headerTagWidth + 18;
     const maxPillRight = privacy ? layout.width - layout.paddingX - 120 : layout.width - layout.paddingX - 16;
@@ -417,7 +418,7 @@ export function renderCardCanvas(
 
   if (privacy) {
     ctx.textAlign = "right";
-    ctx.font = "700 24px system-ui";
+    ctx.font = `700 24px ${theme.fontSans}`;
     ctx.fillStyle = theme.goldMid;
     ctx.fillText("SHIELD", layout.width - layout.paddingX, headerY + 28);
     ctx.textAlign = "left";
@@ -425,10 +426,10 @@ export function renderCardCanvas(
 
   // Symbol & Direction/Hold
   ctx.fillStyle = theme.textPrimary;
-  ctx.font = "850 68px system-ui";
+  ctx.font = `850 68px ${theme.fontSans}`;
   ctx.fillText(trade.symbol, layout.paddingX, headerY + 98);
 
-  ctx.font = "700 24px ui-monospace, monospace";
+  ctx.font = `700 24px ${theme.fontMono}`;
   ctx.fillStyle = trade.direction === "LONG" ? theme.profit : theme.risk;
   ctx.fillText(content.direction, layout.paddingX + 220, headerY + 92);
 
@@ -465,12 +466,12 @@ export function renderCardCanvas(
 
     // Thesis
     ctx.fillStyle = theme.goldMid;
-    ctx.font = "800 20px system-ui";
+    ctx.font = `800 20px ${theme.fontSans}`;
     ctx.fillText("PRE-TRADE THESIS", backX, backY);
     backY += 28;
 
     ctx.fillStyle = theme.textPrimary;
-    ctx.font = "550 22px system-ui";
+    ctx.font = `550 22px ${theme.fontSans}`;
     const thesisText = trade.pre_trade_thesis || trade.note || "No thesis recorded";
     backY = fillWrapped(ctx, thesisText, backX, backY, maxBackW, 28);
     backY += 32;
@@ -478,12 +479,12 @@ export function renderCardCanvas(
     // Management Notes
     if (trade.management_notes) {
       ctx.fillStyle = theme.goldMid;
-      ctx.font = "800 20px system-ui";
+      ctx.font = `800 20px ${theme.fontSans}`;
       ctx.fillText("TRADE MANAGEMENT", backX, backY);
       backY += 28;
 
       ctx.fillStyle = theme.textPrimary;
-      ctx.font = "550 22px system-ui";
+      ctx.font = `550 22px ${theme.fontSans}`;
       backY = fillWrapped(ctx, trade.management_notes, backX, backY, maxBackW, 28);
       backY += 32;
     }
@@ -491,12 +492,12 @@ export function renderCardCanvas(
     // Post-Exit Notes
     if (trade.post_exit_notes) {
       ctx.fillStyle = theme.goldMid;
-      ctx.font = "800 20px system-ui";
+      ctx.font = `800 20px ${theme.fontSans}`;
       ctx.fillText("POST-EXIT NOTES", backX, backY);
       backY += 28;
 
       ctx.fillStyle = theme.textPrimary;
-      ctx.font = "550 22px system-ui";
+      ctx.font = `550 22px ${theme.fontSans}`;
       backY = fillWrapped(ctx, trade.post_exit_notes, backX, backY, maxBackW, 28);
       backY += 32;
     }
@@ -504,7 +505,7 @@ export function renderCardCanvas(
     // Checklist
     if (content.rules.length > 0) {
       ctx.fillStyle = theme.goldMid;
-      ctx.font = "800 20px system-ui";
+      ctx.font = `800 20px ${theme.fontSans}`;
       const sealInfo = content.ruleSeal ? ` · ${content.ruleSeal}` : "";
       ctx.fillText(`PLAYBOOK CHECKLIST${sealInfo}`, backX, backY);
       backY += 28;
@@ -513,7 +514,7 @@ export function renderCardCanvas(
       const rulesToShow = content.rules.slice(0, maxBackRules);
       rulesToShow.forEach((rule, idx) => {
         ctx.fillStyle = rule.checked ? theme.textPrimary : theme.textMuted;
-        ctx.font = "600 20px system-ui";
+        ctx.font = `600 20px ${theme.fontSans}`;
         ctx.fillText(fitText(ctx, `${rule.checked ? "✓" : "○"} ${rule.label}`, maxBackW), backX, backY + idx * 26);
       });
     }
@@ -527,29 +528,29 @@ export function renderCardCanvas(
   // Cell 1: ENTRY
   const x0 = layout.paddingX + 16;
   ctx.fillStyle = theme.textMuted;
-  ctx.font = "650 22px system-ui";
+  ctx.font = `650 22px ${theme.fontSans}`;
   ctx.fillText("ENTRY", x0, statsY + 28);
   ctx.fillStyle = theme.textPrimary;
-  ctx.font = "750 32px ui-monospace, monospace";
+  ctx.font = `750 32px ${theme.fontMono}`;
   ctx.fillText(fitText(ctx, formatPrice(trade.entry_price, trade.symbol), colWidth - 24), x0, statsY + 68);
 
   // Cell 2: EXIT
   const x1 = layout.paddingX + colWidth + 16;
   ctx.fillStyle = theme.textMuted;
-  ctx.font = "650 22px system-ui";
+  ctx.font = `650 22px ${theme.fontSans}`;
   ctx.fillText("EXIT", x1, statsY + 28);
   ctx.fillStyle = theme.textPrimary;
-  ctx.font = "750 32px ui-monospace, monospace";
+  ctx.font = `750 32px ${theme.fontMono}`;
   ctx.fillText(fitText(ctx, trade.exit_time == null ? "OPEN" : formatPrice(trade.exit_price, trade.symbol), colWidth - 24), x1, statsY + 68);
 
   // Cell 3: OUTCOME / HERO R with process seal beside it (docs/23 §3)
   const x2 = layout.paddingX + colWidth * 2 + 16;
   ctx.fillStyle = theme.textMuted;
-  ctx.font = "650 22px system-ui";
+  ctx.font = `650 22px ${theme.fontSans}`;
   ctx.fillText(privacy ? "HERO R · PROCESS" : "OUTCOME", x2, statsY + 28);
 
   if (privacy) {
-    ctx.font = "750 30px ui-monospace, monospace";
+    ctx.font = `750 30px ${theme.fontMono}`;
     ctx.fillStyle = pnl != null && pnl >= 0 ? theme.profit : theme.risk;
     const heroText = content.heroResult;
     ctx.fillText(heroText, x2, statsY + 68);
@@ -557,20 +558,20 @@ export function renderCardCanvas(
     if (content.processSeal) {
       const heroWidth = ctx.measureText(heroText).width;
       ctx.fillStyle = theme.goldMid;
-      ctx.font = "700 20px system-ui";
+      ctx.font = `700 20px ${theme.fontSans}`;
       const maxSealWidth = layout.width - layout.paddingX - (x2 + heroWidth + 16);
       ctx.fillText(fitText(ctx, content.processSeal, maxSealWidth), x2 + heroWidth + 16, statsY + 66);
     }
   } else {
     ctx.fillStyle = pnl != null ? (pnl >= 0 ? theme.profit : theme.risk) : theme.textPrimary;
-    ctx.font = "750 30px ui-monospace, monospace";
+    ctx.font = `750 30px ${theme.fontMono}`;
     ctx.fillText(fitText(ctx, content.outcome, colWidth - 24), x2, statsY + 68);
   }
 
   // Outcome detail (points or R · points)
   if (content.outcomeDetail) {
     ctx.fillStyle = theme.textMuted;
-    ctx.font = "600 20px ui-monospace, monospace";
+    ctx.font = `600 20px ${theme.fontMono}`;
     fillWrapped(ctx, content.outcomeDetail, x2, statsY + 98, colWidth - 24, 24);
   }
 
@@ -578,24 +579,24 @@ export function renderCardCanvas(
   let ctxY = layout.context.y + 24;
   if (content.playbook) {
     ctx.fillStyle = theme.goldMid;
-    ctx.font = "800 22px system-ui";
+    ctx.font = `800 22px ${theme.fontSans}`;
     ctx.fillText("PLAYBOOK", layout.paddingX + 16, ctxY);
     ctx.fillStyle = theme.textPrimary;
-    ctx.font = "650 22px system-ui";
+    ctx.font = `650 22px ${theme.fontSans}`;
     ctx.fillText(fitText(ctx, content.playbook, layout.main.width - 200), layout.paddingX + 180, ctxY);
     ctxY += 34;
   }
 
   if (content.tags.length) {
     ctx.fillStyle = theme.textMuted;
-    ctx.font = "650 22px system-ui";
+    ctx.font = `650 22px ${theme.fontSans}`;
     ctx.fillText(fitText(ctx, content.tags.map((t) => `#${t.replaceAll(" ", "")}`).join("  "), layout.main.width - 32), layout.paddingX + 16, ctxY);
     ctxY += 34;
   }
 
   if (content.ruleSeal) {
     ctx.fillStyle = theme.goldMid;
-    ctx.font = "800 22px system-ui";
+    ctx.font = `800 22px ${theme.fontSans}`;
     ctx.fillText(`RULES · ${content.ruleSeal}`, layout.paddingX + 16, ctxY);
     ctxY += 32;
 
@@ -603,7 +604,7 @@ export function renderCardCanvas(
     const rulesToDisplay = content.rules.slice(0, maxRules);
     rulesToDisplay.forEach((rule, idx) => {
       ctx.fillStyle = rule.checked ? theme.textPrimary : theme.textMuted;
-      ctx.font = "600 22px system-ui";
+      ctx.font = `600 22px ${theme.fontSans}`;
       ctx.fillText(fitText(ctx, `${rule.checked ? "✓" : "○"} ${rule.label}`, layout.main.width - 32), layout.paddingX + 16, ctxY + idx * 28);
     });
   }
@@ -611,7 +612,7 @@ export function renderCardCanvas(
   // Footer Band: mogmine · date · n = sample
   const footerY = layout.footer.y + 24;
   ctx.fillStyle = theme.textMuted;
-  ctx.font = "500 20px ui-monospace, monospace";
+  ctx.font = `500 20px ${theme.fontMono}`;
   ctx.fillText(fitText(ctx, `MOGMINE · ${content.entry.replace("ENTRY ", "")}`, 600), layout.paddingX + 16, footerY);
 
   ctx.textAlign = "right";

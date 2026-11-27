@@ -16,6 +16,7 @@ import { getDrillsBackup, restoreDrills } from "@/lib/drills-store";
 import { getCallsBackup, restoreCalls } from "@/lib/calls-store";
 import { getDailyReviewsBackup, restoreDailyReviews } from "@/lib/daily-review-store";
 import { AccountsSection } from "./AccountsSection";
+import { ArchiveStatusCard } from "./ArchiveStatusCard";
 import { PlaybookEditor } from "./PlaybookEditor";
 import { TagRegistryEditor } from "./TagRegistryEditor";
 import { TIME_ZONE_OPTIONS, formatDateTime } from "@/lib/time";
@@ -42,7 +43,6 @@ const WORKSPACE_LINKS = [
 
 const RISK_SUGGESTIONS = [150, 300, 500, 1000];
 const HEADER_VAL_STYLE = { fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem" } as const;
-
 export function TuneScreen() {
   const prefs = usePrefs();
   const journal = useJournal();
@@ -51,7 +51,6 @@ export function TuneScreen() {
   const [pending, setPending] = useState<PendingRestore | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draftRisk, setDraftRisk] = useState<string | null>(null);
-
   const riskDisplay = draftRisk ?? String(prefs.riskBudgetUsd);
   const riskBudgetDisplay = getTuneRiskBudgetDisplay(prefs.shield, prefs.riskBudgetUsd);
 
@@ -170,6 +169,12 @@ export function TuneScreen() {
             <span>Live, Eval &amp; Replay</span>
           </div>
           <AccountsSection shield={prefs.shield} />
+
+          <div className="section-title">
+            <h2>Market archive</h2>
+            <span>Status &amp; recovery</span>
+          </div>
+          <ArchiveStatusCard zone={prefs.timeZone} />
 
           <div className="section-title">
             <h2>Workspace Hub</h2>
@@ -387,6 +392,8 @@ export function TuneScreen() {
               Backups save your trades (notes, prices, tags, checklist, playbook) and device settings, including saved challenges and your playbooks, to a local JSON file with no network upload.
               Candle caches stay in IndexedDB and are not inside the file—charts for real trades re-fetch candles from Yahoo Finance when opened (and samples keep their offline fixture bars).
             </p>
+            {!journal.hydrated && <p className="muted" role="status" style={{ fontSize: 13 }}>Loading local journal… Backup actions will be available when storage is ready.</p>}
+            {journal.hydrated && journal.trades.length === 0 && <p className="muted" role="status" style={{ fontSize: 13 }}>Journal is empty. Import a backup or record your first trade to begin.</p>}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
               <button type="button" className="btn-primary" style={{ minHeight: 44, minWidth: 44 }} onClick={downloadBackup} disabled={!journal.hydrated}>
                 Download backup

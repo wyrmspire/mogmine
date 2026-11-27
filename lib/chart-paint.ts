@@ -27,6 +27,25 @@ export const CHART_TOKENS = {
   },
 } as const;
 
+/** Direction cues stay luminance-distinct even when the selected fill palette is viewed in grayscale. */
+export const FILLED_CANDLE_DIRECTION_CUES = {
+  upBorder: "#F4F6F9",
+  downBorder: "#667180",
+  upWick: "#E2E6EC",
+  downWick: "#667180",
+} as const;
+
+export function filledCandleColors(upColor: string, downColor: string) {
+  return {
+    upColor,
+    downColor,
+    borderUpColor: FILLED_CANDLE_DIRECTION_CUES.upBorder,
+    borderDownColor: FILLED_CANDLE_DIRECTION_CUES.downBorder,
+    wickUpColor: FILLED_CANDLE_DIRECTION_CUES.upWick,
+    wickDownColor: FILLED_CANDLE_DIRECTION_CUES.downWick,
+  } as const;
+}
+
 /** Export chips are 18 px tall for crisp Trade Card PNGs (08 §4.3). Shield chips are at least 44 px wide. */
 export const CHIP_EXPORT_HEIGHT = 18;
 export const CHIP_MIN_WIDTH_SHIELD = 44;

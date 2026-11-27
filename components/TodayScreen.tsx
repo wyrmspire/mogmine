@@ -7,6 +7,7 @@ import { AccountCards } from "./AccountCard";
 import { AccountSheet } from "./AccountSheet";
 import { ChallengeCard } from "./ChallengeCard";
 import { DayHeader } from "./DayHeader";
+import { TodayDecisionCockpit } from "./TodayDecisionCockpit";
 import { PlanCard } from "./PlanCard";
 import { RunningStatsCard } from "./RunningStatsCard";
 import { TradeRow } from "./TradeRow";
@@ -23,9 +24,10 @@ import { usePrefs } from "@/lib/prefs";
 import { DEFAULT_R_SIZE_CENTS } from "@/lib/r-size";
 import { dayStats, groupByDay, parseSessionDateParam, resolveViewedDate, stepRegularSessionDate, withSamples } from "@/lib/selectors";
 import type { DayGroup } from "@/lib/selectors";
+import { selectReviewQueue } from "@/lib/review-queue";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { useJournal } from "@/lib/store";
-import type { TradeRecord } from "@/lib/trades";
+import { processRead, type TradeRecord } from "@/lib/trades";
 import { openAddTrade, rememberList, useToday } from "@/lib/ui";
 
 // The session rolls at 18:00 ET (17:00 CT). Reading the clock 7 hours back keeps the close banner up until midnight CT.
@@ -110,11 +112,18 @@ function TodayView() {
     : `1R ${formatUsdAmount(activeRCents / 100).replace(/\.00$/, "")}`;
 
   const onlySamples = journal.trades.every((trade) => trade.is_sample);
-  const needsTags = realTrades.filter((trade) => trade.review_status === "new").length;
-  const unreviewed = realTrades.filter((trade) => trade.review_status !== "reviewed").length;
+  const reviewQueue = selectReviewQueue(journal.trades, { accounts: accounts.accounts });
+  const needsTags = reviewQueue.filter((trade) => trade.review_status === "new").length;
+  const unreviewed = reviewQueue.length;
   const sessionTradesCount = focus?.stats.count ?? 0;
   const sessionPlansCount = plansStore.plans.filter((plan) => plan.session_date === viewedDate && !plan.archived).length;
   const dayReviewState = dayStatus(dailyReviews.reviews, viewedDate);
+  const process = (focus?.trades ?? []).reduce((summary, trade) => {
+    const state = processRead(trade);
+    if (state == null) return summary;
+    const followed = state === "clean" ? summary.followed + 1 : summary.followed;
+    return { followed, total: summary.total + 1 };
+  }, { followed: 0, total: 0 });
   const dayReviewLabel = dayReviewState === "done" ? "Done ✓" : dayReviewState === "draft" ? "Draft saved" : "Not written yet";
   const dayReviewAction = dayReviewState === "done" ? "View ✓" : dayReviewState === "draft" ? "Continue →" : "Start →";
   const open = (group: DayGroup) => () => rememberList({ ids: group.trades.map((trade) => trade.id), label: formatSessionDate(group.date), href: dayHref(group.date) });
@@ -261,6 +270,21 @@ function TodayView() {
                   <span>Pre-open warm-up · 5-card Take it? deck →</span>
                 </Link>
               )}
+
+              <TodayDecisionCockpit
+                sessionDate={viewedDate}
+                now={now}
+                trades={liveTrades}
+                sessionTrades={rawFocus?.trades ?? []}
+                accounts={accounts.accounts}
+                activeAccountId={activeAccount?.id ?? null}
+                activeAccountName={activeAccount?.name ?? null}
+                prefs={prefs}
+                plans={plansStore.plans}
+                reviews={dailyReviews.reviews}
+                reviewQueueCount={reviewQueue.length}
+                process={process.total ? process : null}
+              />
 
               <Link
                 href={`/review/day/${viewedDate}`}

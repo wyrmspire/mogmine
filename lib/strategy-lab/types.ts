@@ -329,6 +329,8 @@ export interface RunResult {
     barsMissing: number;
     volumeMissing: number;
     rSize: { usd: number; source: string };
+    /** Added after the first persisted-run schema; absent only on legacy/in-memory fixtures. */
+    research?: ResearchGovernance;
   };
   candidates: number;
   skips: Record<string, Partial<Record<SkipReason, number>>>;
@@ -339,4 +341,22 @@ export interface RunResult {
   separators: Separator[];
   timeOfDay: TodCell[];
   ms: number;
+}
+
+export interface ResearchGovernance {
+  mode: "discovery" | "validation";
+  /** Derived from the executed recipe rather than supplied by the caller. */
+  conditionsSearched: string[];
+  variantsSearched: string[];
+  independentSessionCount: number;
+  recipeHash: string;
+  source: string | null;
+  roll: string | null;
+  /** Exploratory runs must never be presented as held-out validation. */
+  heldOut: boolean;
+  /** Cumulative executions of this recipe family, including the current run. */
+  trialCount?: number;
+  /** Explicit split boundaries. Empty only for legacy discovery runs. */
+  discoverySessions?: string[];
+  validationSessions?: string[];
 }

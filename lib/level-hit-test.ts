@@ -61,15 +61,19 @@ export function hitLevel(
   },
   tolerancePx = LEVEL_HIT_TOLERANCE_PX,
 ): LevelHit | null {
+  const tolerance = Number.isFinite(tolerancePx) ? Math.max(0, tolerancePx) : LEVEL_HIT_TOLERANCE_PX;
   let best: { line: LevelLine; y: number; distance: number } | null = null;
   for (const line of lines) {
     const y = project.priceToY(line.price);
     if (y == null || !Number.isFinite(y)) continue;
     const distance = Math.abs(point.y - y);
-    if (distance > tolerancePx) continue;
+    if (distance > tolerance) continue;
     if (project.raySpanX) {
       const span = project.raySpanX(line);
-      if (!span || point.x < span.x0 || point.x > span.x1) continue;
+      if (!span) continue;
+      const x0 = Math.min(span.x0, span.x1);
+      const x1 = Math.max(span.x0, span.x1);
+      if (!Number.isFinite(x0) || !Number.isFinite(x1) || point.x < x0 || point.x > x1) continue;
     }
     if (!best || distance < best.distance) best = { line, y, distance };
   }

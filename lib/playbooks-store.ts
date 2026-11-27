@@ -9,7 +9,7 @@
 // - Invariant 7: every playbook carries `user_id`.
 import { useSyncExternalStore } from "react";
 import { NO_SETUP_ID, PLAYBOOK_LIMITS, PLAYBOOK_SEEDS, setPlaybookRegistry } from "./playbooks.ts";
-import type { Playbook, PlaybookRule } from "./playbooks.ts";
+import type { Playbook, PlaybookRule, PlaybookVersion } from "./playbooks.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
 import type { TradeStyle } from "./trades.ts";
 import { STYLES, clonePlaybook, pinnedExampleId, trimText, sanitizePlaybooks, withPinnedExample } from "./playbooks-sanitize.ts";
@@ -18,6 +18,7 @@ import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-
 export { sanitizePlaybook, sanitizePlaybooks, sanitizePlaybooksBackup } from "./playbooks-sanitize.ts";
 
 export const PLAYBOOKS_STORAGE_KEY = "mogmine-playbooks-v1";
+export const PLAYBOOK_VERSIONS_STORAGE_KEY = "mogmine-playbook-versions-v1";
 
 export interface PlaybooksState {
   hydrated: boolean;
@@ -29,6 +30,7 @@ export interface PlaybooksState {
 const seeds = (): Playbook[] => PLAYBOOK_SEEDS.map(clonePlaybook);
 const empty = (): PlaybooksState => ({ hydrated: false, saved: true, playbooks: seeds() });
 let state: PlaybooksState = empty();
+let versions: PlaybookVersion[] = [];
 const serverState: PlaybooksState = empty();
 const listeners = new Set<() => void>();
 
@@ -41,7 +43,8 @@ function set(patch: Partial<PlaybooksState>) {
 function persist() {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(PLAYBOOKS_STORAGE_KEY, JSON.stringify(state.playbooks));
+    localStorage.setItem(PLAYBOOKS_STORAGE_KEY, JSON.stringify(state.playbooks.map(withVersionHistory)));
+    localStorage.setItem(PLAYBOOK_VERSIONS_STORAGE_KEY, JSON.stringify(versions));
     if (!state.saved) set({ saved: true });
   } catch {
     if (state.saved) set({ saved: false });
@@ -51,19 +54,26 @@ function persist() {
 // Remote sync (#190 pattern). With NEXT_PUBLIC_PERSISTENCE_ADAPTER=supabase the list is copied to Supabase in the
 // background; the device cache above is always written first. Playbooks are archived, never deleted (deletePolicy).
 function applyRemote(next: Playbook[]) {
-  set({ playbooks: sanitizePlaybooks(next) });
+  versions = mergeVersions(versions, next.flatMap((playbook) => playbook.version_history ?? []));
+  const playbooks = sanitizePlaybooks(next);
+  ensureBaselineVersions(playbooks);
+  set({ playbooks });
   persist();
 }
 
 // A seed nobody edited: a fresh device must not push it over the server's (possibly renamed) copy (#192 review).
 const seedFingerprints = new Map(PLAYBOOK_SEEDS.map((seed) => [seed.id, fingerprint("playbooks", clonePlaybook(seed))]));
-const isUntouchedSeed = (playbook: Playbook) => seedFingerprints.get(playbook.id) === fingerprint("playbooks", playbook);
+const isUntouchedSeed = (playbook: Playbook) => {
+  const clean = clonePlaybook(playbook);
+  delete clean.version_history;
+  return seedFingerprints.get(playbook.id) === fingerprint("playbooks", clean);
+};
 
 function createPlaybooksSync(overrides: Partial<CollectionSyncOptions<Playbook>> = {}): CollectionSync {
   return createCollectionSync<Playbook>({
     key: "playbooks",
     pristine: isUntouchedSeed,
-    getLocal: () => state.playbooks,
+    getLocal: () => state.playbooks.map(withVersionHistory),
     apply: applyRemote,
     ...overrides,
   });
@@ -77,9 +87,22 @@ let storageListener: ((event: StorageEvent) => void) | null = null;
 function listenForStorage() {
   if (storageListener || typeof window === "undefined") return;
   storageListener = (event: StorageEvent) => {
-    if (event.storageArea !== localStorage || (event.key !== PLAYBOOKS_STORAGE_KEY && event.key !== null)) return;
+    if (event.storageArea !== localStorage || (event.key !== PLAYBOOKS_STORAGE_KEY && event.key !== PLAYBOOK_VERSIONS_STORAGE_KEY && event.key !== null)) return;
     try {
-      set({ playbooks: event.newValue ? sanitizePlaybooks(JSON.parse(event.newValue)) : seeds(), saved: true });
+      if (event.key === PLAYBOOK_VERSIONS_STORAGE_KEY) {
+        versions = event.newValue ? sanitizeVersions(JSON.parse(event.newValue)) : [];
+        ensureBaselineVersions(state.playbooks);
+        set({ saved: true });
+        return;
+      }
+      const storedVersions = localStorage.getItem(PLAYBOOK_VERSIONS_STORAGE_KEY);
+      const nextPlaybooks = event.newValue ? sanitizePlaybooks(JSON.parse(event.newValue)) : seeds();
+      versions = mergeVersions(
+        nextPlaybooks.flatMap((playbook) => playbook.version_history ?? []),
+        storedVersions ? sanitizeVersions(JSON.parse(storedVersions)) : [],
+      );
+      ensureBaselineVersions(nextPlaybooks);
+      set({ playbooks: nextPlaybooks, saved: true });
       playbooksSync.changed();
     } catch {
       /* keep ours */
@@ -100,12 +123,74 @@ export function hydratePlaybooks() {
   try {
     const raw = localStorage.getItem(PLAYBOOKS_STORAGE_KEY);
     if (raw) playbooks = sanitizePlaybooks(JSON.parse(raw));
+    versions = mergeVersions(versions, playbooks.flatMap((playbook) => playbook.version_history ?? []));
+    const history = localStorage.getItem(PLAYBOOK_VERSIONS_STORAGE_KEY);
+    if (history) versions = mergeVersions(versions, sanitizeVersions(JSON.parse(history)));
+    ensureBaselineVersions(playbooks);
   } catch {
     saved = false;
   }
   set({ playbooks, hydrated: true, saved });
   listenForStorage();
   playbooksSync.start();
+}
+
+function sanitizeVersions(raw: unknown): PlaybookVersion[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const value = item as Record<string, unknown>;
+    const rules = Array.isArray(value.checklist_rules)
+      ? value.checklist_rules.flatMap((rule) => {
+        if (!rule || typeof rule !== "object") return [];
+        const r = rule as Record<string, unknown>;
+        return typeof r.id === "string" && typeof r.label === "string" ? [{ id: r.id, label: r.label }] : [];
+      })
+      : [];
+    const version = value.version;
+    if (typeof value.playbook_id !== "string" || typeof version !== "number" || !Number.isInteger(version) || version < 1 ||
+      typeof value.created_at !== "string" || typeof value.name !== "string" || !STYLES.includes(value.default_style as TradeStyle)) return [];
+    return [{ playbook_id: value.playbook_id, version, created_at: value.created_at, name: value.name,
+      default_style: value.default_style as TradeStyle, checklist_rules: rules }];
+  });
+}
+
+function mergeVersions(...groups: readonly PlaybookVersion[][]): PlaybookVersion[] {
+  const byKey = new Map<string, PlaybookVersion>();
+  for (const version of groups.flat()) byKey.set(`${version.playbook_id}|${version.version}`, version);
+  return [...byKey.values()].sort((a, b) => a.playbook_id.localeCompare(b.playbook_id) || a.version - b.version);
+}
+
+function withVersionHistory(playbook: Playbook): Playbook {
+  const history = versions.filter((version) => version.playbook_id === playbook.id);
+  return history.length ? { ...playbook, version_history: history.map((version) => ({ ...version, checklist_rules: version.checklist_rules.map((rule) => ({ ...rule })) })) } : playbook;
+}
+
+const snapshot = (playbook: Playbook, version: number): PlaybookVersion => ({
+  playbook_id: playbook.id, version, created_at: new Date().toISOString(), name: playbook.name,
+  default_style: playbook.default_style, checklist_rules: playbook.checklist_rules.map((rule) => ({ ...rule })),
+});
+
+function ensureBaselineVersions(playbooks: readonly Playbook[]): void {
+  const known = new Set(versions.map((version) => version.playbook_id));
+  const missing = playbooks.filter((playbook) => !known.has(playbook.id)).map((playbook) => snapshot(playbook, 1));
+  if (missing.length) versions = mergeVersions(versions, missing);
+}
+
+/** Exact rules/name snapshot. Missing versions return null rather than silently using current rules. */
+export function playbookVersion(id: string, version: number): PlaybookVersion | null {
+  hydratePlaybooks();
+  return versions.find((item) => item.playbook_id === id && item.version === version) ?? null;
+}
+
+export function playbookVersions(id: string): readonly PlaybookVersion[] {
+  hydratePlaybooks();
+  return versions.filter((item) => item.playbook_id === id).sort((a, b) => a.version - b.version);
+}
+
+export function currentPlaybookVersion(id: string): number | null {
+  const history = playbookVersions(id);
+  return history.length ? history[history.length - 1].version : null;
 }
 
 const randomPart = () =>
@@ -170,6 +255,7 @@ export function createPlaybook(draft: PlaybookDraft): PlaybookResult {
     archived: false,
   };
   set({ playbooks: [...state.playbooks, playbook] });
+  versions = [...versions, snapshot(playbook, 1)];
   persist();
   playbooksSync.changed();
   return { ok: true, playbook };
@@ -184,6 +270,11 @@ export function updatePlaybook(id: string, draft: PlaybookDraft): PlaybookResult
   if (error) return { ok: false, error };
   const playbook: Playbook = { ...current, ...cleanDraft(draft) };
   set({ playbooks: state.playbooks.map((item) => (item.id === id ? playbook : item)) });
+  const history = versions.filter((item) => item.playbook_id === id);
+  const nextVersion = (history.at(-1)?.version ?? 0) + 1;
+  // The first edit establishes v1 from the old live record, then records the edited v2.
+  const baseline = history.length ? [] : [snapshot(current, 1)];
+  versions = [...versions, ...baseline, snapshot(playbook, nextVersion === 1 ? 2 : nextVersion)];
   persist();
   playbooksSync.changed();
   return { ok: true, playbook };
@@ -230,7 +321,7 @@ export function activePlaybooks(list: readonly Playbook[], keepId: string | null
 
 export function getPlaybooksBackup(): Playbook[] {
   hydratePlaybooks();
-  return state.playbooks.map(clonePlaybook);
+  return state.playbooks.map((playbook) => clonePlaybook(withVersionHistory(playbook)));
 }
 
 /** True when a list holds anything beyond the untouched seeds. */
@@ -244,6 +335,8 @@ export function playbooksDifferFromSeeds(list: readonly Playbook[]) {
  */
 export function restorePlaybooks(playbooks: readonly Playbook[]) {
   hydratePlaybooks();
+  versions = mergeVersions(versions, playbooks.flatMap((playbook) => playbook.version_history ?? []));
+  ensureBaselineVersions(playbooks);
   const incoming = new Set(playbooks.map((item) => item.id));
   const omitted = state.playbooks.filter((item) => item.id !== NO_SETUP_ID && !incoming.has(item.id)).map((item) => ({ ...item, archived: true }));
   set({ playbooks: sanitizePlaybooks([...playbooks, ...omitted]) });
@@ -255,6 +348,7 @@ export function restorePlaybooks(playbooks: readonly Playbook[]) {
 export function resetPlaybooksForTests() {
   stopListeningForStorage();
   state = empty();
+  versions = [];
   setPlaybookRegistry(state.playbooks);
   playbooksSync.dispose();
   playbooksSync = createPlaybooksSync();

@@ -19,7 +19,7 @@ import type { SkillRegistry } from "./registry.ts";
 import { decisionMinute } from "./skills/clock.ts";
 import { forwardReturn, levelReach, measureBracket, type Bracket } from "./skills/measure.ts";
 import type {
-  BarSeries, Match, Recipe, RunResult, SkillContext, SkillOutputRef, SkipReason, Value,
+  BarSeries, Condition, Match, Recipe, RunResult, SkillContext, SkillOutputRef, SkipReason, Value,
 } from "./types.ts";
 
 export const MES_SPEC = { symbol: "MES", tickSize: 0.25, pointValueUsd: 5 } as const;
@@ -43,6 +43,38 @@ export interface RunContext {
   registry?: SkillRegistry;
   /** Wall clock for `ms`. Injected by tests; defaults to performance.now(). */
   now?: () => number;
+  research?: ResearchRunPlan;
+}
+
+/** The caller selects a research boundary; the runner derives all claims about the executed run. */
+export interface ResearchRunPlan {
+  mode?: "discovery" | "validation";
+  /** Required for validation and must match the recipe executed by this runner. */
+  frozenRecipeHash?: string;
+  /** Validation requires both non-empty sets and rejects any overlap. */
+  discoverySessions?: readonly string[];
+  validationSessions?: readonly string[];
+  /** Completed executions before this one. The runner always adds the current trial. */
+  priorTrialCount?: number;
+  source?: string | null;
+  roll?: string | null;
+}
+
+export function recipeFingerprint(recipe: Recipe): string {
+  let hash = 2166136261;
+  for (const char of JSON.stringify(recipe)) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619); }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function conditionSearches(condition: Condition, path = "trigger"): string[] {
+  if ("all" in condition) return condition.all.flatMap((child, index) => conditionSearches(child, `${path}.all[${index}]`));
+  if ("any" in condition) return condition.any.flatMap((child, index) => conditionSearches(child, `${path}.any[${index}]`));
+  if ("not" in condition) return conditionSearches(condition.not, `${path}.not`);
+  return [`${path}:${condition.skill}.${condition.out}${condition.op}`];
+}
+
+function sessionSet(values: readonly string[] | undefined): Set<string> {
+  return new Set((values ?? []).filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)));
 }
 
 type ReadResult =
@@ -174,12 +206,28 @@ export function runRecipe(input: Recipe, series: BarSeries, context: RunContext)
     throw new Error(`Invalid recipe: ${checked.errors.map((e) => `${e.path} ${e.message}`).join("; ")}`);
   }
   const recipe = checked.recipe;
+  const recipeHash = recipeFingerprint(recipe);
   const rSize = context.rSizeUsd;
   if (!(Number.isFinite(rSize) && rSize > 0)) throw new Error("R size must be a positive dollar amount");
 
+  const researchMode = context.research?.mode ?? "discovery";
+  const discoverySessions = sessionSet(context.research?.discoverySessions);
+  const validationSessions = sessionSet(context.research?.validationSessions);
+  if (researchMode === "validation") {
+    if (context.research?.frozenRecipeHash !== recipeHash) throw new Error("Validation requires the frozen recipe hash for this recipe");
+    if (!discoverySessions.size || !validationSessions.size) throw new Error("Validation requires explicit discovery and validation session sets");
+    for (const date of validationSessions) {
+      if (discoverySessions.has(date)) throw new Error(`Validation session ${date} overlaps the discovery set`);
+    }
+  }
+
   const index = createLevelIndex(series);
   const flatMinuteEt = parseEtMinute(recipe.flatAtEt) ?? 1019; // validated above; 1019 = 16:59
-  const usable = new Set(series.sessions.filter((s) => !s.excluded && s.baseTimeframe === "1m").map((s) => s.date));
+  const researchBoundary = researchMode === "validation" ? validationSessions : discoverySessions;
+  const usable = new Set(series.sessions
+    .filter((s) => !s.excluded && s.baseTimeframe === "1m" && (!researchBoundary.size || researchBoundary.has(s.date)))
+    .map((s) => s.date));
+  if (researchMode === "validation" && !usable.size) throw new Error("None of the held-out validation sessions are available in this data set");
   const skips: RunResult["skips"] = {};
   const matches: Match[] = [];
   const perSession = new Map<string, number>();
@@ -292,6 +340,19 @@ export function runRecipe(input: Recipe, series: BarSeries, context: RunContext)
       barsMissing: usedSessions.reduce((sum, s) => sum + Math.max(0, s.expectedBars - s.presentBars), 0),
       volumeMissing: usedSessions.reduce((sum, s) => sum + s.volumeMissing, 0),
       rSize: { usd: rSize, source: context.rSizeSource ?? "default" },
+      research: {
+        mode: researchMode,
+        conditionsSearched: conditionSearches(recipe.trigger),
+        variantsSearched: [recipeHash],
+        independentSessionCount: usedSessions.length,
+        recipeHash,
+        source: context.research?.source ?? series.symbol,
+        roll: context.research?.roll ?? null,
+        heldOut: researchMode === "validation",
+        trialCount: Math.max(0, Math.trunc(context.research?.priorTrialCount ?? 0)) + 1,
+        discoverySessions: [...discoverySessions].sort(),
+        validationSessions: [...validationSessions].sort(),
+      },
     },
     candidates,
     skips,

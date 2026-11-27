@@ -99,7 +99,7 @@ export function PlaybookCard({ data, example, shield, zone }: {
           aria-pressed={side === "back"}
           aria-label={side === "front" ? "Flip to view playbook rules" : "Flip to view example chart and stats"}
           onClick={() => setSide(side === "front" ? "back" : "front")}
-          style={{ minHeight: 44 }}
+          style={{ minHeight: 44, minWidth: 44 }}
         >
           {side === "front" ? "Rules" : "Example"}
         </button>
@@ -118,7 +118,7 @@ export function PlaybookCard({ data, example, shield, zone }: {
                   aria-pressed={isPinned}
                   disabled={!example}
                   onClick={() => example && setPlaybookPinnedExample(data.playbook_id, isPinned ? null : example.id)}
-                  style={{ minHeight: 44 }}
+                  style={{ minHeight: 44, minWidth: 44 }}
                 >
                   {isPinned ? "Pinned example" : "Pin example"}
                 </button>
@@ -127,7 +127,7 @@ export function PlaybookCard({ data, example, shield, zone }: {
                     aria-label="Choose the pinned teaching example"
                     value={pinSelect}
                     onChange={(event) => setPlaybookPinnedExample(data.playbook_id, event.target.value || null)}
-                    style={{ minHeight: 44 }}
+                    style={{ minHeight: 44, minWidth: 0 }}
                   >
                     <option value="">Automatic</option>
                     {choices.map((trade) => (
@@ -156,7 +156,7 @@ export function PlaybookCard({ data, example, shield, zone }: {
             {data.rules.length ? (
               <ol className="playbook-card-rules" aria-label="Checklist rules">{data.rules.map((rule, i) => <li key={`${i}-${rule}`}>{rule}</li>)}</ol>
             ) : (
-              <p className="muted">No rules on this playbook. Add them in Tune.</p>
+              <p className="muted">No rules yet. Add rules in Tune.</p>
             )}
             <h3>Drills</h3>
             <p className="num playbook-card-drill" aria-label="Drill performance">{playbookDrillLine(data, shield)}</p>
@@ -167,7 +167,7 @@ export function PlaybookCard({ data, example, shield, zone }: {
       <footer className="playbook-card-foot num">
         <span>mogmine</span>
         <span>{playbookSampleLine(data)}</span>
-        <button type="button" className="btn-secondary playbook-share" onClick={open} aria-label={`Share ${data.name} playbook card image`} style={{ minHeight: 44 }}>Share card</button>
+        <button type="button" className="btn-secondary playbook-share" onClick={open} aria-label={`Share ${data.name} playbook card image`} style={{ minHeight: 44, minWidth: 44 }}>Share card</button>
       </footer>
 
       {exporting && (
@@ -211,7 +211,7 @@ function ExampleChart({ ref, example, shield, zone, onRendered }: {
 
   const rendered = useCallback(() => onRendered(shield), [onRendered, shield]);
 
-  if (!example) return <div className="chart-frame playbook-card-chart"><div className="chart-skeleton"><span>No example yet</span></div></div>;
+  if (!example) return <div className="chart-frame playbook-card-chart"><div className="chart-skeleton"><span>No teaching example selected.</span></div></div>;
   return (
     <div className="chart-frame playbook-card-chart">
       {bars.state === "ready" ? (
@@ -219,7 +219,7 @@ function ExampleChart({ ref, example, shield, zone, onRendered }: {
       ) : bars.state === "loading" ? (
         <div className="chart-skeleton"><div className="skeleton" /></div>
       ) : (
-        <div className="chart-skeleton"><span>No saved bars for this trade. <Link href={`/trades/${example.id}`} aria-label={`Open trade ${example.symbol} to load candles`}>Open it</Link> to load them.</span></div>
+        <div className="chart-skeleton"><span>Example chart unavailable. <Link href={`/trades/${example.id}`} aria-label={`Open trade ${example.symbol} to load candles`}>Open the trade</Link> to load candles.</span></div>
       )}
     </div>
   );

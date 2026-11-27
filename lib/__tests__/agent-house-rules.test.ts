@@ -7,7 +7,7 @@ import { buildDiscovery, buildOpenApiSpec, guideUrl, setupBlock, vocabularyUrl }
 import { hasScope, requiredScope } from "../agent/tokens.ts";
 
 const ORIGIN = "https://mogmine.vercel.app";
-const EXPECTED_IDS = Array.from({ length: 12 }, (_, i) => `HR-${i + 1}`);
+const EXPECTED_IDS = Array.from({ length: 13 }, (_, i) => `HR-${i + 1}`);
 const token = `mmk_${"a".repeat(43)}`;
 
 interface SpecShape {
@@ -16,7 +16,7 @@ interface SpecShape {
   paths: Record<string, { get?: { operationId?: string; "x-mogmine-scope"?: string }; post?: { description?: string }; patch?: { description?: string } }>;
 }
 
-test("house rules: exactly HR-1..HR-12, in order, each with the full field set", () => {
+test("house rules: exactly HR-1..HR-13, in order, each with the full field set", () => {
   assert.deepEqual(HOUSE_RULES.map((rule) => rule.id), EXPECTED_IDS);
   for (const rule of HOUSE_RULES) {
     for (const field of ["title", "summary", "rule", "why", "badExample", "goodExample"] as const) {
@@ -81,7 +81,7 @@ test("openapi: record writes repeat the rule reminders that apply to them, with 
   }
 });
 
-test("guide payload: the same version, all twelve rules, the workflows and the vocabulary URL", () => {
+test("guide payload: the same version, all thirteen rules, the workflows and the vocabulary URL", () => {
   const payload = buildGuidePayload(`${ORIGIN}/`);
   assert.equal(payload.version, HOUSE_RULES_VERSION);
   assert.deepEqual(payload.rules.map((rule) => rule.id), EXPECTED_IDS);

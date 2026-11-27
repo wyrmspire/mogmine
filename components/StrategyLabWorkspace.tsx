@@ -9,6 +9,7 @@ import { StrategyLabRecipes } from "@/components/StrategyLabRecipes";
 import { StrategyLabRecipeEditor } from "@/components/StrategyLabRecipeEditor";
 import { StrategyLabResults } from "@/components/StrategyLabResults";
 import { StrategyLabOverlay } from "@/components/StrategyLabOverlay";
+import { StrategyLabEmptyArchive, StrategyLabEmptyRecipes, StrategyLabOfflineNotice, StrategyLabRunError, StrategyLabRunLoading } from "@/components/StrategyLabStates";
 import { hydrateAccounts, useAccounts } from "@/lib/accounts-store";
 import { activePlaybooks, hydratePlaybooks, usePlaybooks } from "@/lib/playbooks-store";
 import { hydratePrefs, usePrefs } from "@/lib/prefs";
@@ -124,6 +125,18 @@ export function StrategyLabWorkspace() {
   const [includeSamples, setIncludeSamples] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [backupText, setBackupText] = useState("");
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    const updateOnlineState = () => setIsOnline(window.navigator.onLine);
+    updateOnlineState();
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+    return () => {
+      window.removeEventListener("online", updateOnlineState);
+      window.removeEventListener("offline", updateOnlineState);
+    };
+  }, []);
 
   const paramTrade = tradeParam ? journal.trades.find((t) => t.id === tradeParam) ?? null : null;
   const paramSeed = paramTrade ? seedFromTrade(paramTrade) : null;
@@ -177,12 +190,17 @@ export function StrategyLabWorkspace() {
         ? accounts.find((a) => a.id === recipe.account.accountId) ?? selectedAccount
         : selectedAccount;
       const runR = labRSize(runAcct?.id ?? null, accounts, prefs);
+      const priorTrialCount = persistence.runs.reduce((highest, run) => {
+        if (run.recipeId !== recipe.id) return highest;
+        return Math.max(highest, run.summary.data.research?.trialCount ?? 1);
+      }, 0);
       const result = runRecipe(recipe, loaded.series, {
         rSizeUsd: runR.usd,
         rSizeSource: runR.source,
         accountName: runAcct?.name ?? null,
         trades: journal.trades,
         includeSamples,
+        research: { mode: "discovery", priorTrialCount },
       });
       setRunsById((prev) => ({
         ...prev,
@@ -269,6 +287,8 @@ export function StrategyLabWorkspace() {
   ));
   const runnableRecipe: Recipe | undefined = editingStored
     ?? (editor.mode === "edit" && editor.initialDraft ? (editor.initialDraft as unknown as Recipe) : undefined);
+  const recipes = latestRecipes(recipeStore);
+  const archiveIsEmpty = archiveJob.status === "loaded" && archiveJob.sessionsLoaded === 0;
 
   return (
     <>
@@ -296,6 +316,9 @@ export function StrategyLabWorkspace() {
           {archiveJob.status === "loading" ? "Loading…" : archiveJob.status === "loaded" ? "Reload MES Archive" : "Load MES Archive"}
         </button>
       </section>
+
+      {!isOnline ? <StrategyLabOfflineNotice /> : null}
+      {archiveIsEmpty ? <StrategyLabEmptyArchive onLoad={() => { void handleLoadArchive(); }} /> : null}
 
       {notice ? <p className="sl-notice" role="status">{notice}</p> : null}
 
@@ -354,6 +377,7 @@ export function StrategyLabWorkspace() {
               onOpen={(id) => setEditor({ mode: "edit", key: `open-${id}`, recipeId: id })}
               onLoadStarter={handleLoadStarter}
             />
+            {recipes.length === 0 ? <StrategyLabEmptyRecipes /> : null}
             <details className="sl-group">
               <summary><span>Backup JSON</span></summary>
               <div className="sl-form" style={{ paddingBottom: 8 }}>
@@ -384,22 +408,8 @@ export function StrategyLabWorkspace() {
             <p className="sl-excluded" style={{ paddingBottom: 8 }}>{LIMITS_TEXT}</p>
           </details>
 
-          {runJob.status === "loading" ? (
-            <div className="sl-status" aria-busy="true">
-              <p role="status" aria-live="polite" style={{ margin: 0 }}>
-                Loading bars · {runJob.done} of {runJob.total} sessions
-              </p>
-            </div>
-          ) : null}
-
-          {runJob.status === "error" ? (
-            <div className="sl-status sl-status--error">
-              <p role="alert" style={{ margin: 0 }}>{runJob.message}</p>
-              <button type="button" className="sl-btn" onClick={() => { void executeRun(runJob.recipe, runJob.anchorDate); }}>
-                Retry
-              </button>
-            </div>
-          ) : null}
+          {runJob.status === "loading" ? <StrategyLabRunLoading done={runJob.done} total={runJob.total} /> : null}
+          {runJob.status === "error" ? <StrategyLabRunError message={runJob.message} onRetry={() => { void executeRun(runJob.recipe, runJob.anchorDate); }} /> : null}
 
           {activeRun ? (
             <StrategyLabResults
@@ -410,6 +420,7 @@ export function StrategyLabWorkspace() {
               labelOf={(ref) => skillSliceLabel(ref)}
               series={activeRun.series}
               onOpenAt={(time) => openAtBar(time, activeRun)}
+              slippageTicks={activeRun.recipe.slippageTicks}
               overlay={(
                 <StrategyLabOverlay
                   summary={overlaySummary}
@@ -424,11 +435,11 @@ export function StrategyLabWorkspace() {
               <p className="sl-hint">
                 No recipe run in this session yet. Mark a point and tap Find similar, or pick a saved recipe to run.
               </p>
-              {latestRecipes(recipeStore).length === 0 ? (
+              {recipes.length === 0 ? (
                 <button type="button" className="sl-btn sl-btn--primary sl-btn--block" onClick={handleLoadStarter}>
                   Load Starter Recipe
                 </button>
-              ) : latestRecipes(recipeStore).map((rcp) => (
+              ) : recipes.map((rcp) => (
                 <button key={rcp.id} type="button" className="sl-btn sl-btn--block" onClick={() => { void executeRun(rcp); }}>
                   Run {rcp.name} (v{rcp.version})
                 </button>

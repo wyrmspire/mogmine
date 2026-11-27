@@ -77,7 +77,7 @@ Every PR that changes a screen checks the standards that apply to what it touche
 | ID | Standard | Current state |
 |---|---|---|
 | **DS-01** | **Readable contrast.** Every text token passes WCAG 2.2 AA **and** APCA on all three surfaces (`--bg-obsidian`, `--bg-surface`, `--bg-elevated`): Lc ≥ 75 body text, Lc ≥ 60 labels, hints and axis text, Lc ≥ 45 only for large headings. | **Failing.** Muted, faint, axis and loss text sit at Lc 35–50 (RM-B1). |
-| **DS-02** | **Direction never by color alone.** Up/down, win/loss and long/short also carry shape or sign: hollow vs filled candles, ▲▼, `+`/`−`. | Partly met. Signs and arrows exist, candles are color-only (RM-B2). |
+| **DS-02** | **Direction never by color alone.** Up/down, win/loss and long/short also carry sign, arrow, luminance or edge/style cues: ▲▼, `+`/`−`, and grayscale-distinguishable candles. Hollow candles are rejected. | Partly met. Signs and arrows exist; candle grayscale direction cues are still in RM-B2. |
 | **DS-03** | **Honest numbers.** Tabular figures; true minus `−`; money always has two decimals; R is always signed. **No percentage without its denominator nearby** (`10/12`, not `83%`), and below n = 10 the label says "early". | Formatting met ([lib/format.ts](lib/format.ts)). The denominator rule isn't audited yet (RM-B5). |
 | **DS-04** | **Process over outcome.** Gold only for rule-following (UX-66, #80). No confetti, sounds or streaks for dollar wins. Skill challenges stay valid on a correctly executed loss, and a planned no-trade day can count as success. | Met, except the no-trade day (RM-H2). |
 | **DS-05** | **Facts, derived values and hypotheticals look different.** Realized, replay and backtest results never share one chart or total. Hindsight is labelled (OD-12, D-010). Strategy Lab results say "hypothetical". | Mostly met. Strategy Lab labelling isn't audited (RM-J6). |
@@ -85,7 +85,7 @@ Every PR that changes a screen checks the standards that apply to what it touche
 | **DS-07** | **Shield is display only.** It never changes what the API returns. Share cards open with Shield on (OD-46a). | One leak: `lib/agent/strategy-lab.ts:163` (RM-A8). |
 | **DS-08** | **Calm attention.** Work arrives as queues, not interruptions. Today shows at most **three** ranked actions and says "Caught up" when nothing is due. Only data-truth problems interrupt. | Queues exist. The Today ranking doesn't (RM-C1, RM-C5). |
 | **DS-09** | **Touch and keyboard.** 44 px minimum targets. List and detail screens get keyboard parity on desktop (J/K, Enter, Esc), with shortcut hints in menus. Never override browser shortcuts. | Met on Trade Detail (UX-69). Feed/Review list parity open (RM-F3). ⌘K and `?` are parked. |
-| **DS-10** | **Two disclosure levels at most.** Nothing decision-critical (stop, risk, account, Shield state, sync state) is hidden behind a second level. | Met in spirit (View menu, #82). Not audited screen by screen. |
+| **DS-10** | **Two disclosure levels at most.** Nothing decision-critical (stop, risk, account, Shield state, sync state) is hidden behind a second level. | Audit owed; RM-B7 makes the screen-by-screen check explicit. |
 | **DS-11** | **Every state is named.** Empty, offline, loading, error and "caught up" each have words. Every agent-generated object has a visible state (pending, confirmed, rejected). | Journal screens met. Agent objects don't exist yet. |
 | **DS-12** | **Dark theme only for now.** The `#07080c` canvas stays pending an owner decision. Primary text softens to `#e6e8ec` if approved (RM-B1). | Owner decision pending (§5). |
 
@@ -129,11 +129,16 @@ Token, typography-audit, and canvas verification changes only. Zero behavioral r
 | ID | Item | Acceptance criteria | Status |
 |---|---|---|---|
 | **RM-B1** | Contrast tokens (DS-01, DS-12) in `app/globals.css`, `lib/chart-paint.ts:25`, and `DEFAULT_CARD_THEME` in `lib/shareCard.ts`. Confirm final hexes in the APCA 0.0.98G calculator. | Every text token passes WCAG 2.2 AA (≥ 4.5:1) and APCA (`Lc ≥ 75` body, `Lc ≥ 60` labels/axis/small P&L) across `--bg-obsidian`, `--bg-surface`, and `--bg-elevated`, enforced by a new `lib/__tests__/contrast.test.ts`. | ready (`--text-primary` waits on owner) |
-| **RM-B2** | Hollow up candles, filled down candles (DS-02) in `TradeChart.tsx`, `ReviewChart.tsx`, and card chart painters: `upColor: "transparent"` while preserving `borderUpColor` and `wickUpColor`. | Up vs down direction is unmistakable in pure grayscale and across both classic and `blue-orange` palettes. Share cards inherit automatically via live theme read. | ready (default vs View option: owner) |
+| **RM-B2** | Filled candle direction cues (DS-02) in `TradeChart.tsx`, `ReviewChart.tsx`, and card chart painters. Do not introduce hollow candles; use luminance and existing sign/arrow redundancy. | Up vs down direction is unmistakable in pure grayscale and across both classic and `blue-orange` palettes. Share cards inherit automatically via live theme read. | ready |
 | **RM-B3** | Fix the stale Shield text in `docs/20-price-first-entry.md:18`. The contracts field is masked (`••`) yet editable, never hidden (`AddTradeSheet.tsx:399`). | Doc matches `components/AddTradeSheet.tsx` and cites the historical defect fix so agents never re-hide quantity. | ready |
 | **RM-B4** | Strategy Lab results header (`components/StrategyLabResults.tsx`, `lib/strategy-lab/results-view.ts`) displays the active slippage assumption. | Every Strategy Lab results view states `"Slippage: N ticks stop · N ticks market"` alongside the R basis. | ready |
 | **RM-B5** | **Denominator & small-sample sweep (`DS-03`).** Add `formatRateWithCount(num, den, { minN?: number })` in `lib/format.ts` (`"10/12 (83%)"`, or `"4/5 · early"` when `den < 10`) and apply across `RunningStatsCard.tsx`, `PlaybookBinder.tsx`, `PlaybookLab`, `ChallengeCard.tsx`, `DrillScreen.tsx`, and `DayReviewScreen.tsx`. | No win rate, rule-adherence rate, or drill accuracy renders as a bare percentage without its `num/den` count adjacent. Unit tests cover `den = 0`, `den < 10`, and `den ≥ 10`. | ready |
 | **RM-B6** | **Canvas primitive & DPR verification pass.** Audit `PositionBoxPrimitive.ts`, `SessionLevelsPrimitive.ts`, and `ReviewChart.tsx` against `lightweight-charts` v5 invariants: DPR-crisp coordinate snapping (`crisp()`), reference-stable `paneViews()`, cached `autoscaleInfo()`, `detached()` cleanup, and `vertTouchDrag: false` on embedded cards. | Automated test in `lib/__tests__/canvas-primitives-audit.test.ts` pins view-array reference stability, `detached()` teardown, and scroll-hijack flags. | ready |
+
+| **RM-B7** | Progressive disclosure audit (DS-10) across Today, Trade Detail, Review, Feed, Tools and Strategy Lab. | A screen matrix records level-one decision facts, one-level disclosures, and exceptions. Stop, risk, account, Shield and sync state remain visible without a second disclosure. | ready |
+| **RM-B8** | UI component consistency pass: standardize cards, chips, buttons, tabs, sheets, spacing and typography using existing tokens. | Touched surfaces use the shared component vocabulary and spacing scale; one-off treatments require a documented exception. | ready |
+| **RM-B9** | Screen-state audit for loading, empty, offline, error and recovery states. | Every major screen has named states with a recovery action where recovery is possible; no blank panel or spinner-only state remains. | ready |
+| **RM-B10** | Responsive visual regression suite for desktop and mobile layouts. | Stable screenshots or equivalent assertions cover `390×844` and desktop width for Today, Trade Detail, Review, Feed, Tools and Strategy Lab. | ready |
 
 Proposed token values (worst-case surface is `--bg-elevated` `#141824`):
 
@@ -176,7 +181,7 @@ Each track has **Round out** items, needed for the feature to be complete, and *
 | **RM-D2** | Daily review (`components/DayReviewScreen.tsx`, `lib/daily-review.ts`) explicitly links to and renders the session's pre-session plan(s) and real trades, excluding replay/sample trades unless explicitly toggled. | Opening `/review/day/[date]` shows the session's plan bias/levels alongside linked real trades and plan fidelity (`X/Y trades matched plan`). | ready |
 | **RM-D3** | Blind review experiment (BET-03, OD-25): stays **off by default** and is tried on trades older than a week. Record the result in DECISIONS.md. | A result is recorded. The default changes only by owner decision. | claimed (owner experiment) |
 | **RM-D4** | Review tab count badge: keep the number or switch to a dot. | Owner decision recorded. | blocked (owner) |
-| **RM-D5** | **Shared review-queue selector (`lib/review-queue.ts`).** Extract the ordering and real-trade filtering logic from `ReviewScreen.tsx` into one pure module shared by `/review` UI and `GET /api/v1/review-queue` (`RM-K2`). | UI queue count, Today's review due count, and `/api/v1/review-queue` always return the exact same ordered items (excluding `is_sample` and isolating `replay`). | ready |
+| **RM-D5** | **Shared review-queue selector (`lib/review-queue.ts`).** Extract the ordering and real-trade filtering logic from `ReviewScreen.tsx` into one pure module shared by `/review` UI, the AppShell navigation badge and `GET /api/v1/review-queue` (`RM-K2`). | UI queue count, Today’s review due count, navigation badge and `/api/v1/review-queue` always return the exact same ordered items (excluding `is_sample` and isolating `replay`). | ready |
 
 **Design nudges:** DS-05 (hindsight labelled in review), DS-06 (agent-written notes marked), DS-03.
 
@@ -186,7 +191,8 @@ Each track has **Round out** items, needed for the feature to be complete, and *
 | ID | Round out | Acceptance criteria | Status |
 |---|---|---|---|
 | **RM-E1** | Verify scenario steps 4–6 end to end on a phone: an agent-logged trade, a stop move, the close. | Chart, record, R, P&L and excursions agree on every surface. | ready |
-| **RM-E2** | Zoom-out floor review: `MIN_BAR_SPACING_PX = 3` stops zoom-out. Decide whether to lower it or auto-step to a higher timeframe. | Owner choice implemented. Pinch on a 390 px phone never crushes candles. | blocked (owner) |
+| **RM-E2** | Continuous zoom-out: remove the fixed `MIN_BAR_SPACING_PX = 3` behavior or replace it with equivalent continuous scaling so candles shrink toward approximately 1px, TradingView-style. Include crosshair accuracy, candle selection and level hit-testing at narrow widths. | Pinch/scroll zoom on a 390px phone keeps adding visible history; crosshair, candle and level hit-testing remain accurate at thin spacing. Add regression coverage for `lib/level-hit-test.ts` and chart interaction helpers. | ready |
+| **RM-E6** | Trade Detail simplification for mobile: price action first, essential trade facts second, human judgment third; move stop history, partials and plan-vs-actual behind clear disclosure. | At `390×844`, the chart and Entry/Exit, Initial stop and Result R remain visible without scrolling through secondary sections. Pit Stop remains available at level two and preserves all existing facts. | ready |
 | **RM-E3** | Volume pane (`VOL-1`) check on real futures trades on a phone. | The band shows on real MES trades and hides on samples and indices. | ready |
 | **RM-E4** | Commissions on trades: record `commission_cents` (integer cents) and show **Gross R** and **Net R** (`(gross_pnl_cents − commission_cents) ÷ r_size_cents`). Blueprint §2 still defines R and sizing. | Net R and Net P&L shown alongside Gross wherever P&L/R appear. Unknown commission reads as `null` / `"fees unrecorded"`, never `$0.00`. | ready (owner sets per-contract rates) |
 | **RM-E5** | **Cross-surface financial & temporal truth suite (Blueprint §3.2).** Add `lib/__tests__/cross-surface-truth.test.ts` running canonical edge cases (shifted fill on 1m bar not admitting full bar range as sequenced excursion, timed & untimed stop moves, multi-lot partials, scratch within `max(0.1R, 2 ticks)`, open trade `OD-38`, `$300` ceiling sizing) across `deriveTrade`, `observeTrade`, `buildMarks`, `excursions`, `selectors`, `shareCard`, `day-card`, `describe.ts`, and `/api/v1` `?include=derived`. | Every surface produces identical P&L cents, Result R, Risk R, MAE/MFE, and process status for every fixture. | ready |
@@ -200,6 +206,7 @@ Each track has **Round out** items, needed for the feature to be complete, and *
 | **RM-F1** | Keep Feed as browse and search, not analytics. Real / Replay / All exists. | No stats panels added to Feed. | standing rule |
 | **RM-F2** | Label rename: Feed → Journal and Tune → Tools (routes unchanged). | Owner decision. | blocked (owner) |
 | **RM-F3** | **Desktop keyboard navigation (`DS-09`)** on `FeedScreen.tsx` and `ReviewScreen.tsx`: `J`/`K` moves focus/selection through visible rows, `Enter` opens the trade, `Esc` clears/closes sheets, with subtle key hints and zero override of browser shortcuts (`Cmd/Ctrl+C/F/R`). | Tested in `lib/__tests__/` and verified alongside mobile touch scrolling. | ready |
+| **RM-F4** | Sample-data lifecycle: keep demo/replay trades isolated from actual trading workflows, review queues, badges and totals. | Sample data is clearly labelled, excluded by default from real workflows, and can be removed or reset without touching real trades. | ready |
 
 **Design nudges:** DS-03, DS-09 (J/K in the list), DS-11 (named empty-filter states).
 
@@ -249,7 +256,7 @@ Each track has **Round out** items, needed for the feature to be complete, and *
 
 | ID | Round out | Acceptance criteria | Status |
 |---|---|---|---|
-| **RM-K1** | **In-UI agent provenance markers (`DS-06`).** Stamp `written_by: { actor: "agent", token_id, token_prefix, at }` on records/fields mutated via `/api/v1` (`lib/agent/dispatch.ts`), cleared/updated to `"owner"` when edited in the UI, and render a quiet `"by agent"` chip on `TradeNotesPanel.tsx`, `ReviewScreen.tsx`, and `DayReviewScreen.tsx`. | Any note, tag, or record written by an agent is visibly marked where read; tapping/hovering shows key prefix and timestamp. | ready |
+| **RM-K1** | **In-UI agent provenance markers (`DS-06`).** Stamp `written_by: { actor: "agent", token_id, token_prefix, at }` on records/fields mutated via `/api/v1` (`lib/agent/dispatch.ts`), cleared/updated to `"owner"` when edited in the UI, and render a quiet `"by agent"` chip on `TradeNotesPanel.tsx`, `ReviewScreen.tsx`, and `DayReviewScreen.tsx`. | Any note, tag, or record written by an agent is visibly marked where read; tapping/hovering shows key prefix and timestamp. RM-C3 is scheduled immediately after this provenance lands. | ready |
 | **RM-K2** | **Read-model endpoints (`GET /api/v1/review-queue`, after `RM-C4` `GET /api/v1/session`).** Expose the canonical review queue (`RM-D5`) and Next-actions summary (`RM-C1`) as read-only server views. | External agents answer `"what needs my review?"` and `"what happened in this session?"` in one `GET` without inventing sorting or filtering rules. | ready (pairs with RM-C4, RM-D5) |
 | **RM-K3** | Insight proposals (`claim`, `kind`, `evidence_refs[]`, `n`, `data_quality`, `trials_considered`, `human_state: pending | confirmed | rejected | snoozed`). | Opened only when the owner opens this feature area (Blueprint: convergence first). | parked |
 | **RM-K4** | Granular capability scopes (`journal:read`, `journal:write`, `research:read`, `research:write`, `replay:write`) alongside backward-compatible `read`/`write`. **Never** an `execute`, `orders`, or `broker` scope. | Opened together with RM-K3. | parked |
@@ -271,6 +278,7 @@ Each track has **Round out** items, needed for the feature to be complete, and *
 | **RM-M1** | Performance budgets on a real phone (#22). | Budgets from docs/08 §2 met. | blocked (owner phone) |
 | **RM-M2** | Dark-room check of RM-B1 on the owner's phone. | Owner sign-off. | blocked (RM-B1) |
 | **RM-M3** | Journal recovery on a fresh device, including historical candle evidence from `mogmine_market_candles` (scenario step 11). | Records, R units, plans, reviews, and trade charts restore cleanly on a fresh profile/device. | ready |
+| **RM-M4** | Accessibility interaction audit across touched screens: touch targets, focus order, keyboard navigation, labels and screen-reader names. | No critical action is pointer-only; focus is visible and ordered; controls have accessible names; the audit covers Today, Trade Detail, Review, Feed, Tools and Strategy Lab. | ready |
 
 ---
 
@@ -292,11 +300,13 @@ All `ready` items above group into **five conflict-free waves** ordered strictly
 ### Wave 7 — Design Hygiene, Perceptual Contrast & Stale-Doc Immunity
 *Standards `DS-01`, `DS-02`, `DS-03` · Zero feature churn.*
 1. **Lane 1 (`RM-B1`):** Dual WCAG 2.2 AA + APCA contrast ramp in `app/globals.css`, `lib/chart-paint.ts`, `lib/shareCard.ts` + `lib/__tests__/contrast.test.ts`.
-2. **Lane 2 (`RM-B2` + `RM-B6`):** Hollow rising / filled falling candles + `canvas-primitives-audit.test.ts` (DPR crispness, `paneViews()` stability, `detached()`, `vertTouchDrag`).
+2. **Lane 2 (`RM-B2` + `RM-B6` + `RM-E2`):** Filled candles with grayscale direction cues, continuous TradingView-style zoom toward ~1px, and `canvas-primitives-audit.test.ts` plus crosshair/candle/level hit-testing coverage.
 3. **Lane 3 (`RM-B5`):** `formatRateWithCount` in `lib/format.ts` + denominator & `"early"` (`n < 10`) sweep across stats, playbooks, challenges, drills, and day review.
 4. **Lane 4 (`RM-B4` + `RM-J5`):** Strategy Lab slippage assumption + `ambiguous-stop` same-bar policy surfaced in `StrategyLabResults.tsx`.
-5. **Lane 5 (`RM-B3`/`RM-N2`, `RM-N3`, `RM-N4`, `RM-N6`):** Author `docs/27-design-principles.md` (loop + `DS-01`–`DS-12` code links), fix stale `docs/20` Shield prose, mark `docs/06` phases superseded, update `docs/01` to current Supabase/API/archive state.
-6. **Integrator:** Visual `390×844` + grayscale check, full verification gate.
+5. **Lane 5 (`RM-B3`, `RM-N2`, `RM-N3`, `RM-N4`, `RM-N6`):** Maintain `docs/27-design-principles.md`, fix stale `docs/20` Shield prose, mark `docs/06` phases superseded, and update `docs/01` to current Supabase/API/archive state.
+6. **Lane 6 (`RM-B7` + `RM-B8` + `RM-B9`):** Progressive-disclosure, component-consistency and named-state implementation pass.
+7. **Lane 7 (`RM-B10` + `RM-M4`):** Responsive regression and accessibility interaction verification at `390×844` and desktop width.
+8. **Integrator:** Grayscale chart check and full verification gate. Contrast, chart-interaction and design regression checks are merge-blocking.
 
 ### Wave 8 — Today Attention Allocator, Daily Loop & Read-Model API
 *Blueprint §3 priorities 5 & 6 · Unblocks Scenarios 2, 3, 8.*
@@ -307,7 +317,8 @@ All `ready` items above group into **five conflict-free waves** ordered strictly
 5. **Lane 5 (`RM-D1` + `RM-D2`):** Link pre-session plans + plan fidelity into `DayReviewScreen.tsx` + `daily-review-sync-api.test.ts`.
 6. **Lane 6 (`RM-K1`):** Agent write provenance stamp in `lib/agent/dispatch.ts` + `"by agent"` chip on `TradeNotesPanel.tsx`, `ReviewScreen.tsx`, `DayReviewScreen.tsx`.
 7. **Lane 7 (`RM-F3`):** Desktop `J`/`K`/`Enter`/`Esc` keyboard navigation on `FeedScreen.tsx` and `ReviewScreen.tsx`.
-8. **Integrator:** Mount `<NextActionsCard />` and `<SessionSummary />` cleanly in `TodayScreen.tsx` (keeping `< 450` lines), full gate.
+8. **Lane 8 (`RM-F4`):** Sample/demo lifecycle and canonical isolation from real queues, badges, totals and review flows.
+9. **Integrator:** Mount `<NextActionsCard />` and `<SessionSummary />` cleanly in `TodayScreen.tsx` (keeping `< 450` lines), full gate.
 
 ### Wave 9 — Guardrails vs. Challenges, Playbook Versions & Strategy Lab Rigor
 *Blueprint §3 priority 7 · Unblocks Scenarios 6, 10.*
@@ -316,7 +327,8 @@ All `ready` items above group into **five conflict-free waves** ordered strictly
 3. **Lane 3 (`RM-J2` + `RM-J7`):** Strategy Lab conditions/variants searched counter + `"N matches across M sessions"` cluster disclosure.
 4. **Lane 4 (`RM-J3` + `RM-J6`):** Frozen recipe hash for `discovery` → `validation` holdout protection + roll/source provenance + `"Hypothetical"` badge.
 5. **Lane 5 (`RM-E4` + `RM-J1`, once owner sets default fee rate):** Integer-cent `commission_cents` on trades and Strategy Lab runs, rendering Gross R and Net R side-by-side.
-6. **Integrator:** Cross-check R/cost consistency across journal and Strategy Lab, full gate.
+6. **Lane 6 (`RM-E6`):** Finish mobile Trade Detail hierarchy and disclosure while keeping initial stop/risk visible at level one.
+7. **Integrator:** Cross-check R/cost consistency across journal and Strategy Lab, full gate.
 
 ### Wave 10 — 11-Step End-to-End Acceptance & Real-Phone Sign-Off
 *Blueprint §6 · Final convergence milestone.*
@@ -334,11 +346,10 @@ A reply pasted into the 2026-11-26 session made suggestions on several of these.
 | Review badge: number or dot | Keep the number | RM-D4 |
 | Blind review default (OD-25) | Keep off until BET-03 settles it | RM-D3 |
 | Shield display-only in the API | Yes, strictly display-only | RM-A8 |
-| Hollow candles as the default or an option | — | RM-B2 |
+| Hollow candles as the default or an option | Rejected 2026-11-27; filled candles plus grayscale/sign redundancy are required | — |
 | Drill ground truth | Playbook or owner labels, never P&L | RM-G1 |
 | Strategy Lab default commission per side | — (e.g. `$0.62`/side MES micro?) | RM-J1 |
 | Backfill Jan–Aug Databento bars | — | RM-A5 |
-| Zoom-out floor | — | RM-E2 |
 | Feed → Journal, Tune → Tools labels | — | RM-F2 |
 | Insights per account or across accounts by default (when opened) | Per account or account mode | RM-K3 |
 | Dedicated Supabase project before more users | — | RM-A10 |

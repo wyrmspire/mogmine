@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PastSessionReviews } from "./PastSessionReviews";
 import { PitStop, showsNoSetupPicked } from "./PitStop";
 import { RStrip } from "./RStrip";
@@ -9,7 +9,7 @@ import { ReviewChart } from "./ReviewChart";
 import { MoodShape, useTradeMood } from "./MoodShape";
 import { describeMood } from "@/lib/mood";
 import { formatDuration, formatMoney, formatPoints, formatPrice, formatR } from "@/lib/format";
-import { formatRealReviewQueueSummary, pendingReviewTrades } from "@/lib/day-counts";
+import { formatReviewQueueSummary } from "@/lib/day-counts";
 import { setPrefs, usePrefs } from "@/lib/prefs";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { dayStatus, recentTradingDays } from "@/lib/day-review-screen";
@@ -24,12 +24,15 @@ import { useAccounts } from "@/lib/accounts-store";
 import type { TradeRecord } from "@/lib/trades";
 import { rememberList, useToday } from "@/lib/ui";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
+import { selectReviewQueue } from "@/lib/review-queue";
+import type { ReviewQueueOptions } from "@/lib/review-queue";
+import { ReviewQueueSummary } from "./ReviewQueueSummary";
 
 export function ReviewScreen() {
   const journal = useJournal();
   if (!journal.hydrated) {
     return (
-      <div className="page" style={{ maxWidth: 720 }}>
+      <div className="page" style={{ maxWidth: 720 }} role="status" aria-label="Review loading" data-screen-state="loading">
         <div className="page-head"><div><span className="eyebrow">Review</span><h1>Loading…</h1></div></div>
         <div className="skeleton" style={{ height: 380 }} />
       </div>
@@ -43,6 +46,22 @@ type ReviewTab = "queue" | "daily";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_CHIP_LIMIT = 14;
 
+/** The review hub is local-first, so an offline state is informative rather than blocking. */
+function useOnline() {
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+  return online;
+}
+
 /** Short day chip label, `Mon 23`. Session dates are labels, so UTC is the calendar. */
 function dayChipLabel(date: string) {
   const day = new Date(`${date}T00:00:00Z`);
@@ -55,12 +74,9 @@ function buildDayOptions(list: readonly TradeRecord[]) {
     .slice(0, DAY_CHIP_LIMIT);
 }
 
-function buildQueueIds(list: readonly TradeRecord[], selectedDay: string | null) {
-  const open = selectedDay ? list.filter((trade) => sessionDate(trade.entry_time) === selectedDay) : list;
-  return [
-    ...open.filter((trade) => trade.review_status === "new"),
-    ...open.filter((trade) => trade.review_status !== "new"),
-  ].map((trade) => trade.id);
+function buildQueueIds(list: readonly TradeRecord[], selectedDay: string | null, accounts: ReviewQueueOptions["accounts"], includeSamples = false) {
+  const scoped = selectedDay ? list.filter((trade) => sessionDate(trade.entry_time) === selectedDay) : list;
+  return selectReviewQueue(scoped, { accounts, includeSamples, includeReplay: includeSamples }).map((trade) => trade.id);
 }
 
 /** Days strip (06 §3): last 14 trading days, each linking to its day review. */
@@ -121,16 +137,21 @@ function ReviewHub() {
   const accounts = useAccounts();
   const dailyReviews = useDailyReviewsStore();
   const plansStore = usePlansStore();
+  const online = useOnline();
   const { date: todayClock } = useToday();
   const [fallbackToday] = useState(() => sessionDate(Date.now()));
   const todayDate = todayClock || fallbackToday;
 
   const realTrades = useMemo(() => journal.trades.filter((trade) => !trade.is_sample), [journal.trades]);
   const hasRealTrades = realTrades.length > 0;
-  const realPending = useMemo(() => pendingReviewTrades(journal.trades), [journal.trades]);
+  const realPending = useMemo(
+    () => selectReviewQueue(journal.trades, { accounts: accounts.accounts }),
+    [journal.trades, accounts.accounts],
+  );
   const demoPending = useMemo(
-    () => journal.trades.filter((trade) => trade.is_sample && trade.review_status !== "reviewed"),
-    [journal.trades],
+    () => selectReviewQueue(journal.trades, { accounts: accounts.accounts, includeSamples: true, includeReplay: true })
+      .filter((trade) => trade.is_sample),
+    [journal.trades, accounts.accounts],
   );
 
   const [previewDemo, setPreviewDemo] = useState(false);
@@ -144,21 +165,21 @@ function ReviewHub() {
   const [day, setDay] = useState<string | null>(null);
   const [queueState, setQueueState] = useState<{ mode: boolean; ids: string[]; days: string[] }>(() => ({
     mode: false,
-    ids: buildQueueIds(realPending, null),
+    ids: buildQueueIds(realPending, null, accounts.accounts),
     days: buildDayOptions(realPending),
   }));
   const [position, setPosition] = useState(0);
   const [revealed, setRevealed] = useState<string | null>(null);
 
   const staleQueue = queueState.mode !== isPreviewingDemo || (queueState.ids.length === 0 && activePending.length > 0);
-  const ids = staleQueue ? buildQueueIds(activePending, day) : queueState.ids;
+  const ids = staleQueue ? buildQueueIds(activePending, day, accounts.accounts, isPreviewingDemo) : queueState.ids;
   const dayOptions = staleQueue ? buildDayOptions(activePending) : queueState.days;
 
   const resetQueue = (list: readonly TradeRecord[], selectedDay: string | null, nextPreview: boolean, refreshDays = true) => {
     setDay(selectedDay);
     setQueueState((prev) => ({
       mode: nextPreview,
-      ids: buildQueueIds(list, selectedDay),
+      ids: buildQueueIds(list, selectedDay, accounts.accounts, nextPreview),
       days: refreshDays ? buildDayOptions(list) : prev.days,
     }));
     setPosition(0);
@@ -194,7 +215,10 @@ function ReviewHub() {
   const trade = journal.trades.find((item) => item.id === ids[position]);
   const done = ids.filter((id) => journal.trades.find((item) => item.id === id)?.review_status === "reviewed").length;
   // UX-05: real trades only so demo fixtures never inflate the pending review summary.
-  const queueSummary = formatRealReviewQueueSummary(journal.trades);
+  const queueSummary = formatReviewQueueSummary(
+    realPending.length,
+    realPending.filter((trade) => trade.review_status === "new").length,
+  );
   const queueTabCount = isPreviewingDemo ? demoPending.length : realPending.length;
   const focusDate = day ?? todayDate;
   const focusTradesCount = realTrades.filter((item) => sessionDate(item.entry_time) === focusDate).length;
@@ -235,7 +259,7 @@ function ReviewHub() {
       : "";
 
   return (
-    <div className="page" style={{ maxWidth: 720 }}>
+    <div className="page" style={{ maxWidth: 720 }} data-screen-state="ready">
       <div className="page-head">
         <div>
           <span className="eyebrow">{headEyebrow}</span>
@@ -245,6 +269,13 @@ function ReviewHub() {
         </div>
         <Link className="btn-secondary drill-link" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills</Link>
       </div>
+
+      {!online && (
+        <div className="card card-pad" role="status" aria-label="Review offline mode" data-screen-state="offline" style={{ marginBottom: 14 }}>
+          <strong>Offline mode</strong>
+          <p className="muted" style={{ margin: "4px 0 0" }}>Review uses the journal saved on this device. Reconnect when you need unavailable online data.</p>
+        </div>
+      )}
 
       <div className="seg-tabs" role="tablist" aria-label="Review sections" style={{ marginBottom: 14 }}>
         <button
@@ -280,7 +311,7 @@ function ReviewHub() {
           <PastSessionReviews />
         </div>
       ) : (
-        <div id="review-panel-queue" role="tabpanel" aria-labelledby="review-tab-queue">
+        <div id="review-panel-queue" role="tabpanel" aria-labelledby="review-tab-queue" aria-label="Review queue">
           {isPreviewingDemo && (
             <div className="card card-pad" style={{ marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
               <span className="muted" style={{ fontSize: 12 }}>Demo preview — sample trades only.</span>
@@ -288,10 +319,13 @@ function ReviewHub() {
             </div>
           )}
 
+          {!isPreviewingDemo && <ReviewQueueSummary count={realPending.length}>{queueSummary || "Real trades only; sample and replay trades stay isolated."}</ReviewQueueSummary>}
+
           {!trade ? (
             !hasRealTrades && !isPreviewingDemo ? (
-              <div className="specular-card empty-state">
-                <h3>Nothing in your queue yet</h3>
+              <div className="specular-card empty-state" role="region" aria-labelledby="review-empty-title" data-screen-state="empty">
+                <h3 id="review-empty-title">Empty review queue</h3>
+                <p className="muted" aria-label="Review queue status">Nothing in your queue yet.</p>
                 <p>No real trades to review yet — log a trade with + or start a Pretend / Replay session.</p>
                 <div className="actions">
                   {demoPending.length > 0 && (
@@ -303,8 +337,8 @@ function ReviewHub() {
             ) : (
               <>
                 {dayChips}
-                <div className="specular-card empty-state">
-                  <h3>{ids.length ? `${done} of ${ids.length} reviewed this pass` : "Nothing is waiting"}</h3>
+                <div className="specular-card empty-state" role="region" aria-labelledby="review-caught-up-title" data-screen-state="caught-up">
+                  <h3 id="review-caught-up-title">{ids.length ? `${done} of ${ids.length} reviewed this pass` : "Review queue caught up"}</h3>
                   <p>{ids.length && done < ids.length ? "Skipped trades stay in the queue for next time." : "Every trade has been reviewed."}</p>
                   <div className="actions">
                     {isPreviewingDemo && (

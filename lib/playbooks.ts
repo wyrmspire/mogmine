@@ -23,6 +23,18 @@ export interface Playbook {
   archived: boolean;
   /** docs/23 §9: the trader's teaching example. Omitted when unset so the seed fingerprints never change. */
   pinned_example_trade_id?: string;
+  /** Immutable rules/name snapshots, synced and backed up with the playbook record. */
+  version_history?: PlaybookVersion[];
+}
+
+/** Immutable snapshot used when a trade or review needs the rules that were in force. */
+export interface PlaybookVersion {
+  playbook_id: string;
+  version: number;
+  created_at: string;
+  name: string;
+  default_style: TradeStyle;
+  checklist_rules: PlaybookRule[];
 }
 
 /** The impulse bucket. Clean Run scores it as broken (docs/17 §4), so it keeps its id, has no rules and cannot be archived. */

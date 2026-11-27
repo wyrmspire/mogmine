@@ -5,11 +5,12 @@ import { ONE_TAP_MOOD_SCORE, dominantSpoke, spokeChipLabel } from "@/lib/mood";
 import type { MoodVector } from "@/lib/mood";
 import { recordUserMood, setSpokeScore, undoMoodRecord, useMood } from "@/lib/mood-store";
 import { EXECUTION_TAGS, SETUP_TAGS, checklistFor, playbookName } from "@/lib/playbooks";
-import { activePlaybooks, usePlaybooks } from "@/lib/playbooks-store";
+import { activePlaybooks, currentPlaybookVersion, usePlaybooks } from "@/lib/playbooks-store";
 import { getTrade, updateTrade, useJournal } from "@/lib/store";
 import { showToast } from "@/lib/toast";
 import { adherence } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
+import { agentAuthoredNoteFields, isAgentWriteProvenance, type AgentProvenancedRecord } from "@/lib/agent/provenance";
 import { MoodShape } from "./MoodShape";
 import { useInlineSaveText } from "./useSaveLabel";
 
@@ -95,11 +96,11 @@ export function TradeNotesPanel({ trade, open = false, shield = false, noteInput
 
   const setPlaybook = (id: string) => {
     if (trade.playbook_id === id) {
-      const before = { playbook_id: trade.playbook_id, checklist_state: trade.checklist_state };
-      updateTrade(trade.id, { playbook_id: null, checklist_state: [] });
+      const before = { playbook_id: trade.playbook_id, playbook_version: trade.playbook_version, checklist_state: trade.checklist_state };
+      updateTrade(trade.id, { playbook_id: null, playbook_version: null, checklist_state: [] });
       showToast(`Removed ${playbookName(id, allPlaybooks)}`, { label: "Undo", run: () => updateTrade(trade.id, before) });
     } else {
-      updateTrade(trade.id, { playbook_id: id, checklist_state: checklistFor(id, allPlaybooks) });
+      updateTrade(trade.id, { playbook_id: id, playbook_version: currentPlaybookVersion(id) ?? 1, checklist_state: checklistFor(id, allPlaybooks) });
     }
   };
 
@@ -120,8 +121,8 @@ export function TradeNotesPanel({ trade, open = false, shield = false, noteInput
 
   const sameAsLast = () => {
     if (!last) return;
-    const before = { playbook_id: trade.playbook_id, checklist_state: trade.checklist_state, quick_tags: trade.quick_tags };
-    updateTrade(trade.id, { playbook_id: last.playbook_id, checklist_state: checklistFor(last.playbook_id, allPlaybooks), quick_tags: [...last.quick_tags] });
+    const before = { playbook_id: trade.playbook_id, playbook_version: trade.playbook_version, checklist_state: trade.checklist_state, quick_tags: trade.quick_tags };
+    updateTrade(trade.id, { playbook_id: last.playbook_id, playbook_version: last.playbook_id ? currentPlaybookVersion(last.playbook_id) ?? 1 : null, checklist_state: checklistFor(last.playbook_id, allPlaybooks), quick_tags: [...last.quick_tags] });
     showToast("Copied from the last trade", { label: "Undo", run: () => updateTrade(trade.id, before) });
   };
 
@@ -133,12 +134,16 @@ export function TradeNotesPanel({ trade, open = false, shield = false, noteInput
   const activeStage = JOURNAL_STAGES.find((stage) => stage.id === stageId) ?? JOURNAL_STAGES[0];
   const filledStages = JOURNAL_STAGES.filter((stage) => trade[stage.field].trim().length > 0).length;
   const statusLabel = trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags";
+  const attributedTrade = trade as TradeRecord & AgentProvenancedRecord;
+  const provenance = isAgentWriteProvenance(attributedTrade.agent_provenance) && agentAuthoredNoteFields(attributedTrade).some((field) => trade[field].trim().length > 0)
+    ? attributedTrade.agent_provenance
+    : null;
 
   return (
     <section className="specular-card card-pad" aria-label="Pit Stop and trade notes">
       <div className="card-head">
         <h3>Pit Stop</h3>
-        <span>{statusLabel} · {shield ? "private · Shield on" : "private"}</span>
+        <span>{statusLabel} · {shield ? "private · Shield on" : "private"}{provenance && <span className="notes-agent-marker" title={`Agent write ${provenance.token_prefix} · ${provenance.at}`}> · by agent</span>}</span>
       </div>
 
       <div className="notes-panel">

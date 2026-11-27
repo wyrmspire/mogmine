@@ -99,6 +99,12 @@ export interface AgentIdentity {
   scopes: string[];
 }
 
+export interface AgentAuditMeta {
+  requestId?: string;
+  decisionCode?: string;
+  decisionVersion?: string;
+}
+
 export type AgentAuth =
   | { ok: true; ctx: AgentIdentity & { db: SupabaseLike } }
   | (AgentResponse & { ok: false; code: AgentErrorCode; identity?: AgentIdentity });
@@ -282,7 +288,7 @@ export async function authenticateAgent(
 export async function recordAgentUse(
   deps: AgentServerDeps,
   identity: AgentIdentity,
-  entry: { method: string; path: string; status: number; outcome: string; recordType?: string; recordId?: string },
+  entry: { method: string; path: string; status: number; outcome: string; recordType?: string; recordId?: string } & AgentAuditMeta,
 ): Promise<void> {
   try {
     await deps.admin.from("mogmine_agent_tokens")
@@ -300,6 +306,9 @@ export async function recordAgentUse(
       path: entry.path.slice(0, 300),
       record_type: entry.recordType ?? null,
       record_id: entry.recordId ? entry.recordId.slice(0, 200) : null,
+      request_id: entry.requestId ?? null,
+      decision_code: entry.decisionCode ?? null,
+      decision_version: entry.decisionVersion ?? null,
       status: entry.status,
       outcome: entry.outcome.slice(0, 40),
     });

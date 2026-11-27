@@ -8,7 +8,7 @@ import { AgentKeysLink } from "./AgentKeysLink";
 import { HomeScreenHint } from "./HomeScreenHint";
 import { SignOutButton } from "./SignOutButton";
 import { hydratePrefs, setPrefs, usePrefs } from "@/lib/prefs";
-import { withSamples } from "@/lib/selectors";
+import { selectReviewQueue } from "@/lib/review-queue";
 import { hydrateJournal, useJournal } from "@/lib/store";
 import { useHeaderSaveLabel } from "./useSaveLabel";
 import { remoteSyncEnabled } from "@/lib/persistence/store-sync";
@@ -16,7 +16,7 @@ import { remoteSyncEnabled } from "@/lib/persistence/store-sync";
 // NEXT_PUBLIC_* values are inlined at build time, so this is a constant in the browser bundle (#190).
 const REMOTE_SYNC = remoteSyncEnabled();
 import { hydrateMood } from "@/lib/mood-store";
-import { hydrateAccounts } from "@/lib/accounts-store";
+import { hydrateAccounts, useAccounts } from "@/lib/accounts-store";
 import { hydrateChallenges } from "@/lib/challenge-store";
 import { hydratePlaybooks } from "@/lib/playbooks-store";
 import { hydrateTagRegistry } from "@/lib/tag-registry-store";
@@ -46,6 +46,7 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const journal = useJournal();
+  const accounts = useAccounts();
   const prefs = usePrefs();
   const ui = useUi();
   const toast = useToast();
@@ -56,7 +57,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useLayoutEffect(() => { hydratePrefs(); hydrateJournal(); hydrateMood(); hydrateAccounts(); hydrateChallenges(); hydratePlaybooks(); hydrateTagRegistry(); hydratePlans(); hydrateDrills(); hydrateCalls(); hydrateDailyReviews(); }, []);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
-  const waiting = journal.hydrated ? withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status === "new").length : 0;
+  const waiting = journal.hydrated
+    ? selectReviewQueue(journal.trades, { accounts: accounts.accounts }).length
+    : 0;
   const reviewBadge = waiting > 0 ? <span className="badge"><span aria-hidden="true">{waiting}</span><span className="visually-hidden">{`, ${waiting} ${waiting === 1 ? "trade needs" : "trades need"} tags`}</span></span> : null;
 
   return (

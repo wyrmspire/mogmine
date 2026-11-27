@@ -6,6 +6,7 @@ import { DEMO_TRADE_IDS, demoTrades } from "./fixtures.ts";
 import { idbSet } from "./idb.ts";
 import { annotationKey, candleCacheKey, candleSignature, deriveReviewStatus, keepFrozenRSize, keepInitialStop, normalizeTrade } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
+import { agentNoteFields } from "./agent/provenance.ts";
 import { resolveRSize } from "./r-size.ts";
 import { getAccountsState } from "./accounts-store.ts";
 import { getPrefs } from "./prefs.ts";
@@ -91,6 +92,7 @@ export function applyFixtureRefresh(stored: TradeRecord, fixture: TradeRecord, p
 function pickAnnotations(trade: TradeRecord) {
   return {
     playbook_id: trade.playbook_id,
+    playbook_version: trade.playbook_version,
     checklist_state: trade.checklist_state,
     note: trade.note,
     quick_tags: trade.quick_tags,
@@ -272,7 +274,17 @@ export function updateTrade(id: string, patch: Partial<TradeRecord>) {
     // Changing the account re-freezes the R size from the new account (D-B). A trade with none yet takes one now.
     if (("account_id" in patch && patch.account_id !== trade.account_id) || next.r_size_cents == null) next.r_size_cents = freshRSize(next);
     // A trader's change to an annotation is theirs, so a later fixture refresh keeps it (issue #62).
-    if (annotationKey(next) !== annotationKey(trade)) next.annotations_modified = true;
+    if (annotationKey(next) !== annotationKey(trade)) {
+      next.annotations_modified = true;
+      // A trader's edit supersedes agent attribution on the note fields it changed; untouched ones keep it.
+      const stillAgent = agentNoteFields(trade.agent_provenance_fields).filter((field) => next[field] === trade[field]);
+      if (stillAgent.length) next.agent_provenance_fields = stillAgent;
+      else {
+        delete next.agent_provenance;
+        delete next.agent_provenance_fields;
+      }
+    }
+    if (next.agent_provenance_fields) next.agent_provenance_fields = agentNoteFields(next.agent_provenance_fields);
     next.review_status = deriveReviewStatus(next);
     remember(id, Object.fromEntries(
       Object.keys(next)
