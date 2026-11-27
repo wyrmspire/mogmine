@@ -206,7 +206,7 @@ function ExampleChart({ ref, example, shield, zone, onRendered }: {
     const derived = deriveTrade(fromLegacy(example));
     const observed = observeTrade(derived, stored.candles, TIMEFRAME_MINUTES[stored.baseTimeframe]);
     const accountRiskR = riskR(example, resolveRSize(example, accounts.accounts, prefs));
-    return buildMarks(derived, observed, stored.baseTimeframe, "medium", shield, { candleTimes: stored.candles.map(({ time }) => time), accountRiskR });
+    return buildMarks(derived, observed, stored.baseTimeframe, "low", shield, { candleTimes: stored.candles.map(({ time }) => time), accountRiskR });
   }, [example, bars, shield, accounts.accounts, prefs]);
 
   const rendered = useCallback(() => onRendered(shield), [onRendered, shield]);

@@ -152,7 +152,7 @@ function DrillCard({ trade, stored, answer, showPlaybook, zone, privacy, onAnswe
     const derived = deriveTrade(fromLegacy(trade));
     const observed = observeTrade(derived, stored.candles, TIMEFRAME_MINUTES[timeframe]);
     const accountRiskR = riskR(trade, resolveRSize(trade, accounts.accounts, prefs));
-    return buildMarks(derived, observed, timeframe, "medium", privacy, { candleTimes: stored.candles.map(({ time }) => time), accountRiskR });
+    return buildMarks(derived, observed, timeframe, "low", privacy, { candleTimes: stored.candles.map(({ time }) => time), accountRiskR });
   }, [answer, trade, stored, timeframe, privacy, accounts.accounts, prefs]);
   const r = resultR(trade, resolveRSize(trade, accounts.accounts, prefs));
   const process = processRead(trade);

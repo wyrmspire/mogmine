@@ -1,6 +1,6 @@
 // Display list for issue #34 and docs/15 §3.4. Prices and UTC bar opens stay in data coordinates.
 import { formatDetailTime } from "./time.ts";
-import { formatPoints, formatPrice, formatR } from "./format.ts";
+import { formatPrice, formatR } from "./format.ts";
 import { formatAccountR } from "./rstrip.ts";
 import { stopAtExit } from "./trade-document.ts";
 import type { DerivedTrade, EventBasis, ExitReason, PositionPoint } from "./trade-document.ts";
@@ -98,12 +98,12 @@ export interface BuildMarksOptions {
 }
 
 const exitText: Record<ExitReason, string> = {
-  target: "TP", stop: "SL", trail: "TRAIL", breakeven: "BE", manual: "MKT", unknown: "",
+  target: "", stop: "", trail: "TRAIL", breakeven: "BE", manual: "MKT", unknown: "",
 };
 
 const findingAppearance: Record<TradeBarFinding["code"], [text: string, tone: MarkTone]> = {
-  stop_traded_through: ["SL touch", "risk"],
-  target_traded_through: ["TP touch", "profit"],
+  stop_traded_through: ["", "risk"],
+  target_traded_through: ["", "profit"],
   fill_outside_bar: ["fill outside bar", "muted"],
   // Never drawn as a flag: the fill's own flag is already anchored on the matched bar, approximate (05 §4.3).
   fill_time_shifted: ["", "muted"],
@@ -115,7 +115,7 @@ export function buildFindingMarks(findings: readonly TradeBarFinding[], exactBar
     const [text, tone] = findingAppearance[finding.code];
     return {
       kind: "flag", t: finding.barTime, price: finding.price, shape: "dot", tone, basis: finding.basis,
-      text: finding.basis === "inferred" ? `≈ ${text}` : text,
+      text: text && finding.basis === "inferred" ? `≈ ${text}` : text,
       finding: { code: finding.code, segment: finding.segment },
     };
   });
@@ -149,7 +149,7 @@ function span(from: Anchor, to: Anchor): MarkSpan | null {
 }
 
 function targetName(derived: DerivedTrade, fill: PositionPoint): [text: string, inferred: boolean] {
-  if (derived.planned_targets.length < 2) return ["TP", false];
+  if (derived.planned_targets.length < 2) return ["", false];
   const linkedOrder = fill.order == null ? undefined : derived.working_orders.findLast(
     (order) => order.role === "target" && order.order === fill.order
       && Date.parse(order.from) <= Date.parse(fill.t)
@@ -159,9 +159,9 @@ function targetName(derived: DerivedTrade, fill: PositionPoint): [text: string, 
     const key = linkedOrder.target ?? derived.planned_targets.find((target) => target.key === linkedOrder.order)?.key;
     if (key) return [key.toUpperCase(), false];
   }
-  if (fill.order != null) return ["TP", false];
+  if (fill.order != null) return ["", false];
   const matches = derived.planned_targets.filter((target) => target.price === fill.price);
-  return matches.length === 1 ? [matches[0].key.toUpperCase(), true] : ["TP", false];
+  return matches.length === 1 ? [matches[0].key.toUpperCase(), true] : ["", false];
 }
 
 /** Build marks in painter order. Unavailable bars leave unresolved geometry out of the list. */
@@ -215,7 +215,6 @@ export function buildMarks(
         marks.push({
           kind: "zone", ...planSpan, layer: "plan", p0: plannedEntry, p1: plannedStop,
           tone: "risk", style, basis: plan?.stop != null ? plan.basis : initialStop?.basis,
-          ...(detail === "high" ? { label: "SL" } : {}),
         });
       }
 
@@ -224,16 +223,9 @@ export function buildMarks(
       );
       let innerPrice = plannedEntry;
       for (const target of targets) {
-        const multiple = targets.length > 1;
-        const name = multiple ? target.key.toUpperCase() : "TP";
-        const risk = target.planned_r == null ? "" : options.accountRiskR == null
-          ? ` ${target.planned_r.toFixed(1)}R`
-          : ` ${formatAccountR(target.planned_r * options.accountRiskR)}`;
-        const size = multiple && !shield && plan ? ` · ${target.qty} of ${plan.qty}` : "";
         marks.push({
           kind: "zone", ...planSpan, layer: "plan", p0: innerPrice, p1: target.price,
           tone: "profit", style, basis: plan?.basis,
-          ...(detail === "low" ? {} : { label: name + risk + size }),
         });
         innerPrice = target.price;
       }
@@ -284,7 +276,7 @@ export function buildMarks(
         });
       }
 
-      if (cancelled && from) {
+      if (cancelled && from && detail !== "low") {
         marks.push({
           kind: "label", anchor: { t: from.t, price: plannedEntry },
           text: cancelledEntry ? "PLAN · cancelled" : "PLAN · not filled",
@@ -427,12 +419,13 @@ export function buildMarks(
       const text = fact.extra_r == null ? "PAST STOP" : `PAST STOP ${formatR(fact.extra_r)}`;
       if (hold) marks.push({
         kind: "hatch", ...hold, p0: fact.stop_price, p1: fact.price, tone: "risk", basis,
-        label: basis === "inferred" ? `≈ ${text}` : text,
+        ...(detail === "low" ? {} : { label: basis === "inferred" ? `≈ ${text}` : text }),
       });
     }
   }
 
-  marks.push(...buildFindingMarks(facts?.findings ?? [], exactBarTimes));
+  const findingMarks = buildFindingMarks(facts?.findings ?? [], exactBarTimes);
+  marks.push(...(detail === "low" ? findingMarks.map((mark) => ({ ...mark, text: "" })) : findingMarks));
 
   const lotsByExit = new Map<number, DerivedTrade["closed_lots"]>();
   for (const lot of derived.closed_lots) {
@@ -475,21 +468,8 @@ export function buildMarks(
   }
   for (const { mark, count, labels } of fillFlags.values()) {
     const text = [...labels].join(" / ");
-    mark.text = [text, count > 1 && !shield ? `×${count}` : ""].filter(Boolean).join(" ");
+    mark.text = detail === "low" ? "" : [text, count > 1 && !shield ? `×${count}` : ""].filter(Boolean).join(" ");
     marks.push(mark);
-  }
-
-  const excursion = facts?.excursions;
-  if (excursion && exit && entryPrice != null) {
-    const { maePrice, mfePrice, coverage } = excursion;
-    const points = (price: number) => formatPoints((price - entryPrice) * (isLong ? 1 : -1), derived.symbol);
-    const mfe = `MFE ≈ ${points(mfePrice)}`;
-    const mae = `MAE ≈ ${points(maePrice)}`;
-    marks.push({
-      kind: "bracket", ...exit, pLow: Math.min(maePrice, mfePrice), pMid: entryPrice,
-      pHigh: Math.max(maePrice, mfePrice), basis: "inferred", coverage,
-      labels: isLong ? { low: mae, high: mfe } : { low: mfe, high: mae },
-    });
   }
 
   const continuation = span(exit, right);

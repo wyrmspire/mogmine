@@ -158,10 +158,9 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
     const halfBar = Math.max(3, scale.options().barSpacing / 2);
     const zoneColor = (tone: Tone) => tone === "profit" ? theme.zoneReward
       : tone === "risk" ? theme.zoneRisk : tone === "entry" ? theme.entryLine : theme.labelMuted;
-    const chipFor = (tone: Tone | "ghost"): Chip => (tone === "ghost" ? { bg: theme.chipGhost, fg: CHART_TOKENS.chip.ghostText }
-      : tone === "profit" ? { bg: theme.chipReward, fg: CHART_TOKENS.chip.text }
-        : tone === "risk" ? { bg: theme.chipRisk, fg: CHART_TOKENS.chip.text }
-          : { bg: theme.chipNeutral, fg: CHART_TOKENS.chip.neutralText });
+    const chipFor = (tone: Tone): Chip => (tone === "profit" ? { bg: theme.chipReward, fg: CHART_TOKENS.chip.text }
+      : tone === "risk" ? { bg: theme.chipRisk, fg: CHART_TOKENS.chip.text }
+        : { bg: theme.chipNeutral, fg: CHART_TOKENS.chip.neutralText });
     // Words use the sans face, numbers the mono face (08 §4.3). Both come from --font-* via lib/theme.ts.
     // Export chips are 18 px tall with 11.5 px text; live chips are 16 px with 10.5 px (08 §4.3).
     const chipH = this.exporting ? CHIP_EXPORT_HEIGHT : CHART_TOKENS.chip.height;
@@ -201,34 +200,13 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
         return rect && ya != null && yb != null ? [{ tone: mark.tone, rect, y0: ya, y1: yb, label: mark.label, approximate: mark.approximate, opacityMultiplier: mark.opacityMultiplier }] : [];
       });
       const envelopes = buildActualLotEnvelopes(lotZones), actualRects = envelopes.flatMap((envelope) => envelope.slices);
-      // Zone chips sit just outside the zone's right edge, flipping inside only at the price axis (08 §4.3).
-      const zoneLabel = (label: string, tone: Tone, { x: left, y: top, width, height }: Area) => {
-        const outside = left + width + 4;
-        if (height >= 13) text(label, outside + measureChip(label) <= pane.width ? outside : left + width - 4 - measureChip(label), top + height / 2, chipFor(tone));
-      };
 
       const paint = (mark: Mark) => {
-        if (mark.kind === "flag" || mark.kind === "label" || mark.kind === "bracket") {
+        if (mark.kind === "bracket") return;
+        if (mark.kind === "flag" || mark.kind === "label") {
           const atX = x(mark.kind === "label" ? mark.anchor.t : mark.t);
-          const atY = y(mark.kind === "label" ? mark.anchor.price : mark.kind === "bracket" ? mark.pMid : mark.price);
+          const atY = y(mark.kind === "label" ? mark.anchor.price : mark.price);
           if (atX == null || atY == null || atX < 0 || atX > pane.width) return;
-          if (mark.kind === "bracket") {
-            const low = y(mark.pLow);
-            const high = y(mark.pHigh);
-            if (low == null || high == null) return;
-            const bx = Math.min(pane.width - 5, atX + halfBar + 5);
-            ctx.save();
-            ctx.globalAlpha *= CHART_TOKENS.line.bracketAlpha;
-            setDash(ctx, "solid");
-            strokeLine(ctx, bx, low, bx, high);
-            for (const cap of [low, atY, high]) strokeLine(ctx, bx - 3, cap, bx + 3, cap);
-            ctx.restore();
-            const width = Math.max(measureChip(mark.labels.low), measureChip(mark.labels.high));
-            const labelX = bx + width + 7 <= pane.width ? bx + 6 : bx - width - 6;
-            text(mark.labels.low, labelX, low + (low - high < 13 ? 7 : 0), chipFor("ghost"));
-            text(mark.labels.high, labelX, high - (low - high < 13 ? 7 : 0), chipFor("ghost"));
-            return;
-          }
           if (atY < 0 || atY > pane.height) return;
           if (mark.kind === "label") {
             if (isRulerLabel(mark)) {
@@ -349,7 +327,6 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
             strokeLine(ctx, left, edgeY, left + width, edgeY);
             ctx.restore();
           }
-          if (mark.label) zoneLabel(mark.label, mark.tone, area);
         } else {
           // Zone fills: one tier per area. Actual zones fade from entry to far price; plan fills are flat and
           // are cut out wherever an actual zone sits, so no two translucent fills stack (08 §3.3).
@@ -395,7 +372,6 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
           ctx.fillStyle = zoneGradient(ctx, env.entryY, env.farY, zoneColor(env.tone), zoneAlpha(CHART_TOKENS.zone.nearFactor, strength), zoneAlpha(CHART_TOKENS.zone.farFactor, strength));
           for (const s of env.slices) ctx.fillRect(s.x, s.y, s.width, s.height);
         } else {
-          if (env.label) zoneLabel(env.label, env.tone, env.rect);
           for (const seg of [...env.farEdges, ...env.separators]) { ctx.globalAlpha = base * seg.alpha; strokeLine(ctx, seg.x0, crisp(seg.y, dpr), seg.x1, crisp(seg.y, dpr)); }
         }
       }

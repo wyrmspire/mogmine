@@ -35,7 +35,7 @@ export function ReviewChart({ trade, sealed, zone, privacy }: { trade: TradeReco
     const derived = deriveTrade(fromLegacy(trade));
     const observed = observeTrade(derived, bars, TIMEFRAME_MINUTES[timeframe]);
     const accountRiskR = riskR(trade, resolveRSize(trade, accounts.accounts, prefs));
-    return buildMarks(derived, observed, timeframe, "medium", privacy, { candleTimes: bars.map(({ time }) => time), accountRiskR });
+    return buildMarks(derived, observed, timeframe, "low", privacy, { candleTimes: bars.map(({ time }) => time), accountRiskR });
   }, [sealed, bars, trade, timeframe, privacy, accounts.accounts, prefs]);
 
   if (!candles || candles.status === "loading") {
