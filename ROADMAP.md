@@ -48,7 +48,9 @@ Every PR that changes a screen checks the standards that apply to what it touche
 
 This matches Blueprint §3 priorities 2–4. It goes first because lost market history can't be recovered.
 
-**What we know** (from `notes/handoffs/2026-11-26-databento-mes-1m.md` on PR #282; **not verified from this machine**, which has no Supabase access):
+**Update:** PR #282 is merged. PR #296 adds the daily top-up (RM-A2). It needs `CRON_SECRET` in Vercel, and until it is merged and has run, the notes below still hold.
+
+**What we knew before it** (from `notes/handoffs/2026-11-26-databento-mes-1m.md` on PR #282; **not verified from this machine**, which has no Supabase access):
 - `mogmine_market_candles` on `showmob-dev` holds **90,840 Databento `MES=F` 1-minute bars, Aug 25 – Nov 24 2026**, plus **1,729 Yahoo bars for Nov 25–26** from one manual top-up run.
 - **Nothing in the app writes bars into the archive.** `lib/market-data/archive.ts` and `/api/market-data` only read. Yahoo bars fill the chart when the archive is thin, but they aren't saved.
 - No scheduled job exists: no Vercel cron, GitHub Action or timer. Yahoo keeps about **30 days** of 1-minute history, so **the first permanent gap starts around Dec 26 2026** unless RM-A2 ships.
@@ -57,8 +59,8 @@ This matches Blueprint §3 priorities 2–4. It goes first because lost market h
 
 | ID | Item | Acceptance criteria | Status |
 |---|---|---|---|
-| **RM-A1** | Merge PR #282 (migrations are already applied on `showmob-dev`, so this records them in the repo). Close PR #71 as superseded. | Migrations `20261126073815_*` and `20261126081228_*` are on `main`. #71 is closed with a link to #282. The Blueprint's #71 rule is updated (RM-N1). | ready (owner) |
-| **RM-A2** | **Daily archive top-up, run on the server.** Add one route, e.g. `POST /api/v1/market/top-up`, that **fetches Yahoo itself** and upserts completed sessions. The caller supplies only `symbol` and an optional date range, **never prices**. Vercel Cron calls it daily after the CME close (17:15 ET, with `CRON_SECRET`). An agent with `write` scope can call the same route from its HTTP or MCP tools to backfill on demand. | Idempotent: rerunning adds 0 rows. The Databento-over-Yahoo guard in the DB still holds (Databento rows never overwritten). Writes a coverage row and a job-log row per session. Refuses symbols outside `OD-15`. The route uses the server-side service role and never exposes it. A test covers rerun, partial session and Yahoo failure. | ready |
+| **RM-A1** | Merge PR #282 (migrations are already applied on `showmob-dev`, so this records them in the repo). Close PR #71 as superseded. | Migrations `20261126073815_*` and `20261126081228_*` are on `main`. #71 is closed with a link to #282. The Blueprint's #71 rule is updated (RM-N1). | done (`e164930`; #71 closed) |
+| **RM-A2** | **Daily archive top-up, run on the server.** Add one route, e.g. `POST /api/v1/market/top-up`, that **fetches Yahoo itself** and upserts completed sessions. The caller supplies only `symbol` and an optional date range, **never prices**. Vercel Cron calls it daily after the CME close (17:15 ET, with `CRON_SECRET`). An agent with `write` scope can call the same route from its HTTP or MCP tools to backfill on demand. | Idempotent: rerunning adds 0 rows. The Databento-over-Yahoo guard in the DB still holds (Databento rows never overwritten). Writes a coverage row and a job-log row per session. Refuses symbols outside `OD-15`. The route uses the server-side service role and never exposes it. A test covers rerun, partial session and Yahoo failure. | review (PR #296) |
 | **RM-A3** | Optional write-through: when `/api/market-data` falls back to Yahoo for a **completed** session, upsert those bars. | Never writes an in-progress session. Same guard and idempotence as RM-A2. | parked (RM-A2 covers it) |
 | **RM-A4** | Show archive status in Tune/Tools: newest bar time, sessions missing, last top-up result. | Follows DS-11. A gap of more than one trading day shows as a warning. | ready |
 | **RM-A5** | Backfill Jan 25 – Aug 24 2026 Databento bars. They're already converted, on the machine that ran the conversion. | Coverage rows for every session in that range. Spot checks match the Parquet files. | blocked (owner) |
@@ -67,6 +69,9 @@ This matches Blueprint §3 priorities 2–4. It goes first because lost market h
 | **RM-A8** | Make Shield display-only in the API: stop passing `prefs.shield` in `lib/agent/strategy-lab.ts:163`. If redacted agent responses are ever wanted, make that an explicit query parameter or scope. | The API response is identical with Shield on or off. A test proves it. | ready (pending DS-07 confirmation) |
 | **RM-A9** | Use operation-specific OpenAPI request schemas instead of the generic `additionalProperties: true` body (`lib/agent/openapi.ts:116`). | Each write operation has its own named schema, with required fields machine-readable. | ready |
 | **RM-A10** | Before any second user: decide on a dedicated Supabase project and replace the in-process rate limiter with a durable one (Blueprint §7). | An owner decision is recorded. | parked |
+| **RM-A11** | Agent-triggered backfill: an agent with `write` scope can run the RM-A2 top-up through `/api/v1` (HTTP or MCP). It names a date range, never prices. | Same guards and idempotence as the cron route. Appears in the agent audit log and the OpenAPI document. | ready after RM-A2 |
+| **RM-A12** | Protect local data from browser eviction: call `navigator.storage.persist()`, and warn a device-only user (notably iOS Safari's 7-day wipe) to sync or install to the Home Screen | The persisted state is shown in Tools. A refused request produces a plain warning, once. | ready |
+| **RM-A13** | Delete versus edit conflicts. Today a record deleted on one device and edited on another is re-created, on purpose (docs/26 §8.2). Decide whether to keep that or add `deleted_at` tombstones. | Owner decision recorded in DECISIONS.md, with a test for the chosen behaviour | blocked (owner) |
 
 ---
 
@@ -93,6 +98,8 @@ Proposed token values. The worst-case surface is `--bg-elevated`:
 | blue-orange `--profit-text` | `#7fb2ff` | `#84b5ff` | 59 → 60 |
 
 The greys step evenly (92 / 70 / 60), so muted and faint stay distinguishable.
+
+The codebase audit proposes a close alternative to compare during RM-B1: secondary `#c5cbd6`, muted `#adb6c4`, loss `#fca5a5`, win `#5eead4`, and a colorblind pair `#56B4E9` / `#E69F00`.
 
 ---
 
@@ -132,6 +139,7 @@ Each track has **Round out** items, needed for the feature to be complete, and *
 | **RM-E1** | Verify scenario steps 4–6 end to end on a phone: an agent-logged trade, a stop move, the close. | Chart, record, R, P&L and excursions agree on every surface | ready |
 | **RM-E2** | Zoom-out floor review: `MIN_BAR_SPACING_PX = 3` stops zoom-out. Decide whether to lower it or auto-step to a higher timeframe. | Owner choice implemented. Pinch on a 390 px phone never crushes candles. | blocked (owner) |
 | **RM-E3** | Volume pane (`VOL-1`) check on real futures trades on a phone | The band shows on real MES trades and hides on samples and indices | ready |
+| **RM-E4** | Commissions on trades: record them and show gross and net R. Trade P&L is gross today. Blueprint §2 still defines R and sizing. | Net R shown wherever gross R is, from integer cents. Unknown commission reads as unknown, not zero. | ready (owner sets per-contract rates) |
 
 **Design nudges:** DS-02 (RM-B2), DS-09 (keyboard parity), DS-01.
 
@@ -193,6 +201,7 @@ Each track has **Round out** items, needed for the feature to be complete, and *
 | **RM-K2** | Read models before new objects: `GET /api/v1/session` (RM-C4), then a canonical review queue | The agent needs no client-side sorting to answer "what should I review?" | ready after RM-C4 |
 | **RM-K3** | Insight proposals (claim, evidence refs, n, data quality, owner state) | Opened only when the owner opens this feature area (Blueprint: convergence first) | parked |
 | **RM-K4** | Capability scopes (`journal:*`, `research:*`, `replay:write`). **Never** an execute, orders or broker scope. | Opened together with RM-K3 | parked |
+| **RM-K5** | Mark free text (notes, tags, imported strings) in agent API responses as untrusted data, and say so in the house rules and OpenAPI, so an agent does not follow instructions found inside it | Responses and docs identify user-authored text fields. A test covers a note containing instructions. | ready |
 
 ### Track L: Share cards and Shield
 *Acceptance scenario step 9.*
@@ -231,6 +240,8 @@ A reply pasted into the 2026-11-26 session made suggestions on several of these.
 | Feed → Journal, Tune → Tools labels | — | RM-F2 |
 | Insights per account or across accounts by default (when opened) | Per account or account mode | RM-K3 |
 | Dedicated Supabase project before more users | — | RM-A10 |
+| Delete vs. edit across devices: keep re-create, or tombstones | — | RM-A13 |
+| Commission rates per contract | — | RM-E4, RM-J1 |
 
 ---
 
@@ -242,9 +253,10 @@ A reply pasted into the 2026-11-26 session made suggestions on several of these.
 | **RM-N2** | docs/20 stale Shield line (same as RM-B3) | ready |
 | **RM-N3** | docs/06's 5-phase roadmap: mark it superseded by the Blueprint and this file | ready |
 | **RM-N4** | Write `docs/27-design-principles.md`: the audit's product loop (plan → record → review → patterns → practice → test → playbook → transfer) plus the `DS-` standards with links to code. Then §1 here shortens to pointers. | ready |
-| **RM-N5** | PDFs stay as background reading. Their known errors: the charter skips Microsoft guideline G14 and shifts G15–G18 by one; the audit's `fileciteturn…` citations and `utm_source=chatgpt.com` links don't resolve. Fix them if the PDFs are regenerated. | ready |
+| **RM-N5** | The charter (now Markdown) and the two audits stay as background reading. Known errors: the charter skips Microsoft guideline G14 and shifts G15–G18 by one; the audit's `fileciteturn…` citations and `utm_source=chatgpt.com` links don't resolve. Fix them if the documents are regenerated. | ready |
 | **RM-N6** | Check docs/01 against the code (Supabase, agent API, archive) and update it in place | ready |
 | **RM-N7** | BOARD.md: the planner copies `ready` `RM-` items into "Up next" in Blueprint order | ready |
+| **RM-N8** | [MogMine Comprehensive Codebase Audit.md](<MogMine Comprehensive Codebase Audit.md>) was written **without the repo**, so its checklist items are to-dos, not findings. Checked 2026-11-26: already done are SHA-256 key hashes, `(select auth.uid())` in RLS, `vertTouchDrag: false`, primitive `detached()` cleanup, per-trade `r_size_cents` and Chicago time. Its gaps are tracked as RM-A7, A12, A13, B1, B2, E4, K1, K5. Do not adopt its floor-sizing default (Blueprint §2 wins) or FSRS (drills use 1/3/7 days, not SM-2) without an owner decision. | Items stay linked as they close | done (this change) |
 
 ---
 

@@ -1,6 +1,6 @@
 # Review: MogMine UX/UI Design Principles charter
 
-This reviews `MogMine UX_UI Design Principles.pdf` against the app as it actually exists. It's written for the charter's author, who wrote it from a description of MogMine without seeing it, and for the owner, who decides what to adopt.
+This reviews the design principles charter ([MogMine UX_UI Design Principles.md](<MogMine UX_UI Design Principles.md>); first reviewed as a PDF) against the app as it actually exists. It's written for the charter's author, who wrote it from a description of MogMine without seeing it, and for the owner, who decides what to adopt.
 
 I checked against `main` at `3747928` (2026-11-26): the code, [DECISIONS.md](DECISIONS.md), [MOGMINE-BLUEPRINT.md](MOGMINE-BLUEPRINT.md) and the specs in `docs/`. I didn't use the live app on a phone, so anything about feel or speed still needs a hands-on check.
 
