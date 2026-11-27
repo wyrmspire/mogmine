@@ -36,7 +36,11 @@ export class YahooFinanceProvider implements MarketDataProvider {
   supportsTickData() { return false; }
 
   async getCandles({ symbol, timeframe, from, to }: MarketDataQuery): Promise<Candle[]> {
-    const ticker = this.resolveProviderSymbol(symbol);
+    return this.getTickerCandles(this.resolveProviderSymbol(symbol), { timeframe, from, to });
+  }
+
+  /** Cleaned bars for an exact Yahoo ticker. The archive top-up uses it to read single contracts (`MESZ26.CME`). */
+  async getTickerCandles(ticker: string, { timeframe, from, to }: Omit<MarketDataQuery, "symbol">): Promise<Candle[]> {
     const params = new URLSearchParams({
       interval: INTERVAL[timeframe],
       period1: String(Math.floor(from.getTime() / 1000)),
