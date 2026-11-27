@@ -1,8 +1,8 @@
 // Accounts and balance checks on this device (docs/21). Kept apart from the trade list, like a separate table.
 // Local-first like the journal (UX-30, UX-31). Moves to Supabase with the trades (R-05).
 import { useSyncExternalStore } from "react";
-import { makeAccount, sanitizeAccounts, sanitizeBalanceChecks } from "./accounts.ts";
-import type { AccountRules, BalanceCheck, TradingAccount } from "./accounts.ts";
+import { accountMode, makeAccount, sanitizeAccounts, sanitizeBalanceChecks } from "./accounts.ts";
+import type { AccountMode, AccountRules, BalanceCheck, TradingAccount } from "./accounts.ts";
 import { isValidRSizeCents } from "./r-size.ts";
 import { createCollectionSync } from "./persistence/store-sync.ts";
 import type { CollectionSync, CollectionSyncOptions } from "./persistence/store-sync.ts";
@@ -107,7 +107,7 @@ export function hydrateAccounts() {
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `acct-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
-export function addAccount(input: { name: string; starting_balance_cents: number; rules?: Partial<AccountRules>; r_size_cents?: number | null }, now = new Date().toISOString()) {
+export function addAccount(input: { name: string; starting_balance_cents: number; rules?: Partial<AccountRules>; r_size_cents?: number | null; mode?: AccountMode }, now = new Date().toISOString()) {
   const account = makeAccount({ ...input, id: newId(), now });
   set({ accounts: [...state.accounts, account] });
   persist();
@@ -116,11 +116,16 @@ export function addAccount(input: { name: string; starting_balance_cents: number
 }
 
 /**
- * Rename, change the start, the R size or the rules, or archive. The running total is recomputed from the trades.
+ * Rename, change the start, the R size, the mode or the rules, or archive. The running total is recomputed from the trades.
  * `r_size_cents: null` clears the account's R size, so its trades fall back to the Default R size (Q-12).
  */
-export function updateAccount(id: string, patch: Partial<Pick<TradingAccount, "name" | "starting_balance_cents" | "r_size_cents" | "rules" | "archived">>) {
-  const next = "r_size_cents" in patch ? { ...patch, r_size_cents: isValidRSizeCents(patch.r_size_cents) ? patch.r_size_cents : null } : patch;
+export function updateAccount(id: string, patch: Partial<Pick<TradingAccount, "name" | "starting_balance_cents" | "r_size_cents" | "rules" | "archived" | "mode">>) {
+  const { mode: rawMode, ...rest } = patch;
+  const next = {
+    ...rest,
+    ...("r_size_cents" in patch ? { r_size_cents: isValidRSizeCents(patch.r_size_cents) ? patch.r_size_cents : null } : {}),
+    ...(rawMode !== undefined ? { mode: accountMode({ mode: rawMode }) } : {}),
+  };
   set({ accounts: state.accounts.map((account) => (account.id === id ? { ...account, ...next, rules: { ...account.rules, ...next.rules } } : account)) });
   persist();
   syncs.accounts.changed();

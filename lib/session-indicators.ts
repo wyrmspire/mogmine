@@ -52,10 +52,17 @@ interface Level {
 
 type Window = ReturnType<typeof readSessionWindow>;
 
-interface VwapPoint {
+export interface VwapPoint {
   /** The candle close time in UTC milliseconds, when its OHLCV becomes usable. */
   time: number;
   value: number;
+}
+
+export interface VwapBandPoint extends VwapPoint {
+  upper1: number;
+  lower1: number;
+  upper2: number;
+  lower2: number;
 }
 
 function mergeWindows(windows: readonly Window[]): Window {
@@ -105,16 +112,30 @@ function typicalPrice(bar: Candle): number {
   return (bar.high + bar.low + bar.close) / 3;
 }
 
-function sessionVwap(bars: readonly Candle[], barMs: number): VwapPoint[] {
+function sessionVwap(bars: readonly Candle[], barMs: number): VwapBandPoint[] {
   let volume = 0;
   let value = 0;
-  const points: VwapPoint[] = [];
+  let m2 = 0;
+  const points: VwapBandPoint[] = [];
   for (const bar of bars) {
-    if (bar.volume > 0) {
+    if (Number.isFinite(bar.volume) && bar.volume > 0) {
+      const tp = typicalPrice(bar);
+      const delta = tp - value;
       volume += bar.volume;
-      value += (typicalPrice(bar) - value) * (bar.volume / volume);
+      value += delta * (bar.volume / volume);
+      m2 += bar.volume * delta * (tp - value);
     }
-    if (volume > 0) points.push({ time: bar.time + barMs, value });
+    if (volume > 0) {
+      const stdev = Math.sqrt(Math.max(0, m2 / volume));
+      points.push({
+        time: bar.time + barMs,
+        value,
+        upper1: value + stdev,
+        lower1: value - stdev,
+        upper2: value + 2 * stdev,
+        lower2: value - 2 * stdev,
+      });
+    }
   }
   return points;
 }
@@ -198,7 +219,8 @@ export function computeSessionIndicators(candles: readonly Candle[], options: Se
     && gaps.missingBars / anchored.coverage.expectedBars <= GLOBEX_MAX_MISSING_SHARE
     && gaps.longestGapMin <= GLOBEX_MAX_GAP_MIN && gaps.rthMissingBars === 0;
   const approximate = tolerated && gaps.missingBars > 0;
-  const vwap = (anchored.coverage.complete || tolerated) && volumesUsable ? sessionVwap(anchored.bars, barMs) : [];
+  const vwapBands = (anchored.coverage.complete || tolerated) && volumesUsable ? sessionVwap(anchored.bars, barMs) : [];
+  const vwap: VwapPoint[] = vwapBands.map(({ time, value }) => ({ time, value }));
   const strictUsable = anchored.coverage.complete && volumesUsable;
   const profile = strictUsable ? volumeProfile(anchored.bars, spec.tickSize) : null;
   const lastBar = anchored.bars.at(-1);
@@ -216,7 +238,7 @@ export function computeSessionIndicators(candles: readonly Candle[], options: Se
       anchored: { ...anchored.coverage, ...gaps, approximate },
       previousDay: previousDay.coverage, overnight: overnight.coverage, week: week.coverage,
     },
-    vwap, levels,
+    vwap, vwapBands, levels,
   };
 }
 

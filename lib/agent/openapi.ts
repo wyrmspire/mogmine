@@ -171,29 +171,50 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
       },
       schemas: {
         Ok: {
-          type: "object",
-          required: ["ok", "data"],
+          type: "object", required: ["ok", "data"],
           properties: {
             ok: { const: true },
             data: { description: "The record, list or document (see the operation)." },
             warnings: {
-              type: "array",
-              description: "Trade writes only. Non-blocking warnings about the saved trade; empty when there are none.",
+              type: "array", description: "Trade writes only. Non-blocking warnings about the saved trade; empty when there are none.",
               items: { type: "object", required: ["code", "message"], properties: { code: { type: "string" }, message: { type: "string" } } },
             },
           },
         },
         Error: {
-          type: "object",
-          required: ["ok", "error"],
+          type: "object", required: ["ok", "error"],
           properties: {
             ok: { const: false },
             error: {
+              type: "object", required: ["code", "message"],
+              properties: { code: { type: "string", enum: ERROR_ENUM }, message: { type: "string", description: "Plain-language message, safe to show." } },
+            },
+          },
+        },
+        Account: {
+          type: "object",
+          description: "Trading account shape for /records/accounts. Use mode \"replay\" for pretend / bar-replay sessions so replay trades stay isolated from real running stats and Drawdown Defender.",
+          required: ["id", "name", "starting_balance_cents"],
+          properties: {
+            id: { type: "string" },
+            name: { type: "string", example: "Pretend Replay" },
+            mode: {
+              type: "string",
+              enum: ["eval", "live", "sim", "replay"],
+              default: "eval",
+              description: "Account mode. Defaults to \"eval\" when omitted; \"replay\" isolates pretend/bar-replay sessions.",
+            },
+            starting_balance_cents: { type: "integer", description: "Whole cents.", example: 5000000 },
+            r_size_cents: { type: "integer", nullable: true, description: "Fixed 1R dollar unit in whole cents (standard $300 = 30000).", example: 30000 },
+            archived: { type: "boolean", default: false },
+            created_at: { type: "string", format: "date-time" },
+            rules: {
               type: "object",
-              required: ["code", "message"],
               properties: {
-                code: { type: "string", enum: ERROR_ENUM },
-                message: { type: "string", description: "Plain-language message, safe to show." },
+                max_loss_cents: { type: "integer", nullable: true },
+                drawdown: { type: "string", enum: ["static", "trailing", "trailing_eod"], default: "trailing" },
+                daily_loss_cents: { type: "integer", nullable: true },
+                profit_target_cents: { type: "integer", nullable: true },
               },
             },
           },
@@ -205,43 +226,16 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
             "stop distance, contract count, dollar risk, R, or exit_reason. Standard R unit is $300 (r_size_cents = 30000); " +
             "whole-micro ceiling rounding up by less than 1 micro over target is expected (HR-6).",
           properties: {
-            note: {
-              type: "string",
-              description: "Short 1-line Pit Stop takeaway shown on cards/feed (optional; never duplicate pre_trade_thesis).",
-              example: "Clean ONL reclaim, slightly early entry.",
-            },
-            pre_trade_thesis: {
-              type: "string",
-              description: "Pre-entry reasoning — why this setup was worth taking before entry.",
-              example: "VWAP reclaim after ONL sweep held higher low against 15m demand.",
-            },
-            management_notes: {
-              type: "string",
-              description: "Decisions made during the trade (holds, trails, scratches, hesitation).",
-              example: "Held through mid-bar chop; trailed under higher swing low once momentum expanded.",
-            },
-            post_exit_notes: {
-              type: "string",
-              description: "Post-exit reflection/lesson — what to repeat or change next time (never restate exit_reason, prices, contracts, or R).",
-              example: "Wait for 1m close above the reclaim level next time instead of anticipating.",
-            },
+            note: { type: "string", description: "Short 1-line Pit Stop takeaway shown on cards/feed (optional; never duplicate pre_trade_thesis).", example: "Clean ONL reclaim, slightly early entry." },
+            pre_trade_thesis: { type: "string", description: "Pre-entry reasoning — why this setup was worth taking before entry.", example: "VWAP reclaim after ONL sweep held higher low against 15m demand." },
+            management_notes: { type: "string", description: "Decisions made during the trade (holds, trails, scratches, hesitation).", example: "Held through mid-bar chop; trailed under higher swing low once momentum expanded." },
+            post_exit_notes: { type: "string", description: "Post-exit reflection/lesson — what to repeat or change next time (never restate exit_reason, prices, contracts, or R).", example: "Wait for 1m close above the reclaim level next time instead of anticipating." },
             stop_moves: {
               type: "array",
-              description:
-                "Timed stop updates [{ price, time }] (UTC ISO-8601 inside the hold). Leave empty with initial_stop_price != stop_loss_price " +
-                "when the exact move minute is unknown (treated as \"untimed\"); never fabricate an exit-time move (HR-4).",
-              items: {
-                type: "object",
-                required: ["price", "time"],
-                properties: { price: { type: "number" }, time: { type: "string", format: "date-time" } },
-              },
+              description: "Timed stop updates [{ price, time }] (UTC ISO-8601 inside the hold). Leave empty with initial_stop_price != stop_loss_price when the exact move minute is unknown (treated as \"untimed\"); never fabricate an exit-time move (HR-4).",
+              items: { type: "object", required: ["price", "time"], properties: { price: { type: "number" }, time: { type: "string", format: "date-time" } } },
             },
-            stated_risk_r: {
-              type: "number",
-              nullable: true,
-              description: "Trader's stated target risk in R (e.g. 0.25) against the account's r_size_cents (standard $300 = 30000 cents). Whole-micro ceiling rounding is expected (HR-6, HR-7).",
-              example: 0.25,
-            },
+            stated_risk_r: { type: "number", nullable: true, description: "Trader's stated target risk in R (e.g. 0.25) against the account's r_size_cents (standard $300 = 30000 cents). Whole-micro ceiling rounding is expected (HR-6, HR-7).", example: 0.25 },
           },
         },
       },

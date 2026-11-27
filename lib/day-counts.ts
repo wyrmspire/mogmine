@@ -44,3 +44,31 @@ export function formatReviewQueueSummary(unreviewedCount: number, needsTagsCount
   if (needsTagsCount > 0) return `${unreviewedCount} to review · ${needsTagsCount} ${needsTagsCount === 1 ? "needs" : "need"} tags`;
   return `${unreviewedCount} to review`;
 }
+
+/**
+ * Real trades only (`!trade.is_sample`) waiting to be reviewed (`review_status !== "reviewed"`).
+ * Demo/sample fixtures are excluded so they never flood the Review queue or inflate pending counts.
+ */
+export function pendingReviewTrades(trades: readonly TradeRecord[]): TradeRecord[] {
+  return trades.filter((trade) => !trade.is_sample && trade.review_status !== "reviewed");
+}
+
+/** Number of real trades waiting in the Review queue (excludes sample/demo trades). */
+export function pendingReviewCount(trades: readonly TradeRecord[]): number {
+  return pendingReviewTrades(trades).length;
+}
+
+/** Unreviewed and untagged counts computed strictly over real trades (`!trade.is_sample`). */
+export function reviewQueueCounts(trades: readonly TradeRecord[]): { unreviewed: number; needsTags: number } {
+  const pending = pendingReviewTrades(trades);
+  return {
+    unreviewed: pending.length,
+    needsTags: pending.filter((trade) => trade.review_status === "new").length,
+  };
+}
+
+/** Review queue summary line computed strictly over real trades (`!trade.is_sample`). */
+export function formatRealReviewQueueSummary(trades: readonly TradeRecord[]): string {
+  const { unreviewed, needsTags } = reviewQueueCounts(trades);
+  return formatReviewQueueSummary(unreviewed, needsTags);
+}

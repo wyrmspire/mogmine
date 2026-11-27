@@ -5,6 +5,8 @@ export type GoldPreset = "bullion" | "champagne" | "amber" | "platinum";
 export type Palette = "classic" | "blue-orange";
 /** Session VWAP anchor on the trade chart (IND-1, OD-18). "off" draws nothing. */
 export type VwapAnchorPref = "off" | "rth" | "globex";
+/** Session VWAP standard-deviation bands on the trade chart. */
+export type VwapBandsMode = "off" | "1sd" | "2sd";
 /** Level labels: "tap" reveals them on tap, "always" keeps the right-edge pills (D-D, LV-09). */
 export type LevelLabelsMode = "tap" | "always";
 /** Review card orientation for share exports (Q-5, DR-3). */
@@ -25,6 +27,8 @@ export interface Prefs {
   riskBudgetUsd: number;
   /** Session VWAP anchor the trader last chose on the trade chart (IND-1). */
   vwapAnchor: VwapAnchorPref;
+  /** Session VWAP standard-deviation band visibility ("off" | "1sd" | "2sd"). */
+  vwapBands: VwapBandsMode;
   /** Level label mode on the trade chart (D-D). */
   levelLabels: LevelLabelsMode;
   /** Draw the 200 EMA on the trade chart (IN-3, D-G). */
@@ -46,6 +50,7 @@ export const DEFAULT_PREFS: Prefs = {
   blindReview: false,
   riskBudgetUsd: 300,
   vwapAnchor: "off",
+  vwapBands: "1sd",
   levelLabels: "tap",
   ema200: false,
   showVolume: true,
@@ -74,6 +79,7 @@ export function sanitize(raw: Partial<Prefs>): Prefs {
     blindReview: raw.blindReview === true,
     riskBudgetUsd: clamp(raw.riskBudgetUsd, 10, 100_000, DEFAULT_PREFS.riskBudgetUsd),
     vwapAnchor: raw.vwapAnchor === "rth" || raw.vwapAnchor === "globex" ? raw.vwapAnchor : DEFAULT_PREFS.vwapAnchor,
+    vwapBands: raw.vwapBands === "off" || raw.vwapBands === "1sd" || raw.vwapBands === "2sd" ? raw.vwapBands : DEFAULT_PREFS.vwapBands,
     levelLabels: raw.levelLabels === "always" ? "always" : DEFAULT_PREFS.levelLabels,
     ema200: raw.ema200 === true,
     showVolume: raw.showVolume !== false,

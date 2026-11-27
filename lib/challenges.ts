@@ -2,6 +2,8 @@
 // Runs on stored trades on the device. No React, no storage, no Date.now() inside.
 // AGENTS §3b invariants: gross dollars / cents, deterministic integer math, no AI scoring, no broker enforcement.
 
+import { isReplayAccount } from "./accounts.ts";
+import type { TradingAccount } from "./accounts.ts";
 import { sessionCloseUtc, sessionDate } from "./session.ts";
 import { isOpen, processRead, tradePnl } from "./trades.ts";
 import type { TradeRecord } from "./trades.ts";
@@ -68,12 +70,21 @@ export interface ChallengeResult {
 
 type TimedTrade = { trade: TradeRecord; exitMs: number };
 
+export interface EvaluateChallengeOptions {
+  /** Accounts used to exclude `replay` account trades unless the challenge is explicitly scoped to that replay account. */
+  accounts?: readonly Pick<TradingAccount, "id" | "mode">[];
+}
+
 export function evaluateChallenge(
   definition: ChallengeDefinition,
   trades: TradeRecord[],
   now: number,
+  opts?: EvaluateChallengeOptions,
 ): ChallengeResult {
   const startedMs = Date.parse(definition.started_at);
+  const replayAccountIds = definition.account_id == null && opts?.accounts?.length
+    ? new Set(opts.accounts.filter(isReplayAccount).map((account) => account.id))
+    : null;
 
   let excludedBeforeStart = 0;
   const inScopeClosedTrades: TimedTrade[] = [];
@@ -83,6 +94,8 @@ export function evaluateChallenge(
     if (trade.is_sample) continue;
     // Account scope (UX-08): filter before any rule sees the trade. Challenge limits stay independent of the account's own rules.
     if (definition.account_id != null && trade.account_id !== definition.account_id) continue;
+    // Replay isolation: never count replay-account trades in all-accounts challenges.
+    if (replayAccountIds && trade.account_id != null && replayAccountIds.has(trade.account_id)) continue;
 
     const entryMs = Date.parse(trade.entry_time);
     if (entryMs < startedMs) {

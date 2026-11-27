@@ -63,16 +63,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="shell">
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <header className="topbar" role="banner">
-        <Link href="/" className="brand" aria-label="MogMine, Today"><span className="brand-gem" aria-hidden="true">M</span><span>MOGMINE</span></Link>
+        <Link href="/" className="brand" aria-label="MogMine, Today" style={{ flexShrink: 0 }}><span className="brand-gem" aria-hidden="true">M</span><span>MOGMINE</span></Link>
         <nav className="topnav" aria-label="Desktop navigation">
           {NAV.map((item) => <Link key={item.href} href={item.href} style={{ minHeight: 44, minWidth: 44 }} aria-current={isActive(item.href) ? "page" : undefined}>{item.label}{item.href === "/review" && reviewBadge}</Link>)}
         </nav>
         <span className="topbar-spacer" />
-        <span className="save-status" data-state={save.state} role="status" title={save.title}><i aria-hidden="true" /><span>{save.text}</span></span>
-        <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} aria-pressed={prefs.shield} aria-label={prefs.shield ? "Shield mode on: dollars hidden. Tap to show dollars." : "Shield mode off. Tap to hide dollars."} title="Shield mode: hide dollars and size" onClick={() => setPrefs({ shield: !prefs.shield })}>{icons.shield}</button>
-        <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade} aria-label="Add trade">＋</button>
-        <AgentKeysLink />
-        <SignOutButton />
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexShrink: 1 }}>
+          <span className="save-status" data-state={save.state} role="status" title={save.title} style={{ minWidth: 0, overflow: "hidden" }}>
+            <i aria-hidden="true" style={{ flexShrink: 0 }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{save.text}</span>
+          </span>
+          <button type="button" className="icon-button" style={{ minHeight: 44, minWidth: 44 }} aria-pressed={prefs.shield} aria-label={prefs.shield ? "Shield mode on: dollars hidden. Tap to show dollars." : "Shield mode off. Tap to hide dollars."} title="Shield mode: hide dollars and size" onClick={() => setPrefs({ shield: !prefs.shield })}>{icons.shield}</button>
+          <button type="button" className="icon-button topbar-add-desktop" style={{ minHeight: 44, minWidth: 44 }} onClick={openAddTrade} aria-label="Add trade">＋</button>
+          <AgentKeysLink />
+          <SignOutButton />
+        </div>
       </header>
 
       <HomeScreenHint />

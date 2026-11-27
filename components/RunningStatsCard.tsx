@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import { isReplayAccount } from "@/lib/accounts";
 import { useAccounts } from "@/lib/accounts-store";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
 import { playbookName } from "@/lib/playbooks";
@@ -149,7 +150,7 @@ function BreakdownTable({
 
 export function RunningStatsCard({
   shield,
-  trades,
+  trades: allTrades,
   now,
 }: {
   shield: boolean;
@@ -162,6 +163,20 @@ export function RunningStatsCard({
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
   const accounts = useAccounts();
   const prefs = usePrefs();
+  const { trades, excludedReplayCount } = useMemo(() => {
+    const replayIds = new Set(accounts.accounts.filter((account) => isReplayAccount(account)).map((account) => account.id));
+    if (!replayIds.size) return { trades: allTrades, excludedReplayCount: 0 };
+    const filtered: TradeRecord[] = [];
+    let replayCount = 0;
+    for (const trade of allTrades) {
+      if (trade.account_id && replayIds.has(trade.account_id)) {
+        replayCount += 1;
+      } else {
+        filtered.push(trade);
+      }
+    }
+    return { trades: filtered, excludedReplayCount: replayCount };
+  }, [allTrades, accounts.accounts]);
   const stats = useMemo(() => runningStats(trades, now, { accounts: accounts.accounts, prefs }), [trades, now, accounts.accounts, prefs]);
   const hasClosedTrades = stats.overall.tradeCount > 0;
   const rows = breakdown === "playbook"
@@ -216,7 +231,7 @@ export function RunningStatsCard({
         </p>
       )}
 
-      {(stats.undatedCount > 0 || stats.excludedOpenCount > 0 || stats.excludedSampleCount > 0) && (
+      {(stats.undatedCount > 0 || stats.excludedOpenCount > 0 || stats.excludedSampleCount > 0 || excludedReplayCount > 0) && (
         <ul className="running-footer-notes muted">
           {stats.undatedCount > 0 && (
             <li>{stats.undatedCount} {stats.undatedCount === 1 ? "trade has an invalid exit date and counts" : "trades have invalid exit dates and count"} only in all-time results.</li>
@@ -226,6 +241,9 @@ export function RunningStatsCard({
           )}
           {stats.excludedSampleCount > 0 && (
             <li>{stats.excludedSampleCount} sample {stats.excludedSampleCount === 1 ? "trade" : "trades"} excluded.</li>
+          )}
+          {excludedReplayCount > 0 && (
+            <li>{excludedReplayCount} replay {excludedReplayCount === 1 ? "trade" : "trades"} excluded.</li>
           )}
         </ul>
       )}

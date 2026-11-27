@@ -11,7 +11,7 @@ import { RECORD_CONTRACTS, contractFor } from "../persistence/registry.ts";
 import { DEFAULT_OWNER_USER_ID, isStopMove, normalizeTrade, toTicks, validateTradeInput } from "../trades.ts";
 import type { TradeRecord } from "../trades.ts";
 import { validateFutureTimes } from "../entry-form.ts";
-import { sanitizeAccounts, sanitizeBalanceChecks } from "../accounts.ts";
+import { isAccountMode, sanitizeAccounts, sanitizeBalanceChecks } from "../accounts.ts";
 import type { BalanceCheck, TradingAccount } from "../accounts.ts";
 import { isValidRSizeCents, isValidStatedRiskR, resolveRSize, riskCents } from "../r-size.ts";
 import { stopMoveError } from "../stop-facts.ts";
@@ -126,6 +126,7 @@ const accountParser = (raw: unknown): Parsed<TradingAccount> => {
   const wholeOrAbsent = (value: unknown) => value === undefined || value === null || Number.isInteger(value);
   if (!isObject(raw) || !Number.isInteger(raw.starting_balance_cents)) return bad("An account needs a whole-cent starting balance.");
   if (raw.r_size_cents != null && !isValidRSizeCents(raw.r_size_cents)) return bad("Account R size must be whole cents between $1 and $100,000.");
+  if (raw.mode !== undefined && !isAccountMode(raw.mode)) return bad("Account mode must be eval, live, sim, or replay.");
   if (!["max_loss_cents", "daily_loss_cents", "profit_target_cents"].every((field) => wholeOrAbsent(rules[field]))) {
     return bad("Account limits are whole cents only.");
   }
@@ -434,9 +435,7 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
       return repoFor(key).remove(owner, id);
     },
 
-    readSingleton(key) {
-      return repos[key].get(owner) as Promise<PersistResult<Stored<SingletonRecordTypes[typeof key]> | null>>;
-    },
+    readSingleton(key) { return repos[key].get(owner) as Promise<PersistResult<Stored<SingletonRecordTypes[typeof key]> | null>>; },
 
     async writeSingleton(key, raw) {
       const parsed = SINGLETON_PARSERS[key](raw);

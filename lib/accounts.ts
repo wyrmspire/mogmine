@@ -34,6 +34,25 @@ export interface AccountRules {
   profit_target_cents: number | null;
 }
 
+/**
+ * Account mode. `replay` is for pretend / bar-replay sessions on historical charts; its trades stay
+ * isolated from real running stats and Drawdown Defender. Legacy accounts without `mode` default to `"eval"`.
+ */
+export type AccountMode = "live" | "eval" | "sim" | "replay";
+export const ACCOUNT_MODES: readonly AccountMode[] = ["eval", "live", "sim", "replay"] as const;
+
+export function isAccountMode(value: unknown): value is AccountMode {
+  return typeof value === "string" && (ACCOUNT_MODES as readonly string[]).includes(value);
+}
+
+export function accountMode(account?: Pick<TradingAccount, "mode"> | null): AccountMode {
+  return account && isAccountMode(account.mode) ? account.mode : "eval";
+}
+
+export function isReplayAccount(account?: Pick<TradingAccount, "mode"> | null): boolean {
+  return accountMode(account) === "replay";
+}
+
 export interface TradingAccount {
   id: string;
   /** Invariant 7. */
@@ -46,6 +65,8 @@ export interface TradingAccount {
   archived: boolean;
   /** Dollars that make 1R in this account, whole cents (04 §3.3). Null: use the default R size from prefs. */
   r_size_cents: number | null;
+  /** Defaults to `"eval"` when omitted on legacy accounts via `accountMode(account)`. */
+  mode?: AccountMode;
 }
 
 /**
@@ -62,7 +83,7 @@ export interface BalanceCheck {
 
 export const NO_RULES: AccountRules = { max_loss_cents: null, drawdown: "trailing", daily_loss_cents: null, profit_target_cents: null };
 
-export function makeAccount(input: { id: string; name: string; starting_balance_cents: number; now: string; rules?: Partial<AccountRules>; r_size_cents?: number | null }): TradingAccount {
+export function makeAccount(input: { id: string; name: string; starting_balance_cents: number; now: string; rules?: Partial<AccountRules>; r_size_cents?: number | null; mode?: AccountMode }): TradingAccount {
   return {
     id: input.id,
     user_id: DEFAULT_OWNER_USER_ID,
@@ -72,6 +93,7 @@ export function makeAccount(input: { id: string; name: string; starting_balance_
     created_at: input.now,
     archived: false,
     r_size_cents: isValidRSizeCents(input.r_size_cents) ? input.r_size_cents : null,
+    mode: accountMode(input),
   };
 }
 
@@ -260,6 +282,7 @@ export function sanitizeAccounts(raw: unknown): TradingAccount[] {
       created_at: typeof account.created_at === "string" ? account.created_at : "",
       archived: account.archived === true,
       r_size_cents: isValidRSizeCents(account.r_size_cents) ? account.r_size_cents : null,
+      mode: accountMode(account),
     }];
   });
 }

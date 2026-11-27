@@ -13,8 +13,18 @@ export interface VwapPoint {
   value: number;
 }
 
+export interface VwapBandPoint {
+  time: number;
+  value: number;
+  upper1: number;
+  lower1: number;
+  upper2: number;
+  lower2: number;
+}
+
 export interface TradeSessionVwapReport {
   points: { time: number; value: number }[];
+  bands: VwapBandPoint[];
   /** True when Globex VWAP was drawn over a window with missing bars (VW-2). */
   approximate: boolean;
   missingBars: number;
@@ -47,6 +57,7 @@ export function tradeSessionVwapReport(
   const missingMinutes = missingBars * TIMEFRAME_MINUTES[baseTimeframe];
   return {
     points: result.vwap,
+    bands: result.vwapBands,
     approximate,
     missingBars,
     reason: approximate ? `≈ ${missingMinutes} min missing overnight` : null,
@@ -79,6 +90,24 @@ export function joinSessionBars(
   return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
 
+function alignPointsToBars<T extends { time: number }>(
+  points: readonly T[],
+  bars: readonly Pick<Candle, "time">[],
+  timeframe: Timeframe,
+  project: (known: T, barTime: number) => T,
+): T[] {
+  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
+  const line: T[] = [];
+  let i = 0;
+  for (const bar of bars) {
+    const close = bar.time + barMs;
+    while (i < points.length && points[i].time <= close) i += 1;
+    const known = points[i - 1];
+    if (known && known.time > bar.time) line.push(project(known, bar.time));
+  }
+  return line;
+}
+
 /**
  * Place cumulative VWAP on the displayed bars. A displayed bar takes the latest point known by its close,
  * and only when that point falls inside it, so a coarser chart never shows a value before its bars exist.
@@ -88,14 +117,21 @@ export function vwapOnBars(
   bars: readonly Pick<Candle, "time">[],
   timeframe: Timeframe,
 ): VwapPoint[] {
-  const barMs = TIMEFRAME_MINUTES[timeframe] * 60_000;
-  const line: VwapPoint[] = [];
-  let i = 0;
-  for (const bar of bars) {
-    const close = bar.time + barMs;
-    while (i < points.length && points[i].time <= close) i += 1;
-    const known = points[i - 1];
-    if (known && known.time > bar.time) line.push({ time: bar.time, value: known.value });
-  }
-  return line;
+  return alignPointsToBars(points, bars, timeframe, (known, time) => ({ time, value: known.value }));
+}
+
+/** Place cumulative VWAP ±1σ / ±2σ band points onto displayed bars using the same non-lookahead bar alignment. */
+export function vwapBandsOnBars(
+  points: readonly VwapBandPoint[],
+  bars: readonly Pick<Candle, "time">[],
+  timeframe: Timeframe,
+): VwapBandPoint[] {
+  return alignPointsToBars(points, bars, timeframe, (known, time) => ({
+    time,
+    value: known.value,
+    upper1: known.upper1,
+    lower1: known.lower1,
+    upper2: known.upper2,
+    lower2: known.lower2,
+  }));
 }
