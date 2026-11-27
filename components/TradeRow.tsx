@@ -10,6 +10,7 @@ import { usePlaybooks } from "@/lib/playbooks-store";
 import { useAccounts } from "@/lib/accounts-store";
 import { usePrefs } from "@/lib/prefs";
 import { resolveRSize, resultR } from "@/lib/r-size";
+import { isReplayTrade } from "@/lib/selectors";
 import { formatListTime } from "@/lib/time";
 import { adherence, holdSeconds, isOpen, tradePnl, tradePoints } from "@/lib/trades";
 import type { TradeRecord } from "@/lib/trades";
@@ -20,6 +21,7 @@ interface Props {
   zone: string;
   shield: boolean;
   current?: boolean;
+  isReplay?: boolean;
   onOpen?: () => void;
 }
 
@@ -31,11 +33,12 @@ function context(trade: TradeRecord, playbooks: readonly Playbook[]) {
   return { text: "Needs tags", todo: true };
 }
 
-export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
+export function TradeRow({ trade, zone, shield, current, isReplay, onOpen }: Props) {
   const { playbooks } = usePlaybooks();
   const pnl = tradePnl(trade);
   const accounts = useAccounts();
   const prefs = usePrefs();
+  const replay = isReplay ?? isReplayTrade(trade, accounts.accounts);
   const rSize = resolveRSize(trade, accounts.accounts, prefs);
   const r = resultR(trade, rSize);
   const tone = (pnl ?? 0) > 0 ? "positive" : (pnl ?? 0) < 0 ? "negative" : "";
@@ -52,6 +55,7 @@ export function TradeRow({ trade, zone, shield, current, onOpen }: Props) {
         <span className="row-title">
           <strong>{trade.symbol}</strong>
           <span className={`direction ${trade.direction === "LONG" ? "long" : "short"}`}><span aria-hidden="true">{trade.direction === "LONG" ? "▲ " : "▼ "}</span>{trade.direction}</span>
+          {replay && <span className="replay-badge" title="Replay / pretend session">REPLAY</span>}
           {trade.is_sample && <span className="tag-chip" title={SAMPLE_CAPTION}>{SAMPLE_CHIP}</span>}
           {score && <span className={`seal ${score.followed === score.total ? "full" : ""}`} title="Rules followed">{score.followed}/{score.total}<span className="visually-hidden"> rules followed</span></span>}
           {trade.flagged && <span className="status-mark reviewed" title="Flagged"><span aria-hidden="true">⚑</span><span className="visually-hidden">Flagged</span></span>}

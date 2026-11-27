@@ -14,7 +14,7 @@ import type { EntryDraft } from "@/lib/entry-form";
 import { formatMoney, formatPointDistance, formatPoints, formatR, formatUsdAmount } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { AccountSelect } from "./AccountSelect";
-import { defaultAccountId } from "@/lib/accounts";
+import { defaultAccountId, isReplayAccount } from "@/lib/accounts";
 import { resolveRSize } from "@/lib/r-size";
 import { useAccounts } from "@/lib/accounts-store";
 import { ONE_TAP_MOOD_SCORE, spokeChipLabel } from "@/lib/mood";
@@ -22,7 +22,7 @@ import { recordUserMood, useMood } from "@/lib/mood-store";
 import { addTradeAndFlush, useJournal } from "@/lib/store";
 import { zoneLabel } from "@/lib/time";
 import { showToast } from "@/lib/toast";
-import { FUTURES_SPECS, MOVED_STOP_TAG, initialRiskUsd, isWholeQuantity, normalizeTrade, plannedRewardRisk, specFor, tickDecimals, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
+import { FUTURES_SPECS, MOVED_STOP_TAG, initialRiskUsd, normalizeTrade, plannedRewardRisk, specFor, tickDecimals, tradePnl, tradePoints, validateTradeInput } from "@/lib/trades";
 import type { Candle, TradeStatus } from "@/lib/trades";
 import { closeAddTrade, keepDraft, readDraft, useOnline } from "@/lib/ui";
 
@@ -93,6 +93,8 @@ export function AddTradeSheet() {
   const moodState = useMood();
   // Undefined until the trader picks: the account used last (docs/21).
   const accountId = draft.accountId !== undefined ? draft.accountId : defaultAccountId(accounts.accounts, journal.trades);
+  const selectedAccount = accounts.accounts.find((account) => account.id === accountId) ?? null;
+  const replaySession = isReplayAccount(selectedAccount);
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -135,11 +137,8 @@ export function AddTradeSheet() {
   const entryPrice = priceOrNull(draft.entryPrice);
   const stopPrice = priceOrNull(draft.stopPrice);
   const targetPrice = priceOrNull(draft.targetPrice);
-  // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50).
-  // Under Shield, the Contracts input is masked on screen but remains editable (UX-e, #15),
-  // so multi-contract trades preserve their true size and underlying dollar P&L.
-  const typedQuantity = Number(draft.quantity);
-  const quantity = isWholeQuantity(typedQuantity) ? typedQuantity : typedQuantity;
+  // Not clamped or rounded: "0", "1.5" and "" are errors the trader sees (issue #50). Under Shield, Contracts stays editable & masked (UX-e, #15).
+  const quantity = Number(draft.quantity);
   const times = entryTimes(draft, zone);
   const { entry, exit: draftExit } = times;
   // Split targets and partial exits (issue #38). Filled exit legs replace the single Exit price and time.
@@ -203,12 +202,7 @@ export function AddTradeSheet() {
   const entryReady = entryPrice != null && entryPrice > 0 && !errors.entryPrice;
   const hint = draft.entryEdited && !Number.isNaN(entry.getTime()) ? entry.getTime() : null;
   const finderInput = entryPrice != null && entryReady && dayRange && dayRange.from < nowMs
-    ? {
-      symbol: draft.symbol, direction: draft.direction, entryPrice,
-      exitPrice: !isOpenDraft && exitPrice != null && exitPrice > 0 && !errors.exitPrice ? exitPrice : null,
-      stopPrice: !errors.stopPrice ? stopPrice : null, targetPrice: !errors.targetPrice ? targetPrice : null,
-      hint, window: dayRange,
-    }
+    ? { symbol: draft.symbol, direction: draft.direction, entryPrice, exitPrice: !isOpenDraft && exitPrice != null && exitPrice > 0 && !errors.exitPrice ? exitPrice : null, stopPrice: !errors.stopPrice ? stopPrice : null, targetPrice: !errors.targetPrice ? targetPrice : null, hint, window: dayRange }
     : null;
   const finderKey = finderInput ? JSON.stringify({ ...finderInput, nonce: finderNonce }) : "";
   const dateLabel = dayRange ? new Intl.DateTimeFormat("en-US", { timeZone: zone, month: "short", day: "numeric" }).format(new Date(dayRange.from + 12 * 3_600_000)) : "";
@@ -227,9 +221,7 @@ export function AddTradeSheet() {
         })
         .catch(() => {
           if (run !== finderRun.current) return;
-          setFinder({ state: "error", key: finderKey, message: navigator.onLine
-            ? `No bars for ${dateLabel} yet. Yahoo may not have published them. Set the times yourself.`
-            : "Offline, so the bars cannot be searched. Set the times yourself." });
+          setFinder({ state: "error", key: finderKey, message: navigator.onLine ? `No bars for ${dateLabel} yet. Yahoo may not have published them. Set the times yourself.` : "Offline, so the bars cannot be searched. Set the times yourself." });
         });
     }, FINDER_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -330,6 +322,7 @@ export function AddTradeSheet() {
               </div>
             </div>
             <AccountSelect className="field wide" value={accountId} onChange={(id) => change({ accountId: id })} />
+            {replaySession && <p className="banner wide" role="status" style={{ margin: 0 }}>Pretend / Replay session — gets full charts &amp; notes, excluded from live stats.</p>}
           </div>
 
           <fieldset className="price-ladder" aria-label="Prices">
@@ -342,7 +335,7 @@ export function AddTradeSheet() {
 
           <RiskRow
             statedRiskR={draft.statedRiskR ?? ""} stopPrice={draft.stopPrice} entryPrice={entryPrice} direction={draft.direction} symbol={draft.symbol}
-            quantity={typedQuantity} rSizeCents={rSize.cents} shield={prefs.shield}
+            quantity={quantity} rSizeCents={rSize.cents} shield={prefs.shield}
             onStated={(text) => change({ statedRiskR: text })} onUseStop={(price) => change({ stopPrice: price.toFixed(tickDecimals(spec?.tickSize ?? 0.01)) })}
           />
 
@@ -401,9 +394,7 @@ export function AddTradeSheet() {
               </select>
               {show("symbol") && <span className="error">{show("symbol")}</span>}
             </label>
-            {/* UX-e (#15): Under Shield, Contracts remains editable and fully bound to state so
-                multi-contract positions retain true economics, but the input digits are masked
-                on screen with password security styling. */}
+            {/* UX-e (#15): Under Shield, Contracts stays editable and bound to state while masked on screen. */}
             <label className="field">
               <span>Contracts {prefs.shield && <i className="shield-tag" style={{ opacity: 0.6, fontSize: "0.8em", marginLeft: 4 }}>masked</i>}</span>
               <input inputMode="numeric" type={prefs.shield ? "password" : "number"} min={1} step={1} value={draft.quantity} placeholder={prefs.shield ? "••" : "1"} aria-label={prefs.shield ? "Contracts (masked under Shield)" : "Contracts"} aria-invalid={!!show("quantity")} onChange={(event) => change({ quantity: event.target.value })} />
