@@ -125,6 +125,12 @@ trap 'rm -f "$TMP"' EXIT
   git diff --stat "$FROM_SHA" "$TO_SHA" -- . \
     ':(exclude)dump*.md' \
     ':(exclude)gitrdif*.md' \
+    ':(exclude)MogMine*' \
+    ':(exclude)DESIGN-PRINCIPLES-REVIEW.md' \
+    ':(exclude)docs/audit-images' \
+    ':(exclude)docs/design' \
+    ':(exclude)docs/design-*' \
+    ':(exclude)docs/playbook-design' \
     ':(exclude)node_modules' \
     ':(exclude)dist' \
     ':(exclude).next' \
@@ -138,6 +144,12 @@ trap 'rm -f "$TMP"' EXIT
   git diff "$FROM_SHA" "$TO_SHA" -- . \
     ':(exclude)dump*.md' \
     ':(exclude)gitrdif*.md' \
+    ':(exclude)MogMine*' \
+    ':(exclude)DESIGN-PRINCIPLES-REVIEW.md' \
+    ':(exclude)docs/audit-images' \
+    ':(exclude)docs/design' \
+    ':(exclude)docs/design-*' \
+    ':(exclude)docs/playbook-design' \
     ':(exclude)node_modules' \
     ':(exclude)dist' \
     ':(exclude).next' \
@@ -156,6 +168,12 @@ trap 'rm -f "$TMP"' EXIT
     git diff -- . \
       ':(exclude)dump*.md' \
       ':(exclude)gitrdif*.md' \
+      ':(exclude)MogMine*' \
+      ':(exclude)DESIGN-PRINCIPLES-REVIEW.md' \
+      ':(exclude)docs/audit-images' \
+      ':(exclude)docs/design' \
+      ':(exclude)docs/design-*' \
+      ':(exclude)docs/playbook-design' \
       ':(exclude)node_modules' \
       ':(exclude)dist' \
     ':(exclude).next' \
@@ -164,6 +182,12 @@ trap 'rm -f "$TMP"' EXIT
     git diff --cached -- . \
       ':(exclude)dump*.md' \
       ':(exclude)gitrdif*.md' \
+      ':(exclude)MogMine*' \
+      ':(exclude)DESIGN-PRINCIPLES-REVIEW.md' \
+      ':(exclude)docs/audit-images' \
+      ':(exclude)docs/design' \
+      ':(exclude)docs/design-*' \
+      ':(exclude)docs/playbook-design' \
       ':(exclude)node_modules' \
       ':(exclude)dist' \
     ':(exclude).next' \

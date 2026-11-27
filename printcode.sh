@@ -382,6 +382,17 @@ FIND_EXCLUDES+=(
     ! -name "gitrdif*.md"
     ! -name "dump*[0-9]"
 )
+# Design docs are long background reading: leave them out of the full dump.
+# `--path` or `--area docs` still includes them.
+if [[ ${#INCLUDE_PATTERNS[@]} -eq 0 ]]; then
+    FIND_EXCLUDES+=(
+        ! -path "$PROJECT_ROOT/MogMine*.md"
+        ! -path "$PROJECT_ROOT/DESIGN-PRINCIPLES-REVIEW.md"
+        ! -path "$PROJECT_ROOT/docs/design/*"
+        ! -path "$PROJECT_ROOT/docs/design-*"
+        ! -path "$PROJECT_ROOT/docs/playbook-design/*"
+    )
+fi
 
 # Determine which extensions to match
 ACTIVE_EXTS=()
