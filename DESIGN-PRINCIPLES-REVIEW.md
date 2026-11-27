@@ -8,6 +8,8 @@ I checked against `main` at `3747928` (2026-11-26): the code, [DECISIONS.md](DEC
 
 The charter points the right way, and MogMine already does about half of what it asks. The useful parts are the contrast findings, shape-coded candles, labelling agent-written content, and a shortcut palette. About a third of the charter is written for a different product, a native-app brokerage with many users, and should be cut or rewritten. A few factual and citation errors need fixing before anyone treats it as authoritative.
 
+A second document, `MogMine Product, UX, and Agent-First Architecture Audit.pdf`, is reviewed in the [addendum](#addendum-the-product-ux-and-agent-first-architecture-audit) at the end. It was written from the code and is much more accurate. Of the two, it's the better guide to product direction. The charter is still useful for visual and accessibility rules.
+
 ## What the author couldn't know from a description
 
 - **It's a journal, not a brokerage.** MogMine records and reviews futures trades (starting with `MES` on TopstepX). It doesn't place orders, hold money or show buy/sell prompts. Advice about friction before placing trades, cool-downs, trending-asset pushes and fee disclosure has nothing to attach to.
@@ -119,3 +121,61 @@ Turn the charter into a short Markdown doc, `docs/27-design-principles.md`, of a
 3. The open gaps above as numbered items.
 
 The PDF can stay as background reading. Then the owner decides gaps 2 and 6 and whether to revisit OD-25. The other gaps can be planned as small packages.
+
+---
+
+## Addendum: the Product, UX and Agent-First Architecture Audit
+
+`MogMine Product, UX, and Agent-First Architecture Audit.pdf` (23 pages) was written from a code and handoff snapshot, not a description, and it says so up front. It also separates *Observed*, *Inference* and *Recommendation*. That makes it much more reliable than the charter. I checked its factual claims against `main` at `3747928`.
+
+### Claims checked against the code
+
+| Audit claim | Status | Evidence |
+|---|---|---|
+| Dock is Today, Feed, Add, Review, Tune | Confirmed | `components/AppShell.tsx:39` |
+| Today has Today / Progress tabs; Feed has Real / Replay / All | Confirmed | `TodayScreen.tsx:34`, `FeedScreen.tsx:15` |
+| Shield once hid the contracts field (bug); it's now masked but editable; an older doc is stale | Confirmed | `AddTradeSheet.tsx:399`; stale text at `docs/20-price-first-entry.md:18` |
+| `includeArchived` / `includeSamples` now default to false | Confirmed | `lib/agent/http.ts:156` |
+| OpenAPI request bodies are a generic object with `additionalProperties: true` | Confirmed | `lib/agent/openapi.ts:116` |
+| Agent keys have only `read` / `write` scopes | Confirmed | `mogmine_agent_tokens.scopes` check constraint |
+| Agent writes have no idempotency key or expected-version check | Confirmed | Device sync *does* use `expectedUpdatedAt` now (`lib/persistence/store-sync.ts:95`), so Blueprint priority 4 is partly done. The agent API doesn't. |
+| Audit log is one row per request, with no model or rules version | Confirmed | Columns: method, path, record type/id, status, outcome |
+| Strategy Lab gates small samples (<5 counts only, 5–9 thin, 10+ full), uses Wilson intervals and shrinkage | Confirmed | `lib/strategy-lab/attribution.ts:19-21` |
+| "No configurable commission/slippage model" | **Partly wrong** | Slippage *is* modeled: 1 tick per stop and market fill, set per recipe (`types.ts:212`, `runner.ts:159`). **Commissions are missing.** Slippage is editable only in the recipe JSON tab and isn't shown in the results. |
+| Same-bar stop/target ambiguity needs a policy | **Already exists** | A bar that hits both stop and target counts as the stop, with slippage, labelled `ambiguous-stop` (`skills/measure.ts:145`). It needs surfacing in the UI, not designing. |
+| Number of conditions/variants searched isn't tracked | Confirmed | Also listed as a trap in Blueprint §3 item 7 |
+| Clean Run counts trades, so a disciplined no-trade day can't advance it | Confirmed | `target_trades` in `lib/challenges.ts:15` |
+| Shield is display-only and doesn't reach the API | **Mostly** | One exception: the agent Strategy Lab context card reads the owner's Shield setting (`lib/agent/strategy-lab.ts:163`), so that one API response changes when the owner toggles Shield in the UI. That's exactly the ambiguity the audit warns about. Pick one rule. |
+
+### Where I'd adjust the audit
+
+1. **Scope vs. the Blueprint.** The Blueprint's current objective is "convergence, not expansion" (§3), and it orders financial and temporal truth, the candle archive, sync integrity and the AI operation contract before new areas. The audit's roadmap adds about eight endpoints, an Insight object, a hypothesis lifecycle and new scopes. Some of it maps straight onto Blueprint priorities and should go first:
+   - `GET /api/v1/session` is priority 6, "ask MogMine about Tuesday".
+   - Trials-searched counts, holdout provenance and commissions are priority 7's listed traps.
+   - Idempotency and expected-version on agent writes complete priority 4.
+
+   Insight objects, replay candidates and capability scopes are new feature areas. Wait for the owner to open them.
+2. **It doesn't mention the candle archive.** The Blueprint ranks it #3 and calls it time-sensitive, because Yahoo history expires and unarchived bars are lost for good. The read path is merged (`19452b8`). The write-side PR #71 is still open and owner-gated. That belongs ahead of every item in the audit's roadmap.
+3. **"Truth" queue items can start from what the app already flags.** These are fill matching, the data-quality chip and missing stops. The Next-action card is the cheapest, highest-value item in the audit. Build it on those existing signals before adding new detectors.
+4. **Renaming Feed → Journal and Tune → Tools** is cheap but costs muscle memory. Owner's call.
+5. **Its citations don't resolve.** The `fileciteturn…file…` markers point to files uploaded into a chat session, and the URLs carry `utm_source=chatgpt.com`. Replace the markers with repo paths and strip the tracking parameters before anyone treats the PDF as a reference.
+
+### How the two documents fit together
+
+- **They agree on the core.** Process over outcome, no gamification, and attention through queues rather than interruptions. All three are already policy (UX-66, OD-12, the Review queue).
+- **The audit's rules are more concrete. Adopt them:**
+  - "At most three ranked items on Today" makes the charter's "≤4 working-memory chunks" concrete.
+  - "Never show a percentage without its denominator nearby" (`10/12, early sample`) belongs in the charter's numeric-typography rules.
+  - Drill ground truth comes from playbook or human labels, never from whether the trade won. That strengthens the charter's outcome-bias section with an actual mechanism.
+- **The audit's insight provenance fields cover my gap 4** (agent-written content isn't labelled). Do the cheap part first: a per-record "written by agent" marker using the agent key id the API already knows. Leave full Insight objects for when the owner opens that area.
+- **Blind review.** The charter wants outcome masking by default. The audit treats blind review as an existing, optional feature, which matches OD-25. The audit's drill ground-truth argument is the better case for revisiting OD-25 later.
+
+### Revised next step
+
+Make the suggested `docs/27-design-principles.md` a merge of both documents:
+
+1. Start from the audit's product model: Plan → record → review → patterns → practice → test → playbook → transfer.
+2. Add the charter's trimmed visual and accessibility rules (gaps 1–3).
+3. Link each rule to the current practice or the open gap that satisfies it.
+
+Before adding new feature areas, fix the stale `docs/20` Shield line, decide the Shield-in-API rule, and add commissions plus a trials-searched count to Strategy Lab results.
