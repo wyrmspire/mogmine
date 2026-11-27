@@ -25,8 +25,8 @@ test("house rules: exactly HR-1..HR-12, in order, each with the full field set",
   }
 });
 
-test("house rules: the three workflows exist in the agreed order, each with steps", () => {
-  assert.deepEqual(AGENT_WORKFLOWS.map((workflow) => workflow.id), ["log_trade", "review_day", "plan_session"]);
+test("house rules: the four workflows exist in the agreed order, each with steps", () => {
+  assert.deepEqual(AGENT_WORKFLOWS.map((workflow) => workflow.id), ["log_trade", "review_day", "plan_session", "pretend_session"]);
   for (const workflow of AGENT_WORKFLOWS) assert.ok(workflow.steps.length > 0, workflow.id);
 });
 
@@ -85,7 +85,7 @@ test("guide payload: the same version, all twelve rules, the workflows and the v
   const payload = buildGuidePayload(`${ORIGIN}/`);
   assert.equal(payload.version, HOUSE_RULES_VERSION);
   assert.deepEqual(payload.rules.map((rule) => rule.id), EXPECTED_IDS);
-  assert.deepEqual(payload.workflows.map((workflow) => workflow.id), ["log_trade", "review_day", "plan_session"]);
+  assert.deepEqual(payload.workflows.map((workflow) => workflow.id), ["log_trade", "review_day", "plan_session", "pretend_session"]);
   assert.equal(payload.vocabulary_url, vocabularyUrl(ORIGIN));
   assert.equal(payload.vocabulary_url, "https://mogmine.vercel.app/api/v1/vocabulary");
 });

@@ -86,6 +86,6 @@ test("buildMarks: a 0.25R trade spaces its ruler at each stop width but labels i
   assert.ok(labels.includes("+0.5R"), "must include +0.5R");
   assert.ok(labels.includes("+0.75R"), "must include +0.75R");
 
-  // The target label is in account R too: 3× stop width = +0.75R.
-  assert.ok(marks.some((m) => "label" in m && m.label === "TP +0.75R"), "target reads TP +0.75R");
+  // Owner directive (W5-01): no floating TP label covering the target zone; R-ruler lines carry the R multiples.
+  assert.equal(marks.some((m) => "label" in m && typeof m.label === "string" && m.label.startsWith("TP")), false);
 });

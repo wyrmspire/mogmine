@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { PastSessionReviews } from "./PastSessionReviews";
 import { PitStop, showsNoSetupPicked } from "./PitStop";
 import { RStrip } from "./RStrip";
@@ -137,50 +137,42 @@ function ReviewHub() {
   const isPreviewingDemo = previewDemo && !hasRealTrades;
   const activePending = isPreviewingDemo ? demoPending : realPending;
 
-  const [tab, setTab] = useState<ReviewTab>(() => (realPending.length > 0 ? "queue" : "daily"));
-  const userPickedTab = useRef(false);
+  const [pickedTab, setPickedTab] = useState<ReviewTab | null>(null);
+  const tab: ReviewTab = pickedTab ?? (realPending.length > 0 ? "queue" : "daily");
 
   // Queue and day chips stay fixed during a pass so tagging a trade does not jump the card away.
   const [day, setDay] = useState<string | null>(null);
-  const [dayOptions, setDayOptions] = useState<string[]>(() => buildDayOptions(realPending));
-  const [ids, setIds] = useState<string[]>(() => buildQueueIds(realPending, null));
+  const [queueState, setQueueState] = useState<{ mode: boolean; ids: string[]; days: string[] }>(() => ({
+    mode: false,
+    ids: buildQueueIds(realPending, null),
+    days: buildDayOptions(realPending),
+  }));
   const [position, setPosition] = useState(0);
   const [revealed, setRevealed] = useState<string | null>(null);
 
-  const resetQueue = (list: readonly TradeRecord[], selectedDay: string | null, refreshDays = true) => {
+  const staleQueue = queueState.mode !== isPreviewingDemo || (queueState.ids.length === 0 && activePending.length > 0);
+  const ids = staleQueue ? buildQueueIds(activePending, day) : queueState.ids;
+  const dayOptions = staleQueue ? buildDayOptions(activePending) : queueState.days;
+
+  const resetQueue = (list: readonly TradeRecord[], selectedDay: string | null, nextPreview: boolean, refreshDays = true) => {
     setDay(selectedDay);
-    if (refreshDays) setDayOptions(buildDayOptions(list));
-    setIds(buildQueueIds(list, selectedDay));
+    setQueueState((prev) => ({
+      mode: nextPreview,
+      ids: buildQueueIds(list, selectedDay),
+      days: refreshDays ? buildDayOptions(list) : prev.days,
+    }));
     setPosition(0);
     setRevealed(null);
   };
 
-  useEffect(() => {
-    if (!userPickedTab.current && tab === "daily" && realPending.length > 0) setTab("queue");
-  }, [tab, realPending.length]);
-
-  useEffect(() => {
-    if (hasRealTrades && previewDemo) {
-      setPreviewDemo(false);
-      resetQueue(realPending, null);
-    }
-  }, [hasRealTrades, previewDemo, realPending]);
-
-  useEffect(() => {
-    if (!isPreviewingDemo && ids.length === 0 && realPending.length > 0) {
-      resetQueue(realPending, null);
-    }
-  }, [isPreviewingDemo, ids.length, realPending]);
-
   const selectTab = (next: ReviewTab) => {
-    userPickedTab.current = true;
-    setTab(next);
-    if (next === "queue" && position >= ids.length && activePending.length > 0) resetQueue(activePending, null);
+    setPickedTab(next);
+    if (next === "queue" && position >= ids.length && activePending.length > 0) resetQueue(activePending, null, isPreviewingDemo);
   };
 
-  const startDemoPreview = () => { setPreviewDemo(true); resetQueue(demoPending, null); };
-  const stopDemoPreview = () => { setPreviewDemo(false); resetQueue(realPending, null); };
-  const chooseDay = (next: string | null) => { if (next !== day) resetQueue(activePending, next, false); };
+  const startDemoPreview = () => { setPreviewDemo(true); resetQueue(demoPending, null, true); };
+  const stopDemoPreview = () => { setPreviewDemo(false); resetQueue(realPending, null, false); };
+  const chooseDay = (next: string | null) => { if (next !== day) resetQueue(activePending, next, isPreviewingDemo, false); };
 
   const dayChips = dayOptions.length > 0 && (
     <div className="filter-bar" role="group" aria-label="Review by trading day" style={{ margin: "0 0 14px" }}>

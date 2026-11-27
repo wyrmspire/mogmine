@@ -23,8 +23,8 @@ import { TradeLevelEditor } from "./TradeLevelEditor";
 import type { ChartExtension, TradeChartHandle } from "./TradeChart";
 import { TradeRow } from "./TradeRow";
 import { useTradeLevels } from "./useTradeLevels";
-import { joinSessionBars, tradeSessionVwapReport, vwapOnBars } from "@/lib/chart-indicators";
-import type { VwapPoint } from "@/lib/chart-indicators";
+import { joinSessionBars, tradeSessionVwapReport, vwapBandsOnBars, vwapOnBars } from "@/lib/chart-indicators";
+import type { VwapBandPoint, VwapPoint } from "@/lib/chart-indicators";
 import { ema200Status, emaOnBars } from "@/lib/ema";
 import { hasRealVolume } from "@/lib/volume";
 import { levelsStatusText, levelsTitle, withheldText } from "@/lib/level-withheld";
@@ -391,6 +391,8 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const sessionVwap = sessionVwapReport?.points ?? null;
   const vwapLine = useMemo(() => (sessionVwap && displayedBars ? vwapOnBars(sessionVwap, displayedBars, timeframe) : NO_VWAP),
     [sessionVwap, displayedBars, timeframe]);
+  const vwapBandsLine = useMemo<VwapBandPoint[]>(() => (sessionVwapReport?.bands && displayedBars ? vwapBandsOnBars(sessionVwapReport.bands, displayedBars, timeframe) : []),
+    [sessionVwapReport, displayedBars, timeframe]);
   // IN-3: the 200 EMA on the displayed bars (View → 200 EMA, prefs.ema200).
   const emaLine = useMemo(() => (prefs.ema200 && levels.ema200 && displayedBars ? emaOnBars(levels.ema200.points, displayedBars) : []), [prefs.ema200, levels.ema200, displayedBars]);
   // VOL-1: the volume band (View → Volume) needs real traded volume. Sample bars carry none, so it is hidden there.
@@ -403,7 +405,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
     fetching: candles?.fetching,
     online,
   });
-  const sourceLabel = candles?.source === "Yahoo Finance" ? "Yahoo" : candles?.source === "Demo fixture" ? "Demo fixture" : "No candles";
+  const sourceLabel = candles?.source ? (candles.source === "Yahoo Finance" ? "Yahoo" : candles.source) : "No candles";
   const sourceInterval = `${base} source${base !== "1m" ? " (1m unavailable)" : ""}`;
   const sourceText = `${trade.yahoo_ticker} · ${sourceLabel} · ${ready ? `${timeframe} chart · ${sourceInterval}${barCoverage === "partial" ? " · gaps in trade" : ""}` : "—"}`;
 
@@ -489,6 +491,13 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                         <button key={value} type="button" aria-pressed={vwapAnchor === value} onClick={() => setPrefs({ vwapAnchor: value })} title={hint}><span>{label}</span><small>{hint}</small></button>
                       ))}
                     </div>
+                    {vwapAnchor !== "off" && (
+                      <div className="view-menu-toggle-group three" role="group" aria-label="Session VWAP bands" style={{ marginTop: 6 }}>
+                        {([["off", "Line", "VWAP only"], ["1sd", "±1σ", "1 std dev"], ["2sd", "±1σ/2σ", "1 & 2 std dev"]] as const).map(([value, label, hint]) => (
+                          <button key={value} type="button" aria-pressed={prefs.vwapBands === value} onClick={() => setPrefs({ vwapBands: value })} title={hint}><span>{label}</span><small>{hint}</small></button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="view-menu-section">
                     <span className="view-menu-label">200 EMA{prefs.ema200 ? ema200Status(levels.ema200) : ""}</span>
@@ -520,7 +529,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
             </div>
             {ready ? (
               <>
-                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} highlightedLineTick={highlightedTick} vwap={vwapLine} vwapApproximate={sessionVwapReport?.approximate} showVolume={volumeReal && prefs.showVolume} ema={emaLine} emaApproximate={levels.ema200?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
+                {displayedBars && <TradeChart ref={chartRef} trade={trade} bars={displayedBars} timeframe={timeframe} marks={marks} levels={levels.lines} highlightedLineTick={highlightedTick} vwap={vwapLine} vwapBands={vwapBandsLine} vwapBandsMode={prefs.vwapBands} vwapApproximate={sessionVwapReport?.approximate} showVolume={volumeReal && prefs.showVolume} ema={emaLine} emaApproximate={levels.ema200?.approximate} zone={zone} privacy={renderPrivacy} readout={readoutRef} onRendered={onRendered} onFitChange={setFitted} onExtensionChange={setExtension} neighbourTrades={neighbours} onSelectNeighbour={(tradeId) => router.push(`/trades/${tradeId}`)} />}
               </>
             ) : (
               <div className="chart-skeleton" role="status"><div className="skeleton" /><span>Loading candles…</span></div>

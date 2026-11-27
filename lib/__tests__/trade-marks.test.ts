@@ -234,12 +234,12 @@ test("live continuation uses pane edges, and only the earlier view adds entry-si
     && mark.t0 === utc("16:03") && mark.t1 === utc("16:03")));
 });
 
-test("Shield hides counts and quantities and retains R, and archive emits actual geometry alone", () => {
+test("clean charts emit no floating plan zone labels, and archive emits actual geometry alone (W5-01)", () => {
   const { derived, facts, options } = setup("ex-partials");
   const planLabels = (shield: boolean) => buildMarks(derived, facts, "1m", "medium", shield, options)
     .flatMap((mark) => mark.kind === "zone" && mark.label ? [mark.label] : []);
-  assert.deepEqual(planLabels(false), ["T1 1.0R · 1 of 2", "T2 2.5R · 1 of 2"]);
-  assert.deepEqual(planLabels(true), ["T1 1.0R", "T2 2.5R"]);
+  assert.deepEqual(planLabels(false), []);
+  assert.deepEqual(planLabels(true), []);
   const archive = buildMarks(derived, facts, "1m", "medium", true, { ...options, archived: true });
   assert.equal(archive.length, 2);
   assert.ok(archive.every((mark) => mark.kind === "zone" && mark.layer === "archived" && mark.style === "dotted"));
@@ -248,7 +248,7 @@ test("Shield hides counts and quantities and retains R, and archive emits actual
     .some((mark) => mark.kind === "hatch" && mark.label === "PAST STOP −0.6R"));
 });
 
-test("same-bar scale fills collapse, retain the right arrow and expose their fill count only with Shield off", () => {
+test("same-bar scale fills collapse, retain the right arrow, expose count only with Shield off, and emit no MAE/MFE bracket", () => {
   const doc = fixture("ex-partials");
   doc.side = "short";
   doc.events = [
@@ -266,10 +266,7 @@ test("same-bar scale fills collapse, retain the right arrow and expose their fil
     mark.kind === "flag" && mark.shape !== "dot" ? [[mark.shape, mark.price, mark.text]] : []);
   assert.deepEqual(flags(marks(false)), [["arrow_down", 7600, "×2"], ["triangle_up", 7595, "MKT ×2"]]);
   assert.deepEqual(flags(marks(true)), [["arrow_down", 7600, ""], ["triangle_up", 7595, "MKT"]]);
-  const bracket = marks(true).find((mark) => mark.kind === "bracket");
-  assert.ok(bracket);
-  assert.equal(bracket.pLow, 7594);
-  assert.equal(bracket.pHigh, 7603);
-  assert.ok(bracket.pMid > bracket.pLow && bracket.pMid < bracket.pHigh);
-  assert.deepEqual(bracket.labels, { low: "MFE ≈ +6.67 pts", high: "MAE ≈ −2.33 pts" });
+  // Owner directive (W5-01): no MAE/MFE bracket marks over candlesticks.
+  assert.equal(marks(true).some((mark) => mark.kind === "bracket"), false);
+  assert.equal(marks(false).some((mark) => mark.kind === "bracket"), false);
 });

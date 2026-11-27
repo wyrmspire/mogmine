@@ -147,8 +147,9 @@ test("buildMarks displays corresponding exit flag text: TP, SL, TRAIL, BE, MKT",
     return exitFlag?.text;
   };
 
-  assert.equal(flagsFor("target"), "TP");
-  assert.equal(flagsFor("stop"), "SL");
+  // Owner directive (W5-01): no floating TP or SL labels covering candlesticks.
+  assert.equal(flagsFor("target"), "");
+  assert.equal(flagsFor("stop"), "");
   assert.equal(flagsFor("trail"), "TRAIL");
   assert.equal(flagsFor("breakeven"), "BE");
   assert.equal(flagsFor("manual"), "MKT");

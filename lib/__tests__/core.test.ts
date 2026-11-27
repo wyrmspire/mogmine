@@ -621,6 +621,7 @@ test("journal backup round-trips trades (notes, prices, tags, checklist, playboo
     blindReview: true,
     riskBudgetUsd: 300,
     vwapAnchor: "off",
+    vwapBands: "1sd",
     levelLabels: "tap",
     ema200: false,
     reviewCardOrientation: "portrait",
