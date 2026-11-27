@@ -3,15 +3,40 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { AccountSheet } from "./AccountSheet";
-import { accountSummary, dollarsToCents } from "@/lib/accounts";
-import type { AccountSummary, TradingAccount } from "@/lib/accounts";
+import { accountMode, accountSummary, dollarsToCents, isReplayAccount } from "@/lib/accounts";
+import type { AccountMode, AccountSummary, TradingAccount } from "@/lib/accounts";
 import { addBalanceCheck, removeBalanceCheck, useAccounts } from "@/lib/accounts-store";
-import { formatBalance, formatCents, formatUsdAmount } from "@/lib/format";
+import { formatBalance, formatCents, formatR, formatUsdAmount } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
-import { DEFAULT_R_SIZE_CENTS } from "@/lib/r-size";
+import { DEFAULT_R_SIZE_CENTS, resolveRSize, resultR } from "@/lib/r-size";
 import { formatSessionDate } from "@/lib/session";
 import { useJournal } from "@/lib/store";
 import { showToast } from "@/lib/toast";
+
+const MODE_LABEL: Record<AccountMode, string> = {
+  replay: "REPLAY",
+  live: "LIVE",
+  eval: "EVAL",
+  sim: "SIM",
+};
+
+function ModeBadge({ account }: { account: TradingAccount }) {
+  const mode = accountMode(account);
+  const style = mode === "replay"
+    ? {
+        color: "var(--box-planned)",
+        borderColor: "color-mix(in srgb, var(--box-planned) 48%, transparent)",
+        background: "color-mix(in srgb, var(--box-planned) 14%, var(--bg-elevated))",
+      }
+    : mode === "live"
+      ? {
+          color: "var(--profit-text)",
+          borderColor: "color-mix(in srgb, var(--profit-emerald) 40%, transparent)",
+          background: "color-mix(in srgb, var(--profit-emerald) 12%, var(--bg-elevated))",
+        }
+      : undefined;
+  return <span className="tag-chip" style={style}>{MODE_LABEL[mode]}</span>;
+}
 
 /** Balance over time, neutral ink: a balance line is not a verdict (UX-65). */
 function BalanceLine({ curve, floor }: { curve: number[]; floor: number | null }) {
@@ -92,6 +117,21 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
   const defaultRText = formatRUsd(defaultRCents);
   const accountRText = account.r_size_cents != null ? formatRUsd(account.r_size_cents) : null;
 
+  const replay = isReplayAccount(account);
+  const hasLimits = account.rules.max_loss_cents != null || account.rules.daily_loss_cents != null || account.rules.profit_target_cents != null;
+  const calmReplay = replay && !hasLimits;
+
+  const netR = useMemo(() => {
+    let sum = 0;
+    let count = 0;
+    for (const trade of journal.trades) {
+      if (trade.account_id !== account.id || trade.is_sample || trade.exit_time == null) continue;
+      const r = resultR(trade, resolveRSize(trade, store.accounts, prefs));
+      if (r != null) { sum += r; count += 1; }
+    }
+    return count > 0 ? sum : null;
+  }, [journal.trades, account.id, store.accounts, prefs]);
+
   const saveCheck = (event: FormEvent) => {
     event.preventDefault();
     if (actualCents == null) return;
@@ -108,14 +148,21 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
     summary.openTrades ? `${summary.openTrades} open, not counted yet` : "",
     unpricedCount ? `${unpricedCount} ${unpricedCount === 1 ? "trade" : "trades"} could not be priced` : "",
     undatedCount ? `${undatedCount} ${undatedCount === 1 ? "trade needs" : "trades need"} a valid exit date` : "",
-    summary.adjustments_cents && !shield ? `${formatCents(summary.adjustments_cents)} adjustments` : "",
+    !calmReplay && summary.adjustments_cents && !shield ? `${formatCents(summary.adjustments_cents)} adjustments` : "",
   ].filter(Boolean);
 
   return (
     <section className="specular-card card-pad account-card" aria-label={`Account ${account.name}`}>
       <div className="card-head">
-        <h3>{account.name}</h3>
-        <span className="num">{shield || !accountRText ? "From your journal · gross" : `From your journal · gross · 1R ${accountRText}`}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+          <h3>{account.name}</h3>
+          <ModeBadge account={account} />
+        </div>
+        <span className="num">
+          {calmReplay
+            ? (shield || !accountRText ? "Pretend / Replay" : `Pretend / Replay · 1R ${accountRText}`)
+            : (shield || !accountRText ? "From your journal · gross" : `From your journal · gross · 1R ${accountRText}`)}
+        </span>
       </div>
       {account.r_size_cents == null && (
         <button
@@ -128,20 +175,38 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
           <span className="account-r-nudge-cta" aria-hidden="true">Set R →</span>
         </button>
       )}
-      {shield ? (
-        <p className="account-balance muted">Dollars hidden <span>Shield</span></p>
+      {calmReplay ? (
+        <>
+          <p className="account-balance num">
+            <b className={netR != null && netR > 0 ? "positive" : netR != null && netR < 0 ? "negative" : ""} style={{ color: netR == null ? "var(--text-muted)" : undefined }}>
+              {formatR(netR)}
+            </b>
+            <span>
+              {summary.sessions} {summary.sessions === 1 ? "session" : "sessions"} · {summary.closedTrades} {summary.closedTrades === 1 ? "trade" : "trades"}
+            </span>
+          </p>
+          <p className="account-today num">
+            Today · {summary.today.trades} {summary.today.trades === 1 ? "trade" : "trades"}
+          </p>
+        </>
       ) : (
-        <p className="account-balance num">{formatBalance(summary.balance_cents)}<span>{summary.closedTrades ? `${account.rules.drawdown === "trailing_eod" && account.rules.max_loss_cents ? "high at a close" : "high"} ${formatBalance(summary.peak_cents)}` : "no trades logged yet"}</span></p>
+        <>
+          {shield ? (
+            <p className="account-balance muted">Dollars hidden <span>Shield</span></p>
+          ) : (
+            <p className="account-balance num">{formatBalance(summary.balance_cents)}<span>{summary.closedTrades ? `${account.rules.drawdown === "trailing_eod" && account.rules.max_loss_cents ? "high at a close" : "high"} ${formatBalance(summary.peak_cents)}` : "no trades logged yet"}</span></p>
+          )}
+          <p className="account-today num">
+            Today {shield ? `${summary.today.trades} ${summary.today.trades === 1 ? "trade" : "trades"}` : `${formatCents(summary.today.realized_cents)} · ${summary.today.trades} ${summary.today.trades === 1 ? "trade" : "trades"}`}
+            {!shield && summary.drawdown_cents > 0 ? ` · ${formatBalance(summary.drawdown_cents)} below the high` : ""}
+          </p>
+          {!shield && <BalanceLine curve={summary.curve} floor={summary.limit?.floor_cents ?? null} />}
+          <Limits account={account} summary={summary} shield={shield} />
+        </>
       )}
-      <p className="account-today num">
-        Today {shield ? `${summary.today.trades} ${summary.today.trades === 1 ? "trade" : "trades"}` : `${formatCents(summary.today.realized_cents)} · ${summary.today.trades} ${summary.today.trades === 1 ? "trade" : "trades"}`}
-        {!shield && summary.drawdown_cents > 0 ? ` · ${formatBalance(summary.drawdown_cents)} below the high` : ""}
-      </p>
-      {!shield && <BalanceLine curve={summary.curve} floor={summary.limit?.floor_cents ?? null} />}
-      <Limits account={account} summary={summary} shield={shield} />
       {notes.length > 0 && <p className="account-notes">{notes.join(" · ")}</p>}
 
-      {checking && (
+      {!calmReplay && checking && (
         <form className="account-check" onSubmit={saveCheck}>
           <label className="field"><span>Balance your broker shows ($)</span>
             <input inputMode="decimal" autoFocus value={actual} placeholder={(summary.balance_cents / 100).toFixed(2)} onChange={(event) => setActual(event.target.value)} />
@@ -155,8 +220,8 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
       )}
 
       <div className="actions account-actions">
-        {!checking && !shield && <button type="button" className="btn-secondary" onClick={() => setChecking(true)}>Match broker balance</button>}
-        <button type="button" className="btn-ghost" onClick={() => setEditing(true)}>Edit</button>
+        {!replay && !checking && !shield && <button type="button" className="btn-secondary" onClick={() => setChecking(true)}>Match broker balance</button>}
+        <button type="button" className="btn-secondary" onClick={() => setEditing(true)}>Edit</button>
       </div>
 
       {summary.rows.length > 0 && !shield && (
@@ -184,23 +249,29 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
 /** Today: one card per active account, or an offer to add one. */
 export function AccountCards({ shield }: { shield: boolean }) {
   const store = useAccounts();
-  const [adding, setAdding] = useState(false);
+  const [addingMode, setAddingMode] = useState<AccountMode | null>(null);
   if (!store.hydrated) return null;
   const active = store.accounts.filter((account) => !account.archived);
   return (
     <div className="account-cards">
       {active.length === 0 ? (
-        <div className="card card-pad account-empty">
-          <span><b>Track an account</b><br /><span className="muted">A running total from the trades you log: balance, high point and room before your loss limit.</span></span>
-          <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>Add account</button>
+        <div className="specular-card card-pad account-empty" style={{ flexWrap: "wrap" }}>
+          <span><b>Track an account</b><br /><span className="muted">Running totals for eval or live accounts, or a Pretend / Replay session on external charts.</span></span>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="btn-primary" style={{ minHeight: 44 }} onClick={() => setAddingMode("eval")}>+ Add account</button>
+            <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => setAddingMode("replay")}>+ Pretend / Replay</button>
+          </div>
         </div>
       ) : (
         <>
           {active.map((account) => <OneAccount key={account.id} account={account} shield={shield} />)}
-          <button type="button" className="btn-ghost account-add" onClick={() => setAdding(true)}>＋ Another account</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="btn-secondary account-add" style={{ minHeight: 44 }} onClick={() => setAddingMode("eval")}>+ Add account</button>
+            <button type="button" className="btn-secondary account-add" style={{ minHeight: 44 }} onClick={() => setAddingMode("replay")}>+ Pretend / Replay</button>
+          </div>
         </>
       )}
-      {adding && <AccountSheet onClose={() => setAdding(false)} />}
+      {addingMode && <AccountSheet defaultMode={addingMode} onClose={() => setAddingMode(null)} />}
     </div>
   );
 }
