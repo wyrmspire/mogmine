@@ -1,5 +1,6 @@
 // Theme values for Canvas code. Read from the CSS variables once into this small store and re-read
 // only when a slider, preset or palette changes — never per frame (Invariant 5, AGENTS §3b-7, docs/08 §2).
+import { withAlpha } from "./chart-paint.ts";
 
 export interface ChartTheme {
   chartBg: string;
@@ -34,6 +35,9 @@ export interface ChartTheme {
   /** Opacity of the level pill's background over the chart (`--level-label-bg-alpha`, LB-2). Optional: literal themes (shareCard) omit it and paint at 0.95. */
   levelLabelBgAlpha?: number;
   vwap: string;
+  /** Session VWAP ±1σ / ±2σ band colours derived from `--indicator-vwap`. Optional: literal themes omit them. */
+  vwapBand1?: string;
+  vwapBand2?: string;
   /** 200 EMA line (`--ind-ema200`, IN-3). Optional: literal themes (shareCard) omit it and the chart uses its fallback. */
   ema200?: string;
   /** Chart surface and label tokens (docs/design-2026-11-24/08 §4.1). */
@@ -60,6 +64,7 @@ function read(): ChartTheme {
   const value = (name: string) => style.getPropertyValue(name).trim() || NEUTRAL;
   const opacity = Number.parseFloat(style.getPropertyValue("--position-box-opacity"));
   const labelAlpha = Number.parseFloat(style.getPropertyValue("--level-label-bg-alpha"));
+  const vwap = value("--indicator-vwap");
   return {
     chartBg: value("--chart-bg"),
     gridH: value("--chart-grid-h"),
@@ -90,7 +95,9 @@ function read(): ChartTheme {
     levelNeutral: value("--level-neutral"),
     levelLabelText: value("--level-label-text"),
     levelLabelBgAlpha: Number.isFinite(labelAlpha) ? labelAlpha : 0.95,
-    vwap: value("--indicator-vwap"),
+    vwap,
+    vwapBand1: withAlpha(vwap, 0.42),
+    vwapBand2: withAlpha(vwap, 0.24),
     ema200: value("--ind-ema200"),
     crosshairLabel: value("--chart-crosshair-label"),
     zoneReward: value("--zone-reward"),
@@ -104,6 +111,13 @@ function read(): ChartTheme {
     chipGhost: value("--chip-ghost-bg"),
     fontMono: value("--font-mono"),
     fontSans: value("--font-sans"),
+  };
+}
+
+export function vwapBandColors(t: Pick<ChartTheme, "vwap" | "vwapBand1" | "vwapBand2">) {
+  return {
+    band1: t.vwapBand1 ?? withAlpha(t.vwap, 0.42),
+    band2: t.vwapBand2 ?? withAlpha(t.vwap, 0.24),
   };
 }
 
