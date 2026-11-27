@@ -23,6 +23,11 @@ const demoById = new Map(demoTrades.map((trade) => [trade.id, trade]));
 // Older builds stored trades with their candles inline. They are read once and left untouched,
 // so going back to an older build still finds its data.
 const LEGACY_KEYS = ["mogmine-trades-v2", "mogmine-trades-v1"];
+// Records that fail validation on load are quarantined here verbatim (D-02): never dropped, never
+// rewritten in place, and reported through JournalState.quarantined so the trader can recover them.
+const QUARANTINE_KEY = "mogmine-trades-quarantine-v1";
+// The first raw payload that produced quarantined records, kept byte-for-byte as a recovery copy.
+const RAW_RECOVERY_KEY = "mogmine-trades-raw-recovery-v1";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -31,6 +36,12 @@ export interface JournalState {
   /** False until device storage has been read. Lists show skeletons, not sample data, until then. */
   hydrated: boolean;
   saveState: SaveState;
+  /**
+   * Stored records that could not be loaded, preserved verbatim in quarantine (D-02).
+   * Empty when every stored record loaded. Non-empty is the recovery notice: these records
+   * are not in `trades`, but their data still exists on this device and can be exported.
+   */
+  quarantined: unknown[];
 }
 
 /**
@@ -102,7 +113,7 @@ function pickAnnotations(trade: TradeRecord) {
 
 
 function emptyJournal(): JournalState {
-  return { trades: [...demoTrades].sort(byNewest), hydrated: false, saveState: "idle" };
+  return { trades: [...demoTrades].sort(byNewest), hydrated: false, saveState: "idle", quarantined: [] };
 }
 
 const serverState: JournalState = emptyJournal();
@@ -184,34 +195,92 @@ function mergeIncoming(incoming: TradeRecord[]): TradeRecord[] {
   return [...merged.values()].sort(byNewest);
 }
 
-function readStored(): TradeRecord[] | null {
+interface StoredJournal {
+  trades: TradeRecord[];
+  /** Raw stored records that failed validation, exactly as parsed. Never dropped (D-02). */
+  quarantined: unknown[];
+  /** The raw stored string, before any schema transformation. */
+  raw: string;
+}
+
+function readStored(): StoredJournal | null {
   const current = localStorage.getItem(STORAGE_KEY);
   const raw = current ?? LEGACY_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
   if (!raw) return null;
-  const parsed = JSON.parse(raw) as LegacyTrade[];
-  if (!Array.isArray(parsed)) return null;
-  return parsed.flatMap((item) => {
-    // An open trade (R-03) has null exits. A closed or legacy record with a missing exit is still dropped.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // The whole payload is unreadable: quarantine the raw string itself rather than lose it.
+    return { trades: [], quarantined: [raw], raw };
+  }
+  if (!Array.isArray(parsed)) return { trades: [], quarantined: [parsed], raw };
+  const trades: TradeRecord[] = [];
+  const quarantined: unknown[] = [];
+  for (const item of parsed as LegacyTrade[]) {
+    // An open trade (R-03) has null exits. A closed or legacy record with a missing exit is quarantined.
     const exitOk = item?.status === "open" || (item?.exit_time && item.exit_price != null);
-    if (!item?.id || !item.symbol || !item.entry_time || !exitOk || item.entry_price == null || !item.direction) return [];
+    if (!item?.id || !item.symbol || !item.entry_time || !exitOk || item.entry_price == null || !item.direction) {
+      quarantined.push(item);
+      continue;
+    }
     const { candles, ...rest } = item;
     let trade: TradeRecord;
     try {
       trade = normalizeTrade({ ...(rest as TradeRecord), is_sample: rest.is_sample ?? DEMO_TRADE_IDS.has(item.id) });
+      // Refresh fixture-owned facts. Samples now carry a plan fixed at entry and an outcome walked from Yahoo bars;
+      // stale device copies must not preserve the old impossible exits. Real trades are never changed.
+      const currentDemo = demoById.get(trade.id);
+      if (currentDemo && trade.is_sample) trade = applyFixtureRefresh(trade, currentDemo);
     } catch {
-      return []; // status and exit fields disagree: drop this one record, keep the rest
+      quarantined.push(item); // status and exit fields disagree: quarantine this one record, keep the rest
+      continue;
     }
-    // Refresh fixture-owned facts. Samples now carry a plan fixed at entry and an outcome walked from Yahoo bars;
-    // stale device copies must not preserve the old impossible exits. Real trades are never changed.
     const currentDemo = demoById.get(trade.id);
-    if (currentDemo && trade.is_sample) trade = applyFixtureRefresh(trade, currentDemo);
     // Yahoo candles from an older build are real market data: keep them only when their ticker
     // matches the current spec (OD-15). Skip samples so stale bars are not cached under the #29 signature.
     if (!current && candles?.length && rest.candle_source === "Yahoo Finance" && rest.yahoo_ticker === trade.yahoo_ticker && !trade.is_sample) {
       void idbSet(candleCacheKey(trade), { signature: candleSignature(trade), candles, source: "Yahoo Finance", baseTimeframe: "1m", fetchedAt: Date.now() });
     }
-    return [trade];
-  });
+    trades.push(trade);
+  }
+  return { trades, quarantined, raw };
+}
+
+/** Records preserved by earlier loads, exactly as stored. Corrupt quarantine contents read as empty. */
+function readQuarantine(): unknown[] {
+  try {
+    const raw = localStorage.getItem(QUARANTINE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Preserve malformed records before anything else can write (D-02). The raw payload is copied
+ * byte-for-byte once and never replaced; the records themselves are appended to quarantine,
+ * deduplicated by exact content so repeated loads neither lose nor multiply them.
+ */
+function preserveQuarantined(raw: string, records: unknown[]) {
+  if (!localStorage.getItem(RAW_RECOVERY_KEY)) localStorage.setItem(RAW_RECOVERY_KEY, raw);
+  const merged = readQuarantine();
+  const seen = new Set(merged.map((record) => JSON.stringify(record)));
+  for (const record of records) {
+    const key = JSON.stringify(record);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(record);
+    }
+  }
+  localStorage.setItem(QUARANTINE_KEY, JSON.stringify(merged));
+}
+
+/** Raw stored records that failed to load, preserved verbatim for recovery (D-02). */
+export function getQuarantinedRecords(): unknown[] {
+  return state.quarantined;
 }
 
 /** Read device storage once. Safe to call repeatedly. */
@@ -219,17 +288,27 @@ export function hydrateJournal() {
   if (state.hydrated || typeof window === "undefined") return;
   let trades = state.trades;
   let saveState: SaveState = "saved";
+  let quarantined: unknown[] = [];
   try {
+    quarantined = readQuarantine();
     const stored = readStored();
     if (stored) {
-      const known = new Set(stored.map((trade) => trade.id));
-      trades = [...stored, ...demoTrades.filter((trade) => !known.has(trade.id))].sort(byNewest);
+      const known = new Set(stored.trades.map((trade) => trade.id));
+      trades = [...stored.trades, ...demoTrades.filter((trade) => !known.has(trade.id))].sort(byNewest);
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
+    if (stored?.quarantined.length) {
+      // Preserve the malformed records first (D-02), then leave the stored key exactly as found:
+      // a load that quarantined never writes the filtered list back over the original bytes.
+      // If preserving throws, the catch below reports the failure and the original stays put too.
+      preserveQuarantined(stored.raw, stored.quarantined);
+      quarantined = readQuarantine();
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
+    }
   } catch {
     saveState = "error"; // Storage is blocked: the session still works, and the header says it is not saved.
   }
-  set({ trades, hydrated: true, saveState });
+  set({ trades, hydrated: true, saveState, quarantined });
   window.addEventListener("pagehide", flush);
   window.addEventListener("storage", (event) => {
     // Another tab changed the journal: accept it, overlaid with fields still pending in this tab.
