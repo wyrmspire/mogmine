@@ -10,7 +10,10 @@ import { PlanCard } from "./PlanCard";
 import { RunningStatsCard } from "./RunningStatsCard";
 import { TradeRow } from "./TradeRow";
 import { useAccounts } from "@/lib/accounts-store";
+import { useDailyReviewsStore } from "@/lib/daily-review-store";
+import { dayStatus } from "@/lib/day-review-screen";
 import { formatMoney, formatPercent, formatR } from "@/lib/format";
+import { usePlansStore } from "@/lib/plans-store";
 import { usePrefs } from "@/lib/prefs";
 import { groupByDay, parseSessionDateParam, resolveViewedDate, stepRegularSessionDate, withSamples } from "@/lib/selectors";
 import { isPreOpenWarmupWindow } from "@/lib/drills";
@@ -54,6 +57,8 @@ function TodayView() {
   const journal = useJournal();
   const prefs = usePrefs();
   const accounts = useAccounts();
+  const dailyReviews = useDailyReviewsStore();
+  const plansStore = usePlansStore();
   const { date: todayDate, closed, now } = useToday();
   const router = useRouter();
   const requestedDate = useSearchParams().get("date");
@@ -81,6 +86,11 @@ function TodayView() {
   const onlySamples = journal.trades.every((trade) => trade.is_sample);
   const needsTags = trades.filter((trade) => trade.review_status === "new").length;
   const unreviewed = trades.filter((trade) => trade.review_status !== "reviewed").length;
+  const sessionTradesCount = focus?.stats.count ?? 0;
+  const sessionPlansCount = plansStore.plans.filter((plan) => plan.session_date === viewedDate && !plan.archived).length;
+  const dayReviewState = dayStatus(dailyReviews.reviews, viewedDate);
+  const dayReviewLabel = dayReviewState === "done" ? "Done ✓" : dayReviewState === "draft" ? "Draft saved" : "Not written yet";
+  const dayReviewAction = dayReviewState === "done" ? "View ✓" : dayReviewState === "draft" ? "Continue →" : "Start →";
   const open = (group: DayGroup) => () => rememberList({ ids: group.trades.map((trade) => trade.id), label: formatSessionDate(group.date), href: dayHref(group.date) });
 
   // UX-04: one rule for the header ("1 trade today (0 closed)"). Past days keep their own session wording.
@@ -146,6 +156,19 @@ function TodayView() {
 
           {focus && <DaySummary group={focus} shield={prefs.shield} />}
           <PlanCard sessionDate={viewedDate} trades={trades} zone={prefs.timeZone} />
+          <Link
+            href={`/review/day/${viewedDate}`}
+            className="specular-card card-pad daily-review-cta"
+            aria-label={`Daily Review for ${formatSessionDate(viewedDate)}: ${sessionTradesCount} ${tradeWord(sessionTradesCount)}, ${sessionPlansCount} ${sessionPlansCount === 1 ? "plan" : "plans"}, ${dayReviewLabel}`}
+          >
+            <span className="daily-review-cta-copy">
+              <b>Daily Review</b>
+              <span className="muted num">
+                {sessionTradesCount} {tradeWord(sessionTradesCount)} · {sessionPlansCount} {sessionPlansCount === 1 ? "plan" : "plans"} · {dayReviewLabel}
+              </span>
+            </span>
+            <span className="btn-secondary daily-review-cta-action" aria-hidden="true">{dayReviewAction}</span>
+          </Link>
           {viewingToday && <ChallengeCard shield={prefs.shield} />}
 
           {focus ? (

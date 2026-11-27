@@ -15,6 +15,7 @@ import { withSamples } from "@/lib/selectors";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { dayStatus, recentTradingDays } from "@/lib/day-review-screen";
 import { useDailyReviewsStore } from "@/lib/daily-review-store";
+import { usePlansStore } from "@/lib/plans-store";
 import { updateTrade, useJournal } from "@/lib/store";
 import { formatListTime } from "@/lib/time";
 import { showToast } from "@/lib/toast";
@@ -22,7 +23,7 @@ import { holdSeconds, tradePnl, tradePoints } from "@/lib/trades";
 import { resolveRSize, resultR } from "@/lib/r-size";
 import { useAccounts } from "@/lib/accounts-store";
 import type { TradeRecord } from "@/lib/trades";
-import { rememberList } from "@/lib/ui";
+import { rememberList, useToday } from "@/lib/ui";
 import { SAMPLE_CAPTION, SAMPLE_CHIP } from "@/lib/fixtures";
 
 export function ReviewScreen() {
@@ -43,7 +44,7 @@ function dayChipLabel(date: string) {
 }
 
 /** Days strip (06 §3): last 14 trading days, each linking to its day review. */
-function DaysStrip() {
+function DaysStrip({ focusDate }: { focusDate: string }) {
   const { reviews } = useDailyReviewsStore();
   const [today] = useState(() => sessionDate(Date.now()));
   const days = useMemo(() => recentTradingDays(today), [today]);
@@ -55,7 +56,12 @@ function DaysStrip() {
           const text = status === "done" ? "done ✓" : status === "draft" ? "draft" : "—";
           return (
             <li key={date}>
-              <Link className={`review-day is-${status}`} href={`/review/day/${date}`} aria-label={`Review ${dayChipLabel(date)}, ${text}`}>
+              <Link
+                className={`review-day is-${status}`}
+                href={`/review/day/${date}`}
+                aria-current={date === focusDate ? "date" : undefined}
+                aria-label={`Review ${dayChipLabel(date)}, ${text}`}
+              >
                 <span className="review-day-date">{dayChipLabel(date)}</span>
                 <span className="review-day-status">{text}</span>
               </Link>
@@ -67,12 +73,39 @@ function DaysStrip() {
   );
 }
 
+/** 1-tap Daily Review CTA showing trades, plans, and daily-review status for the focused session. */
+function DailyReviewCta({ date, tradesCount, plansCount, status }: { date: string; tradesCount: number; plansCount: number; status: "none" | "draft" | "done" }) {
+  const statusLabel = status === "done" ? "Done ✓" : status === "draft" ? "Draft saved" : "Not written yet";
+  const actionLabel = status === "done" ? "View ✓" : status === "draft" ? "Continue →" : "Start →";
+  return (
+    <Link
+      href={`/review/day/${date}`}
+      className="specular-card card-pad daily-review-cta"
+      aria-label={`Daily Review for ${formatSessionDate(date)}: ${tradesCount} ${tradesCount === 1 ? "trade" : "trades"}, ${plansCount} ${plansCount === 1 ? "plan" : "plans"}, ${statusLabel}`}
+    >
+      <span className="daily-review-cta-copy">
+        <b>Daily Review · {formatSessionDate(date)}</b>
+        <span className="muted num">
+          {tradesCount} {tradesCount === 1 ? "trade" : "trades"} · {plansCount} {plansCount === 1 ? "plan" : "plans"} · {statusLabel}
+        </span>
+      </span>
+      <span className="btn-secondary daily-review-cta-action" aria-hidden="true">{actionLabel}</span>
+    </Link>
+  );
+}
+
 /** One trade at a time, untagged first, so a session's tagging is finished in about a minute (docs/05 §2C). */
 function Queue() {
   const journal = useJournal();
   const prefs = usePrefs();
   const accounts = useAccounts();
-  const pending = withSamples(journal.trades, prefs.showSamples).filter((trade) => trade.review_status !== "reviewed");
+  const dailyReviews = useDailyReviewsStore();
+  const plansStore = usePlansStore();
+  const { date: todayClock } = useToday();
+  const [fallbackToday] = useState(() => sessionDate(Date.now()));
+  const todayDate = todayClock || fallbackToday;
+  const visibleTrades = withSamples(journal.trades, prefs.showSamples);
+  const pending = visibleTrades.filter((trade) => trade.review_status !== "reviewed");
   // Queue and day chips are fixed when the screen opens: tagging a trade must not make the card or the chips jump away.
   const [dayOptions] = useState(() => [...new Set(pending.map((trade) => sessionDate(trade.entry_time)))].sort((a, b) => (a < b ? 1 : -1)).slice(0, DAY_CHIP_LIMIT));
   const queueFor = (day: string | null) => {
@@ -113,12 +146,17 @@ function Queue() {
   const done = ids.filter((id) => journal.trades.find((item) => item.id === id)?.review_status === "reviewed").length;
   // UX-05: the same wording and the same "needs tags" count as the Today queue and the nav badge.
   const queueSummary = formatReviewQueueSummary(pending.length, pending.filter((item) => item.review_status === "new").length);
+  const focusDate = day ?? todayDate;
+  const focusTradesCount = visibleTrades.filter((item) => sessionDate(item.entry_time) === focusDate).length;
+  const focusPlansCount = plansStore.plans.filter((plan) => plan.session_date === focusDate && !plan.archived).length;
+  const focusStatus = dayStatus(dailyReviews.reviews, focusDate);
 
   if (!trade) {
     return (
       <div className="page" style={{ maxWidth: 720 }}>
         <div className="page-head"><div><span className="eyebrow">Review queue</span><h1>All caught up</h1>{queueSummary && <p className="muted num">{queueSummary}</p>}</div></div>
-        <DaysStrip />
+        <DaysStrip focusDate={focusDate} />
+        <DailyReviewCta date={focusDate} tradesCount={focusTradesCount} plansCount={focusPlansCount} status={focusStatus} />
         {dayChips}
         <div className="specular-card empty-state">
           <h3>{ids.length ? `${done} of ${ids.length} reviewed this pass` : "Nothing is waiting"}</h3>
@@ -153,7 +191,8 @@ function Queue() {
         <div><span className="eyebrow">Review queue</span><h1>{position + 1} of {ids.length}</h1><p>Playbook, tags, one line. Then mark it reviewed.</p>{queueSummary && <p className="muted num">{queueSummary}</p>}</div>
         <Link className="btn-secondary drill-link" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "center" }} href="/drills">Drills</Link>
       </div>
-      <DaysStrip />
+      <DaysStrip focusDate={focusDate} />
+      <DailyReviewCta date={focusDate} tradesCount={focusTradesCount} plansCount={focusPlansCount} status={focusStatus} />
       {dayChips}
 
       <section className="specular-card queue-card" aria-label={`Trade ${position + 1} of ${ids.length}`}>

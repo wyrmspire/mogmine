@@ -6,7 +6,9 @@ import { AccountSheet } from "./AccountSheet";
 import { accountSummary, dollarsToCents } from "@/lib/accounts";
 import type { AccountSummary, TradingAccount } from "@/lib/accounts";
 import { addBalanceCheck, removeBalanceCheck, useAccounts } from "@/lib/accounts-store";
-import { formatBalance, formatCents } from "@/lib/format";
+import { formatBalance, formatCents, formatUsdAmount } from "@/lib/format";
+import { usePrefs } from "@/lib/prefs";
+import { DEFAULT_R_SIZE_CENTS } from "@/lib/r-size";
 import { formatSessionDate } from "@/lib/session";
 import { useJournal } from "@/lib/store";
 import { showToast } from "@/lib/toast";
@@ -76,12 +78,19 @@ function Limits({ account, summary, shield }: { account: TradingAccount; summary
 function OneAccount({ account, shield }: { account: TradingAccount; shield: boolean }) {
   const journal = useJournal();
   const store = useAccounts();
+  const prefs = usePrefs();
   const [editing, setEditing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [actual, setActual] = useState("");
   const summary = useMemo(() => accountSummary(account, journal.trades, store.checks, new Date().toISOString()), [account, journal.trades, store.checks]);
   const byId = useMemo(() => new Map(journal.trades.map((trade) => [trade.id, trade])), [journal.trades]);
   const actualCents = dollarsToCents(actual);
+  const defaultRCents = Number.isFinite(prefs.riskBudgetUsd) && prefs.riskBudgetUsd >= 10
+    ? Math.round(prefs.riskBudgetUsd * 100)
+    : DEFAULT_R_SIZE_CENTS;
+  const formatRUsd = (cents: number) => formatUsdAmount(cents / 100).replace(/\.00$/, "");
+  const defaultRText = formatRUsd(defaultRCents);
+  const accountRText = account.r_size_cents != null ? formatRUsd(account.r_size_cents) : null;
 
   const saveCheck = (event: FormEvent) => {
     event.preventDefault();
@@ -104,7 +113,21 @@ function OneAccount({ account, shield }: { account: TradingAccount; shield: bool
 
   return (
     <section className="specular-card card-pad account-card" aria-label={`Account ${account.name}`}>
-      <div className="card-head"><h3>{account.name}</h3><span>From your journal · gross</span></div>
+      <div className="card-head">
+        <h3>{account.name}</h3>
+        <span className="num">{shield || !accountRText ? "From your journal · gross" : `From your journal · gross · 1R ${accountRText}`}</span>
+      </div>
+      {account.r_size_cents == null && (
+        <button
+          type="button"
+          className="account-r-nudge num"
+          onClick={() => setEditing(true)}
+          aria-label={shield ? "Using default R — set account R" : `Using ${defaultRText} default — set account R`}
+        >
+          <span>{shield ? "Using default R — set account R" : `Using ${defaultRText} default — set account R`}</span>
+          <span className="account-r-nudge-cta" aria-hidden="true">Set R →</span>
+        </button>
+      )}
       {shield ? (
         <p className="account-balance muted">Dollars hidden <span>Shield</span></p>
       ) : (
