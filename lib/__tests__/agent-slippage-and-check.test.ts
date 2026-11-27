@@ -175,3 +175,45 @@ test("checks: an entry inside the loaded range raises no price_out_of_range", as
   if (!result.ok) return;
   assert.equal(result.data.warnings.some((warning) => warning.code === "price_out_of_range"), false);
 });
+
+// ---- regression: the day range is the whole session day, not the +-10-minute fill window (live check, 2026-11-27) ----
+
+/** A provider double that answers each query with the master bars inside the queried window, like a real provider. */
+function windowProvider(all: Candle[]): MarketDataProvider {
+  const real = new YahooFinanceProvider();
+  return {
+    name: "yahoo_finance",
+    resolveProviderSymbol: (symbol: string) => real.resolveProviderSymbol(symbol),
+    supportsTickData: () => false,
+    async getCandles(query: MarketDataQuery) {
+      const from = +query.from;
+      const to = +query.to;
+      return all.filter((bar) => bar.time >= from && bar.time < to).map((bar) => ({ ...bar }));
+    },
+  };
+}
+
+test("checks: an entry priced at the morning's levels does not warn when checked against the afternoon's window", async () => {
+  // Mirrors the live 2026-11-23 check that misfired: the session traded at 7137 in the morning (07:55 CT) and at
+  // 7232.25-7278.25 around 09:10 CT. Ranging only the fill window warned that 7140 was outside the "day".
+  const morning: Candle = { time: Date.parse("2026-11-23T13:55:00Z"), open: 7140, high: 7145, low: 7130, close: 7142, volume: 100 };
+  const afternoon = Array.from({ length: 21 }, (_, index) => ({
+    time: Date.parse("2026-11-23T15:00:00Z") + index * MINUTE,
+    open: 7250, high: 7278.25, low: 7232.25, close: 7250, volume: 100,
+  }));
+  const loader = createCandleLoader({ provider: windowProvider([morning, ...afternoon]), now: () => NOW });
+  const run = { commands: EMPTY_COMMANDS, loader, limitKey: "tok", now: NOW };
+
+  const inside = await runTradeCheck({ kind: "draft", body: draftBody(7140, "2026-11-23T15:10:00Z") }, run);
+  assert.equal(inside.ok, true, inside.ok ? "" : inside.message);
+  if (!inside.ok) return;
+  assert.equal(inside.data.warnings.some((warning) => warning.code === "price_out_of_range"), false);
+
+  // A price outside even the whole session still warns, and the message cites the session range, not the window's.
+  const outside = await runTradeCheck({ kind: "draft", body: draftBody(6000, "2026-11-23T15:10:00Z") }, run);
+  assert.equal(outside.ok, true);
+  if (!outside.ok) return;
+  const out = outside.data.warnings.filter((warning) => warning.code === "price_out_of_range");
+  assert.equal(out.length, 1);
+  assert.match(out[0].message, /entry_price 6000 .* 7130-7278\.25/);
+});
