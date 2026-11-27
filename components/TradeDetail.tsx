@@ -8,10 +8,8 @@ import { MoodCard } from "./MoodCard";
 import { AccountSelect } from "./AccountSelect";
 import { MoodEditorSheet } from "./MoodEditorSheet";
 import { MoodShape, useTradeMood } from "./MoodShape";
-import { ONE_TAP_MOOD_SCORE, dominantSpoke, spokeChipLabel } from "@/lib/mood";
-import { recordUserMood, setSpokeScore, undoMoodRecord, useMood } from "@/lib/mood-store";
 import { EXIT_REASONS } from "@/lib/trades";
-import { PitStop } from "./PitStop";
+import { OpenTradeFeeling, TradeNotesPanel } from "./TradeNotesPanel";
 import { RiskChips } from "./RiskChips";
 import { RiskLine } from "./RiskLine";
 import { useAccounts } from "@/lib/accounts-store";
@@ -128,7 +126,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
   const [moodOpen, setMoodOpen] = useState(false);
   const closeMood = useCallback(() => setMoodOpen(false), [setMoodOpen]);
   const mood = useTradeMood(trade);
-  const moodState = useMood();
   const candles = useCandles(trade.id);
   const chartRef = useRef<TradeChartHandle>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
@@ -252,7 +249,11 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
       else if (key === "[") chartRef.current?.extend("before");
       else if (key === "]") chartRef.current?.extend("after");
       else if (key === "c") openCard();
-      else if (key === "n") { event.preventDefault(); document.getElementById("review-note")?.focus(); }
+      else if (key === "n") {
+        event.preventDefault();
+        const inputs = Array.from(document.querySelectorAll<HTMLElement>("[data-trade-note-input]"));
+        (inputs.find((el) => el.offsetParent !== null) ?? document.getElementById("review-note"))?.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -449,14 +450,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               <button type="button" className="tool-button" disabled={!ready || !extension.canAfter} title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"} aria-label={extension.canAfter ? "Show 30 later bars" : "No later candles"} onClick={() => chartRef.current?.extend("after")}>30›</button>
             </div>
             <div className="view-menu-wrapper" ref={viewMenuRef}>
-              <button
-                type="button"
-                className="tool-button view-button"
-                aria-expanded={viewOpen}
-                aria-haspopup="true"
-                aria-label="Chart view options"
-                onClick={() => setViewOpen((open) => !open)}
-              >
+              <button type="button" className="tool-button view-button" aria-expanded={viewOpen} aria-haspopup="true" aria-label="Chart view options" onClick={() => setViewOpen((was) => !was)}>
                 <span>View</span>
                 <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden="true">
                   <path d="M4.5 6L8 9.5 11.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -465,54 +459,22 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
               {viewOpen && (
                 <div className="view-menu" role="menu" aria-label="Chart view options">
                   <div className="view-menu-section">
-                    <button
-                      type="button"
-                      className="view-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        chartRef.current?.fit();
-                        setViewOpen(false);
-                      }}
-                      title="Fit the trade (F)"
-                    >
-                      <span>{fitted ? "Fitted ✓" : "Fit trade"}</span>
-                      <span className="shortcut">F</span>
+                    <button type="button" className="view-menu-item" role="menuitem" onClick={() => { chartRef.current?.fit(); setViewOpen(false); }} title="Fit the trade (F)">
+                      <span>{fitted ? "Fitted ✓" : "Fit trade"}</span><span className="shortcut">F</span>
                     </button>
                   </div>
-                  {!open && <div className="view-menu-section">
-                    <span className="view-menu-label">Continuation</span>
-                    <div className="view-menu-toggle-group" role="group" aria-label="Chart detail">
-                      <button
-                        type="button"
-                        aria-pressed={detailLevel === "low"}
-                        onClick={() => setDetailLevel("low")}
-                        title="No post-exit continuation"
-                      >
-                        <span>Simple</span>
-                        <small>No extra</small>
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={detailLevel === "medium"}
-                        onClick={() => setDetailLevel("medium")}
-                        title="Dotted continuation on"
-                      >
-                        <span>After exit</span>
-                        <small>Continuation</small>
-                      </button>
+                  {!open && (
+                    <div className="view-menu-section">
+                      <span className="view-menu-label">Continuation</span>
+                      <div className="view-menu-toggle-group" role="group" aria-label="Chart detail">
+                        <button type="button" aria-pressed={detailLevel === "low"} onClick={() => setDetailLevel("low")} title="No post-exit continuation"><span>Simple</span><small>No extra</small></button>
+                        <button type="button" aria-pressed={detailLevel === "medium"} onClick={() => setDetailLevel("medium")} title="Dotted continuation on"><span>After exit</span><small>Continuation</small></button>
+                      </div>
                     </div>
-                  </div>}
+                  )}
                   <div className="view-menu-section">
-                    <button
-                      type="button"
-                      className="view-menu-item"
-                      role="menuitemcheckbox"
-                      aria-checked={showLevels}
-                      onClick={() => setShowLevels((prev) => !prev)}
-                      title={levelsTitle(levels)}
-                    >
-                      <span>{showLevels ? "Session levels ✓" : "Session levels"}</span>
-                      <span className="shortcut">{levelsStatusText(levels)}</span>
+                    <button type="button" className="view-menu-item" role="menuitemcheckbox" aria-checked={showLevels} onClick={() => setShowLevels((prev) => !prev)} title={levelsTitle(levels)}>
+                      <span>{showLevels ? "Session levels ✓" : "Session levels"}</span><span className="shortcut">{levelsStatusText(levels)}</span>
                     </button>
                     {/* Withheld levels are named with their reason, never hidden (docs/12 §5, OD-55). Visible: touch has no tooltip. */}
                     {levels.withheld.length > 0 && <small style={{ display: "block", padding: "2px 4px", fontSize: "0.6875rem", color: "var(--text-muted)" }}>Withheld: {withheldText(levels.withheld)}</small>}
@@ -524,10 +486,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                     </span>
                     <div className="view-menu-toggle-group three" role="group" aria-label="Session VWAP anchor">
                       {([["off", "Off", "No VWAP"], ["rth", "RTH", "From 09:30 ET"], ["globex", "Globex", "From 18:00 ET"]] as const).map(([value, label, hint]) => (
-                        <button key={value} type="button" aria-pressed={vwapAnchor === value} onClick={() => setPrefs({ vwapAnchor: value })} title={hint}>
-                          <span>{label}</span>
-                          <small>{hint}</small>
-                        </button>
+                        <button key={value} type="button" aria-pressed={vwapAnchor === value} onClick={() => setPrefs({ vwapAnchor: value })} title={hint}><span>{label}</span><small>{hint}</small></button>
                       ))}
                     </div>
                   </div>
@@ -540,43 +499,15 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                     <div className="view-menu-toggle-group" role="group" aria-label="Volume">{([[false, "Off"], [true, "On"]] as const).map(([value, label]) => <button key={label} type="button" aria-pressed={prefs.showVolume === value} disabled={!volumeReal} onClick={() => setPrefs({ showVolume: value })}><span>{label}</span></button>)}</div>
                   </div>
                   <div className="view-menu-section">
-                    <button
-                      type="button"
-                      className="view-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setFullscreen(!fullscreen);
-                        setViewOpen(false);
-                      }}
-                      title={fullscreen ? "Exit full screen" : "Full-screen chart"}
-                    >
-                      <span>{fullscreen ? "Exit full screen" : "Full screen"}</span>
-                      <span className="shortcut">{fullscreen ? "Esc" : ""}</span>
+                    <button type="button" className="view-menu-item" role="menuitem" onClick={() => { setFullscreen(!fullscreen); setViewOpen(false); }} title={fullscreen ? "Exit full screen" : "Full-screen chart"}>
+                      <span>{fullscreen ? "Exit full screen" : "Full screen"}</span><span className="shortcut">{fullscreen ? "Esc" : ""}</span>
                     </button>
                   </div>
                   <div className="view-menu-section">
                     <span className="view-menu-label">Extend range</span>
                     <div className="view-menu-row">
-                      <button
-                        type="button"
-                        className="tool-button"
-                        disabled={!extension.canBefore}
-                        title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"}
-                        aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"}
-                        onClick={() => chartRef.current?.extend("before")}
-                      >
-                        ‹ 30 earlier
-                      </button>
-                      <button
-                        type="button"
-                        className="tool-button"
-                        disabled={!extension.canAfter}
-                        title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"}
-                        aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"}
-                        onClick={() => chartRef.current?.extend("after")}
-                      >
-                        30 later ›
-                      </button>
+                      <button type="button" className="tool-button" disabled={!extension.canBefore} title={extension.canBefore ? "Show 30 earlier bars ([)" : "No more candles"} aria-label={extension.canBefore ? "Show 30 earlier bars" : "No more candles"} onClick={() => chartRef.current?.extend("before")}>‹ 30 earlier</button>
+                      <button type="button" className="tool-button" disabled={!extension.canAfter} title={extension.canAfter ? "Show 30 later bars (])" : "No more candles"} aria-label={extension.canAfter ? "Show 30 later bars" : "No more candles"} onClick={() => chartRef.current?.extend("after")}>30 later ›</button>
                     </div>
                   </div>
                 </div>
@@ -623,14 +554,6 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
         </>}
 
-        {/* UX-b: Pit Stop sits right beneath the chart on mobile so notes are taken with chart in view */}
-        <div className="mobile-pitstop">
-          <section className="specular-card card-pad">
-            <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
-            <PitStop trade={trade} />
-          </section>
-        </div>
-
         <div className="trade-levels-card specular-card">
           <div className="rstrip-row">
             <RStrip trade={trade} excursions={ex} size="detail" rSizeCents={rSize.cents} />
@@ -655,24 +578,12 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
                 {EXIT_REASONS.map((reason) => {
                   const selected = trade.exit_reason === reason.value;
                   return (
-                    <button
-                      key={reason.value}
-                      type="button"
-                      className="chip"
-                      aria-pressed={selected}
-                      aria-label={`Exit reason: ${reason.label}`}
-                      onClick={() => {
-                        const previous = trade.exit_reason;
-                        const next = selected ? null : reason.value;
-                        updateTrade(trade.id, { exit_reason: next });
-                        showToast(next ? `Exit reason: ${reason.label}` : "Exit reason cleared", {
-                          label: "Undo",
-                          run: () => updateTrade(trade.id, { exit_reason: previous }),
-                        });
-                      }}
-                    >
-                      {reason.label}
-                    </button>
+                    <button key={reason.value} type="button" className="chip" aria-pressed={selected} aria-label={`Exit reason: ${reason.label}`} onClick={() => {
+                      const previous = trade.exit_reason;
+                      const nextReason = selected ? null : reason.value;
+                      updateTrade(trade.id, { exit_reason: nextReason });
+                      showToast(nextReason ? `Exit reason: ${reason.label}` : "Exit reason cleared", { label: "Undo", run: () => updateTrade(trade.id, { exit_reason: previous }) });
+                    }}>{reason.label}</button>
                   );
                 })}
               </div>
@@ -683,20 +594,19 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           {/* The frozen first stop once the working stop has moved, or why R is blank (R-10). */}
           {stopHistory && <p className="initial-stop">{stopHistory}</p>}
           <StopFacts trade={trade} rSize={rSize} />
-
           {/* G2 (#36): Interactive stop-move editor & widening suggestion (UX-33) */}
           <StopMovesEditor
             trade={trade}
             onChange={(moves) => updateTrade(trade.id, { stop_moves: moves })}
-            onSuggestMovedStop={
-              !trade.quick_tags.includes("Moved Stop")
-                ? () => updateTrade(trade.id, { quick_tags: [...trade.quick_tags, "Moved Stop"] })
-                : undefined
-            }
+            onSuggestMovedStop={!trade.quick_tags.includes("Moved Stop") ? () => updateTrade(trade.id, { quick_tags: [...trade.quick_tags, "Moved Stop"] }) : undefined}
           />
-
           <PartialsCard trade={trade} rSize={rSize} shield={prefs.shield} zone={zone} />
           <PlanVsActualSection comparison={planVsActual} />
+        </div>
+
+        {/* Mobile Pit Stop / Quick Takeaway sits right below the levels ribbon before secondary cards */}
+        <div className="mobile-pitstop">
+          <TradeNotesPanel trade={trade} open={open} shield={prefs.shield} noteInputId="review-note" />
         </div>
 
         {undatedExit || candles?.status === "none" ? null : (
@@ -705,61 +615,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
           </div>
         )}
 
-        {open && (
-          <section className="open-mood-section specular-card card-pad" aria-label="Pre-exit feeling">
-            <div className="open-mood-head">
-              <div>
-                <span className="eyebrow">Pre-exit feeling</span>
-                <p className="open-mood-sub">How do you feel in this trade? <i>optional</i></p>
-              </div>
-              <button
-                type="button"
-                className="mood-mini"
-                onClick={() => setMoodOpen(true)}
-                aria-label="Mood Shape. Tap to open editor."
-              >
-                <MoodShape vector={mood} size={40} />
-              </button>
-            </div>
-            <div className="chip-row" role="group" aria-label="Pre-exit feeling">
-              {moodState.registry.spokes.map((spoke) => {
-                const selected = dominantSpoke(mood) === spoke.id;
-                return (
-                  <button
-                    key={spoke.id}
-                    type="button"
-                    className="chip"
-                    aria-pressed={selected}
-                    aria-label={`${spoke.label} pre-exit feeling`}
-                    onClick={() => {
-                      if (selected) {
-                        const rec = setSpokeScore(trade.id, spoke.id, null);
-                        showToast(`${spokeChipLabel(spoke)} cleared`, {
-                          label: "Undo",
-                          run: () => undoMoodRecord(rec.id),
-                        });
-                      } else {
-                        const previousDominant = dominantSpoke(mood);
-                        const scores: Record<string, number | null> = { [spoke.id]: ONE_TAP_MOOD_SCORE };
-                        if (previousDominant && previousDominant !== spoke.id) {
-                          scores[previousDominant] = null;
-                        }
-                        const now = new Date().toISOString();
-                        const rec = recordUserMood(trade.id, scores, now, now);
-                        showToast(`Feeling recorded: ${spokeChipLabel(spoke)}`, {
-                          label: "Undo",
-                          run: () => undoMoodRecord(rec.id),
-                        });
-                      }
-                    }}
-                  >
-                    {spokeChipLabel(spoke)}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
+        {open && <OpenTradeFeeling trade={trade} mood={mood} onOpenEditor={() => setMoodOpen(true)} />}
 
         {open && (
           <div className="detail-actions">
@@ -776,10 +632,7 @@ function DetailBody({ trade, list, listLabel, backHref }: { trade: TradeRecord; 
 
       <aside className="detail-side">
         <div className="desktop-pitstop">
-          <section className="specular-card card-pad">
-            <div className="card-head"><h3>Pit Stop</h3><span>{trade.review_status === "reviewed" ? "Reviewed ✓" : trade.review_status === "tagged" ? "Tagged" : "Needs tags"} · private</span></div>
-            <PitStop trade={trade} />
-          </section>
+          <TradeNotesPanel trade={trade} open={open} shield={prefs.shield} noteInputId="review-note-desktop" />
         </div>
         {!trade.is_sample && <AccountSelect className="field account-pick" value={trade.account_id} onChange={(id) => updateTrade(trade.id, { account_id: id })} />}
         <MoodCard trade={trade} onEdit={() => setMoodOpen(true)} />

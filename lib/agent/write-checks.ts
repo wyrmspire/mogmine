@@ -12,6 +12,9 @@ export interface AgentWriteWarning {
     | "playbook_missing"
     | "setup_tag_missing"
     | "notes_restate_fields"
+    | "notes_duplicate_thesis"
+    | "notes_restate_exit_reason"
+    | "stated_risk_missing"
     | "stop_moved_without_time"
     | "exit_reason_mismatch"
     | "stated_risk_differs"
@@ -48,7 +51,14 @@ const EXIT_TICK_TOLERANCE = 2;
 
 const NOTE_FIELDS = ["note", "pre_trade_thesis", "management_notes", "post_exit_notes"] as const;
 const PRICE_FIELDS = ["entry_price", "stop_loss_price", "initial_stop_price", "planned_target_price", "exit_price"] as const;
-const R_OR_DOLLAR = [/\b\d*\.?\d+\s*R\b/i, /\$\d+(\.\d{1,2})?\b/];
+const COMMENTARY_RESTATE_PATTERNS = [
+  /(?:\b\d+(?:\.\d+)?|\.\d+)\s*R\b/i,
+  /\$\d[\d,]*(?:\.\d{1,2})?\b/,
+  /\b\d[\d,]*(?:\.\d{1,2})?\s*dollars?\b/i,
+  /\b\d+\s*(?:contracts?|lots?|micros?|minis?|MES|MNQ|ES|NQ|MYM|YM|M2K|RTY|MGC|MCL)\b/i,
+  /\b(?:qty|quantity)\s*[:=]?\s*\d+\b/i,
+];
+const EXIT_REASON_PREFIX = /^\s*exit\s*reason\s*[:\-]/i;
 
 /** Every number written in the text, commas stripped, so `7,137.00` and `7137` both read as 7137. */
 function numbersIn(text: string): number[] {
@@ -56,7 +66,7 @@ function numbersIn(text: string): number[] {
 }
 
 function restatesFields(text: string, prices: number[]): boolean {
-  if (R_OR_DOLLAR.some((pattern) => pattern.test(text))) return true;
+  if (COMMENTARY_RESTATE_PATTERNS.some((pattern) => pattern.test(text))) return true;
   return numbersIn(text).some((value) => prices.includes(value));
 }
 
@@ -159,8 +169,8 @@ function warningsFor(candidate: TradeRecord, ctx: WriteCheckContext): AgentWrite
   const warnings: AgentWriteWarning[] = [];
   const setup = new Set(activeTagLists(ctx).setup);
 
-  if (ctx.isCreate && candidate.playbook_id == null) {
-    warnings.push({ code: "playbook_missing", message: "No playbook_id on this new trade. Take one from GET /api/v1/vocabulary." });
+  if ((ctx.isCreate || ctx.writtenFields.has("playbook_id")) && candidate.playbook_id == null) {
+    warnings.push({ code: "playbook_missing", message: "No playbook_id on this trade. Take one from GET /api/v1/vocabulary (HR-3)." });
   }
 
   if (!candidate.quick_tags.some((tag) => setup.has(tag))) {
@@ -170,8 +180,38 @@ function warningsFor(candidate: TradeRecord, ctx: WriteCheckContext): AgentWrite
   const prices = PRICE_FIELDS.map((field) => candidate[field]).filter((value): value is number => typeof value === "number");
   for (const field of NOTE_FIELDS) {
     if (restatesFields(candidate[field], prices)) {
-      warnings.push({ code: "notes_restate_fields", message: `${field} restates a price, stop, risk or R. Those fields already hold them (HR-1).` });
+      warnings.push({ code: "notes_restate_fields", message: `${field} appears to restate a price, stop, contract count, dollar risk or R. Those fields already hold them (HR-1).` });
     }
+  }
+
+  const noteTrimmed = candidate.note.trim();
+  const thesisTrimmed = candidate.pre_trade_thesis.trim();
+  if (noteTrimmed.length > 0 && thesisTrimmed.length > 0 && noteTrimmed.toLowerCase() === thesisTrimmed.toLowerCase()) {
+    warnings.push({
+      code: "notes_duplicate_thesis",
+      message: "note duplicates pre_trade_thesis verbatim. Keep note as a short 1-line Pit Stop takeaway (or empty) and put pre-entry reasoning in pre_trade_thesis (HR-1).",
+    });
+  }
+
+  const postExit = candidate.post_exit_notes.trim();
+  if (postExit.length > 0 && (EXIT_REASON_PREFIX.test(postExit) || (candidate.exit_reason != null && postExit.toLowerCase() === candidate.exit_reason.toLowerCase()))) {
+    warnings.push({
+      code: "notes_restate_exit_reason",
+      message: "post_exit_notes restates the exit reason. Use post_exit_notes for post-exit reflection or what to repeat/change next time; exit_reason already records how the trade ended (HR-1).",
+    });
+  }
+
+  const checksClosedRisk =
+    ctx.isCreate ||
+    ctx.writtenFields.has("status") ||
+    ctx.writtenFields.has("exit_time") ||
+    ctx.writtenFields.has("exit_price") ||
+    ctx.writtenFields.has("stated_risk_r");
+  if (candidate.status === "closed" && candidate.stated_risk_r == null && checksClosedRisk) {
+    warnings.push({
+      code: "stated_risk_missing",
+      message: "No stated_risk_r on this closed trade. If the trader stated a target risk (e.g. 0.25R), record stated_risk_r without altering the stop (HR-7).",
+    });
   }
 
   const moves = candidate.stop_moves ?? [];

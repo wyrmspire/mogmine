@@ -15,6 +15,8 @@ import { hydratePrefs, usePrefs } from "@/lib/prefs";
 import { sessionDate } from "@/lib/session";
 import { hydrateJournal, useJournal } from "@/lib/store";
 import { loadBarSeries, recentSessionDates } from "@/lib/strategy-lab/bars";
+import { DEFAULT_ARCHIVE_SESSIONS, fetchAndImportMesArchive } from "@/lib/strategy-lab/archive-loader";
+import { loadStarterRecipesIntoStore } from "@/lib/strategy-lab/starter-recipe";
 import { markTimeUtc, rSizeBasis, type CardMark, type CardRSize } from "@/lib/strategy-lab/context-card";
 import { overlayRecipe } from "@/lib/strategy-lab/overlay";
 import { labRSize } from "@/lib/strategy-lab/r";
@@ -79,6 +81,13 @@ type RunJob =
   | { status: "loading"; recipe: Recipe; anchorDate: string; done: number; total: number }
   | { status: "error"; recipe: Recipe; anchorDate: string; message: string };
 
+type ArchiveJob =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; sessionsLoaded: number; totalAvailable: number; barsImported: number; dateRange: { from: string; to: string } | null }
+  | { status: "unconfigured"; detail: string }
+  | { status: "error"; detail: string };
+
 type EditorTarget =
   | { mode: "closed" }
   | { mode: "edit"; key: string; recipeId: string | null; initialDraft?: Draft | null; reasons?: readonly string[]; anchorDate?: string };
@@ -111,6 +120,7 @@ export function StrategyLabWorkspace() {
   const [runsById, setRunsById] = useState<Record<string, StoredRun>>({});
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runJob, setRunJob] = useState<RunJob>({ status: "idle" });
+  const [archiveJob, setArchiveJob] = useState<ArchiveJob>({ status: "idle" });
   const [includeSamples, setIncludeSamples] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [backupText, setBackupText] = useState("");
@@ -129,11 +139,32 @@ export function StrategyLabWorkspace() {
   const cardRSize: CardRSize = { usd: rSize.usd, source: rSize.source, accountName: selectedAccount?.name ?? null };
   const basisLabel = rSizeBasis(cardRSize, prefs.shield);
 
-  async function executeRun(recipe: Recipe, anchorDate = sessionDate(Date.now())) {
+  const archiveAnchor = archiveJob.status === "loaded" && archiveJob.dateRange ? archiveJob.dateRange.to : undefined;
+  const runSessionCount = archiveJob.status === "loaded" ? Math.max(RUN_SESSIONS, archiveJob.sessionsLoaded) : RUN_SESSIONS;
+
+  async function handleLoadArchive() {
+    setArchiveJob({ status: "loading" });
+    const res = await fetchAndImportMesArchive(DEFAULT_ARCHIVE_SESSIONS);
+    if (!res.ok) {
+      setArchiveJob({ status: res.reason === "unconfigured" ? "unconfigured" : "error", detail: res.detail });
+      return;
+    }
+    setArchiveJob({ status: "loaded", sessionsLoaded: res.payload.sessionsLoaded, totalAvailable: res.payload.totalAvailableSessions, barsImported: res.summary.barsImported, dateRange: res.summary.dateRange });
+  }
+
+  function handleLoadStarter() {
+    const { store, added } = loadStarterRecipesIntoStore(recipeStore, playbookId);
+    if (!added.length) return;
+    setClientRecipeStore(store);
+    persistence.persistRecipes(added);
+    setNotice(`Loaded ${added.length} starter MES recipe${added.length === 1 ? "" : "s"}.`);
+  }
+
+  async function executeRun(recipe: Recipe, anchorDate = archiveAnchor ?? sessionDate(Date.now())) {
     setTab("runs");
     setNotice(null);
-    setRunJob({ status: "loading", recipe, anchorDate, done: 0, total: RUN_SESSIONS });
-    const dates = recentSessionDates(anchorDate, RUN_SESSIONS);
+    setRunJob({ status: "loading", recipe, anchorDate, done: 0, total: runSessionCount });
+    const dates = recentSessionDates(anchorDate, runSessionCount);
     try {
       const loaded = await loadBarSeries(dates, {
         onProgress: (done, total) => setRunJob((prev) => (prev.status === "loading" ? { ...prev, done, total } : prev)),
@@ -249,6 +280,23 @@ export function StrategyLabWorkspace() {
         ))}
       </nav>
 
+      <section className="sl-archive" aria-label="MES 1m archive">
+        <div className="sl-archive__meta">
+          <span className="sl-archive__pill" data-tone={archiveJob.status}>
+            {archiveJob.status === "loaded"
+              ? `${archiveJob.sessionsLoaded}/${archiveJob.totalAvailable} sess · ${archiveJob.dateRange ? `${archiveJob.dateRange.from}–${archiveJob.dateRange.to}` : "empty"}`
+              : archiveJob.status === "loading" ? "Loading MES archive…"
+                : archiveJob.status === "unconfigured" ? "Archive unavailable (local)"
+                  : archiveJob.status === "error" ? "Archive load failed" : "MES Archive: ready"}
+          </span>
+          {archiveJob.status === "loaded" ? <span className="sl-row-note">{archiveJob.barsImported.toLocaleString()} bars cached</span>
+            : archiveJob.status === "unconfigured" || archiveJob.status === "error" ? <span className="sl-row-note">{archiveJob.detail}</span> : null}
+        </div>
+        <button type="button" className="sl-btn sl-archive__btn" disabled={archiveJob.status === "loading"} onClick={() => { void handleLoadArchive(); }}>
+          {archiveJob.status === "loading" ? "Loading…" : archiveJob.status === "loaded" ? "Reload MES Archive" : "Load MES Archive"}
+        </button>
+      </section>
+
       {notice ? <p className="sl-notice" role="status">{notice}</p> : null}
 
       {tab === "mark" ? (
@@ -276,22 +324,13 @@ export function StrategyLabWorkspace() {
               </section>
             ) : null}
             {runnableRecipe ? (
-              <button
-                type="button"
-                className="sl-btn sl-btn--primary sl-btn--block"
-                onClick={() => { void executeRun(runnableRecipe, editor.anchorDate); }}
-              >
-                Run over history ({RUN_SESSIONS} sessions)
+              <button type="button" className="sl-btn sl-btn--primary sl-btn--block" onClick={() => { void executeRun(runnableRecipe, editor.anchorDate); }}>
+                Run over history ({runSessionCount} sessions)
               </button>
             ) : null}
             <StrategyLabRecipeEditor
-              key={editor.key}
-              store={recipeStore}
-              recipeId={editor.recipeId}
-              playbookId={playbookId}
-              initialDraft={editor.initialDraft}
-              newestHasRuns={newestHasRuns}
-              rSizeLabel={basisLabel}
+              key={editor.key} store={recipeStore} recipeId={editor.recipeId} playbookId={playbookId}
+              initialDraft={editor.initialDraft} newestHasRuns={newestHasRuns} rSizeLabel={basisLabel}
               onSave={(nextStore, saved) => {
                 setClientRecipeStore(nextStore);
                 persistence.persistRecipes([saved]);
@@ -310,31 +349,19 @@ export function StrategyLabWorkspace() {
               </select>
             </div>
             <StrategyLabRecipes
-              store={recipeStore}
-              playbookId={playbookId}
-              playbookName={selectedPlaybook?.name}
-              lastRuns={lastRuns}
+              store={recipeStore} playbookId={playbookId} playbookName={selectedPlaybook?.name} lastRuns={lastRuns}
               onNew={() => setEditor({ mode: "edit", key: `new-${Date.now()}`, recipeId: null })}
               onOpen={(id) => setEditor({ mode: "edit", key: `open-${id}`, recipeId: id })}
+              onLoadStarter={handleLoadStarter}
             />
             <details className="sl-group">
               <summary><span>Backup JSON</span></summary>
               <div className="sl-form" style={{ paddingBottom: 8 }}>
-                <textarea
-                  className="sl-input"
-                  rows={5}
-                  aria-label="Recipes backup JSON"
-                  value={backupText}
-                  placeholder="Export or paste { &quot;recipes&quot;: [...] }"
-                  onChange={(e) => setBackupText(e.target.value)}
-                />
+                <textarea className="sl-input" rows={5} aria-label="Recipes backup JSON" value={backupText} placeholder='Export or paste { "recipes": [...] }' onChange={(e) => setBackupText(e.target.value)} />
                 <div className="sl-actions">
-                  <button type="button" className="sl-btn sl-btn--block" onClick={() => setBackupText(exportRecipesJson(recipeStore))}>
-                    Export JSON
-                  </button>
+                  <button type="button" className="sl-btn sl-btn--block" onClick={() => setBackupText(exportRecipesJson(recipeStore))}>Export JSON</button>
                   <button
-                    type="button"
-                    className="sl-btn sl-btn--block"
+                    type="button" className="sl-btn sl-btn--block"
                     onClick={() => {
                       const parsed = importRecipesJson(backupText);
                       if (parsed.error) { setNotice(parsed.error); return; }
@@ -342,9 +369,7 @@ export function StrategyLabWorkspace() {
                       persistence.persistRecipes(parsed.store.recipes);
                       setNotice(`Imported ${parsed.store.recipes.length} recipe version(s).`);
                     }}
-                  >
-                    Import JSON
-                  </button>
+                  >Import JSON</button>
                 </div>
               </div>
             </details>
@@ -399,7 +424,11 @@ export function StrategyLabWorkspace() {
               <p className="sl-hint">
                 No recipe run in this session yet. Mark a point and tap Find similar, or pick a saved recipe to run.
               </p>
-              {latestRecipes(recipeStore).map((rcp) => (
+              {latestRecipes(recipeStore).length === 0 ? (
+                <button type="button" className="sl-btn sl-btn--primary sl-btn--block" onClick={handleLoadStarter}>
+                  Load Starter Recipe
+                </button>
+              ) : latestRecipes(recipeStore).map((rcp) => (
                 <button key={rcp.id} type="button" className="sl-btn sl-btn--block" onClick={() => { void executeRun(rcp); }}>
                   Run {rcp.name} (v{rcp.version})
                 </button>

@@ -16,6 +16,7 @@ export interface StrategyLabRecipesProps {
   lastRuns?: Readonly<Record<string, string>>;
   onNew: () => void;
   onOpen: (recipeId: string) => void;
+  onLoadStarter?: () => void;
 }
 
 /** Counts the leaves of a condition tree. Nested all/any/not are walked; a leaf is one condition. */
@@ -49,7 +50,7 @@ function RecipeCard({ recipe, lastRun, onOpen }: { recipe: Recipe; lastRun?: str
   );
 }
 
-export function StrategyLabRecipes({ store, playbookId, playbookName, lastRuns, onNew, onOpen }: StrategyLabRecipesProps) {
+export function StrategyLabRecipes({ store, playbookId, playbookName, lastRuns, onNew, onOpen, onLoadStarter }: StrategyLabRecipesProps) {
   const recipes = playbookId === null ? latestRecipes(store) : recipesForPlaybook(store, playbookId);
   const heading = playbookId === null ? "All recipes" : (playbookName ?? playbookId);
   return (
@@ -61,9 +62,16 @@ export function StrategyLabRecipes({ store, playbookId, playbookName, lastRuns, 
         <button type="button" className="sl-btn sl-btn--primary" onClick={onNew}>+ New</button>
       </div>
       {recipes.length === 0 ? (
-        <p className="sl-hint">
-          No recipes yet. Create one here, or use Find similar on a Context Card.
-        </p>
+        <div className="sl-card">
+          <p className="sl-hint">
+            No recipes yet. Load the starter MES templates, create one here, or use Find similar on a Context Card.
+          </p>
+          {onLoadStarter ? (
+            <button type="button" className="sl-btn sl-btn--primary sl-btn--block" onClick={onLoadStarter}>
+              Load Starter Recipe
+            </button>
+          ) : null}
+        </div>
       ) : (
         <div className="sl-group">
           {recipes.map((recipe) => (

@@ -4,17 +4,15 @@
 import { createSupabaseAdapter } from "../persistence/supabase-adapter.ts";
 import { createMemoryCandleStore } from "../persistence/local-adapter.ts";
 import { createJournalCommands } from "../commands/journal-commands.ts";
-import { dispatchAgentRoute } from "./dispatch.ts";
+import { dispatchAgentRoute, notFoundHint } from "./dispatch.ts";
 import type { AgentRoute } from "./dispatch.ts";
-import { agentEnabled, authenticateAgent, defaultAgentDeps, recordAgentUse } from "./server-auth.ts";
+import { agentEnabled, authenticateAgent, defaultAgentDeps, defaultAgentLimiter, recordAgentUse } from "./server-auth.ts";
 import type { AgentServerDeps } from "./server-auth.ts";
-import { agentError, agentFail, createRateLimiter } from "./http.ts";
+import { agentError, agentFail } from "./http.ts";
 import type { AgentResponse, RateLimiter } from "./http.ts";
 
 /** Request bodies above this are refused before they are parsed. */
 export const AGENT_BODY_LIMIT_BYTES = 256 * 1024;
-/** Per key, per instance (best effort; see `createRateLimiter`). */
-const sharedLimiter = createRateLimiter({ limit: 120, windowMs: 60_000 });
 
 export interface AgentRequestOptions {
   /** Tests inject fakes. `null` means the API is off. Omitted: the real clients from the environment. */
@@ -67,7 +65,7 @@ export async function handleAgentRequest(
   const path = url.pathname.slice(0, 300);
   const method = req.method;
   try {
-    const auth = await authenticateAgent(req, deps, options.limiter ?? sharedLimiter);
+    const auth = await authenticateAgent(req, deps, options.limiter ?? defaultAgentLimiter(method));
     if (!auth.ok) {
       if (auth.identity) await recordAgentUse(deps, auth.identity, { method, path, status: auth.status, outcome: auth.code });
       return respond(auth);
@@ -84,7 +82,7 @@ export async function handleAgentRequest(
     const route = build(url, body.body);
     if (!route) {
       await audit(404, "not_found");
-      return respond(agentError("not_found", "Not found."));
+      return respond(agentError("not_found", notFoundHint(url.pathname)));
     }
     const adapter = createSupabaseAdapter({ client: ctx.db, candles: createMemoryCandleStore() });
     const commands = createJournalCommands(adapter.repositories, ctx.userId);

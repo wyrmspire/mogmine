@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { dollarsToCents } from "@/lib/accounts";
 import type { DrawdownMode, TradingAccount } from "@/lib/accounts";
 import { addAccount, updateAccount } from "@/lib/accounts-store";
+import { usePrefs } from "@/lib/prefs";
 import { showToast } from "@/lib/toast";
 
 const MODES: Array<{ value: DrawdownMode; label: string }> = [
@@ -11,6 +12,8 @@ const MODES: Array<{ value: DrawdownMode; label: string }> = [
   { value: "trailing", label: "Trails the high after every trade" },
   { value: "static", label: "Fixed below the starting balance" },
 ];
+
+const R_SIZE_PRESETS = [150, 300, 500, 1000] as const;
 
 const centsText = (cents: number | null) => (cents == null ? "" : (cents / 100).toFixed(2).replace(/\.00$/, ""));
 /** 1R in this account is $1 to $100,000 (04 §3.3). Empty means the Default R size applies. */
@@ -22,6 +25,7 @@ const R_SIZE_MAX_CENTS = 10_000_000;
  * describe the account. They never block or change a trade.
  */
 export function AccountSheet({ account, onClose }: { account?: TradingAccount; onClose: () => void }) {
+  const { shield } = usePrefs();
   const [name, setName] = useState(account?.name ?? "");
   const [start, setStart] = useState(account ? centsText(account.starting_balance_cents) : "");
   const [maxLoss, setMaxLoss] = useState(centsText(account?.rules.max_loss_cents ?? null));
@@ -50,7 +54,7 @@ export function AccountSheet({ account, onClose }: { account?: TradingAccount; o
   const dailyLoss = optional(daily);
   const profit = optional(target);
   const rSizeCents = rSizeText.trim() === "" ? null : dollarsToCents(rSizeText);
-  const rSizeError = rSizeText.trim() === "" || (rSizeCents != null && rSizeCents >= R_SIZE_MIN_CENTS && rSizeCents <= R_SIZE_MAX_CENTS)
+  const rSizeError = shield || rSizeText.trim() === "" || (rSizeCents != null && rSizeCents >= R_SIZE_MIN_CENTS && rSizeCents <= R_SIZE_MAX_CENTS)
     ? undefined
     : "Enter an amount from $1 to $100,000, or leave it empty to use the Default R size";
   const errors = {
@@ -68,12 +72,13 @@ export function AccountSheet({ account, onClose }: { account?: TradingAccount; o
     event.preventDefault();
     setSubmitted(true);
     if (hasErrors || startCents == null) return;
+    const nextRSizeCents = shield ? (account?.r_size_cents ?? null) : rSizeCents;
     const rules = { max_loss_cents: loss.cents, drawdown: mode, daily_loss_cents: dailyLoss.cents, profit_target_cents: profit.cents };
     if (account) {
-      updateAccount(account.id, { name: name.trim(), starting_balance_cents: startCents, r_size_cents: rSizeCents, rules });
+      updateAccount(account.id, { name: name.trim(), starting_balance_cents: startCents, r_size_cents: nextRSizeCents, rules });
       showToast("Account updated. The total is recalculated from your trades.");
     } else {
-      addAccount({ name: name.trim(), starting_balance_cents: startCents, r_size_cents: rSizeCents, rules });
+      addAccount({ name: name.trim(), starting_balance_cents: startCents, r_size_cents: nextRSizeCents, rules });
       showToast("Account added. Pick it when you log a trade.");
     }
     onClose();
@@ -119,11 +124,53 @@ export function AccountSheet({ account, onClose }: { account?: TradingAccount; o
               <input inputMode="decimal" value={daily} placeholder="1000" aria-invalid={!!show("daily")} onChange={(event) => setDaily(event.target.value)} />
               {show("daily") && <span className="error">{show("daily")}</span>}
             </label>
-            <label className="field"><span>R size ($) <i>optional</i></span>
-              <input inputMode="decimal" value={rSizeText} placeholder="300" aria-invalid={!!show("rSize")} aria-describedby="r-size-hint" onChange={(event) => setRSizeText(event.target.value)} />
-              <span id="r-size-hint" style={{ fontSize: 12, color: "var(--text-dim)" }}>1R in this account. Empty uses the Default R size in Tune.</span>
+            <div className="field wide">
+              <label htmlFor="account-r-size-input"><span>{shield ? "R size" : "R size ($)"} <i>optional</i></span></label>
+              {shield ? (
+                <input
+                  id="account-r-size-input"
+                  type="text"
+                  value="Hidden"
+                  disabled
+                  readOnly
+                  aria-label="Account R size (hidden while Shield mode is on)"
+                  aria-describedby="r-size-hint"
+                />
+              ) : (
+                <>
+                  <input
+                    id="account-r-size-input"
+                    className="num"
+                    inputMode="decimal"
+                    value={rSizeText}
+                    placeholder="300"
+                    aria-invalid={!!show("rSize")}
+                    aria-describedby="r-size-hint"
+                    onChange={(event) => setRSizeText(event.target.value)}
+                  />
+                  <div className="suggest" role="group" aria-label="Account R size presets" style={{ marginTop: 4 }}>
+                    {R_SIZE_PRESETS.map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        className="num"
+                        style={{ minHeight: 44, minWidth: 44 }}
+                        aria-pressed={rSizeCents === amount * 100}
+                        onClick={() => setRSizeText(String(amount))}
+                      >
+                        ${amount}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              <span id="r-size-hint" className="hint">
+                {shield
+                  ? "1R is your fixed at-least risk unit (rounding up by <1 micro is fine). Existing trades keep their saved R. Turn Shield mode off to view or set the dollar amount."
+                  : "1R is your fixed at-least risk unit (rounding up by <1 micro is fine). Existing trades keep their saved R."}
+              </span>
               {show("rSize") && <span className="error">{show("rSize")}</span>}
-            </label>
+            </div>
             {maxLoss.trim() !== "" && (
               <label className="field wide"><span>How the loss limit moves</span>
                 <select value={mode} onChange={(event) => setMode(event.target.value as DrawdownMode)}>

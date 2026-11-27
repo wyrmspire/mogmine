@@ -9,14 +9,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAccounts } from "@/lib/accounts-store";
-import {
-  DAILY_REVIEW_LIMITS, dailyReviewTotals, findExistingDailyReview, makeDailyReview, proposePlanIds, proposeTradeIds, unlinkedDayTradeIds,
-} from "@/lib/daily-review";
+import { DAILY_REVIEW_LIMITS, dailyReviewTotals, findExistingDailyReview, makeDailyReview, proposePlanIds, proposeTradeIds, unlinkedDayTradeIds } from "@/lib/daily-review";
 import type { DailyReview, ReviewPoint, ReviewPointKind } from "@/lib/daily-review";
 import { updateDailyReview, upsertDailyReview, useDailyReviewsStore } from "@/lib/daily-review-store";
 import { markLinkedTradesReviewed } from "@/lib/day-review-screen";
 import { buildDaySheetModel, daySheetFileName, encodeDaySheet } from "@/lib/day-sheet";
 import type { DaySheetSnapshots } from "@/lib/day-sheet";
+import { formatUsdAmount } from "@/lib/format";
+import { isValidRSizeCents } from "@/lib/r-size";
 import { formatSessionDate, sessionDate } from "@/lib/session";
 import { parseSessionDateParam, stepRegularSessionDate } from "@/lib/selectors";
 import { usePlansStore } from "@/lib/plans-store";
@@ -31,10 +31,10 @@ import { useInlineSaveText } from "./useSaveLabel";
 import { ReviewCard, ReviewCardStyles } from "./ReviewCard";
 
 const POINT_GROUPS: { kind: ReviewPointKind; title: string; placeholder: string }[] = [
-  { kind: "went_well", title: "Went well", placeholder: "What worked, and why it worked" },
-  { kind: "mistake", title: "Mistakes", placeholder: "What went wrong in your process" },
-  { kind: "observation", title: "Observations", placeholder: "What you saw in the market" },
-  { kind: "next_time", title: "Next time", placeholder: "What to do differently" },
+  { kind: "went_well", title: "Went well", placeholder: "What worked in your process and why (commentary only — no prices or R)" },
+  { kind: "mistake", title: "Mistakes", placeholder: "What went wrong in execution or discipline (no prices or R)" },
+  { kind: "observation", title: "Observations", placeholder: "What you saw in structure or flow (no prices or R)" },
+  { kind: "next_time", title: "Next time", placeholder: "What concrete habit to adjust next session" },
 ];
 
 const pathFor = (date: string, account: string | null) => `/review/day/${date}${account ? `?account=${encodeURIComponent(account)}` : ""}`;
@@ -45,6 +45,7 @@ const SHEET_STYLE: CSSProperties = {
   display: "grid", gap: 12, padding: 16, background: "var(--elevated, #11131c)", borderTop: "1px solid var(--chart-border)",
 };
 const snapshotKey = (tradeId: string, shield: boolean) => `${tradeId}|${shield ? 1 : 0}`;
+const fmtRUsd = (cents: number) => formatUsdAmount(cents / 100).replace(/\.00$/, "");
 
 /** Online state for the offline note. Server render assumes online (the screen waits for hydration anyway). */
 function useOnline() {
@@ -135,12 +136,7 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   }, [lessonDraft, review?.lesson]);
 
   const points = review?.points ?? [];
-  const totals = dailyReviewTotals(
-    { session_date: date, trade_ids: linkedIds },
-    journal.trades,
-    prefs.shield,
-    { accounts: accounts.accounts, prefs },
-  );
+  const totals = dailyReviewTotals({ session_date: date, trade_ids: linkedIds }, journal.trades, prefs.shield, { accounts: accounts.accounts, prefs });
   const byId = new Map(journal.trades.map((trade) => [trade.id, trade] as const));
   const candidateIds = [...new Set([...linkedIds, ...proposeTradeIds(journal.trades, date, accountId, { includeSamples: prefs.showSamples })])];
   const candidates = candidateIds.map((id) => byId.get(id)).filter((trade): trade is TradeRecord => Boolean(trade));
@@ -156,6 +152,12 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   const dayPlans = plans.plans.filter((plan) => plan.session_date === date && !plan.archived);
   const done = review?.status === "done";
   const nextDate = stepRegularSessionDate(date, 1);
+  const hasLinkedCards = candidates.some((trade) => linkedIds.includes(trade.id));
+  const scopedAccount = accountId ? accounts.accounts.find((account) => account.id === accountId) ?? null : null;
+  const defaultCents = Math.round(prefs.riskBudgetUsd * 100);
+  const rBasisText = prefs.shield ? null : scopedAccount
+    ? (isValidRSizeCents(scopedAccount.r_size_cents) ? `1R ${fmtRUsd(scopedAccount.r_size_cents)}` : `1R ${fmtRUsd(defaultCents)} default`)
+    : `default 1R ${fmtRUsd(defaultCents)}`;
 
   // UX-70: the PNG is encoded as soon as the sheet opens or an input changes, so the Share tap has a Blob ready.
   const orientation = prefs.reviewCardOrientation;
@@ -226,10 +228,7 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   // Q-4: marks the linked trades only; the day's status is separate. Undo restores each trade's own previous status.
   const markReviewed = () => {
     const { count, undo } = markLinkedTradesReviewed(unreviewed, (id, status) => updateTrade(id, { review_status: status }));
-    showToast(`Marked ${count} trades reviewed`, {
-      label: "Undo",
-      run: undo,
-    });
+    showToast(`Marked ${count} trades reviewed`, { label: "Undo", run: undo });
   };
 
   return (
@@ -260,6 +259,7 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
 
       <p className="day-review-summary num">
         {totals.tradeCount} {totals.tradeCount === 1 ? "trade" : "trades"} · {totals.formattedNetR} net · rules {totals.rulesFollowed}/{totals.rulesTotal} · From your journal · gross
+        {rBasisText ? ` · ${rBasisText}` : ""}
         {!prefs.shield && totals.formattedNetMoney ? ` · ${totals.formattedNetMoney}` : ""}
       </p>
 
@@ -270,17 +270,20 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
         </div>
       )}
 
-      <div className="day-review-orientation" role="group" aria-label="Review card orientation" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        {ORIENTATIONS.map(([value, label]) => (
-          <button key={value} type="button" aria-pressed={orientation === value} className={orientation === value ? "btn-primary" : "btn-secondary"} style={{ minHeight: 44 }} onClick={() => setPrefs({ reviewCardOrientation: value })}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {hasLinkedCards && (
+        <div className="day-review-orientation" role="group" aria-label="Review card orientation" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          {ORIENTATIONS.map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={orientation === value} className={orientation === value ? "btn-primary" : "btn-secondary"} style={{ minHeight: 44 }} onClick={() => setPrefs({ reviewCardOrientation: value })}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <section className="day-review-trades" data-slot="review-cards" aria-label="Trades this day">
         <ReviewCardStyles />
-        {candidates.length === 0 && <p className="day-review-empty">A day without trades is still a review. Write what you saw.</p>}
+        {candidates.length === 0 && <p className="day-review-empty">No trades logged for this session. A day without trades is still a review — write what you saw.</p>}
+        {candidates.length > 0 && !hasLinkedCards && <p className="day-review-empty">No trades linked to this review yet. Check any trade below to include it.</p>}
         <div className="review-card-grid" data-orientation={orientation}>
           {candidates.filter((trade) => linkedIds.includes(trade.id)).map((trade) => (
             <div key={trade.id} className="day-review-cell">
@@ -309,16 +312,27 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
         </ul>
       </section>
 
-      {dayPlans.length > 0 && (
-        <section className="day-review-plans" aria-label="Plans today">
-          <h2>Plans today</h2>
+      <section className="day-review-plans" aria-label="Plans today">
+        <div className="day-review-plans-head">
+          <h2>Session plans</h2>
+          <Link href={`/?date=${date}`}>Open day →</Link>
+        </div>
+        {dayPlans.length > 0 ? (
           <ul>
             {dayPlans.map((plan) => (
-              <li key={plan.id}><strong>{plan.name}</strong>{plan.lesson ? <span className="muted"> · lesson: {plan.lesson}</span> : null}</li>
+              <li key={plan.id} className="day-review-plan-item">
+                <span><strong>{plan.name}</strong>{plan.bias ? <span className="muted"> · {plan.bias}</span> : null}<span className="muted num"> · {plan.levels.length} {plan.levels.length === 1 ? "level" : "levels"}</span></span>
+                {plan.observations && <span className="muted">{plan.observations}</span>}
+                {plan.lesson && <span className="muted">Lesson: {plan.lesson}</span>}
+              </li>
             ))}
           </ul>
-        </section>
-      )}
+        ) : (
+          <p className="day-review-empty">No planning session logged for this date.</p>
+        )}
+      </section>
+
+      <p className="day-review-hr1-hint">Commentary only (HR-1): write reasoning, mistakes, and lessons — no prices, stop distances, risk, or R.</p>
 
       {POINT_GROUPS.map((group) => (
         <PointGroup
@@ -345,10 +359,10 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
             rows={3}
             onChange={(event) => setLessonDraft(event.target.value)}
             onBlur={() => { if (lessonDraft !== (review?.lesson ?? "")) save({ lesson: lessonDraft }); }}
-            placeholder="One lesson for the next session"
+            placeholder="One lesson for the next session (commentary only — no prices, size, or R)"
           />
         </label>
-        <small className="num">{saveState === "idle" ? "" : `${saveText} · `}{lessonDraft.length}/{DAILY_REVIEW_LIMITS.lesson}</small>
+        <small className="num">{saveState === "idle" ? "Commentary only · no prices or R · " : `${saveText} · `}{lessonDraft.length}/{DAILY_REVIEW_LIMITS.lesson}</small>
       </section>
 
       <div className="day-review-actions">
@@ -388,16 +402,8 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
 }
 
 function PointGroup(props: {
-  title: string;
-  placeholder: string;
-  points: ReviewPoint[];
-  trades: TradeRecord[];
-  timeZone: string;
-  open: boolean;
-  onOpen: () => void;
-  onCancel: () => void;
-  onAdd: (text: string, tradeId: string | null) => void;
-  onRemove: (id: string) => void;
+  title: string; placeholder: string; points: ReviewPoint[]; trades: TradeRecord[]; timeZone: string;
+  open: boolean; onOpen: () => void; onCancel: () => void; onAdd: (text: string, tradeId: string | null) => void; onRemove: (id: string) => void;
 }) {
   const [text, setText] = useState("");
   const [tradeId, setTradeId] = useState("");
@@ -409,6 +415,7 @@ function PointGroup(props: {
         {!props.open && <button type="button" className="btn-ghost day-review-add" style={{ minHeight: 44, minWidth: 44 }} onClick={props.onOpen}>+ Add</button>}
       </div>
       <ul className="day-review-points">
+        {props.points.length === 0 && !props.open && <li className="day-review-group-empty">No notes yet.</li>}
         {props.points.map((point) => (
           <li key={point.id}>
             <span>{point.text}{point.trade_id ? <span className="muted"> · about {label(point.trade_id)}</span> : null}</span>

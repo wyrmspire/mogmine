@@ -19,7 +19,47 @@ export interface ResolvedRSize {
 
 export const MIN_R_SIZE_CENTS = 100; // $1.00
 export const MAX_R_SIZE_CENTS = 10_000_000; // $100,000.00
-export const DEFAULT_R_SIZE_CENTS = 25_000; // $250.00, the default risk budget
+export const DEFAULT_R_SIZE_CENTS = 30_000; // $300.00, the owner's locked standard 1R unit
+
+export interface AtLeastPositionSize {
+  contracts: number;
+  actualRiskCents: number;
+  overshootCents: number;
+}
+
+/**
+ * Whole-contract "at-least" position sizing in integer ticks/cents:
+ * returns the smallest whole contract count (>= 1) whose initial risk is >= targetCents,
+ * overshooting targetCents by strictly less than 1 contract's risk.
+ */
+export function sizeContractsAtLeast(
+  targetCents: number,
+  stopDistanceTicks: number,
+  symbol: string,
+): AtLeastPositionSize | null {
+  const tickCents = tickValueCents(symbol);
+  if (
+    tickCents == null ||
+    tickCents <= 0 ||
+    !Number.isFinite(targetCents) ||
+    targetCents <= 0 ||
+    !Number.isInteger(stopDistanceTicks) ||
+    stopDistanceTicks <= 0
+  ) {
+    return null;
+  }
+  const target = Math.round(targetCents);
+  if (target <= 0) return null;
+  const singleContractRiskCents = stopDistanceTicks * tickCents;
+  if (!(singleContractRiskCents > 0)) return null;
+  const contracts = Math.max(1, Math.ceil(target / singleContractRiskCents));
+  const actualRiskCents = contracts * singleContractRiskCents;
+  return {
+    contracts,
+    actualRiskCents,
+    overshootCents: actualRiskCents - target,
+  };
+}
 
 /** A whole-cent R size between $1 and $100,000. */
 export function isValidRSizeCents(value: unknown): value is number {
@@ -96,7 +136,9 @@ export function riskR(
 }
 
 /**
- * Actual and stated risk side by side (04 §3.4). `differs` only when both exist and they are apart by at least
+ * Actual and stated risk side by side (04 §3.4).
+ * Under the owner's whole-micro "at-least" ceiling rule, overshooting statedTargetCents by strictly less than
+ * 1 contract's risk counts as matching (`differs = false`). Otherwise `differs` when apart by at least
  * 0.02R or one tick × quantity in dollars, whichever is larger.
  */
 export function riskComparison(
@@ -110,8 +152,23 @@ export function riskComparison(
   const actual_r = actualCents != null && cents > 0 ? actualCents / cents : null;
   let differs = false;
   if (actualCents != null && statedR != null && cents > 0) {
-    const tolerance = Math.max(0.02 * cents, (tickValueCents(trade.symbol) ?? 0) * trade.quantity);
-    differs = Math.abs(actualCents - statedR * cents) >= tolerance;
+    const statedTargetCents = Math.round(statedR * cents);
+    const tickCents = tickValueCents(trade.symbol) ?? 0;
+    const stop = riskStopPrice({ ...trade, exit_price: null, initial_stop_price: trade.initial_stop_price ?? null });
+    const entryTicks = toTicks(trade.entry_price, trade.symbol);
+    const stopTicks = stop == null ? null : toTicks(stop, trade.symbol);
+    const singleContractRiskCents =
+      entryTicks != null && stopTicks != null && tickCents > 0
+        ? Math.abs(entryTicks - stopTicks) * tickCents
+        : 0;
+    const withinAtLeastCeiling =
+      singleContractRiskCents > 0 &&
+      actualCents >= statedTargetCents &&
+      actualCents - statedTargetCents < singleContractRiskCents;
+    if (!withinAtLeastCeiling) {
+      const tolerance = Math.max(0.02 * cents, tickCents * trade.quantity);
+      differs = Math.abs(actualCents - statedTargetCents) >= tolerance;
+    }
   }
   return { actual_r, stated_r: statedR, differs };
 }

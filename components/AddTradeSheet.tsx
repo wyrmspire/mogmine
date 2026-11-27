@@ -37,6 +37,12 @@ type Finder =
 
 // Kept while the app is open, so closing the sheet by accident never loses what was typed.
 const DRAFT_KEY = "add-trade";
+const NOTES_DRAFT_KEY = "add-trade-notes";
+
+interface NotesDraft {
+  note: string;
+  preTradeThesis: string;
+}
 
 type PriceKey = "entryPrice" | "exitPrice" | "stopPrice" | "targetPrice";
 type ErrorKey = PriceKey | "symbol" | "quantity" | "date" | "entryClock" | "exitClock";
@@ -71,6 +77,7 @@ export function AddTradeSheet() {
   const prefs = usePrefs();
   const zone = prefs.timeZone;
   const [draft, setDraft] = useState<EntryDraft>(() => upgradeDraft(readDraft<unknown>(DRAFT_KEY), new Date(), zone));
+  const [notesDraft, setNotesDraft] = useState<NotesDraft>(() => readDraft<NotesDraft>(NOTES_DRAFT_KEY) ?? { note: "", preTradeThesis: "" });
   const [submitted, setSubmitted] = useState(false);
   const [finder, setFinder] = useState<Finder>({ state: "idle" });
   /** The day bars the finder loaded, keyed by the day window they cover (UX-09 price-range warning). */
@@ -108,6 +115,7 @@ export function AddTradeSheet() {
   }, []);
 
   const change = (patch: Partial<EntryDraft>) => { setNowMs(new Date().getTime()); setDraft((current) => keepDraft(DRAFT_KEY, { ...current, ...patch })); };
+  const changeNotes = (patch: Partial<NotesDraft>) => setNotesDraft((current) => keepDraft(NOTES_DRAFT_KEY, { ...current, ...patch }));
   const isOpenDraft = draft.status === "open";
   // Still open: the entry defaults to now unless the trader already set a time (R-03b).
   const setStatus = (status: TradeStatus) => {
@@ -265,7 +273,8 @@ export function AddTradeSheet() {
       partial_targets: partials.targets, partial_exits: partials.exits,
       planned_target_price: targetPrice,
       key_level_price: null,
-      note: "",
+      note: notesDraft.note.trim(),
+      pre_trade_thesis: notesDraft.preTradeThesis.trim(),
       account_id: accountId,
       // 04 §2: what the trader said (never computed), and the R size frozen on save (D-B).
       stated_risk_r: statedRiskRFrom(draft.statedRiskR),
@@ -279,6 +288,10 @@ export function AddTradeSheet() {
     const nextDraft = entryDraftAfterSave(draft, trade.id, saved);
     keepDraft(DRAFT_KEY, nextDraft);
     if (nextDraft) setDraft(nextDraft);
+    if (saved) {
+      keepDraft(NOTES_DRAFT_KEY, null);
+      setNotesDraft({ note: "", preTradeThesis: "" });
+    }
     closeAddTrade();
     showToast(saved
       ? isOpenDraft ? "Open trade saved on this device" : "Trade saved on this device"
@@ -355,21 +368,12 @@ export function AddTradeSheet() {
           </div>
 
           <div className="mood-entry-section">
-            <div className="mood-entry-head">
-              <span className="mood-entry-title">Feeling at entry <i>optional</i></span>
-            </div>
+            <div className="mood-entry-head"><span className="mood-entry-title">Feeling at entry <i>optional</i></span></div>
             <div className="chip-row" role="group" aria-label="Feeling at entry">
               {moodState.registry.spokes.map((spoke) => {
                 const selected = draft.entryMoodSpoke === spoke.id;
                 return (
-                  <button
-                    key={spoke.id}
-                    type="button"
-                    className="chip"
-                    aria-pressed={selected}
-                    aria-label={`${spoke.label} feeling at entry`}
-                    onClick={() => change({ entryMoodSpoke: selected ? null : spoke.id })}
-                  >
+                  <button key={spoke.id} type="button" className="chip" aria-pressed={selected} aria-label={`${spoke.label} feeling at entry`} onClick={() => change({ entryMoodSpoke: selected ? null : spoke.id })}>
                     {spokeChipLabel(spoke)}
                   </button>
                 );
@@ -402,17 +406,7 @@ export function AddTradeSheet() {
                 on screen with password security styling. */}
             <label className="field">
               <span>Contracts {prefs.shield && <i className="shield-tag" style={{ opacity: 0.6, fontSize: "0.8em", marginLeft: 4 }}>masked</i>}</span>
-              <input
-                inputMode="numeric"
-                type={prefs.shield ? "password" : "number"}
-                min={1}
-                step={1}
-                value={draft.quantity}
-                placeholder={prefs.shield ? "••" : "1"}
-                aria-label={prefs.shield ? "Contracts (masked under Shield)" : "Contracts"}
-                aria-invalid={!!show("quantity")}
-                onChange={(event) => change({ quantity: event.target.value })}
-              />
+              <input inputMode="numeric" type={prefs.shield ? "password" : "number"} min={1} step={1} value={draft.quantity} placeholder={prefs.shield ? "••" : "1"} aria-label={prefs.shield ? "Contracts (masked under Shield)" : "Contracts"} aria-invalid={!!show("quantity")} onChange={(event) => change({ quantity: event.target.value })} />
               {show("quantity") && <span className="error">{show("quantity")}</span>}
             </label>
             <label className="field wide"><span>Date <i>{zoneName}</i></span>
@@ -436,6 +430,17 @@ export function AddTradeSheet() {
                 {show("exitClock") && <span className="error">{show("exitClock")}</span>}
               </div>
             )}
+          </div>
+          <div className="add-notes-section">
+            <label className="field wide">
+              <span>Quick Takeaway <i>optional · feed &amp; cards</i></span>
+              <textarea rows={1} value={notesDraft.note} placeholder="One-line takeaway for cards & feed — reasoning/lesson only, no prices or R" aria-label="Quick Takeaway" autoCapitalize="sentences" enterKeyHint="done" onChange={(event) => changeNotes({ note: event.target.value })} />
+            </label>
+            <label className="field wide">
+              <span>Before Entry <i>optional · thesis</i></span>
+              <textarea rows={2} value={notesDraft.preTradeThesis} placeholder="Why was this setup worth taking?" aria-label="Before Entry: Thesis and invalidation" autoCapitalize="sentences" onChange={(event) => changeNotes({ preTradeThesis: event.target.value })} />
+            </label>
+            <p className="notes-hint">Commentary only — prices, stop, risk and R are saved above.</p>
           </div>
           <button className="btn-primary btn-block" type="submit" style={{ marginTop: 14 }}>{isOpenDraft ? "Save open trade and open chart" : "Save trade and open chart"}</button>
         </form>

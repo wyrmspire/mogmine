@@ -44,7 +44,7 @@ export const DEFAULT_PREFS: Prefs = {
   timeZone: DEFAULT_TIME_ZONE,
   showSamples: true,
   blindReview: false,
-  riskBudgetUsd: 250,
+  riskBudgetUsd: 300,
   vwapAnchor: "off",
   levelLabels: "tap",
   ema200: false,
