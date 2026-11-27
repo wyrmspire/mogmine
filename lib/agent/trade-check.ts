@@ -19,15 +19,16 @@ import type { Prefs } from "../prefs-sanitize.ts";
 import { createMemoryCandleStore } from "../persistence/local-adapter.ts";
 import { createSupabaseAdapter } from "../persistence/supabase-adapter.ts";
 import type { SupabaseLike } from "../persistence/supabase-adapter.ts";
-import { agentEnabled, authenticateAgent, defaultAgentDeps, recordAgentUse } from "./server-auth.ts";
+import { agentEnabled, authenticateAgent, defaultAgentDeps, recordAgentUse, sharedPreflightLimiter } from "./server-auth.ts";
 import type { AgentServerDeps } from "./server-auth.ts";
-import { agentError, agentOk, createRateLimiter, isIsoTimestamp, statusFor } from "./http.ts";
+import { agentError, agentOk, isIsoTimestamp, statusFor } from "./http.ts";
 import type { AgentErrorCode, AgentResponse, RateLimiter } from "./http.ts";
 import { AGENT_BODY_LIMIT_BYTES } from "./handle.ts";
 import { formatCt, loadAgentCandles, defaultCandleLoader, RANGE_CAP_MS } from "./candles.ts";
 import type { CandleLoader } from "./candles.ts";
 
 const MINUTE_MS = 60_000;
+const HOUR_MS = 3_600_000;
 /** The bars checked around the trade: ten minutes before the entry and after the exit (or the entry, when open). */
 const PAD_MS = 10 * MINUTE_MS;
 
@@ -270,9 +271,18 @@ export async function runTradeCheck(input: TradeCheckInput, run: TradeCheckRun):
   const from = entry - PAD_MS;
   if (to - from > RANGE_CAP_MS["1m"]) return { ok: false, status: 422, code: "invalid", message: "The trade window is longer than 26 hours. Check it in pieces." };
 
-  const loaded = await loadAgentCandles(run.loader, { symbol: record.symbol, timeframe: "1m", from, to }, run.limitKey);
+  // Snap the upstream fetch to whole-hour bounds so checking multiple candidate times in a session reuses cached 1m bars.
+  const loaderNow = run.loader.now();
+  const snappedFrom = Math.floor(from / HOUR_MS) * HOUR_MS;
+  const rawSnappedTo = Math.ceil(to / HOUR_MS) * HOUR_MS;
+  const snappedTo = to <= loaderNow ? Math.min(rawSnappedTo, loaderNow) : rawSnappedTo;
+  const useSnapped = from <= loaderNow && snappedTo > snappedFrom && snappedTo - snappedFrom <= RANGE_CAP_MS["1m"];
+  const fetchFrom = useSnapped ? snappedFrom : from;
+  const fetchTo = useSnapped ? snappedTo : to;
+
+  const loaded = await loadAgentCandles(run.loader, { symbol: record.symbol, timeframe: "1m", from: fetchFrom, to: fetchTo }, run.limitKey);
   if (!loaded.ok) return { ok: false, status: statusFor(loaded.code), code: loaded.code, message: loaded.message, retryAfterSec: loaded.retryAfterSec };
-  const bars = loaded.value.bars;
+  const bars = loaded.value.bars.filter((bar) => bar.time >= from && bar.time < to);
 
   const vocabulary = await checkVocabulary(run.commands);
   if (!vocabulary.ok) return { ok: false, status: statusFor("unavailable"), code: "unavailable", message: "Could not read the vocabulary. Try again." };
@@ -317,8 +327,6 @@ export interface TradeCheckRequestOptions {
   now?: number;
 }
 
-const generalLimiter = createRateLimiter({ limit: 120, windowMs: MINUTE_MS });
-
 function respond(response: AgentResponse): Response {
   return Response.json(response.body, {
     status: response.status,
@@ -351,7 +359,7 @@ export async function handleTradeCheckRequest(req: Request, options: TradeCheckR
     // This route is read scope although it is a POST (docs/07 §5). The shared auth maps the method to a scope, so it sees
     // a GET-shaped copy of this request: same URL and headers, nothing else changed. The body is read below, after auth.
     const readView = new Request(req.url, { method: "GET", headers: req.headers });
-    const auth = await authenticateAgent(readView, deps, options.limiter ?? generalLimiter);
+    const auth = await authenticateAgent(readView, deps, options.limiter ?? sharedPreflightLimiter);
     if (!auth.ok) {
       if (auth.identity) await recordAgentUse(deps, auth.identity, { method: "POST", path, status: auth.status, outcome: auth.code });
       return respond(auth);

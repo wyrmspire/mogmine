@@ -25,12 +25,15 @@ export const HOUSE_RULES: readonly HouseRule[] = [
   {
     id: "HR-1",
     title: "Notes are commentary only",
-    summary: "Notes hold reasoning, mistakes and lessons. Never restate prices, stop distance, risk, R or size.",
+    summary:
+      "Four distinct note fields hold commentary only (note = 1-line Pit Stop takeaway, pre_trade_thesis, management_notes, post_exit_notes). Never restate prices, stop distance, contracts, risk, R or exit_reason.",
     rule:
-      "`note`, `pre_trade_thesis`, `management_notes`, `post_exit_notes` and review points hold reasoning, mistakes, lessons and what to do differently. Never restate entry, stop, stop distance, target, exit price or time, risk dollars, R or size. Those fields already hold them.",
-    why: "Notes repeated the stop, the risk and the entry that the record already stored, so the two copies could disagree.",
-    badExample: "note: \"Entered at 5012.25 with a 12-point stop, risked $75 (0.25R). Should have waited.\"",
-    goodExample: "note: \"Chased the first push instead of waiting for the retest. Next time wait for a close back above the level.\"",
+      "`note`, `pre_trade_thesis`, `management_notes`, `post_exit_notes` and review points hold commentary only — never restate entry, stop, stop distance, target, exit price or time, `exit_reason`, contract count, risk dollars or R (those fields already hold them). Roles of the four trade note fields: `note` is a short 1-line Pit Stop takeaway shown on cards/feed (optional; never duplicate `pre_trade_thesis`); `pre_trade_thesis` is pre-entry reasoning for why this setup was worth taking before entry; `management_notes` captures decisions made during the trade (holds, trails, scratches, hesitation); `post_exit_notes` is the post-exit reflection or lesson on what to repeat or change next time (never \"Exit reason: ...\").",
+    why: "Notes repeated the stop, the risk, exit_reason and the entry that the record already stored, or duplicated pre_trade_thesis into note.",
+    badExample:
+      'note and pre_trade_thesis with identical text, or post_exit_notes: "Exit reason: news. Entered 2 MES at 5012.25, risked $75 (0.25R)."',
+    goodExample:
+      'pre_trade_thesis: "VWAP reclaim after ONL sweep held higher low." | management_notes: "Held through mid-bar chop; trailed under swing low." | post_exit_notes: "Wait for 1m close next time instead of anticipating." | note: "Clean ONL reclaim, slightly early entry."',
     appliesTo: ["trades", "plans", "daily_reviews"],
   },
   {
@@ -58,12 +61,13 @@ export const HOUSE_RULES: readonly HouseRule[] = [
   {
     id: "HR-4",
     title: "Record stop moves with times",
-    summary: "Stop moves go in stop_moves as [{price, time}]. The first stop is initial_stop_price; the last is stop_loss_price.",
+    summary:
+      "Timed stop moves go in stop_moves as [{price, time}]. Unknown move times stay untimed (initial_stop_price + stop_loss_price, empty stop_moves).",
     rule:
-      "Record stop moves with times in `stop_moves` as `[{price, time}]`. `initial_stop_price` is the first stop and `stop_loss_price` is the last. Never set `initial_stop_set_at` to stand in for a move time.",
-    why: "A trailed stop was treated as live from the entry, which produced a false stop touch on the chart.",
-    badExample: "stop_loss_price: 4998.00 with no stop_moves, after the stop was trailed up",
-    goodExample: "initial_stop_price: 4990.00, stop_moves: [{price: 4996.00, time: \"2026-11-23T15:02:00Z\"}], stop_loss_price: 4996.00",
+      "Record timed stop moves in `stop_moves` as `[{price, time}]` (UTC ISO-8601 inside the hold). `initial_stop_price` is the first stop and `stop_loss_price` is the last. If the exact move minute is unknown, leave `stop_moves` empty and set both `initial_stop_price` and `stop_loss_price` so the app treats the move as \"untimed\" — never fabricate an exit-time stop move, and never set `initial_stop_set_at` to stand in for a move time.",
+    why: "A trailed stop was treated as live from the entry, or bots fabricated an exit-time stop move when the exact move minute was unknown.",
+    badExample: "stop_loss_price: 4998.00 with no stop_moves after a known timed trail, or a fabricated move at exit_time when the minute was unknown",
+    goodExample: "Timed: initial_stop_price: 4990.00, stop_moves: [{price: 4996.00, time: \"2026-11-23T15:02:00Z\"}], stop_loss_price: 4996.00. Untimed: initial_stop_price: 4990.00, stop_loss_price: 4996.00, stop_moves: []",
     appliesTo: ["trades"],
   },
   {
@@ -80,9 +84,10 @@ export const HOUSE_RULES: readonly HouseRule[] = [
   {
     id: "HR-6",
     title: "R is measured against the account's R size",
-    summary: "R uses the account's R size (r_size_cents), not the stop width. Never write R; the app computes it.",
+    summary:
+      "R uses the account's R size (r_size_cents; standard $300 = 30000 cents), not the stop width. Whole-micro ceiling rounding is expected; never write R.",
     rule:
-      "R is measured against the account's R size, stored in integer cents as `r_size_cents` on the account. It is never the stop width. Do not write R anywhere in notes or fields; the app computes `resultR` and `riskR` from the fills and the account's `r_size_cents`. Until `r_size_cents` is stored, do not write risk or R into notes.",
+      "R is measured against the account's R size, stored in integer cents as `r_size_cents` on the account (the owner's standard at-least R unit is $300 / `30000` cents). It is never the stop width. Whole-micro ceiling rounding up by less than 1 micro over target is expected and is not a risk error. Do not write R anywhere in notes or fields; the app computes `resultR` and `riskR` from the fills and the account's `r_size_cents`. Until `r_size_cents` is stored, do not write risk or R into notes.",
     why: "Risk was shown as 1R, measured against the stop width, instead of the fixed dollar R of the account.",
     badExample: "note: \"Risked 1R on a 12-point stop.\"",
     goodExample: "Store the dollars the trader risked in the account's terms; leave R out of the notes and let the app compute it.",

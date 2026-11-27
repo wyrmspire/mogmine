@@ -4,7 +4,7 @@
 // stored (docs/07 §3.5, guardrail 11).
 import type { CollectionKey, PersistError, PersistResult, SingletonKey } from "../persistence/contract.ts";
 import type { JournalCommands } from "../commands/journal-commands.ts";
-import { agentError, agentFail, agentOk, statusFor } from "./http.ts";
+import { agentError, agentFail, agentOk, COLLECTION_KEYS, decodeRouteParam, isCollectionKey, isSingletonKey, SINGLETON_KEYS, statusFor } from "./http.ts";
 import type { AgentListQuery } from "./http.ts";
 import { buildVocabulary } from "./vocabulary.ts";
 import { accountSummary, pnlCents } from "../accounts.ts";
@@ -83,6 +83,49 @@ export interface AccountDerived {
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
+
+/** Actionable 404 message when an agent requests an unknown collection, singleton, or route under /api/v1. */
+export function notFoundHint(pathname: string): string {
+  const rec = /^\/api\/v1\/records\/([^/]+)(?:\/|$)/.exec(pathname);
+  if (rec) {
+    const raw = decodeRouteParam(rec[1]) ?? rec[1];
+    const key = raw.toLowerCase();
+    if (key === "candles") return 'No collection "candles" under /records. Use GET /api/v1/candles (symbol, from, to, timeframe), and see GET /api/v1/guide.';
+    if (key === "levels") return 'No collection "levels" under /records. Use GET /api/v1/levels (symbol, session_date, as_of?), and see GET /api/v1/guide.';
+    if (key === "settings" || key === "preferences" || key === "prefs" || key === "user_prefs" || key === "user_preferences") {
+      return "Settings and preferences are not under /records. Use GET/PUT /api/v1/singletons/prefs, and see GET /api/v1/guide.";
+    }
+    if (key === "mood_registry" || key === "tag_registry") {
+      return `Use GET/PUT /api/v1/singletons/${key} instead of /records/${key}. See GET /api/v1/guide.`;
+    }
+    if (key === "vocabulary" || key === "tags" || key === "setup_tags" || key === "execution_tags") {
+      return `Use GET /api/v1/vocabulary instead of /records/${key}. See GET /api/v1/guide.`;
+    }
+    if (key === "guide" || key === "house_rules") return `Use GET /api/v1/guide instead of /records/${key}.`;
+    if (key === "prompt_library") {
+      return `prompt_library is not exposed in the v1 agent API. Valid collections: ${COLLECTION_KEYS.join(", ")}. See GET /api/v1/guide.`;
+    }
+    if (isCollectionKey(raw)) return `Route not found for collection "${raw}". Check method and path in GET /api/v1/guide or GET /api/v1/openapi.json.`;
+    return `Unknown collection. Valid collections: ${COLLECTION_KEYS.join(", ")}. For candles or levels use /api/v1/candles or /api/v1/levels; see GET /api/v1/guide.`;
+  }
+  const sing = /^\/api\/v1\/singletons\/([^/]+)(?:\/|$)/.exec(pathname);
+  if (sing) {
+    const raw = decodeRouteParam(sing[1]) ?? sing[1];
+    const key = raw.toLowerCase();
+    if (key === "settings" || key === "preferences" || key === "user_prefs" || key === "user_preferences") {
+      return `Unknown singleton "${key}". Use /api/v1/singletons/prefs instead (valid singletons: ${SINGLETON_KEYS.join(", ")}). See GET /api/v1/guide.`;
+    }
+    if (key === "prompt_library") {
+      return `Singleton "prompt_library" is not exposed in the v1 agent API. Valid singletons: ${SINGLETON_KEYS.join(", ")}. See GET /api/v1/guide.`;
+    }
+    if (key === "vocabulary") return "Use GET /api/v1/vocabulary instead of /api/v1/singletons/vocabulary. See GET /api/v1/guide.";
+    if (key === "tags" || key === "tag_defs") return "Use /api/v1/singletons/tag_registry (or GET /api/v1/vocabulary for active tags). See GET /api/v1/guide.";
+    if (key === "moods") return "Use /api/v1/singletons/mood_registry instead of /api/v1/singletons/moods. See GET /api/v1/guide.";
+    if (isSingletonKey(raw)) return `Method or sub-path not supported for singleton "${raw}" (use GET or PUT). See GET /api/v1/guide.`;
+    return `Unknown singleton. Valid singletons: ${SINGLETON_KEYS.join(", ")}. See GET /api/v1/guide.`;
+  }
+  return "Not found. See GET /api/v1/guide or GET /api/v1/openapi.json.";
+}
 
 /** Only trades and accounts have a derived block. Other collections ignore `include=derived`. */
 const isDerivable = (type: CollectionKey): type is "trades" | "accounts" => type === "trades" || type === "accounts";

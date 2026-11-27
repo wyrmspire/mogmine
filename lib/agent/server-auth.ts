@@ -6,10 +6,24 @@
 import { createClient } from "@supabase/supabase-js";
 import { chooseAdapter } from "../persistence/select.ts";
 import type { DbError, SupabaseLike } from "../persistence/supabase-adapter.ts";
-import { agentError } from "./http.ts";
+import { agentError, createRateLimiter } from "./http.ts";
 import type { AgentErrorCode, AgentResponse, RateLimiter } from "./http.ts";
 import { hasScope, hashAgentToken, parseBearer, requiredScope } from "./tokens.ts";
 import type { AgentScope } from "./tokens.ts";
+
+export const AGENT_READ_RATE_LIMIT = 300;
+export const AGENT_WRITE_RATE_LIMIT = 120;
+export const AGENT_PREFLIGHT_RATE_LIMIT = 300;
+const RATE_WINDOW_MS = 60_000;
+
+/** Separate per-instance buckets so reads and pre-flight checks are not throttled by the write cap. */
+export const sharedReadLimiter = createRateLimiter({ limit: AGENT_READ_RATE_LIMIT, windowMs: RATE_WINDOW_MS });
+export const sharedWriteLimiter = createRateLimiter({ limit: AGENT_WRITE_RATE_LIMIT, windowMs: RATE_WINDOW_MS });
+export const sharedPreflightLimiter = createRateLimiter({ limit: AGENT_PREFLIGHT_RATE_LIMIT, windowMs: RATE_WINDOW_MS });
+
+export function defaultAgentLimiter(method: string): RateLimiter {
+  return requiredScope(method) === "read" ? sharedReadLimiter : sharedWriteLimiter;
+}
 
 /** One query on a table, as the service-role client is used here: filters, then a single row or a write. */
 export interface AgentQuery<T = unknown> extends PromiseLike<{ data: T | null; error: DbError | null }> {
@@ -217,7 +231,11 @@ function denied(code: AgentErrorCode, message: string, identity?: AgentIdentity,
 }
 
 /** Bearer → hash → rate limit → lookup by hash → scope → owner session. Every failure is a response, never a throw. */
-export async function authenticateAgent(req: Request, deps: AgentServerDeps, limiter: RateLimiter): Promise<AgentAuth> {
+export async function authenticateAgent(
+  req: Request,
+  deps: AgentServerDeps,
+  limiter: RateLimiter = defaultAgentLimiter(req.method),
+): Promise<AgentAuth> {
   const token = parseBearer(req.headers.get("authorization"));
   if (!token) {
     return denied("unauthenticated", "Send your agent key as `Authorization: Bearer mmk_…`.", undefined, {

@@ -8,14 +8,8 @@ export const AGENT_API_VERSION = "1.0.0";
 
 /** Every error code the API can return, with its status. `satisfies` fails to compile if a code is missing or unknown. */
 const ERROR_CODES = {
-  not_found: 404,
-  conflict: 409,
-  invalid: 422,
-  unauthenticated: 401,
-  forbidden: 403,
-  unavailable: 503,
-  unknown: 500,
-  rate_limited: 429,
+  not_found: 404, conflict: 409, invalid: 422, unauthenticated: 401,
+  forbidden: 403, unavailable: 503, unknown: 500, rate_limited: 429,
 } as const satisfies Record<AgentErrorCode, number>;
 
 const STATUS_TEXT: Record<number, string> = {
@@ -34,28 +28,18 @@ const STATUS_TEXT: Record<number, string> = {
 const ERROR_STATUSES_READ = [401, 403, 429, 500, 503];
 const ERROR_STATUSES_WRITE = [400, 401, 403, 413, 422, 429, 500, 503];
 
-export function apiBaseUrl(origin: string): string {
-  return `${origin.replace(/\/+$/, "")}/api/v1`;
-}
-
-export function specUrl(origin: string): string {
-  return `${apiBaseUrl(origin)}/openapi.json`;
-}
-
+export const apiBaseUrl = (origin: string): string => `${origin.replace(/\/+$/, "")}/api/v1`;
+export const specUrl = (origin: string): string => `${apiBaseUrl(origin)}/openapi.json`;
 /** GET /api/v1/guide: the house rules with examples, and the workflows. Read before writing anything. */
-export function guideUrl(origin: string): string {
-  return `${apiBaseUrl(origin)}/guide`;
-}
-
+export const guideUrl = (origin: string): string => `${apiBaseUrl(origin)}/guide`;
 /** GET /api/v1/vocabulary: the names agents may use (playbooks, tags, accounts). Advertised here; built in API-2a. */
-export function vocabularyUrl(origin: string): string {
-  return `${apiBaseUrl(origin)}/vocabulary`;
-}
+export const vocabularyUrl = (origin: string): string => `${apiBaseUrl(origin)}/vocabulary`;
 
 /** Rule reminders repeated on record writes, so an agent meets the rules that matter where it writes (07 §2.1 item 2). */
 const writeRuleReminder = (origin: string) =>
-  "House rules to follow on this write: HR-1 notes are commentary only; HR-2 verify fill times against 1-minute candles; " +
-  "HR-3 vocabulary names only; HR-4 stop moves carry times; HR-5 stop and trail mean the working stop triggered (the fill may slip); " +
+  "House rules to follow on this write: HR-1 notes are commentary only (note = 1-line Pit Stop takeaway, pre_trade_thesis = pre-entry why, management_notes = in-trade decisions, post_exit_notes = reflection/lesson); " +
+  "HR-2 verify fill times against 1-minute candles; HR-3 vocabulary names only; HR-4 timed stop moves carry times (unknown move times stay empty stop_moves = untimed); " +
+  "HR-5 stop and trail mean the working stop triggered (the fill may slip); HR-6 $300 (30000 cents) is the standard R unit and whole-micro ceiling rounding is expected; " +
   "HR-7 keep stated_risk_r as the trader said it; HR-9 daily reviews go in daily_reviews; HR-10 never write derived values. " +
   `Read the full rules at ${guideUrl(origin)}.`;
 
@@ -64,34 +48,14 @@ const TRADE_WRITE_NOTE =
   " Trades: refused with 422 when playbook_id or account_id is not the owner's (the message lists the valid ones), " +
   "when a quick_tags value is not in the vocabulary, when entry_time or exit_time is more than 5 minutes in the future, " +
   "or when risk_cents differs from the computed value. Saved trades also return `warnings` (never blocking): " +
-  "playbook_missing, setup_tag_missing, notes_restate_fields (HR-1), stop_moved_without_time (HR-4), " +
-  "exit_reason_mismatch (HR-5), stated_risk_differs (HR-7), price_out_of_range (only when cached bars exist).";
+  "playbook_missing, setup_tag_missing, stated_risk_missing, notes_restate_fields (HR-1), notes_duplicate_thesis (HR-1), " +
+  "notes_restate_exit_reason (HR-1), stop_moved_without_time (HR-4), exit_reason_mismatch (HR-5), stated_risk_differs (HR-7), " +
+  "price_out_of_range (only when cached bars exist). See components.schemas.TradeRecord for note-field roles.";
 
 const ERROR_ENUM = Object.keys(ERROR_CODES);
-
-const typeParam = {
-  name: "type",
-  in: "path",
-  required: true,
-  description: "The collection (journal record type).",
-  schema: { type: "string", enum: [...COLLECTION_KEYS] },
-};
-
-const keyParam = {
-  name: "key",
-  in: "path",
-  required: true,
-  description: "The singleton document.",
-  schema: { type: "string", enum: [...SINGLETON_KEYS] },
-};
-
-const idParam = {
-  name: "id",
-  in: "path",
-  required: true,
-  description: "The record id, URL-encoded (ids may contain `:`).",
-  schema: { type: "string" },
-};
+const typeParam = { name: "type", in: "path", required: true, description: "The collection (journal record type).", schema: { type: "string", enum: [...COLLECTION_KEYS] } };
+const keyParam = { name: "key", in: "path", required: true, description: "The singleton document.", schema: { type: "string", enum: [...SINGLETON_KEYS] } };
+const idParam = { name: "id", in: "path", required: true, description: "The record id, URL-encoded (ids may contain `:`).", schema: { type: "string" } };
 
 /** `?include=derived` on trades and accounts. The block is computed on read and never stored (docs/07 §3.5). */
 const includeParam = {
@@ -215,11 +179,7 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
             warnings: {
               type: "array",
               description: "Trade writes only. Non-blocking warnings about the saved trade; empty when there are none.",
-              items: {
-                type: "object",
-                required: ["code", "message"],
-                properties: { code: { type: "string" }, message: { type: "string" } },
-              },
+              items: { type: "object", required: ["code", "message"], properties: { code: { type: "string" }, message: { type: "string" } } },
             },
           },
         },
@@ -235,6 +195,52 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
                 code: { type: "string", enum: ERROR_ENUM },
                 message: { type: "string", description: "Plain-language message, safe to show." },
               },
+            },
+          },
+        },
+        TradeRecord: {
+          type: "object",
+          description:
+            "Journal trade shape for /records/trades and /checks/trade. Commentary-only note fields (HR-1): never restate prices, " +
+            "stop distance, contract count, dollar risk, R, or exit_reason. Standard R unit is $300 (r_size_cents = 30000); " +
+            "whole-micro ceiling rounding up by less than 1 micro over target is expected (HR-6).",
+          properties: {
+            note: {
+              type: "string",
+              description: "Short 1-line Pit Stop takeaway shown on cards/feed (optional; never duplicate pre_trade_thesis).",
+              example: "Clean ONL reclaim, slightly early entry.",
+            },
+            pre_trade_thesis: {
+              type: "string",
+              description: "Pre-entry reasoning — why this setup was worth taking before entry.",
+              example: "VWAP reclaim after ONL sweep held higher low against 15m demand.",
+            },
+            management_notes: {
+              type: "string",
+              description: "Decisions made during the trade (holds, trails, scratches, hesitation).",
+              example: "Held through mid-bar chop; trailed under higher swing low once momentum expanded.",
+            },
+            post_exit_notes: {
+              type: "string",
+              description: "Post-exit reflection/lesson — what to repeat or change next time (never restate exit_reason, prices, contracts, or R).",
+              example: "Wait for 1m close above the reclaim level next time instead of anticipating.",
+            },
+            stop_moves: {
+              type: "array",
+              description:
+                "Timed stop updates [{ price, time }] (UTC ISO-8601 inside the hold). Leave empty with initial_stop_price != stop_loss_price " +
+                "when the exact move minute is unknown (treated as \"untimed\"); never fabricate an exit-time move (HR-4).",
+              items: {
+                type: "object",
+                required: ["price", "time"],
+                properties: { price: { type: "number" }, time: { type: "string", format: "date-time" } },
+              },
+            },
+            stated_risk_r: {
+              type: "number",
+              nullable: true,
+              description: "Trader's stated target risk in R (e.g. 0.25) against the account's r_size_cents (standard $300 = 30000 cents). Whole-micro ceiling rounding is expected (HR-6, HR-7).",
+              example: 0.25,
             },
           },
         },
@@ -370,13 +376,13 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           operationId: "checkTrade",
           summary: "Check a draft (or stored) trade against the 1m bars before saving: fills, stop moves, findings, warnings and R",
           description:
-            "Read scope although it is a POST: it writes nothing, so call it as often as needed (HR-2). Body: a draft trade in the create " +
-            "shape, or { \"id\": \"…\" } for a stored trade. Each fill is matched within 5 minutes (match: stated, shifted, outside, no-bars); " +
-            "a shifted fill carries matched (UTC ISO), offset_min and a message to ask the trader. stop_moves are checked against the hold " +
-            "and the tick grid. findings come from the post-entry bar check (the entry bar is never inside the hold). warnings are the " +
-            "write checks (not blocking). refusal is the message a save would be refused with, or null. derived gives risk_cents, risk_r, " +
-            "result_r, r_size_cents, r_size_source and stated_risk_r. The window is the trade's 1m bars from 10 minutes before the entry to " +
-            "10 minutes after the exit (or the entry, when open).",
+            "Read scope although it is a POST: it writes nothing and has a generous pre-flight rate limit, so call it as often as needed (HR-2). " +
+            "Body: a draft trade in the create shape (see TradeRecord), or { \"id\": \"…\" } for a stored trade. Each fill is matched within 5 minutes " +
+            "(match: stated, shifted, outside, no-bars); a shifted fill carries matched (UTC ISO), offset_min and a message to ask the trader. " +
+            "stop_moves are checked against the hold and tick grid (leave stop_moves empty when the move minute is unknown so it stays \"untimed\", HR-4). " +
+            "findings come from the post-entry bar check (the entry bar is never inside the hold). warnings are the non-blocking write checks (including note hygiene). " +
+            "refusal is the message a save would be refused with, or null. derived gives risk_cents, risk_r, result_r, r_size_cents (standard $300 = 30000 cents; " +
+            "whole-micro ceiling rounding up by <1 micro is expected, HR-6), r_size_source and stated_risk_r. The window is the trade's 1m bars from 10 minutes before the entry to 10 minutes after the exit (or the entry, when open).",
           scope: "read",
           requestBody: jsonBody("A draft trade (the create shape), or { \"id\": \"…\" } for a stored trade."),
           success: { status: 200, description: "fills, stop_moves, findings, warnings, refusal, derived and window." },
