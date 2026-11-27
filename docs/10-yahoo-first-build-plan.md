@@ -55,9 +55,9 @@ Not settled: whether the newest bars are delayed. The response has no delay fiel
 
 This is the one time-sensitive task. Nothing else in the project loses data by waiting.
 
-> **Still open (2026-11-22).** The archive is not built: it waits for the owner's Supabase project (`R-04`, #70). Until then candles are cached per device in IndexedDB (`lib/candles.ts`) when a chart opens, so Invariant 2 is only half met: a trade nobody opened within about 30 days loses its `1m` bars for good.
+> **Archive and continuation live (2026-11-26).** The owner approved #70. `showmob-dev` has forced-RLS archive, coverage, run-log and unadjusted-roll tables. It holds 90,840 Databento `MES=F` 1m bars for session dates 2026-08-25 through 2026-11-24, followed by Yahoo bars from the two current sessions to Yahoo's newest available minute. The converter, authoritative loader and idempotent continuation are in `scripts/databento/`. No scheduler is installed yet, and charts still use IndexedDB/Yahoo until a later slice wires archive-first reads.
 
-**What it does.** Once a day, for each symbol, request the last 8 days of `1m` bars in one call, clean them (§2), split them by session, and upsert one row per session into `market_candles` (schema in [09 §8](09-backend-risk-register.md#8-proposed-schema-changes)).
+**What the continuation job does.** For `MES=F`, it requests no more than seven days of `1m` bars per Yahoo call, cleans them (§2), splits them by Chicago session and records the run. Databento is authoritative inside its covered sessions: its loader removes all Yahoo rows in each full covered session before upserting, and the database blocks Yahoo from replacing a Databento row. Yahoo may refresh only Yahoo rows after the seam. Prices remain unadjusted; explicit CME contract comparisons detect Yahoo's session-boundary roll and record the new-minus-old spread rather than silently mixing contracts.
 
 **Why 8 days every day.** Each run overlaps the previous seven. A week of failed runs loses nothing, and there are 30 days of slack before any `1m` bar is gone for good.
 
@@ -67,7 +67,7 @@ This is the one time-sensitive task. Nothing else in the project loses data by w
 
 **Symbols.** `MES=F`, `ES=F`, `MNQ=F`, `NQ=F`. Add `^VIX` and `DX-Y.NYB` if the companion views will use them. See §4 for why both the micro and the mini.
 
-**Where it runs.** One server route in the app (Node runtime, protected by a secret), called daily by a scheduler, plus an **Archive now** button in development. Yahoo is known to throttle datacenter addresses (B-15), and these measurements were taken from a desktop. Test the route from the deployed environment before trusting it. If it is throttled there, run the same code from a scheduled task on a home machine.
+**Where it runs.** The current implementation is a Python command intended for a secured daily systemd timer or equivalent shortly after the 16:00 Chicago close. That timer is not installed in this slice. A later app route would need a protected Node runtime and the same bounded, idempotent and source-precedence rules. Yahoo is known to throttle datacenter addresses (B-15); use a scheduled home-machine task if the deployed environment is throttled.
 
 **Make it visible.** A status row records the last run and the newest archived session per symbol. The Tune screen shows it, and it turns red after three days without a new session.
 

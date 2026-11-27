@@ -9,7 +9,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 
 ---
 
-## Current state (2026-11-22)
+## Current state (2026-11-26)
 
 - **`main` holds UI Phases 1–5, Challenges (`R-09a`–`R-09d`), open trades (`R-03a`–`R-03c`), frozen initial stop (`R-10`), price-first entry & price-axis stretch (`docs/20`), accounts & running totals (`docs/21`), Mood Shape (`docs/18`), and `deriveTrade` (`lib/trade-document.ts`, PR #124).**
 - **Backend boundary (`docs/22`, 2026-11-20):** Supabase is **not** a prerequisite for ordinary product, UI, pure-math, stats, playbook, or render-grammar work. Keep building local-first with fixtures and device storage (`mogmine-trades-v3`) until a feature requires cross-device persistence.
@@ -17,6 +17,7 @@ The volatile file. `AGENTS.md` says what never changes. This says where things s
 - **Owner priority (`D-011`, 2026-11-22):** a usable trading day: end-of-day logging, "pre-anything" planning sessions, levels and indicators on the chart, after-session review. Slices `LV-1`, `LV-2`, `PS-1`–`PS-4` and `IND-1` come right after `TD-3` ([docs/24](docs/24-planning-sessions-and-after-session-review.md)).
 - **Phone behaviour is not verified.** Builds, headless Chromium `390×844` checks, and Yahoo responses passed; persistence, gestures and native sharing have not been checked on a real phone (`AC-11`).
 - **No TopstepX account yet (`D-009`).** Everything is built and tested on Yahoo data. The plan for that is [docs/10](docs/10-yahoo-first-build-plan.md).
+- **Server candle archive exists (#70).** `showmob-dev` has 90,840 authoritative Databento `MES=F` 1m bars for sessions 2026-08-25 through 2026-11-24, followed by Yahoo to its newest available minute. Source precedence, run logging, unadjusted rolls and an idempotent continuation command are built. Scheduling and app archive-first reads remain open.
 - Specs: `docs/01`–`07` (original), `docs/08`–`15`, `docs/16` (roadmap), `docs/17` (challenges), `docs/18` (mood), `docs/19` (design guide), `docs/20` (price-first entry), `docs/21` (accounts), `docs/22` (backend boundary), `docs/23` (card system: Trade Card refresh, drill cards, playbook card; proposal under `OD-46`), `docs/25` (discretionary calls; proposal under `OD-52`).
 - Open decisions in [DECISIONS.md](DECISIONS.md): `OD-37`, `OD-39`–`OD-55`, `OD-30`–`OD-36`, `OD-1`–`OD-29` (except decided `OD-15`, `OD-38`). `OD-3` and `OD-7` are parked until there is a broker account. `OD-17`–`OD-22` are product proposals.
 - **Times display in Central Time** (`lib/time.ts`), the owner's zone. Storage stays UTC and session math stays `America/New_York`.
@@ -58,7 +59,7 @@ Done from `docs/16`: `R-01` pinch zoom (phone check still owed), `R-02` candle r
 
 ### Supabase-gated / Owner-gated (do not block on or pick up unasked)
 
-- `R-04` (owner creates Supabase project + rebase `feat/m0-candle-archive`, `#70`; never touch PR `#71`), `R-05` (Supabase trade persistence, needs `R-04` + `OD-30`), `R-06` (assistant endpoint, needs `R-05` + `OD-19`).
+- `R-04` schema and initial MES backfill are done on `feat/databento-mes-1m`; daily continuation and archive-first reads remain. `R-05` Supabase trade persistence is already built under docs/26; `R-06` assistant work follows its own roadmap.
 - Skip owner-question issues (`#5`–`#9`, `#23`, `#24`, `#39`), parked broker work (`#43`), and `#123`.
 
 Still open from before: `OD-37`, `OD-39`–`OD-45`, `OD-1`, `OD-16`, and `AC-01`–`AC-11` in [docs/10 §7](docs/10-yahoo-first-build-plan.md#acceptance-criteria-for-m0-and-m1). When a TopstepX account exists: get Topstep's written confirmation that a read-only cloud service is allowed (B-01), then reopen `OD-3` and `OD-7`.
@@ -78,6 +79,15 @@ Claim a lane before starting. Clear the claim when you stop.
 | AI review | — | | |
 
 ## Handoff log
+
+### 2026-11-26 — Codex — Databento MES candle archive (#70), Data/Market data lanes released
+
+Did:      Converted 261 Databento DBN day files to 297,855 continuous `MES=F` 1m bars (plus 5m/15m/1h), excluding 22 mapped spreads and selecting the highest-volume outright per Chicago session. Applied forced-RLS `mogmine_market_candles` / `mogmine_market_coverage` and uploaded 90,840 1m bars for sessions 2026-08-25..11-24 plus 66 coverage rows.
+Files:    `scripts/databento/{trades_to_1m.py,test_trades_to_1m.py,README.md}`, `supabase/migrations/20261126073815_mogmine_market_archive.sql`, `docs/{10-yahoo-first-build-plan,26-persistence-contract-and-db-readiness}.md`, `notes/handoffs/2026-11-26-databento-mes-1m.md`.
+Verified: targeted Python tests 3/3; 0 off-tick prices, duplicate keys or invalid OHLC bars; Supabase monthly counts 7,020 / 30,120 / 30,240 / 23,460; forced RLS, authenticated SELECT-only, no anon grants. Yahoo full-range hourly check matched except roll-session lows; recent 1m Yahoo missed 14–34 minutes/session (123 across five).
+Follow-up: Databento sessions now atomically replace all Yahoo rows and cannot be overwritten by Yahoo. Added archive jobs and unadjusted roll rows (49.50 / 63.00 / 66.75 points), verified the Nov 24 Yahoo seam at 0.00 median OHLC difference, and filled Yahoo forward through its newest available 2026-11-26 bar. The daily command detects Yahoo contract switches but no scheduler is installed.
+Left:     Schedule the daily continuation, expose archive status, and wire app archive-first reads. Local market data is under `/home/chriswstubbs/data/databento/`, never Git.
+Watch:    The local series includes a 60-minute partial session dated 2026-11-25 from the input cutoff; it was intentionally not uploaded. Coverage expected bars equal observed active-session minutes until the exchange calendar slice exists.
 
 ### 2026-11-22 — Master Agent (Lane 8) — Wave MM-W2 7-Lane Swarm Integration
 
