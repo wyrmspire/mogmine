@@ -42,7 +42,8 @@ test("R3-15 Shield: DayReviewScreen hides dollar P&L and contract counts wheneve
 
 test("R3-15 #19: DayReviewScreen Share day dialog has role, aria-modal and Escape handling", () => {
   const src = readSource("components/DayReviewScreen.tsx");
-  assert.match(src, /<section className="day-share-sheet" role="dialog" aria-modal="true" aria-label="Share day"/);
+  assert.match(src, /<section ref=\{shareDialogRef\} tabIndex=\{-1\} className="day-share-sheet" role="dialog" aria-modal="true" aria-labelledby="day-share-title"/);
+  assert.match(src, /<strong id="day-share-title">Share day<\/strong>/);
   assert.match(src, /if \(event\.key === "Escape"\) setShareOpen\(false\);/);
   assert.match(src, /window\.addEventListener\("keydown", onKey\);/);
   assert.match(src, /window\.removeEventListener\("keydown", onKey\);/);
@@ -126,4 +127,8 @@ test("R3-15 #19: PlaybookLabGaps gap links enforce 44px and the section is label
   assert.match(src, /<Link href="\/tune#playbooks" style=\{\{ minHeight: 44, display: "inline-flex", alignItems: "center" \}\}>/);
   assert.doesNotMatch(src, /formatMoney|formatUsd|\.quantity|currency/);
   assert.doesNotMatch(src, HARDCODED_COLOUR);
+});
+
+test("agent key page says Shield does not apply to the API (docs/16 §6)", () => {
+  assert.match(readSource("components/AgentKeysScreen.tsx"), /Shield does not apply to the agent API\./);
 });

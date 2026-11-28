@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRef, type KeyboardEvent } from "react";
 import { DayHeader } from "./DayHeader";
 import { MoodStatsCard } from "./MoodCard";
 import { TradeRow } from "./TradeRow";
@@ -46,6 +47,28 @@ export function FeedScreen() {
   const setFilters = (patch: Partial<FeedFilters>) => router.replace(buildFeedUrl(pathname, { ...filters, ...patch }, scope), { scroll: false });
   const setScope = (nextScope: AccountScopeFilter) => router.replace(buildFeedUrl(pathname, filters, nextScope), { scroll: false });
   const clearFilters = () => router.replace(buildFeedUrl(pathname, { status: "all" }, scope), { scroll: false });
+  const tradeListRef = useRef<HTMLDivElement>(null);
+  const handleTradeListKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const target = event.target as HTMLElement;
+    if (target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+    const list = tradeListRef.current;
+    if (!list || !list.contains(document.activeElement)) return;
+    const rows = Array.from(list.querySelectorAll<HTMLAnchorElement>("a.trade-row"));
+    const focusedRow = document.activeElement?.closest<HTMLAnchorElement>("a.trade-row");
+    const focusedIndex = focusedRow ? rows.indexOf(focusedRow) : -1;
+    if (event.key === "j" || event.key === "k") {
+      event.preventDefault();
+      const nextIndex = focusedIndex < 0 ? 0 : focusedIndex + (event.key === "j" ? 1 : -1);
+      rows[Math.max(0, Math.min(nextIndex, rows.length - 1))]?.focus();
+    } else if (event.key === "Enter" && focusedRow) {
+      event.preventDefault();
+      focusedRow.click();
+    } else if (event.key === "Escape" && focusedRow) {
+      event.preventDefault();
+      focusedRow.blur();
+    }
+  };
 
   if (!journal.hydrated) {
     return <div className="page" role="status" aria-label="Loading your journal…"><div className="page-head"><div><span className="eyebrow">Feed</span><h1>Loading your journal…</h1></div></div>{[0, 1, 2].map((key) => <div key={key} className="skeleton skeleton-row" />)}</div>;
@@ -144,12 +167,16 @@ export function FeedScreen() {
           )}
         </div>
       ) : (
-        groups.map((group) => (
+        <div ref={tradeListRef} onKeyDown={handleTradeListKeyDown} aria-describedby="feed-keyboard-hint">
+          <p className="eyebrow" id="feed-keyboard-hint">J/K navigate · Enter open · Esc clear focus</p>
+          <p className="visually-hidden">Keyboard: J moves to the next trade, K to the previous trade, Enter opens the focused trade, and Escape clears focus.</p>
+        {groups.map((group) => (
           <section key={group.date} className="day-group" aria-label={`Trading session ${group.date}`}>
             <DayHeader group={group} shield={prefs.shield} />
             <div className="trade-list grid">{group.trades.map((trade) => <TradeRow key={trade.id} trade={trade} zone={prefs.timeZone} shield={prefs.shield} isReplay={isReplayTrade(trade, accounts.accounts)} onOpen={open} />)}</div>
           </section>
-        ))
+        ))}
+        </div>
       )}
 
       {groups.length > 0 && <MoodStatsCard trades={all} />}

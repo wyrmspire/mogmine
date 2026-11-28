@@ -5,7 +5,7 @@
 // `invalid` and nothing is written. Money is never rounded or coerced here (Guardrail 4).
 import type {
   CollectionKey, CollectionRecordTypes, CollectionRepository, JournalRepositories, ListQuery, PersistErrorCode,
-  PersistResult, RecordId, RecordTypeKey, SingletonKey, SingletonRecordTypes, SingletonRepository, Stored, UserId,
+  PersistResult, RecordId, RecordTypeKey, SingletonKey, SingletonRecordTypes, SingletonRepository, Stored, UserId, WriteOptions,
 } from "../persistence/contract.ts";
 import { RECORD_CONTRACTS, contractFor } from "../persistence/registry.ts";
 import { DEFAULT_OWNER_USER_ID, isStopMove, normalizeTrade, toTicks, validateTradeInput } from "../trades.ts";
@@ -266,13 +266,13 @@ export interface JournalCommands {
    */
   listFiltered<K extends CollectionKey>(key: K, query?: ListQuery, filters?: AgentListFilters): Promise<PersistResult<CollectionRecordTypes[K][]>>;
   /** Shallow patch over the stored record, re-validated as a whole. Fails with `conflict` if the row changed since it was read. */
-  update<K extends CollectionKey>(key: K, id: RecordId, patch: Record<string, unknown>): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
+  update<K extends CollectionKey>(key: K, id: RecordId, patch: Record<string, unknown>, options?: WriteOptions): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
   /** Sets `archived` on types whose delete policy is `archive` (accounts, playbooks). */
   archive<K extends CollectionKey>(key: K, id: RecordId): Promise<PersistResult<Stored<CollectionRecordTypes[K]>>>;
   /** Hard delete. Archive-policy types return `forbidden`. Children with `cascade_parent` (e.g. a trade's drills) go first. */
   remove<K extends CollectionKey>(key: K, id: RecordId): Promise<PersistResult<void>>;
   readSingleton<K extends SingletonKey>(key: K): Promise<PersistResult<Stored<SingletonRecordTypes[K]> | null>>;
-  writeSingleton<K extends SingletonKey>(key: K, raw: unknown): Promise<PersistResult<Stored<SingletonRecordTypes[K]>>>;
+  writeSingleton<K extends SingletonKey>(key: K, raw: unknown, options?: WriteOptions): Promise<PersistResult<Stored<SingletonRecordTypes[K]>>>;
 }
 
 /**
@@ -378,11 +378,15 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
       return { ok: true, value: limited as CollectionRecordTypes[typeof key][] };
     },
 
-    async update(key, id, patch) {
+    async update(key, id, patch, options) {
       const derived = derivedFieldIn(key, patch);
       if (derived) return fail("forbidden", `${derived} is derived and cannot be stored.`, key, id);
       const current = await repoFor(key).get(owner, id);
       if (!current.ok) return current;
+      if (options?.expectedUpdatedAt && current.value.meta.updated_at !== options.expectedUpdatedAt) {
+        return fail("conflict", "This record changed somewhere else. Reload and try again.", key, id);
+      }
+      const expectedUpdatedAt = options?.expectedUpdatedAt ?? current.value.meta.updated_at;
       // A stored risk_cents may be stale once entry, stop or quantity change. Unless the patch sets it, drop it so
       // the recomputed value is checked instead of the old one.
       const base = key === "trades" && !("risk_cents" in patch) ? { ...current.value.record, risk_cents: undefined } : current.value.record;
@@ -396,16 +400,16 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
         const clash = scopeChanged ? await reviewScopeClash(after) : null;
         if (clash) return clash;
       }
-      if (key !== "trades") return write(key, parsed.value, current.value.meta.updated_at);
+      if (key !== "trades") return write(key, parsed.value, expectedUpdatedAt);
       const trade = parsed.value as TradeRecord;
       const accountChanged = "account_id" in patch && patch.account_id !== (current.value.record as TradeRecord).account_id;
       if (!accountChanged && trade.r_size_cents != null) {
-        return write(key, trade as CollectionRecordTypes[typeof key], current.value.meta.updated_at);
+        return write(key, trade as CollectionRecordTypes[typeof key], expectedUpdatedAt);
       }
       const inputs = await rSizeInputs();
       if (!inputs.ok) return inputs;
       const frozen = withFrozenRSize(trade, inputs.value, accountChanged);
-      return write(key, frozen as CollectionRecordTypes[typeof key], current.value.meta.updated_at);
+      return write(key, frozen as CollectionRecordTypes[typeof key], expectedUpdatedAt);
     },
 
     async archive(key, id) {
@@ -437,12 +441,12 @@ export function createJournalCommands(repos: JournalRepositories, owner: UserId 
 
     readSingleton(key) { return repos[key].get(owner) as Promise<PersistResult<Stored<SingletonRecordTypes[typeof key]> | null>>; },
 
-    async writeSingleton(key, raw) {
+    async writeSingleton(key, raw, options) {
       const parsed = SINGLETON_PARSERS[key](raw);
       if (!parsed.ok) return fail("invalid", parsed.message, key);
       const stamped = ownedBy(key, parsed.value);
       if (!stamped.ok) return fail("forbidden", stamped.message, key);
-      return (repos[key] as SingletonRepository<SingletonRecordTypes[typeof key]>).put(owner, stamped.value);
+      return (repos[key] as SingletonRepository<SingletonRecordTypes[typeof key]>).put(owner, stamped.value, options);
     },
   };
   return commands;

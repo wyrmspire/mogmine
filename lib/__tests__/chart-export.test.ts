@@ -107,5 +107,5 @@ test("TradeChart screenshot() toggles export mode around takeScreenshot and rest
   assert.match(fin, /l\.primitive\.setExportMode\(false\);/);
   assert.match(fin, /sizeForExport\(l, l\.host\.clientWidth, l\.host\.clientHeight, view\)/);
   assert.match(fin, /paintLevels\(l, paint, "tap", livePills\);/);
-  assert.match(body, /computeExportDimensions\(l\.host\.clientWidth, l\.host\.clientHeight, window\.devicePixelRatio \|\| 1\)/);
+  assert.match(body, /computeExportDimensions\(l\.host\.clientWidth, l\.host\.clientHeight, safeDevicePixelRatio\(window\.devicePixelRatio\)\)/);
 });

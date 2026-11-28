@@ -6,6 +6,7 @@ import { isValidRSizeCents, isValidStatedRiskR, riskCents } from "./r-size.ts";
 import type { TradingAccount } from "./accounts.ts";
 import type { Prefs } from "./prefs-sanitize.ts";
 import { partialsTradeMetrics, sanitizePartialExits, sanitizePartialTargets, type PartialExit, type PartialTarget } from "./partials-record.ts";
+import { agentNoteFields, isAgentWriteProvenance } from "./agent/provenance.ts";
 export { expectedInsideBarTimes } from "./session.ts";
 export type { PartialExit, PartialTarget } from "./partials-record.ts";
 
@@ -147,6 +148,8 @@ export interface TradeRecord {
   note: string;
   review_status: ReviewStatus;
   playbook_id: string | null;
+  /** Immutable playbook snapshot in force when the playbook was assigned. Null on legacy/unfiled trades. */
+  playbook_version?: number | null;
   quick_tags: string[];
   checklist_state: ChecklistItem[];
   pre_trade_thesis: string;
@@ -173,6 +176,9 @@ export interface TradeRecord {
    * stored before this field existed.
    */
   annotations_modified?: boolean;
+  /** Non-secret provenance for agent-authored note fields; absent on legacy records. */
+  agent_provenance?: import("./agent/provenance.ts").AgentWriteProvenance;
+  agent_provenance_fields?: import("./agent/provenance.ts").AgentNoteField[];
   /** R size in whole cents, frozen when the trade was saved (04 §3.3, D-B). Null on older records: resolved at read time. */
   r_size_cents?: number | null;
   /** The risk the trader said, as a share of R (e.g. 0.25). Typed input, never computed. Null when not stated. */
@@ -985,12 +991,13 @@ export function candleSignature(trade: Pick<TradeRecord, "symbol" | "entry_time"
  * Stable text for the trader-written annotations (issue #62). Two records with the same key show the
  * same notes, tags, playbook and checklist ticks. Checklist rows compare by id, label and checked state.
  */
-export function annotationKey(trade: Partial<Pick<TradeRecord, "note" | "quick_tags" | "checklist_state" | "playbook_id" | "pre_trade_thesis" | "management_notes" | "post_exit_notes">>) {
+export function annotationKey(trade: Partial<Pick<TradeRecord, "note" | "quick_tags" | "checklist_state" | "playbook_id" | "playbook_version" | "pre_trade_thesis" | "management_notes" | "post_exit_notes">>) {
   return JSON.stringify([
     trade.note ?? "",
     trade.quick_tags ?? [],
     (trade.checklist_state ?? []).map((item) => [item.id, item.label, item.checked === true]),
     trade.playbook_id ?? null,
+    trade.playbook_version ?? null,
     trade.pre_trade_thesis ?? "",
     trade.management_notes ?? "",
     trade.post_exit_notes ?? "",
@@ -1030,6 +1037,7 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     note: "",
     review_status: "new",
     playbook_id: null,
+    playbook_version: null,
     quick_tags: [],
     checklist_state: [],
     pre_trade_thesis: "",
@@ -1045,6 +1053,14 @@ export function normalizeTrade(raw: Partial<TradeRecord> & Pick<TradeRecord, "id
     status,
   };
   trade.symbol = symbol;
+  trade.playbook_version = trade.playbook_id && Number.isInteger(raw.playbook_version) && (raw.playbook_version as number) >= 1
+    ? raw.playbook_version as number
+    : null;
+  if (isAgentWriteProvenance(raw.agent_provenance)) trade.agent_provenance = raw.agent_provenance;
+  else delete trade.agent_provenance;
+  const provenanceFields = agentNoteFields(raw.agent_provenance_fields);
+  if (provenanceFields.length > 0 && trade.agent_provenance) trade.agent_provenance_fields = provenanceFields;
+  else delete trade.agent_provenance_fields;
   if (canonicalTicker) trade.yahoo_ticker = canonicalTicker;
   // Only a missing quantity defaults to 1. A stored 0 or 1.5 stays visible, and its money reads as null.
   if (trade.quantity == null) trade.quantity = 1;

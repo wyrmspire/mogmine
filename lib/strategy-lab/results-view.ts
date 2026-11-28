@@ -21,6 +21,58 @@ export const TOP_SEPARATORS = 3;
 export type BucketTone = "full" | "thin" | "counts";
 export type Sign = "pos" | "neg" | "zero" | "none";
 
+/** The active execution-cost assumption shown with a Strategy Lab result. */
+export interface SlippageAssumption {
+  stopTicks: number;
+  marketTicks: number;
+  value: string;
+}
+
+export const HYPOTHETICAL_LABEL = "Hypothetical";
+export const HYPOTHETICAL_NOTE = "Hypothetical — simulated results, not executed trades.";
+export const HYPOTHETICAL_CONTEXT_NOTE = "Hypothetical — simulated context, not executed trades.";
+
+export function researchGovernanceLines(data: RunResult["data"]): string[] {
+  const r = data.research ?? {
+    mode: "discovery" as const,
+    conditionsSearched: [],
+    variantsSearched: [],
+    independentSessionCount: data.sessionsUsed.length,
+    recipeHash: "legacy",
+    source: null,
+    roll: null,
+    heldOut: false,
+    trialCount: 1,
+    discoverySessions: [],
+    validationSessions: [],
+  };
+  const mode = r.mode === "validation" && r.heldOut ? "Held-out validation" : "Exploratory discovery";
+  const boundary = r.mode === "validation"
+    ? `${r.discoverySessions?.length ?? 0} discovery / ${r.validationSessions?.length ?? 0} validation sessions`
+    : `${r.discoverySessions?.length || r.independentSessionCount} discovery sessions`;
+  return [
+    `${mode} · trial ${r.trialCount ?? 1} · ${r.independentSessionCount} independent sessions · recipe ${r.recipeHash}`,
+    `Boundary: ${boundary}`,
+    `Searched: ${[...r.conditionsSearched, ...r.variantsSearched].join(" · ") || "recipe conditions and variants"}`,
+    `Source: ${r.source ?? "not recorded"}${r.roll ? ` · roll ${r.roll}` : ""}`,
+  ];
+}
+
+/** Formats the recipe's deterministic slippage inputs without changing run calculations. */
+export function slippageAssumption(slippageTicks: { stop: number; market: number }): SlippageAssumption {
+  const stopTicks = slippageTicks.stop;
+  const marketTicks = slippageTicks.market;
+  return {
+    stopTicks,
+    marketTicks,
+    value: `Slippage: ${stopTicks} ticks stop · ${marketTicks} ticks market`,
+  };
+}
+
+export function slippageAssumptionText(slippageTicks?: { stop: number; market: number }): string {
+  return slippageTicks ? slippageAssumption(slippageTicks).value : "Slippage assumption unavailable";
+}
+
 const finite = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
 
 /** "+0.21R", "−0.25R", "0.00R", or "—" when there is no value. Rounds first so −0.001 reads "0.00R". */

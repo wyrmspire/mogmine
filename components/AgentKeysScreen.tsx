@@ -152,6 +152,7 @@ function AgentKeys() {
       <section className="card card-pad" style={SECTION} aria-labelledby="agent-connect">
         <h2 id="agent-connect" style={HEAD}>Connect an assistant</h2>
         <p className="muted" style={{ margin: 0 }}>Give your assistant these two things: the spec URL and a key.</p>
+        <div className="banner warn" role="note" style={{ margin: 0 }}>Shield does not apply to the agent API. A key with read access gets dollar amounts, size and account names even when Shield is on.</div>
         <CopyRow label="Base URL" value={base} onCopy={() => copy(base, "Base URL")} />
         <CopyRow label="OpenAPI spec URL" value={spec} onCopy={() => copy(spec, "Spec URL")} />
       </section>

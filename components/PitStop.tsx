@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { EXECUTION_TAGS, SETUP_TAGS, checklistFor, playbookName } from "@/lib/playbooks";
-import { activePlaybooks, usePlaybooks } from "@/lib/playbooks-store";
+import { activePlaybooks, currentPlaybookVersion, usePlaybooks } from "@/lib/playbooks-store";
 import { getTrade, updateTrade, useJournal } from "@/lib/store";
 import { showToast } from "@/lib/toast";
 import { useInlineSaveText } from "./useSaveLabel";
@@ -59,12 +59,12 @@ export function PitStop({ trade, compact = false }: Props) {
 
   const setPlaybook = (id: string) => {
     if (trade.playbook_id === id) {
-      const before = { playbook_id: trade.playbook_id, checklist_state: trade.checklist_state };
-      updateTrade(trade.id, { playbook_id: null, checklist_state: [] });
+      const before = { playbook_id: trade.playbook_id, playbook_version: trade.playbook_version, checklist_state: trade.checklist_state };
+      updateTrade(trade.id, { playbook_id: null, playbook_version: null, checklist_state: [] });
       showToast(`Removed ${playbookName(id, allPlaybooks)}`, { label: "Undo", run: () => updateTrade(trade.id, before) });
     } else {
       // The rules are frozen on the trade now; editing a playbook later never rescores old trades (UX-50).
-      updateTrade(trade.id, { playbook_id: id, checklist_state: checklistFor(id, allPlaybooks) });
+      updateTrade(trade.id, { playbook_id: id, playbook_version: currentPlaybookVersion(id) ?? 1, checklist_state: checklistFor(id, allPlaybooks) });
     }
   };
 
@@ -77,8 +77,8 @@ export function PitStop({ trade, compact = false }: Props) {
 
   const sameAsLast = () => {
     if (!last) return;
-    const before = { playbook_id: trade.playbook_id, checklist_state: trade.checklist_state, quick_tags: trade.quick_tags };
-    updateTrade(trade.id, { playbook_id: last.playbook_id, checklist_state: checklistFor(last.playbook_id, allPlaybooks), quick_tags: [...last.quick_tags] });
+    const before = { playbook_id: trade.playbook_id, playbook_version: trade.playbook_version, checklist_state: trade.checklist_state, quick_tags: trade.quick_tags };
+    updateTrade(trade.id, { playbook_id: last.playbook_id, playbook_version: last.playbook_id ? currentPlaybookVersion(last.playbook_id) ?? 1 : null, checklist_state: checklistFor(last.playbook_id, allPlaybooks), quick_tags: [...last.quick_tags] });
     showToast("Copied from the last trade", { label: "Undo", run: () => updateTrade(trade.id, before) });
   };
 

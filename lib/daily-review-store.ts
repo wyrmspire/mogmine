@@ -38,13 +38,15 @@ function set(patch: Partial<DailyReviewsState>) {
   listeners.forEach((listener) => listener());
 }
 
-function persist() {
-  if (typeof window === "undefined") return;
+function persist(): boolean {
+  if (typeof window === "undefined") return false;
   try {
     localStorage.setItem(DAILY_REVIEWS_STORAGE_KEY, JSON.stringify(state.reviews));
     if (!state.saved) set({ saved: true });
+    return true;
   } catch {
     if (state.saved) set({ saved: false });
+    return false;
   }
 }
 
@@ -114,6 +116,14 @@ export function getDailyReviews(): readonly DailyReview[] {
 export function getDailyReviewsBackup(): DailyReview[] {
   hydrateDailyReviews();
   return sanitizeDailyReviews(state.reviews);
+}
+
+/** Re-attempt the device write without rebuilding the screen or discarding any in-progress form state. */
+export async function retryDailyReviews(): Promise<boolean> {
+  hydrateDailyReviews();
+  if (!persist()) return false;
+  await dailyReviewsSync.flushNow();
+  return true;
 }
 
 /**

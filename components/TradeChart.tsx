@@ -19,6 +19,8 @@ import type { Mark } from "@/lib/trade-marks";
 import type { NeighbourTradeProjection } from "@/lib/neighbour-trades";
 import { levelPills, tradeAnchors, type LevelLine, type LevelPill } from "@/lib/chart-levels";
 import { computeExportDimensions } from "@/lib/chart-export";
+import { filledCandleColors } from "@/lib/chart-paint";
+import { finiteCssPoint, nearestBarIndexAtTime, safeDevicePixelRatio } from "@/lib/chart-thin-width";
 import { resolveTapAction, type LevelHit } from "@/lib/level-hit-test";
 import { usePrefs } from "@/lib/prefs";
 import type { LevelLabelsMode, VwapBandsMode } from "@/lib/prefs-sanitize";
@@ -335,7 +337,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       paintLevels(l, paint, "always", exportPills);
       l.levelLabels = exportPills.map((pill) => pill.label);
       applyLevelRightOffset(l);
-      const exp = computeExportDimensions(l.host.clientWidth, l.host.clientHeight, window.devicePixelRatio || 1);
+      const exp = computeExportDimensions(l.host.clientWidth, l.host.clientHeight, safeDevicePixelRatio(window.devicePixelRatio));
       const view: ExportView = { logical: l.chart.timeScale().getVisibleLogicalRange(), auto: l.chart.priceScale("right").options().autoScale, prices: l.chart.priceScale("right").getVisibleRange() };
       l.primitive.setExportMode(true);
       try {
@@ -370,10 +372,7 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       crosshair: { vertLine: { color: t.crosshair, labelBackgroundColor: t.crosshairLabel }, horzLine: { color: t.crosshair, labelBackgroundColor: t.crosshairLabel } },
     });
     l.series.applyOptions({
-      upColor: t.candleUp,
-      downColor: t.candleDown,
-      wickUpColor: t.candleUp,
-      wickDownColor: t.candleDown,
+      ...filledCandleColors(t.candleUp, t.candleDown),
       // Keep recorded fill, stop and target prices in view even when a missing bar prevents anchoring a mark.
       autoscaleInfoProvider: ((baseImplementation) => {
         const base = baseImplementation();
@@ -492,6 +491,9 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
         height: host.clientHeight,
         layout: { fontSize: 11, attributionLogo: false }, // licence notice lives on Tune (UX-E5, D-V4)
         rightPriceScale: { scaleMargins: { top: 0.14, bottom: 0.12 } },
+        // Keep zoom continuous down to approximately one CSS pixel per candle (D-014/RM-E2).
+        // Do not restore the former 3px floor: thin-width crosshair and level hit-testing are
+        // deliberately covered by the interaction layer below.
         timeScale: { timeVisible: true, secondsVisible: false, rightOffset: DEFAULT_RIGHT_OFFSET_BARS, minBarSpacing: MIN_BAR_SPACING_PX },
         // A vertical swipe that starts on the chart scrolls the page (UX-41). The chart owns pinch (UX-44).
         handleScroll: { vertTouchDrag: false },
@@ -536,7 +538,14 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
       draw.current();
 
       chart.subscribeCrosshairMove((param) => {
-        const bar = param.time != null && param.point ? param.seriesData.get(series) as { open: number; high: number; low: number; close: number } | undefined : undefined;
+        const seriesBar = param.time != null && finiteCssPoint(param.point)
+          ? param.seriesData.get(series) as { open: number; high: number; low: number; close: number } | undefined
+          : undefined;
+        // At ~1px spacing a pointer can fall between candle columns and LWC may omit seriesData.
+        // Use the nearest loaded bar for the readout, while leaving the library crosshair itself authoritative.
+        const fallbackIndex = param.time == null ? null : nearestBarIndexAtTime(Number(param.time) * 1000, state.renderedBars.map((bar) => bar.time));
+        const fallback = fallbackIndex == null ? undefined : state.renderedBars[fallbackIndex];
+        const bar = seriesBar ?? fallback;
         const target = latest.current.readout?.current;
         if (target) {
           const symbol = latest.current.trade.symbol;
@@ -551,11 +560,12 @@ export function TradeChart({ ref, trade, bars, timeframe, marks, levels = NO_LEV
 
       // Priority (docs/03 §3): neighbour trade box, then level ray or zone, then dismiss an open card.
       const onChartClick = (param: import("lightweight-charts").MouseEventParams<Time>) => {
-        if (!param.point) return;
-        const hitTradeId = state.primitive.hitTestTradeId(param.point.x, param.point.y)
-          ?? state.primitive.hitTest(param.point.x, param.point.y)?.externalId
+        const point = finiteCssPoint(param.point);
+        if (!point) return;
+        const hitTradeId = state.primitive.hitTestTradeId(point.x, point.y)
+          ?? state.primitive.hitTest(point.x, point.y)?.externalId
           ?? (param.hoveredObjectId as string | undefined);
-        const action = resolveTapAction(hitTradeId ?? null, state.levelsPrimitive.hitTestLevel(param.point.x, param.point.y));
+        const action = resolveTapAction(hitTradeId ?? null, state.levelsPrimitive.hitTestLevel(point.x, point.y));
         if (action.kind === "neighbour") latest.current.onSelectNeighbour?.(action.tradeId);
         const hit = action.kind === "level" ? action.hit : null;
         setOpenLevel(hit ? { hit, fromList: false } : null);

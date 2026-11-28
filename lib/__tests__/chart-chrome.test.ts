@@ -22,8 +22,8 @@ test("effectiveRightOffsetBars falls back to the breathing room when barSpacing 
   assert.equal(effectiveRightOffsetBars(0, 0, 0), 2);
 });
 
-test("MIN_BAR_SPACING_PX keeps 1m candles at least 3 px wide (§7.3)", () => {
-  assert.ok(MIN_BAR_SPACING_PX >= 3);
+test("MIN_BAR_SPACING_PX allows continuous zoom toward approximately 1 px (D-014)", () => {
+  assert.equal(MIN_BAR_SPACING_PX, 1);
 });
 
 test("TRADINGVIEW_ATTRIBUTION links to the lightweight-charts page", () => {
@@ -31,7 +31,7 @@ test("TRADINGVIEW_ATTRIBUTION links to the lightweight-charts page", () => {
   assert.match(TRADINGVIEW_ATTRIBUTION.notice, /Apache License 2\.0/);
 });
 
-test("TradeChart turns off the attribution logo and sets the offset and bar-spacing floor (F-10, §7.3)", () => {
+test("TradeChart turns off the attribution logo and sets the offset and continuous bar spacing (F-10, D-014)", () => {
   const src = read("components/TradeChart.tsx");
   assert.match(src, /attributionLogo: false/);
   assert.doesNotMatch(src, /attributionLogo: true/);

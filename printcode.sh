@@ -251,6 +251,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------------------------------------------------------------------------
+# Snapshot for ./gitrdif.sh (full default dumps only). Taken before any file is
+# read, so an edit made while dumping shows up in the next diff.
+# ---------------------------------------------------------------------------
+SNAPSHOT_TREE=""
+if [[ "$OUTPUT_PREFIX" == "dump" && "$LIST_ONLY" != true && -z "$SLICE_MODE$MAX_FILES$MAX_BYTES" ]] \
+    && (( ${#AREAS[@]} + ${#INCLUDE_PATHS[@]} + ${#USER_EXCLUDES[@]} + ${#EXT_FILTER[@]} == 0 )) \
+    && git -C "$PROJECT_ROOT" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    SNAPSHOT_TREE="$(bash "$PROJECT_ROOT/scripts/dump-snapshot.sh")"
+fi
+
+# ---------------------------------------------------------------------------
 # Build include patterns from areas + paths
 # ---------------------------------------------------------------------------
 declare -a INCLUDE_PATTERNS=()
@@ -292,7 +303,7 @@ ALL_EXCLUDES=("${DEFAULT_EXCLUDES[@]}" "${USER_EXCLUDES[@]}")
 # ---------------------------------------------------------------------------
 # Original extensions: py sh md yaml yml ts tsx css
 # Added toml json ini for config area support
-DEFAULT_EXTS=(py sh md yaml yml ts tsx css toml json ini js mjs html svg)
+DEFAULT_EXTS=(py sh md yaml yml ts tsx css toml json ini js mjs html svg sql)
 
 # ---------------------------------------------------------------------------
 # Language hint from extension
@@ -382,6 +393,17 @@ FIND_EXCLUDES+=(
     ! -name "gitrdif*.md"
     ! -name "dump*[0-9]"
 )
+# Design docs are long background reading: leave them out of the full dump.
+# `--path` or `--area docs` still includes them.
+if [[ ${#INCLUDE_PATTERNS[@]} -eq 0 ]]; then
+    FIND_EXCLUDES+=(
+        ! -path "$PROJECT_ROOT/MogMine*.md"
+        ! -path "$PROJECT_ROOT/DESIGN-PRINCIPLES-REVIEW.md"
+        ! -path "$PROJECT_ROOT/docs/design/*"
+        ! -path "$PROJECT_ROOT/docs/design-*"
+        ! -path "$PROJECT_ROOT/docs/playbook-design/*"
+    )
+fi
 
 # Determine which extensions to match
 ACTIVE_EXTS=()
@@ -713,10 +735,11 @@ done
 echo "Done! Created:"
 ls -la "$PROJECT_ROOT"/${OUTPUT_PREFIX}*.md 2>/dev/null || echo "No files created"
 
-# Record baseline for ./gitrdif.sh (full default dumps only — prefix "dump")
-if [[ "$OUTPUT_PREFIX" == "dump" ]] && [[ "$LIST_ONLY" != true ]] && command -v git >/dev/null 2>&1; then
-    if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        git -C "$PROJECT_ROOT" rev-parse HEAD > "$PROJECT_ROOT/.last-dump-commit"
-        echo "Recorded dump baseline → .last-dump-commit ($(git -C "$PROJECT_ROOT" rev-parse --short HEAD))"
-    fi
+# Record baseline for ./gitrdif.sh: a local-only commit holding the snapshot.
+# It is on no branch; refs/dump/baseline keeps git from cleaning it up.
+if [[ -n "$SNAPSHOT_TREE" ]]; then
+    baseline="$(git -C "$PROJECT_ROOT" commit-tree "$SNAPSHOT_TREE" -p HEAD -m "printcode dump snapshot")"
+    git -C "$PROJECT_ROOT" update-ref refs/dump/baseline "$baseline"
+    echo "$baseline" > "$PROJECT_ROOT/.last-dump-commit"
+    echo "Recorded dump baseline → .last-dump-commit (snapshot of local files)"
 fi

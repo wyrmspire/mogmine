@@ -2,6 +2,7 @@
 // Pure: no DOM, no lightweight-charts runtime. The pill-column maths stays in SessionLevelsPrimitive.ts.
 
 import { computeLevelRightOffsetBars } from "../components/SessionLevelsPrimitive.ts";
+import { THIN_BAR_SPACING_PX } from "./chart-thin-width.ts";
 
 /**
  * TradingView attribution. The lightweight-charts licence (Apache 2.0) requires attribution, so the
@@ -16,8 +17,14 @@ export const TRADINGVIEW_ATTRIBUTION = {
 /** Breathing room, in bars, between the newest bar and the right price axis (F-10). */
 export const DEFAULT_RIGHT_OFFSET_BARS = 2;
 
-/** Bar-spacing floor in CSS pixels, so pinching out on a 390 px phone never crushes 1m candles (§7.3). */
-export const MIN_BAR_SPACING_PX = 3;
+/**
+ * Smallest CSS spacing the chart will use while continuously zooming out.
+ *
+ * This is intentionally approximately one pixel: the chart must keep fitting more history as the
+ * user pinches out, TradingView-style. The old 3px floor made zooming stop abruptly on phones and
+ * is retired by D-014/RM-E2.
+ */
+export const MIN_BAR_SPACING_PX = THIN_BAR_SPACING_PX;
 
 /**
  * Right offset in bars: the larger of the breathing room and the bars the level pill column needs.

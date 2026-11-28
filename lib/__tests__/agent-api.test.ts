@@ -40,6 +40,7 @@ interface World {
   owners: Map<string, FakeSupabase>;
   userClientTokens: string[];
   tokenSeq: number;
+  claims: Record<string, unknown>[];
 }
 
 /** A chain that is both a builder (`eq`) and an awaitable result, the way the supabase-js builder behaves. */
@@ -82,6 +83,7 @@ function makeWorld(options: { env?: AgentEnv; start?: number } = {}): World {
     owners,
     userClientTokens: [] as string[],
     tokenSeq: 0,
+    claims: [] as Record<string, unknown>[],
   } as unknown as World;
 
   const session = (uid: string) => {
@@ -112,6 +114,7 @@ function makeWorld(options: { env?: AgentEnv; start?: number } = {}): World {
           },
         };
       }
+      if (table === "mogmine_agent_idempotency") return idempotencyFake();
       return {
         select: () => {
           throw new Error(`service role must not read ${table}`);
@@ -139,6 +142,29 @@ function makeWorld(options: { env?: AgentEnv; start?: number } = {}): World {
       },
     },
   } as unknown as AdminLike;
+
+  /** The replay table: unique on (user_id, endpoint, idempotency_key), `created_at` stamped from the test clock. */
+  function idempotencyFake() {
+    const matches = (filters: Record<string, string>) => (row: Record<string, unknown>) =>
+      Object.entries(filters).every(([column, value]) => row[column] === value);
+    return {
+      select: () => chain((filters) => ({ data: world.claims.find(matches(filters)) ?? null, error: null })),
+      insert: (row: Record<string, unknown>) => {
+        const taken = world.claims.some(matches({ user_id: String(row.user_id), endpoint: String(row.endpoint), idempotency_key: String(row.idempotency_key) }));
+        if (taken) return Promise.resolve({ error: { message: "duplicate key" } });
+        world.claims.push({ ...row, created_at: new Date(clock.now).toISOString() });
+        return Promise.resolve({ error: null });
+      },
+      update: (patch: Record<string, unknown>) => chain((filters) => {
+        world.claims.filter(matches(filters)).forEach((row) => Object.assign(row, patch));
+        return { error: null };
+      }),
+      delete: () => chain((filters) => {
+        world.claims = world.claims.filter((row) => !matches(filters)(row));
+        return { error: null };
+      }),
+    };
+  }
 
   const anon = {
     auth: {
@@ -430,7 +456,9 @@ test("audit: one row per authenticated request with method, path (no query), sta
   await call(world, "GET", "/api/v1/records/trades?limit=5&includeArchived=false", { token });
   await call(world, "GET", "/api/v1/records/trades/nope", { token });
   assert.equal(world.audits.length, 3);
-  assert.deepEqual(world.audits[0], {
+  const { request_id, ...createRow } = world.audits[0] as Record<string, unknown>;
+  assert.match(String(request_id), /^[0-9a-f-]{36}$/);
+  assert.deepEqual(createRow, {
     user_id: OWNER_A,
     token_id: "tok-1",
     method: "POST",
@@ -439,6 +467,8 @@ test("audit: one row per authenticated request with method, path (no query), sta
     record_id: "t-5",
     status: 201,
     outcome: "ok",
+    decision_code: "create",
+    decision_version: "agent-write-safety-1",
   });
   assert.equal(world.audits[1].path, "/api/v1/records/trades");
   assert.equal(world.audits[1].status, 200);
@@ -593,7 +623,7 @@ test("vocabulary: GET with a read key is 200 and the tags are never playbooks; a
   const data = reply.json.data as { setup_tags: string[]; playbooks: { name: string }[]; house_rules_version: string };
   assert.ok(data.setup_tags.includes("VWAP Hold"));
   assert.ok(!data.playbooks.some((playbook) => playbook.name === "VWAP Hold"));
-  assert.equal(data.house_rules_version, "2026-11-26.1");
+  assert.equal(data.house_rules_version, "2026-11-27.1");
   assert.equal(reply.headers.get("cache-control"), "no-store");
   const writeOnly = await mintKey(world, OWNER_A, ["write"]);
   assert.equal((await call(world, "GET", "/api/v1/vocabulary", { token: writeOnly })).status, 403);
@@ -635,4 +665,45 @@ test("list filters and include=derived over HTTP: filtered rows, derived block, 
   assert.equal(accountRow.derived.from_journal_gross, true);
   // Two closed trades on the account, each $615: t-a and t-b (the next day's copy).
   assert.equal(accountRow.derived.realized_cents, 123_000);
+});
+
+// ---- idempotent creates --------------------------------------------------------------------------------------------
+
+const createOnce = (world: World, token: string, id: string) =>
+  call(world, "POST", "/api/v1/records/trades", { token, body: sampleTrade(id), headers: { "idempotency-key": `key-${id}` } });
+
+test("idempotency: a retry replays the first response", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  const first = await createOnce(world, token, "t-idem");
+  const again = await createOnce(world, token, "t-idem");
+  assert.equal(first.status, 201);
+  assert.equal(again.status, 201);
+  assert.deepEqual(again.json, first.json);
+});
+
+test("idempotency: a stranded claim waits out its lease, then answers with the saved record", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await createOnce(world, token, "t-saved");
+  Object.assign(world.claims[0], { state: "in_flight", status: null, response_body: null });
+  assert.equal((await createOnce(world, token, "t-saved")).status, 409, "a recent claim may still be running");
+  world.clock.now += 16 * 60_000;
+  const reconciled = await createOnce(world, token, "t-saved");
+  assert.equal(reconciled.status, 201);
+  assert.equal(recordOf(reconciled.json.data).id, "t-saved");
+  assert.equal(world.claims[0].state, "completed");
+});
+
+test("idempotency: a stranded claim with nothing saved is run again", async () => {
+  const world = makeWorld();
+  const token = await mintKey(world, OWNER_A);
+  await createOnce(world, token, "t-lost");
+  Object.assign(world.claims[0], { state: "in_flight", status: null, response_body: null });
+  world.owners.clear();
+  world.clock.now += 16 * 60_000;
+  const rerun = await createOnce(world, token, "t-lost");
+  assert.equal(rerun.status, 201);
+  assert.equal(world.claims.length, 1);
+  assert.equal(world.claims[0].state, "completed");
 });

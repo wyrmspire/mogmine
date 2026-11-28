@@ -1,6 +1,6 @@
 // Pure playbook sanitizers (no React, no window). Split out of lib/playbooks-store.ts so server routes can import the command layer (#185a).
 import { NO_SETUP_ID, PLAYBOOK_LIMITS, PLAYBOOK_SEEDS } from "./playbooks.ts";
-import type { Playbook, PlaybookRule } from "./playbooks.ts";
+import type { Playbook, PlaybookRule, PlaybookVersion } from "./playbooks.ts";
 import { DEFAULT_OWNER_USER_ID } from "./trades.ts";
 import type { TradeStyle } from "./trades.ts";
 
@@ -19,8 +19,13 @@ export function withPinnedExample(playbook: Playbook, tradeId: string | null): P
 }
 
 export function clonePlaybook(playbook: Playbook): Playbook {
-  const copy: Playbook = { ...playbook, checklist_rules: playbook.checklist_rules.map((rule) => ({ ...rule })) };
+  const copy: Playbook = {
+    ...playbook,
+    checklist_rules: playbook.checklist_rules.map((rule) => ({ ...rule })),
+    version_history: playbook.version_history?.map((version) => ({ ...version, checklist_rules: version.checklist_rules.map((rule) => ({ ...rule })) })),
+  };
   if (!pinnedExampleId(playbook.pinned_example_trade_id)) delete copy.pinned_example_trade_id;
+  if (!copy.version_history?.length) delete copy.version_history;
   return copy;
 }
 
@@ -44,6 +49,28 @@ function sanitizeRules(raw: unknown): PlaybookRule[] | null {
   return rules;
 }
 
+export function sanitizePlaybookVersions(raw: unknown, playbookId: string): PlaybookVersion[] {
+  if (!Array.isArray(raw)) return [];
+  const byVersion = new Map<number, PlaybookVersion>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const value = item as Record<string, unknown>;
+    const version = typeof value.version === "number" && Number.isInteger(value.version) && value.version >= 1 ? value.version : null;
+    const rules = sanitizeRules(value.checklist_rules);
+    const name = trimText(value.name, PLAYBOOK_LIMITS.name);
+    if (version == null || !rules || !name || typeof value.created_at !== "string" || !Number.isFinite(Date.parse(value.created_at))) continue;
+    byVersion.set(version, {
+      playbook_id: playbookId,
+      version,
+      created_at: new Date(Date.parse(value.created_at)).toISOString(),
+      name,
+      default_style: STYLES.includes(value.default_style as TradeStyle) ? value.default_style as TradeStyle : "scalp",
+      checklist_rules: rules,
+    });
+  }
+  return [...byVersion.values()].sort((a, b) => a.version - b.version);
+}
+
 export function sanitizePlaybook(raw: unknown): Playbook | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
@@ -61,6 +88,8 @@ export function sanitizePlaybook(raw: unknown): Playbook | null {
     checklist_rules: noSetup ? [] : rules,
     archived: noSetup ? false : obj.archived === true,
   };
+  const history = sanitizePlaybookVersions(obj.version_history, id);
+  if (history.length) playbook.version_history = history;
   return withPinnedExample(playbook, pinnedExampleId(obj.pinned_example_trade_id));
 }
 

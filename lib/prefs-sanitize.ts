@@ -12,6 +12,14 @@ export type LevelLabelsMode = "tap" | "always";
 /** Review card orientation for share exports (Q-5, DR-3). */
 export type ReviewCardOrientation = "portrait" | "landscape";
 
+export interface CurrentFocusPreference {
+  text: string;
+  sessionDate: string;
+  sourceReviewId: string;
+  sourceAccountId: string | null;
+  pinnedAt: string;
+}
+
 export interface Prefs {
   /** Hide dollars and size everywhere; show R and points (UX-64). */
   shield: boolean;
@@ -37,6 +45,8 @@ export interface Prefs {
   showVolume?: boolean;
   /** Orientation of exported review cards (Q-5). */
   reviewCardOrientation: ReviewCardOrientation;
+  /** Account-scoped, remotely synced focus pins. `*` is the all-accounts scope. */
+  currentFocusByAccount?: Record<string, CurrentFocusPreference>;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -55,12 +65,32 @@ export const DEFAULT_PREFS: Prefs = {
   ema200: false,
   showVolume: true,
   reviewCardOrientation: "portrait",
+  currentFocusByAccount: {},
 };
 
 export const GOLD_PRESETS: GoldPreset[] = ["bullion", "champagne", "amber", "platinum"];
 
 const clamp = (value: unknown, min: number, max: number, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+
+function sanitizeCurrentFocus(raw: unknown): Record<string, CurrentFocusPreference> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const result: Record<string, CurrentFocusPreference> = {};
+  for (const [scope, candidate] of Object.entries(raw)) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) || (!scope.trim())) continue;
+    const value = candidate as Partial<CurrentFocusPreference>;
+    if (typeof value.text !== "string" || !value.text.trim() || typeof value.sessionDate !== "string" ||
+      typeof value.sourceReviewId !== "string" || typeof value.pinnedAt !== "string") continue;
+    result[scope.slice(0, 200)] = {
+      text: value.text.replace(/\s+/g, " ").trim().slice(0, 500),
+      sessionDate: value.sessionDate.slice(0, 10),
+      sourceReviewId: value.sourceReviewId.slice(0, 300),
+      sourceAccountId: typeof value.sourceAccountId === "string" ? value.sourceAccountId.slice(0, 200) : null,
+      pinnedAt: value.pinnedAt,
+    };
+  }
+  return result;
+}
 
 /** Validate a stored or imported prefs object. Used by the persistence adapter (#175) as well as hydration. */
 export function sanitizePrefs(raw: unknown): Prefs {
@@ -84,5 +114,6 @@ export function sanitize(raw: Partial<Prefs>): Prefs {
     ema200: raw.ema200 === true,
     showVolume: raw.showVolume !== false,
     reviewCardOrientation: raw.reviewCardOrientation === "landscape" ? "landscape" : DEFAULT_PREFS.reviewCardOrientation,
+    currentFocusByAccount: sanitizeCurrentFocus(raw.currentFocusByAccount),
   };
 }

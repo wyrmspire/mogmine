@@ -1,8 +1,6 @@
 "use client";
-
 // The day review screen, /review/day/[date] (docs/06 §3, Q-3 and Q-4 in 92). Saves go through lib/daily-review-store.ts.
 // Trade totals come from dailyReviewTotals (Shield-aware). "Done for the day" never changes a trade's review_status.
-
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,13 +9,13 @@ import type { CSSProperties } from "react";
 import { useAccounts } from "@/lib/accounts-store";
 import { DAILY_REVIEW_LIMITS, dailyReviewTotals, findExistingDailyReview, makeDailyReview, proposePlanIds, proposeTradeIds, unlinkedDayTradeIds } from "@/lib/daily-review";
 import type { DailyReview, ReviewPoint, ReviewPointKind } from "@/lib/daily-review";
-import { updateDailyReview, upsertDailyReview, useDailyReviewsStore } from "@/lib/daily-review-store";
+import { retryDailyReviews, updateDailyReview, upsertDailyReview, useDailyReviewsStore } from "@/lib/daily-review-store";
 import { markLinkedTradesReviewed } from "@/lib/day-review-screen";
 import { buildDaySheetModel, daySheetFileName, encodeDaySheet } from "@/lib/day-sheet";
 import type { DaySheetSnapshots } from "@/lib/day-sheet";
 import { formatUsdAmount } from "@/lib/format";
 import { isValidRSizeCents } from "@/lib/r-size";
-import { formatSessionDate, sessionDate } from "@/lib/session";
+import { sessionDate } from "@/lib/session";
 import { parseSessionDateParam, stepRegularSessionDate } from "@/lib/selectors";
 import { usePlansStore } from "@/lib/plans-store";
 import { setPrefs, usePrefs } from "@/lib/prefs";
@@ -29,7 +27,7 @@ import type { TradeRecord } from "@/lib/trades";
 import type { LocalSave } from "@/lib/save-label";
 import { useInlineSaveText } from "./useSaveLabel";
 import { ReviewCard, ReviewCardStyles } from "./ReviewCard";
-
+import { DayReviewHeader, DayReviewSaveStatus } from "./DayReviewChrome";
 const POINT_GROUPS: { kind: ReviewPointKind; title: string; placeholder: string }[] = [
   { kind: "went_well", title: "Went well", placeholder: "What worked in your process and why (commentary only — no prices or R)" },
   { kind: "mistake", title: "Mistakes", placeholder: "What went wrong in execution or discipline (no prices or R)" },
@@ -95,11 +93,16 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
   const linkedIds = review ? review.trade_ids : draftIds;
   const [lessonDraft, setLessonDraft] = useState(review?.lesson ?? "");
   const [saveState, setSaveState] = useState<LocalSave>("idle");
+  const [saveRetryMessage, setSaveRetryMessage] = useState<string | null>(null);
   const saveText = useInlineSaveText(saveState);
   const [adding, setAdding] = useState<ReviewPointKind | null>(null);
   // DR-3: chart snapshots keyed by trade and privacy. Cards behind the Share sheet render with the export's Shield.
   const [snapshots, setSnapshots] = useState<Record<string, HTMLCanvasElement>>({});
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareError, setShareError] = useState(false);
+  const [shareRetry, setShareRetry] = useState(0);
+  const shareDialogRef = useRef<HTMLElement | null>(null);
+  const shareTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [exportShieldPick, setExportShield] = useState(true); // OD-46a: Shield on by default
   const [encoded, setEncoded] = useState<{ key: string; blob: Blob; url: string; width: number; height: number } | null>(null);
   const onSnapshotReady = useCallback((tradeId: string, canvas: HTMLCanvasElement, shield: boolean) => {
@@ -108,6 +111,7 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
 
   // Writes one patch. With no saved review yet, the first write creates it from the current draft (rule 5 keeps one per scope).
   const save = (patch: Partial<DailyReview>) => {
+    setSaveRetryMessage(null);
     setSaveState("saving");
     const saved = review
       ? updateDailyReview(review.id, patch)
@@ -124,6 +128,14 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
       }));
     setSaveState(saved ? "saved" : "error");
     return saved;
+  };
+  const retrySave = async () => {
+    if (saveState === "saving") return;
+    setSaveState("saving");
+    setSaveRetryMessage("Retrying save… Your form stays here while we try again.");
+    const saved = await retryDailyReviews();
+    setSaveState(saved ? "saved" : "error");
+    setSaveRetryMessage(saved ? "Retry succeeded — saved on this device." : "Retry failed — your latest change is still in the form.");
   };
   const saveRef = useRef(save);
   useEffect(() => { saveRef.current = save; });
@@ -187,19 +199,24 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
         objectUrl = URL.createObjectURL(blob);
         setEncoded({ key: shareKey, blob, url: objectUrl, width: model.width, height: model.height });
       },
-      () => { if (!cancelled) setEncoded(null); },
+      () => { if (!cancelled) { setEncoded(null); setShareError(true); } },
     );
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [shareOpen, shareKey, exportShield, orientation, linkedIds, journal.trades, snapshots, date, accounts.accounts, prefs]);
+  }, [shareOpen, shareKey, exportShield, orientation, linkedIds, journal.trades, snapshots, date, accounts.accounts, prefs, shareRetry]);
   // Escape closes the Share day sheet, as SessionReview and CloseTradeSheet do.
   useEffect(() => {
     if (!shareOpen) return;
+    shareDialogRef.current?.focus();
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setShareOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [shareOpen]);
+  useEffect(() => {
+    if (shareOpen) return;
+    shareTriggerRef.current?.focus();
   }, [shareOpen]);
   // The tap calls navigator.share (or the download link) synchronously: the file is already encoded.
   const shareDay = () => {
@@ -217,7 +234,6 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-
   const toggleLink = (id: string) => {
     const next = linkedIds.includes(id) ? linkedIds.filter((item) => item !== id) : [...linkedIds, id];
     if (review) save({ trade_ids: next });
@@ -238,29 +254,15 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
 
   return (
     <div className="page day-review" style={{ maxWidth: 720 }}>
-      <div className="page-head day-review-head">
-        <div>
-          <span className="eyebrow">Day review</span>
-          <div className="day-review-nav">
-            <Link className="day-review-step" href={pathFor(stepRegularSessionDate(date, -1), accountId)} aria-label="Previous trading day" scroll={false}>‹</Link>
-            <h1>{formatSessionDate(date, true)}</h1>
-            {nextDate <= today
-              ? <Link className="day-review-step" href={pathFor(nextDate, accountId)} aria-label="Next trading day" scroll={false}>›</Link>
-              : <span className="day-review-step is-disabled" aria-hidden="true">›</span>}
-          </div>
-        </div>
-        <label className="day-review-scope">
-          <span className="sr-only">Account scope</span>
-          <select value={accountId ?? ""} onChange={(event) => router.replace(pathFor(date, event.target.value || null))}>
-            <option value="">All accounts</option>
-            {accounts.accounts.filter((account) => !account.archived || account.id === accountId).map((account) => (
-              <option key={account.id} value={account.id}>{account.name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {!online && <p className="day-review-note" role="status">Offline: this review is kept on this device until you reconnect.</p>}
+      <DayReviewHeader
+        date={date}
+        accountId={accountId}
+        accounts={accounts.accounts}
+        previousHref={pathFor(stepRegularSessionDate(date, -1), accountId)}
+        nextHref={nextDate <= today ? pathFor(nextDate, accountId) : null}
+        onAccountChange={(nextAccountId) => router.replace(pathFor(date, nextAccountId))}
+      />
+      <DayReviewSaveStatus online={online} saveState={saveState} retryMessage={saveRetryMessage} onRetry={() => { void retrySave(); }} />
 
       <p className="day-review-summary num">
         {totals.tradeCount} {totals.tradeCount === 1 ? "trade" : "trades"} · {totals.formattedNetR} net · rules {totals.rulesFollowed}/{totals.rulesTotal} · From your journal · gross
@@ -379,27 +381,25 @@ function DayReview({ date, accountId }: { date: string; accountId: string | null
             Also mark {unreviewed.length} linked trades reviewed
           </button>
         )}
-        <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => setShareOpen(true)} disabled={shareOpen}>
-          Share day
-        </button>
+        <button ref={shareTriggerRef} type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => { setShareError(false); setShareOpen(true); }} disabled={shareOpen}>Share day</button>
       </div>
 
       {shareOpen && (
-        <section className="day-share-sheet" role="dialog" aria-modal="true" aria-label="Share day" style={SHEET_STYLE}>
+        <section ref={shareDialogRef} tabIndex={-1} className="day-share-sheet" role="dialog" aria-modal="true" aria-labelledby="day-share-title" style={SHEET_STYLE}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>Share day</strong>
+            <strong id="day-share-title">Share day</strong>
             <button type="button" className="btn-ghost" style={{ minHeight: 44, minWidth: 44 }} aria-label="Close share day" onClick={() => setShareOpen(false)}>Close</button>
           </div>
           <label style={{ minHeight: 44, display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={exportShield} disabled={prefs.shield} onChange={(event) => setExportShield(event.target.checked)} />
             <span>Shield: hide dollars and contract size</span>
           </label>
+          {shareError && <p role="alert">The day sheet could not be prepared. Try again.</p>}
           {readyShare
             ? <Image src={readyShare.url} width={readyShare.width} height={readyShare.height} unoptimized alt={`Day sheet for ${date}`} style={{ width: "100%", height: "auto", borderRadius: 12 }} />
-            : <p className="muted">Preparing the image…</p>}
-          <button type="button" className="btn-primary" style={{ minHeight: 44 }} disabled={!readyShare} onClick={shareDay}>
-            Share image
-          </button>
+            : <p className="muted" role="status">{shareError ? "Image preparation failed." : "Preparing the image…"}</p>}
+          {shareError && <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => { setShareError(false); setShareRetry((value) => value + 1); }}>Retry image preparation</button>}
+          <button type="button" className="btn-primary" style={{ minHeight: 44 }} disabled={!readyShare} onClick={shareDay}>Share image</button>
         </section>
       )}
     </div>

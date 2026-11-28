@@ -53,6 +53,8 @@ const TRADE_WRITE_NOTE =
   "price_out_of_range (only when cached bars exist). See components.schemas.TradeRecord for note-field roles.";
 
 const ERROR_ENUM = Object.keys(ERROR_CODES);
+const idempotencyParam = { name: "Idempotency-Key", in: "header", required: false, description: "Send on every create: 1–128 visible ASCII characters, new for each record. Reuse it when retrying, and the first response is returned instead of a second record.", schema: { type: "string", maxLength: 128 } };
+const ifMatchParam = { name: "If-Match", in: "header", required: false, description: "Send on every update: the meta.updated_at from your last read. If the stored version differs, the write is refused with 409.", schema: { type: "string" } };
 const typeParam = { name: "type", in: "path", required: true, description: "The collection (journal record type).", schema: { type: "string", enum: [...COLLECTION_KEYS] } };
 const keyParam = { name: "key", in: "path", required: true, description: "The singleton document.", schema: { type: "string", enum: [...SINGLETON_KEYS] } };
 const idParam = { name: "id", in: "path", required: true, description: "The record id, URL-encoded (ids may contain `:`).", schema: { type: "string" } };
@@ -268,6 +270,7 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           operationId: "createRecord", summary: "Create a record", scope: "write", description: writeRuleReminder(origin) + TRADE_WRITE_NOTE,
           success: { status: 201, description: "The stored record. Trades add `warnings` (possibly empty)." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
           requestBody: jsonBody("The full record, with a client-generated `id`. Derived fields are refused."),
+          parameters: [idempotencyParam],
         }),
       },
       "/records/{type}/{id}": {
@@ -282,6 +285,7 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
           operationId: "updateRecord", summary: "Change some fields of a record", scope: "write", description: writeRuleReminder(origin) + TRADE_WRITE_NOTE,
           success: { status: 200, description: "The stored record. Trades add `warnings` (possibly empty)." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
           requestBody: jsonBody("The fields to change. Other fields keep their values."),
+          parameters: [ifMatchParam],
         }),
         delete: operation({
           operationId: "deleteRecord", summary: "Delete one record", scope: "write",
@@ -398,7 +402,8 @@ export function buildOpenApiSpec(origin: string): Record<string, unknown> {
         }),
         put: operation({
           operationId: "putSingleton", summary: "Replace a singleton document", scope: "write",
-          success: { status: 200, description: "The stored document." }, errors: [...ERROR_STATUSES_WRITE, 404],
+          success: { status: 200, description: "The stored document." }, errors: [...ERROR_STATUSES_WRITE, 404, 409],
+          parameters: [ifMatchParam],
           requestBody: jsonBody("The whole document. It replaces the saved one."),
         }),
       },

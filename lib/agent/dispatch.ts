@@ -19,6 +19,8 @@ import { DEFAULT_TAG_REGISTRY, sanitizeTagRegistry } from "../tag-registry.ts";
 import { isValidRSizeCents } from "../r-size.ts";
 import { checkTradeWrite } from "./write-checks.ts";
 import type { AgentWriteWarning, TradeWriteCheckResult, WriteCheckContext } from "./write-checks.ts";
+import { AGENT_NOTE_FIELDS, agentWriteProvenance } from "./provenance.ts";
+import { withUntrustedTextMeta } from "./untrusted-text.ts";
 
 export type AgentRoute =
   | { kind: "me" }
@@ -40,6 +42,8 @@ export interface AgentDispatchOptions {
   dayPriceRange?: (trade: TradeRecord) => { low: number; high: number } | null;
   /** The clock for the future-time refusal. Defaults to Date.now(). */
   nowMs?: number;
+  /** Version supplied by If-Match or expected_updated_at. Checked before writes when present. */
+  expectedUpdatedAt?: string;
 }
 
 export interface AgentWho {
@@ -55,6 +59,29 @@ export interface AgentDispatch {
   recordType?: string;
   recordId?: string;
   outcome: string;
+  decisionCode?: string;
+  decisionVersion?: string;
+}
+
+const DECISION_VERSION = "agent-write-safety-1";
+
+function writeDecision(code: string): Pick<AgentDispatch, "decisionCode" | "decisionVersion"> {
+  return { decisionCode: code, decisionVersion: DECISION_VERSION };
+}
+
+async function versionMatches(
+  commands: JournalCommands,
+  route: Extract<AgentRoute, { kind: "update" }>,
+  expected: string | undefined,
+): Promise<AgentDispatch | null> {
+  if (!expected) return null;
+  const current = await commands.read(route.type, route.id);
+  if (!current.ok) return failure(current.error, route.type, route.id);
+  if (current.value.meta.updated_at !== expected) {
+    const result = agentError("conflict", "The record changed since it was read. Re-read it and retry with its current version.");
+    return { status: result.status, body: result.body, recordType: route.type, recordId: route.id, outcome: "conflict", ...writeDecision("optimistic_concurrency") };
+  }
+  return null;
 }
 
 /** The computed block on a trade (`?include=derived`). Money is integer cents; R values are null when not computable. */
@@ -209,12 +236,21 @@ async function checkTradeBody(
 /** A saved trade, with the write-time warnings beside it. Warnings are always present, possibly empty. */
 function settleTrade<T>(result: PersistResult<T>, recordId: string | undefined, warnings: AgentWriteWarning[], status: number): AgentDispatch {
   if (!result.ok) return failure(result.error, "trades", recordId);
-  return { status, body: { ok: true, data: result.value, warnings }, recordType: "trades", recordId, outcome: "ok" };
+  return { status, body: { ok: true, data: withUntrustedTextMeta("trades", result.value), warnings }, recordType: "trades", recordId, outcome: "ok" };
 }
 
 function invalidBody(recordType: string, recordId: string | undefined, message: string): AgentDispatch {
   const { status, body } = agentFail(statusFor("invalid"), "invalid", message);
   return { status, body, recordType, recordId, outcome: "invalid" };
+}
+
+function stampAgentWrite(body: Record<string, unknown>, who: AgentWho): Record<string, unknown>;
+function stampAgentWrite(body: unknown, who: AgentWho): unknown;
+function stampAgentWrite(body: unknown, who: AgentWho): unknown {
+  if (!isPlainObject(body)) return body;
+  const noteFields = AGENT_NOTE_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(body, field));
+  if (noteFields.length === 0) return body;
+  return { ...body, agent_provenance: agentWriteProvenance(who.tokenId), agent_provenance_fields: noteFields };
 }
 
 /** What a derived block is computed from: the owner's accounts and prefs, plus trades and checks for accounts. */
@@ -296,45 +332,50 @@ export async function dispatchAgentRoute(
         ? await commands.listFiltered(route.type, query, filters)
         : await commands.list(route.type, query);
       if (!listed.ok || !includeDerived || !isDerivable(route.type)) {
-        return settle(listed, route.type, undefined, (records) => records);
+        return settle(listed, route.type, undefined, (records) => withUntrustedTextMeta(route.type, records));
       }
       const context = await deriveContext(route.type, commands);
       if (!context.ok) return failure(context.error, route.type, undefined);
       const rows = (listed.value as unknown[]).map((row) => ({ ...(row as object), derived: deriveOne(route.type as "trades" | "accounts", row, context.value) }));
-      return settle({ ok: true, value: rows }, route.type, undefined, (records) => records);
+      return settle({ ok: true, value: rows }, route.type, undefined, (records) => withUntrustedTextMeta(route.type, records));
     }
 
     case "create": {
       const id = isPlainObject(route.body) && typeof route.body.id === "string" ? route.body.id : undefined;
-      if (route.type !== "trades" || !isPlainObject(route.body)) {
-        return settle(await commands.create(route.type, route.body), route.type, id, (stored) => stored, 201);
+      const writeBody = stampAgentWrite(route.body, who);
+      if (route.type !== "trades" || !isPlainObject(writeBody)) {
+        const result = settle(await commands.create(route.type, writeBody), route.type, id, (stored) => withUntrustedTextMeta(route.type, stored), 201);
+        return result.status >= 200 && result.status < 300 ? { ...result, ...writeDecision("create") } : result;
       }
-      const checked = await checkTradeBody(route.body, null, commands, options);
+      const checked = await checkTradeBody(writeBody, null, commands, options);
       if (!checked.ok) return failure(checked.error, "trades", id);
       if (checked.value && !checked.value.ok) return invalidBody("trades", id, checked.value.message);
-      return settleTrade(await commands.create("trades", route.body), id, checked.value?.warnings ?? [], 201);
+      return { ...settleTrade(await commands.create("trades", writeBody), id, checked.value?.warnings ?? [], 201), ...writeDecision("create") };
     }
 
     case "read": {
       const stored = await commands.read(route.type, route.id);
       if (!stored.ok || !route.includeDerived || !isDerivable(route.type)) {
-        return settle(stored, route.type, route.id, (value) => value);
+        return settle(stored, route.type, route.id, (value) => withUntrustedTextMeta(route.type, value));
       }
       const context = await deriveContext(route.type, commands);
       if (!context.ok) return failure(context.error, route.type, route.id);
       const derived = deriveOne(route.type, stored.value.record, context.value);
-      return settle({ ok: true, value: { ...stored.value, derived } }, route.type, route.id, (value) => value);
+      return settle({ ok: true, value: { ...stored.value, derived } }, route.type, route.id, (value) => withUntrustedTextMeta(route.type, value));
     }
 
     case "update": {
       if (!isPlainObject(route.body)) return invalidBody(route.type, route.id, "Body must be a JSON object of fields to change.");
-      if (route.type !== "trades") return settle(await commands.update(route.type, route.id, route.body), route.type, route.id, (stored) => stored);
+      const versionFailure = await versionMatches(commands, route, options.expectedUpdatedAt);
+      if (versionFailure) return versionFailure;
+      const writeBody = stampAgentWrite(route.body, who);
+      if (route.type !== "trades") return { ...settle(await commands.update(route.type, route.id, writeBody, { expectedUpdatedAt: options.expectedUpdatedAt }), route.type, route.id, (stored) => withUntrustedTextMeta(route.type, stored)), ...writeDecision("update") };
       const current = await commands.read("trades", route.id);
       if (!current.ok) return failure(current.error, "trades", route.id);
-      const checked = await checkTradeBody(route.body, current.value.record, commands, options);
+      const checked = await checkTradeBody(writeBody, current.value.record, commands, options);
       if (!checked.ok) return failure(checked.error, "trades", route.id);
       if (checked.value && !checked.value.ok) return invalidBody("trades", route.id, checked.value.message);
-      return settleTrade(await commands.update("trades", route.id, route.body), route.id, checked.value?.warnings ?? [], 200);
+      return { ...settleTrade(await commands.update("trades", route.id, writeBody, { expectedUpdatedAt: options.expectedUpdatedAt }), route.id, checked.value?.warnings ?? [], 200), ...writeDecision("update") };
     }
 
     case "remove": {
@@ -346,9 +387,17 @@ export async function dispatchAgentRoute(
       return settle(await commands.archive(route.type, route.id), route.type, route.id, (stored) => stored);
 
     case "readSingleton":
-      return settle(await commands.readSingleton(route.key), route.key, undefined, (stored) => stored);
+      return settle(await commands.readSingleton(route.key), route.key, undefined, (stored) => withUntrustedTextMeta(route.key, stored));
 
     case "writeSingleton":
-      return settle(await commands.writeSingleton(route.key, route.body), route.key, undefined, (stored) => stored);
+      if (options.expectedUpdatedAt) {
+        const current = await commands.readSingleton(route.key);
+        if (!current.ok) return failure(current.error, route.key, undefined);
+        if (!current.value || current.value.meta.updated_at !== options.expectedUpdatedAt) {
+          const result = agentError("conflict", "The singleton changed since it was read. Re-read it and retry with its current version.");
+          return { status: result.status, body: result.body, recordType: route.key, outcome: "conflict", ...writeDecision("optimistic_concurrency") };
+        }
+      }
+      return { ...settle(await commands.writeSingleton(route.key, route.body, { expectedUpdatedAt: options.expectedUpdatedAt }), route.key, undefined, (stored) => withUntrustedTextMeta(route.key, stored)), ...writeDecision("update") };
   }
 }

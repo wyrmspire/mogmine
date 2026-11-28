@@ -160,7 +160,9 @@ export async function buildAgentContext(input: AgentContextInput, deps: ContextD
   const cardRSize: CardRSize = { usd: rSize.usd, source: rSize.source, accountName: account?.name ?? null };
 
   const series = buildBarSeries(CONTEXT_SYMBOL, bars);
-  const card = buildContextCard(series, mark, { rSize: cardRSize, shield: prefs.shield, excludedSessions: excluded.length });
+  // Shield is a sharing/presentation preference. The authenticated agent API returns computed truth;
+  // it must not silently remove dollar facts from the data contract.
+  const card = buildContextCard(series, mark, { rSize: cardRSize, shield: false, excludedSessions: excluded.length });
   const sessionsUsed = dates.length - excluded.length;
   return {
     ok: true,

@@ -148,16 +148,16 @@ test("lookahead: a bar after the mark cannot change any at-the-mark row", async 
   assert.equal(atMark(spike), atMark(original), "at-mark values are the same with and without the later spike");
 });
 
-test("R: no account falls back to prefs ($300), and Shield hides every dollar amount in the basis", async () => {
+test("R: no account falls back to prefs ($300), and Shield does not change what the API returns (RM-A8)", async () => {
   const noAccount = unwrap(await build(mark({ accountId: null }), { commands: commandsWith([SIM_EVAL], null) }));
   assert.equal(noAccount.card.basis, "R = $300 (default risk budget)");
   assert.equal(noAccount.provenance.r_size.source, "default");
 
   const shielded = unwrap(await build(mark({ accountId: null }), { commands: commandsWith([SIM_EVAL], { shield: true }) }));
-  assert.equal(shielded.card.basis, "R · default risk budget");
-  assert.doesNotMatch(shielded.card.basis, /\$/);
+  assert.deepEqual(shielded.card, noAccount.card);
+  const open = unwrap(await build(mark()));
   const shieldedAccount = unwrap(await build(mark(), { commands: commandsWith([SIM_EVAL], { shield: true }) }));
-  assert.equal(shieldedAccount.card.basis, "R · SIM Eval 50K");
+  assert.equal(shieldedAccount.card.basis, open.card.basis);
 });
 
 test("accounts: an account_id that is not one of yours is refused as invalid", async () => {

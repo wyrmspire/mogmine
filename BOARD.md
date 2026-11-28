@@ -1,197 +1,164 @@
-# BOARD.md — Work Order and Tactics
+# BOARD.md — Work Order, Active Wave & Tactics
 
-> The board says **what to do next and how agents share the work**. The work items themselves live in **GitHub issues** (`gh issue list --repo wyrmspire/mogmine`). Specs live in `docs/`. Decisions live in `DECISIONS.md`. This file only points to them, it never copies them.
+> The board says **what to do next and how agents share the work**. Long-range tracks and design standards (`DS-01`–`DS-12`) live in [ROADMAP.md](ROADMAP.md). Priorities and locked R rules live in [MOGMINE-BLUEPRINT.md](MOGMINE-BLUEPRINT.md). Settled decisions live in [DECISIONS.md](DECISIONS.md). Detailed specs live in `docs/`.
 >
-> **Only the planner edits this file** (the owner, or the agent the owner names as planner). Workers read it and never edit it in a feature PR. That keeps it from becoming a merge-conflict magnet.
+> **Only the planner / integrator edits this file.** Workers read it and never edit `BOARD.md`, `ROADMAP.md`, `NOTES.md`, or `DECISIONS.md` in a feature branch.
 
 ---
 
-## 1. Up next (top = highest priority)
+## 0. Handoff Context for GPT / Planner (2026-11-27)
 
-Workers take the **first row whose status is `ready`** and whose issue has no assignee and no `claim/` branch.
-
-_Built 2026-11-22 from NOTES.md "Next up", docs/16 §2b and the open GitHub issues, each checked against the code in this folder._
-
-> **⚠ All agents share this one folder.** Whole-file saves from a stale copy have reverted other lanes' work three times on 2026-11-22: `app/globals.css` twice and this board once. **Re-read a file right before you write it, and change only your own lines** (targeted replacement, never "save the whole file as I last saw it"). This applies most to shared files: `BOARD.md`, `app/globals.css`, `lib/store.ts`, `components/TuneScreen.tsx`, `components/AppShell.tsx`.
-
-| # | Issue | Item | Spec | Size | Status |
-|---|---|---|---|---|---|
-| 1 | #169 | `CD-3c` Playbook card PNG export on the shared frame (Shield hides results; all three sizes tested) | docs/23 §2, §5.4 | S | done (`69ab1f7`) |
-| 1b | — | `RV-1` Review queue shows the trade's chart beside the Pit Stop; sealed at entry under blind review | docs/05 §2C, docs/23 §4 | S | done (`69ab1f7`) |
-| 2 | — | `UI-3` Mood at Entry: optional one-tap pre-exit mood + retrospective `recorded_at` timestamp integrity | docs/19 §4, `OD-39` (c) | M | done (`1941d79`) |
-| 3 | #36 | `G1` "How did it end?" one-tap exit reason in add-trade and editable on the trade page | #36, docs/15 §3 | S | done (`69ab1f7`) |
-| 4 | #36 | `G2` "I moved my stop" model (`stop_moves`) + interactive `StopMovesEditor` + `WIDENED` suggestion tag (`UX-33`) | #36, docs/15 §3, `R-10` | M | done (`MM-W2-05`) |
-| 5 | #42 | `M1` Time-in-trade label and exit efficiency (`captured 0.8R of 1.4R available`) | #42, docs/15 §3.4 | S | done (`1941d79`) |
-| 6 | #42 | `M2` Planned-versus-actual table under the chart (entry, stop, exit: planned, actual, difference in points and R) | #42, docs/13 BET-06 | S | done (`1941d79`) |
-| 7 | #42 | `M3` R ruler at each whole R on the plan, and playbook tag on the plan corner and Trade Card | #42 | S | done (`MM-W2-07`) |
-| 8 | #40 | `K` Archived neighbours: other trades in view drawn faint, no labels, no axis tags, tap opens them | #40, docs/12 §14 | M | done (`MM-W2-06`) |
-| 9 | — | `DC-2` Discretionary calls store + backup (storage only, no UI) | docs/25 §8 | S | done (`69ab1f7`) |
-| 10 | #15 | Shield sweep + `UX-e` masked editable Contracts input preserving true P&L math | #15, UX-64 | S | done (`1941d79`) |
-| 11 | #21 | Spec write-back: docs/08, docs/05, docs/02 rows listed in #21 against current code | #21 | S | done (`69ab1f7`) |
-| 12 | #19 | Accessibility pass on every route: large text, reduced motion, blue/orange palette, focus, labels | #19, docs/08 §16 | M | done (`MM-W2-01`, `MM-W2-02`) |
-| 12a | — | `UX-a` Chart labels collide: stacked with `separateLabels` | docs/15 §3.4 | S | done (`69ab1f7`) |
-| 12b | — | `UX-b` Trade Detail mobile Pit Stop positioned directly under chart at `390×844` | docs/08 §5 | M | done (`1941d79`) |
-| 12c | — | `UX-c` Header meta wraps cleanly at 390 px: unbreakable date and hold duration units | docs/08 §13 | S | done (`1941d79`) |
-| 12d | — | `UX-d` Sample trades in Review queue ("10 to mark reviewed" on Today) on a fresh install | docs/08 §4 | S | blocked (owner: confirm samples leave the queue) |
-| 13 | #38 | `I` Partials and multiple targets (pure integer-tick model + lot-band geometry, fixture 7 = `+1.75R`) | #38, docs/15 | L | done (pure model `MM-W2-03`) |
-| 13b | — | `DP-1` Discretionary prompts engine (`detectDeviations`, `pendingAsks`, seed prompt library) | docs/playbook-design/04 | M | done (`MM-W2-04`) |
-| 13c | — | `CD-4` Day Card pure builder + canvas renderer on shared card frame + `M3` Trade Card playbook tag | docs/23 §2, §6, #42 | M | done (`MM-W2-07`) |
-| 14 | — | `DC-3`–`DC-7` Call sheet, chart pins, grading, score | docs/25 §8 | M each | blocked (owner: `OD-52`) |
-| 15 | — | `OD-55` `5m` fallback for Yahoo `1m` Globex gaps in session levels | docs/24, `OD-55` | S | blocked (owner: `OD-55`) |
-| 16 | #65 | Session-aware expected coverage across market closures | #65 | M | blocked (owner: calendar, `OD-35`) |
-| 17 | #22 | Performance budgets on a real phone | docs/08 §2 | — | blocked (owner: real phone) |
-| — | #41 | `CD-1b` Trade Card sheet controls | docs/23 §3 | — | done (`69ab1f7`) |
-| — | #169 | `CD-3b` Playbook card + `/playbooks` binder | docs/23 §5 | — | done (`69ab1f7`) |
-
-_Added 2026-11-22: Supabase-ready wave (`D-012`). Dependency order: #173 first, then #174 and #175 in parallel, then #176. #177 may be claimed in parallel with any of them. Owner-decision rows above stay untouched._
-
-| 18 | #173 | Persistence contract + database-readiness checklist (every record type in `lib/`) | #173, docs/22, docs/06, `D-012` | M | done (docs/26, `lib/persistence/`) |
-| 19 | #174 | AI-operable command layer (typed create/read/update, no UI) | #174, after #173 | M | done (`lib/commands/journal-commands.ts`) |
-| 20 | #175 | Local/mock adapter implementing the contract (env flag to stay on mocks) | #175, after #173, parallel with #174 | M | done (`lib/persistence/local-adapter.ts`, `NEXT_PUBLIC_PERSISTENCE_ADAPTER`) |
-| 21 | #176 | Supabase adapter: `mogmine_` migrations, RLS, shared tests on `showmob-dev` | #176, after #173–#175, `D-012` | L | done (`lib/persistence/supabase-adapter.ts`, `supabase/migrations/`, docs/26 §7) |
-| 22 | #177 | Line-count deviation rule in `AGENTS.md` (report/justify files over the target) | #177, may run in parallel | S | done (AGENTS.md §6.12, `npm run check:file-length`) |
-| 23 | #182 | Sign-in: `/login` magic link (implicit flow, no PKCE), allow-list gate only in `supabase` mode, sign-out | #182, docs/26 §6 | M | done (`772ff38`) |
-| 24 | #185 | `185a` Agent API: hashed revocable tokens, owner-session auth (RLS applies), `/api/v1` records + singletons, audit, rate limit | #185, docs/26 §6–7 | L | done (`45a9f7b`) |
-| 25 | #185 | `185b` Agent keys settings page, OpenAPI 3.1 `/api/v1/openapi.json`, `/.well-known/mogmine.json` | #185 (discovery comment) | M | done (PR #189) |
-
-**Open on GitHub but already built here (owner: close them):** #10, #11, #12, #13, #14 (fitted chart window, bar floor, timeframe from duration, style labels gone, tests), #18 (backup), #20 (icons and hint; a real iOS check is still owed), #25 (no price ladder), #27 (`MES=F`), #28 (no synthetic candles), #29 (bar validator), #90 (`MD-1`), #91 (D-010 restatement), #165 (`CD-2a`–`CD-2c`). #26 and #114 are umbrellas: what is left of them is rows 15 and 16 above.
-
-Status values: `ready` · `claimed` · `review` · `blocked (reason)` · `done`. The planner moves rows to the archive in §5 once a week.
-
-**Never take:** owner-question issues (#5–#9, #23, #24, #39), #43, #70, #123, PR #71, or anything labelled `owner`.
+1. **Git baseline before launching Wave 6 (`MM-W6`):**
+   - `origin/main` is at **`4b9b75e`** (includes Wave 4 `3bccf06`, Wave 5 `3747928`, UX Charter/Audit `b88400b`, Databento archive `e164930` PR #282, and daily Vercel Cron archive top-up `4b9b75e` PR #296).
+   - Branch `docs/codebase-audit-roadmap` (open PR #297) holds the elaborated [ROADMAP.md](ROADMAP.md), [MogMine Comprehensive Codebase Audit.md](<MogMine Comprehensive Codebase Audit.md>), [MogMine UX_UI Design Principles.md](<MogMine UX_UI Design Principles.md>), and **this `BOARD.md`**.
+   - **Step 0 before cutting worktrees:** Commit `ROADMAP.md` + `BOARD.md` onto `docs/codebase-audit-roadmap` (note: leave unstaged local tweaks to `printcode.sh` / `gitrdif.sh` alone or stash/commit only if owner wants), rebase/merge PR #297 onto `origin/main` (`4b9b75e`), and cut all Wave 6 worktrees from that merged `main` commit so every lane has `lib/market-data/top-up.ts` from PR #296.
+2. **Live Supabase (`showmob-dev`, ref `vsasmtsifuylhfrrsrso`) verified state:**
+   - All 25 `mogmine_*` tables exist with `rls_enabled: true`.
+   - `mogmine_market_candles` has **92,569 `MES=F` 1m bars** (Aug 25 – Nov 26 2026), `mogmine_market_coverage` has 68 rows, `mogmine_market_archive_jobs` has 5 rows, `mogmine_market_rolls` has 3 rows, and `mogmine_daily_reviews` is live.
+   - `public.mogmine_bars_1m` has **0 rows** — `lib/strategy-lab/bars-cache.ts` still queries it instead of `mogmine_market_candles`. `RM-A14` (Wave 6 Lane 2) fixes that and drops `mogmine_bars_1m`.
+   - **Vercel Production cron is configured:** `CRON_SECRET` was added on 2026-11-27 and `SUPABASE_SERVICE_ROLE_KEY` is present. `GET /api/cron/archive-topup` (`23:00 UTC` daily) is live; no further owner setup is required.
+3. **Important guardrails tests enforce automatically:**
+   - `lib/__tests__/auth.test.ts` enforces a strict allowlist of files allowed to reference `SUPABASE_SERVICE_ROLE_KEY` or call `createClient(`. Any new server-only archive query belongs in `lib/market-data/archive.ts` or `lib/market-data/top-up-store.ts` (already allowlisted) — or update `auth.test.ts` explicitly in the Integrator pass with server-only guards.
+   - `npm run check:file-length` lists 12 grandfathered files over 450 lines (`trade-document.ts`, `globals.css`, `trades.ts`, `mood.ts`, `StopMovesEditor.tsx`, `TradeChart.tsx`, `TradeDetail.tsx`, `shareCard.ts`, `ChallengeDetail.tsx`, `trade-marks.ts`, `day-card.ts`, `PlanSheet.tsx`). Keep new logic in focused modules (`≤ 450` lines) and never grow a grandfathered file without reporting before/after counts and extracting where possible.
 
 ---
 
-## 1b. Wave `MM-W2` — 8-Lane Deployment (`boardinit` 7 + 1)
+## 1. Up next (ordered strictly by `MOGMINE-BLUEPRINT.md §3` & `ROADMAP.md`)
 
-> **Baseline:** `main` (post-`MM-W1` unified integration `1941d79` + this `BOARD.md` commit).
-> **Wave Target:** ~2,500 total changed lines (~300–450 lines per lane).
-> **Worktree Isolation:** Each worker lane runs in its own isolated git worktree (`workspace: "share"` or `..\mogmine-w<N>`) on its own branch (`feat/mm-w2-01`..`feat/mm-w2-07`), with strictly disjoint writable files.
-> **Cross-Lane Rule:** Workers NEVER edit `BOARD.md`, `NOTES.md`, `DECISIONS.md`, `components/TradeDetail.tsx`, or `app/globals.css`. Shared UI wiring and the full verification gate run once in Lane 8 (`MM-W2-08`, Master Agent Final Pass).
+Workers take the **first row whose status is `ready`** (or take their assigned lane in `§1b` during a multi-lane `boardinit` wave) with no assignee and no `claim/<id>` branch on `origin`.
 
-| Lane | Item | Owner | Branch | Writable Files (strict) | Must Avoid | Target | Status |
-|---|---|---|---|---|---|---|---|
-| `MM-W2-01` | `#19a` Accessibility pass (`/drills`, `/challenges`, `/playbooks`) | Worker 01 (`worker-1`) | `feat/mm-w2-01` | `app/drills/**`, `app/challenges/**`, `app/playbooks/**`, `components/DrillScreen.tsx`, `components/ChallengeCard.tsx`, `components/ChallengeDetail.tsx`, `components/ChallengeSetupSheet.tsx`, `components/PlaybookBinder.tsx`, `components/PlaybookCard.tsx`, `components/PlaybookCardSheet.tsx`, `components/PlaybookEditor.tsx`, `lib/__tests__/a11y-routes.test.ts` | `TradeDetail.tsx`, `TradeChart.tsx`, `AddTradeSheet.tsx`, `AppShell.tsx`, `app/globals.css`, `BOARD.md`, `NOTES.md` | ~300–450 lines | `done` |
-| `MM-W2-02` | `#19b` Accessibility pass (`Today`, `Review`, `Feed`, `Tune`, `Plan`, `AppShell`) | Worker 02 (`worker-2`) | `feat/mm-w2-02` | `components/TodayScreen.tsx`, `components/ReviewScreen.tsx`, `components/FeedScreen.tsx`, `components/TuneScreen.tsx`, `components/PlanCard.tsx`, `components/PlanSheet.tsx`, `components/SessionReview.tsx`, `components/AppShell.tsx`, `lib/__tests__/a11y-core-screens.test.ts` | `TradeDetail.tsx`, `TradeChart.tsx`, `AddTradeSheet.tsx`, `app/globals.css`, `BOARD.md`, `NOTES.md`, Lane 1 files | ~300–450 lines | `done` |
-| `MM-W2-03` | `#38` `I` Partials & multiple targets pure model + lot-band geometry | Worker 03 (`worker-3`) | `feat/mm-w2-03` | `lib/partials.ts`, `lib/__tests__/partials.test.ts` | `lib/trades.ts`, `lib/trade-document.ts`, `lib/trade-marks.ts`, `components/**`, `BOARD.md`, `NOTES.md` | ~300–450 lines | `done` |
-| `MM-W2-04` | `DP-1` Discretionary prompts engine (`detectDeviations`, `pendingAsks`) | Worker 04 (`worker-4`) | `feat/mm-w2-04` | `lib/discretionary-prompts.ts`, `lib/__tests__/discretionary-prompts.test.ts` | `lib/calls.ts`, `lib/calls-store.ts`, `components/**`, `BOARD.md`, `NOTES.md` | ~300–450 lines | `done` |
-| `MM-W2-05` | `#36` `G2-UI` Interactive `"I moved my stop"` editor component | Worker 05 (`worker-5`) | `feat/mm-w2-05` | `components/StopMovesEditor.tsx`, `lib/__tests__/stop-moves-editor.test.ts` | `components/TradeDetail.tsx`, `components/AddTradeSheet.tsx`, `lib/trades.ts`, `app/globals.css`, `BOARD.md`, `NOTES.md` | ~300–400 lines | `done` |
-| `MM-W2-06` | `#40` `K-UI` Neighbour-trade hit testing & chart tap interaction | Worker 06 (`worker-6`) | `feat/mm-w2-06` | `components/TradeChart.tsx`, `components/PositionBoxPrimitive.ts`, `lib/__tests__/neighbour-hit-test.test.ts` | `components/TradeDetail.tsx`, `lib/neighbour-trades.ts`, `lib/trade-marks.ts`, `app/globals.css`, `BOARD.md`, `NOTES.md` | ~300–400 lines | `done` |
-| `MM-W2-07` | `#42` `M3-Card` Trade Card playbook tag + `CD-4` Day Card builder & canvas renderer | Worker 07 (`worker-7`) | `feat/mm-w2-07` | `lib/shareCard.ts`, `lib/day-card.ts`, `lib/__tests__/day-card.test.ts` | `components/**`, `lib/trade-marks.ts`, `app/globals.css`, `BOARD.md`, `NOTES.md` | ~300–450 lines | `done` |
-| `MM-W2-08` | Final Pass: Merge, Wire into `TradeDetail.tsx`, Full Verification Gate & Docs | Master Agent (08) | `main` | Integration targets (`components/TradeDetail.tsx`, `app/globals.css`, `NOTES.md`, `BOARD.md`, `AGENTS.md`) | Starting unapproved feature scope | Integration & gate | `done` |
+> **⚠ Shared-file safety:** Re-read any file immediately before editing and apply targeted replacements only — never overwrite a whole file from stale memory.
 
-### Wave `MM-W2` Detailed Lane Specifications
+| # | Roadmap ID | Item | Spec / Files | Size | Wave | Status |
+|---|---|---|---|---|---|---|
+| 1 | `RM-A4` | Archive health endpoint (`/api/market-data/status`) + `<ArchiveStatusCard />` in Tools (newest bar, missing sessions, last cron job result) | [ROADMAP §2](ROADMAP.md#2-track-a-data-truth-sync-safety-and-the-candle-archive-first), DS-11 | S | W6-L1 | `ready` |
+| 2 | `RM-A11` + `RM-A14` | Agent-triggered `POST /api/v1/market/top-up` (`write` scope, date range only, never prices) + repoint Strategy Lab `bars-cache.ts` off empty `mogmine_bars_1m` to `mogmine_market_candles` and drop `mogmine_bars_1m` | [ROADMAP §2](ROADMAP.md#2-track-a-data-truth-sync-safety-and-the-candle-archive-first), PR #296 | M | W6-L2 | `ready` |
+| 3 | `RM-A7` | Agent API write safety: `Idempotency-Key` on `POST` creates, `expected_updated_at` / `If-Match` (409) on updates, `request_id` in responses, and decision-audit columns (`workflow`, `house_rules_version`) | [ROADMAP §2](ROADMAP.md#2-track-a-data-truth-sync-safety-and-the-candle-archive-first), docs/26 §8 | M | W6-L3 | `ready` |
+| 4 | `RM-A8` + `RM-K5` | Fix `prefs.shield` API leak in `lib/agent/strategy-lab.ts:163` (`DS-07`) + mark untrusted user prose (`_untrusted_fields` / house rule) against indirect prompt injection (`OWASP LLM01`) | [ROADMAP §2, §4K](ROADMAP.md#track-k-agent-api-read-models-and-human-ai-trust) | S | W6-L4 | `ready` |
+| 5 | `RM-A9` | Operation-specific OpenAPI 3.1 request schemas (`CreateTradeInput`, `PatchTradeInput`, `DailyReviewInput`, `PlanInput`, `AccountInput`, `PlaybookInput`, `TradeCheckInput`) replacing generic `additionalProperties: true` | [ROADMAP §2](ROADMAP.md#2-track-a-data-truth-sync-safety-and-the-candle-archive-first), `lib/agent/openapi.ts` | M | W6-L5 | `ready` |
+| 6 | `RM-A12` | Browser storage persistence (`navigator.storage.persisted()` / `persist()`) + calm iOS Safari 7-day device-only eviction warning & Tools status row | [ROADMAP §2](ROADMAP.md#2-track-a-data-truth-sync-safety-and-the-candle-archive-first), DS-11 | S | W6-L6 | `ready` |
+| 7 | `RM-E5` + `RM-G4` | Cross-surface financial & temporal reconciliation suite (`cross-surface-truth.test.ts`, Blueprint §3.2) + comprehensive Replay isolation suite (`replay-isolation.test.ts`) | [ROADMAP §4E, §4G](ROADMAP.md#track-e-trade-detail-chart-and-financial-truth) | M | W6-L7 | `ready` |
+| 8 | `RM-B1` | Dual WCAG 2.2 AA + APCA contrast token ramp (`globals.css`, `chart-paint.ts`, `shareCard.ts`) + automated `contrast.test.ts` across all 3 surfaces | [ROADMAP §3](ROADMAP.md#3-track-b-design-hygiene--perceptual-precision-wave-7), DS-01, DS-12 | S | W7-L1 | `ready` (`--text-primary` `#e6e8ec` pending owner) |
+| 9 | `RM-B2` + `RM-B6` + `RM-E2` | Filled candles with grayscale direction cues, continuous ~1px zoom, thin-width crosshair/candle/level hit-testing, and canvas primitive DPR/reference/teardown verification | [ROADMAP §3](ROADMAP.md#3-track-b-design-hygiene--perceptual-precision-wave-7), DS-02, DS-09 | M | W7-L2 | `ready` (owner direction settled) |
+| 10 | `RM-B5` | `formatRateWithCount(num, den)` in `lib/format.ts` + full denominator & `"early"` (`n < 10`) sweep across stats, playbooks, challenges, drills, and day review | [ROADMAP §3](ROADMAP.md#3-track-b-design-hygiene--perceptual-precision-wave-7), DS-03 | M | W7-L3 | `ready` |
+| 11 | `RM-B4` + `RM-J5` | Surface Strategy Lab slippage assumption + `ambiguous-stop` same-bar fill rule & count in `StrategyLabResults.tsx` | [ROADMAP §3, §4J](ROADMAP.md#track-j-strategy-lab-methodological-governance-before-skill-breadth) | S | W7-L4 | `ready` |
+| 12 | `RM-B3` + `RM-N2`–`N4` + `N6` | Maintain design principles and stale-doc corrections; mark `docs/06` superseded and refresh `docs/01` | [ROADMAP §6](ROADMAP.md#6-doc-upkeep-so-docs-dont-drift-from-the-code) | S | W7-L5 | `ready` |
+| 12a | `RM-B7` + `RM-B8` + `RM-B9` | Progressive-disclosure, component-consistency and named-state implementation pass | [ROADMAP §3](ROADMAP.md#3-track-b-design-hygiene--perceptual-precision-wave-7), DS-10, DS-11 | M | W7-L6 | `ready` |
+| 12b | `RM-B10` + `RM-M4` | Responsive regression and accessibility interaction verification at phone and desktop widths | [ROADMAP §3, §4M](ROADMAP.md#3-track-b-design-hygiene--perceptual-precision-wave-7), DS-09 | M | W7-L7 | `ready` |
+| 13 | `RM-C1` | Today `"Next"` decision card (`lib/next-actions.ts` + `<NextActionsCard />`): `≤ 3` ranked items (`Truth > Review > Practice > Research`) or `"Caught up"`; mobile expands #1 + `"N more"` | [ROADMAP §4C](ROADMAP.md#track-c-today-the-human-checkpoint--attention-allocator), DS-08 | M | W8-L1 | `ready` |
+| 14 | `RM-C2` + `RM-C5` | Canonical `lib/session-summary.ts` (plan, real/replay counts, review state, process `X/Y`) + exception-only `"Data confidence: needs attention"` banner | [ROADMAP §4C](ROADMAP.md#track-c-today-the-human-checkpoint--attention-allocator), DS-03, DS-08 | S | W8-L2 | `ready` |
+| 15 | `RM-C4` | `GET /api/v1/session?date=&account_id=` canonical session read model ("ask MogMine about Tuesday") sharing `lib/session-summary.ts` | [ROADMAP §4C](ROADMAP.md#track-c-today-the-human-checkpoint--attention-allocator), Blueprint §3.6 | M | W8-L3 | `ready` |
+| 16 | `RM-D5` + `RM-K2` | Shared pure `lib/review-queue.ts` selector + `GET /api/v1/review-queue` wired into `ReviewScreen.tsx` | [ROADMAP §4D, §4K](ROADMAP.md#track-d-review-and-the-daily-loop) | M | W8-L4 | `ready` |
+| 17 | `RM-D1` + `RM-D2` | Link pre-session plans + plan fidelity (`X/Y`) into `DayReviewScreen.tsx` + `daily-review-sync-api.test.ts` round-trip verification | [ROADMAP §4D](ROADMAP.md#track-d-review-and-the-daily-loop), Blueprint §3.5 | M | W8-L5 | `ready` |
+| 18 | `RM-K1` | Stamp agent write provenance (`token_prefix`, `at`) in `lib/agent/dispatch.ts` + `"by agent"` chip on `TradeNotesPanel.tsx`, `ReviewScreen.tsx`, `DayReviewScreen.tsx` | [ROADMAP §4K](ROADMAP.md#track-k-agent-api-read-models-and-human-ai-trust), DS-06 | M | W8-L6 | `ready` |
+| 19 | `RM-F3` | Desktop `J`/`K`/`Enter`/`Esc` keyboard navigation on `FeedScreen.tsx` and `ReviewScreen.tsx` (`DS-09`) | [ROADMAP §4F](ROADMAP.md#track-f-feed-journal), DS-09 | S | W8-L7 | `ready` |
+| 19a | `RM-F4` | Sample/demo lifecycle and canonical isolation from real queues, badges, totals and review flows | [ROADMAP §4F](ROADMAP.md#track-f-feed-journal), DS-05 | S | W8-L8 | `ready` |
+| 19b | `RM-E6` | Mobile Trade Detail hierarchy: price action and essential risk facts first; secondary execution evidence behind one disclosure | [ROADMAP §4E](ROADMAP.md#track-e-trade-detail-chart-and-financial-truth), DS-10 | M | W9-L6 | `ready` |
+| 20 | `RM-H1` + `RM-H2` | Separate mechanical `Account Guardrails` from `Skill Challenges` + allow a planned, reviewed no-trade session to advance Clean Run | [ROADMAP §4H](ROADMAP.md#track-h-challenges-and-account-guardrails), DS-04 | M | W9-L1 | `ready` |
+| 21 | `RM-I1` | Playbook `version` history on rule edits + `playbook_version` stamped on trades | [ROADMAP §4I](ROADMAP.md#track-i-playbooks) | M | W9-L2 | `ready` |
+| 22 | `RM-J2` + `RM-J7` | Strategy Lab conditions/variants searched counter + `"N matches across M sessions"` cluster count | [ROADMAP §4J](ROADMAP.md#track-j-strategy-lab-methodological-governance-before-skill-breadth), Blueprint §3.7 | M | W9-L3 | `ready` |
+| 23 | `RM-J3` + `RM-J6` | Frozen recipe hash for `discovery` → `validation` holdout protection + roll/source provenance + `"Hypothetical"` badge | [ROADMAP §4J](ROADMAP.md#track-j-strategy-lab-methodological-governance-before-skill-breadth), DS-05 | M | W9-L4 | `ready` |
+| 24 | `RM-E4` + `RM-J1` | Integer-cent `commission_cents` on trades and Strategy Lab runs, showing Gross R and Net R everywhere | [ROADMAP §4E, §4J](ROADMAP.md#track-e-trade-detail-chart-and-financial-truth) | M | W9-L5 | `ready` (owner sets default per-side rate) |
+| 25 | `RM-E1` + `RM-E3` + `RM-L1` + `RM-M3` | Blueprint §6 11-step end-to-end acceptance walk (agent trade → stop move → close → card Shield → fresh-device recovery) | [MOGMINE-BLUEPRINT §6](MOGMINE-BLUEPRINT.md#6-end-to-end-acceptance-scenario-0-of-11-verified) | M | W10 | `ready` (after W6–W9) |
 
-#### `MM-W2-01` · Accessibility Pass: Drills, Challenges, Playbooks (`#19a`)
-- **Writable Files:** `app/drills/**`, `app/challenges/**`, `app/playbooks/**`, `components/DrillScreen.tsx`, `components/ChallengeCard.tsx`, `components/ChallengeDetail.tsx`, `components/ChallengeSetupSheet.tsx`, `components/PlaybookBinder.tsx`, `components/PlaybookCard.tsx`, `components/PlaybookCardSheet.tsx`, `components/PlaybookEditor.tsx`, `lib/__tests__/a11y-routes.test.ts`
-- **Acceptance Criteria (`docs/08 §16`):**
-  - Explicit accessible names (`aria-label`, visible text, or `sr-only`) on all buttons, icon buttons, toggles, and interactive cards.
-  - Minimum `44×44px` tap targets on primary and thumb-zone controls.
-  - `prefers-reduced-motion` respected on card flips, progress transitions, and sheets.
-  - No red/green-only status conveyance (pair with icons/text/shapes for blue/orange color-blind safety).
-  - Keyboard focusability and `aria-modal` / `role="dialog"` on modal sheets.
+### 1a. Owner-gated / blocked items (do NOT pick up without owner decision)
 
-#### `MM-W2-02` · Accessibility Pass: Core Screens & AppShell (`#19b`)
-- **Writable Files:** `components/TodayScreen.tsx`, `components/ReviewScreen.tsx`, `components/FeedScreen.tsx`, `components/TuneScreen.tsx`, `components/PlanCard.tsx`, `components/PlanSheet.tsx`, `components/SessionReview.tsx`, `components/AppShell.tsx`, `lib/__tests__/a11y-core-screens.test.ts`
-- **Acceptance Criteria (`docs/08 §16`):**
-  - Semantic landmarks (`<main>`, `<nav aria-label="...">`), `aria-current="page"` on active bottom-dock tab.
-  - Accessible labels and `aria-valuetext` on Tune sliders (Gold Intensity, Box Opacity) and `role="switch"` / `aria-checked` on toggles (Shield, Color-blind mode).
-  - `role="dialog"` + `aria-modal="true"` + Escape key handler on `PlanSheet` and `SessionReview`.
-  - Minimum `44×44px` tap targets on all bottom-dock links, review actions, and plan buttons.
+| Roadmap / Issue | Item | Blocked on |
+|---|---|---|
+| `RM-A5` | Backfill Jan 25 – Aug 24 2026 Databento 1m Parquet bars | Owner upload from conversion machine |
+| `RM-A6` / `#65` | CME holiday & early-close session calendar (`closed` vs `missing`) | Owner (`OD-35`) |
+| `RM-A13` | Cross-device delete vs. edit conflict policy (keep re-create vs `deleted_at` tombstones) | Owner (`ROADMAP §5`) |
+| `RM-C3` | Today `"Current focus"` pinned line | `RM-K1` provenance; schedule immediately after RM-K1 lands |
+| `RM-D3` | Blind review experiment on trades > 7 days old | Owner experiment (`BET-03`, `OD-25`) |
+| `RM-D4` | Review tab badge: number vs dot | Owner (`ROADMAP §5`) |
+| `RM-F2` | Nav display labels `Feed → Journal` and `Tune → Tools` | Owner (`ROADMAP §5`) |
+| `RM-G1`–`G3` | Drill ground truth decoupled from `r` + false-take/false-pass + live transfer metric | Owner label rule (`ROADMAP §5`) |
+| `DC-3`–`DC-7` | Discretionary call sheet UI, chart pins, grading, score | Owner (`OD-52`) |
+| `OD-55` | `5m` fallback for Yahoo `1m` Globex gaps in session levels | Owner (`OD-55`) |
+| `RM-M1` / `#22`, `RM-M2` | Real-phone performance budgets & dark-room APCA check | Owner real phone |
 
-#### `MM-W2-03` · Partials & Multiple Targets Pure Model (`#38`, `I`)
-- **Writable Files:** `lib/partials.ts`, `lib/__tests__/partials.test.ts`
-- **Acceptance Criteria (`docs/15`, Guardrail 4):**
-  - Pure types & functions for multi-lot partial exits (`PartialExit`, `PartialTarget`, `PartialLotBand`, `PartialSummary`).
-  - Integer-tick P&L calculation across multiple exit legs (never floating-point price math), using contract point values (`MES` = `$5/pt`, `MNQ` = `$2/pt`, `ES` = `$50/pt`, `NQ` = `$20/pt`).
-  - Per-lot R contribution and total weighted R (verify Fixture 7 case: 2 lots, T1 at `+1.0R`, T2 at `+2.5R` -> `+1.75R`).
-  - Generate `PartialLotBand[]` geometry (entry time -> each lot's exit time, price range, lot count, ticks, R) ready for `PositionBoxPrimitive` / `buildMarks` wiring in Lane 8.
-  - Guard `R === null` when initial stop is absent; handle open remaining lots cleanly.
-
-#### `MM-W2-04` · Discretionary Prompts Engine (`DP-1`)
-- **Writable Files:** `lib/discretionary-prompts.ts`, `lib/__tests__/discretionary-prompts.test.ts`
-- **Acceptance Criteria (`docs/playbook-design/04-discretionary-prompts-integration.md`):**
-  - Define `ReasonChip`, `DeviationKind`, `PromptTrigger`, `ReviewPrompt`, `PromptLibraryV1`, `PendingAsk`.
-  - Seed default library (`seedPromptLibrary(userId)`) with stable `seed:*` IDs for all 7 `CallKind`s and shared reasons, always setting `user_id` (Invariant 7).
-  - Implement `detectDeviations(trade: TradeRecord): DeviationKind[]` reading `exit_price`, `planned_target_price`, `initial_stop_price`, `stop_loss_price`, `stop_moves`, and `hasWidenedStop`.
-  - Implement `pendingAsks(trade, library, existingCalls): PendingAsk[]` returning ordered, unanswered prompts whose trigger matches detected deviations or `always`, excluding retired prompts and already-answered kinds.
-
-#### `MM-W2-05` · Interactive `"I Moved My Stop"` Editor (`#36`, `G2-UI`)
-- **Writable Files:** `components/StopMovesEditor.tsx`, `lib/__tests__/stop-moves-editor.test.ts`
-- **Acceptance Criteria (`#36`, `docs/15 §3`, `docs/20`, `UX-33`):**
-  - Self-contained React component `<StopMovesEditor trade={trade} onChange={onChange} />` styled cleanly for `390×844` mobile and desktop (using existing CSS variables `--gold-mid`, `--surface`, `--text-muted`, etc., no hardcoded gold hex).
-  - Allows adding a stop move with tick-stepper price adjustment (`0.25` tick size for MES/ES/MNQ/NQ via `CONTRACT_SPECS`) and timestamp picker/input, plus removing existing rows.
-  - Computes and displays per-row delta vs prior stop (tightened / breakeven / widened) using `tabular-nums`.
-  - When any move widens risk, displays a non-destructive suggestion badge (`Moved Stop (widened)` — suggests, never auto-applies per `UX-33`).
-
-#### `MM-W2-06` · Neighbour-Trade Hit Testing & Chart Tap Interaction (`#40`, `K-UI`)
-- **Writable Files:** `components/TradeChart.tsx`, `components/PositionBoxPrimitive.ts`, `lib/__tests__/neighbour-hit-test.test.ts`
-- **Acceptance Criteria (`#40`, `D-010`, `docs/12 §14`):**
-  - Add pure hit-testing helper (e.g. `hitTestArchivedMark(x, y, boxes)`) that checks pointer coordinates against rendered `layer === "archived"` box rects and returns the matching `tradeId` (if any).
-  - Expose `onSelectNeighbour?: (tradeId: string) => void` prop on `TradeChart.tsx` and wire chart click/tap events to call it when an archived neighbour box is tapped.
-  - Keep archived boxes faint (`<= 0.1` alpha, dotted outline, zero text labels or axis tags per `D-010`) and ensure normal chart pan, crosshair scrub, and pinch-zoom remain unaffected.
-
-#### `MM-W2-07` · Trade Card Playbook Tag & Day Card Builder (`#42` `M3-Card` + `CD-4`)
-- **Writable Files:** `lib/shareCard.ts`, `lib/day-card.ts`, `lib/__tests__/day-card.test.ts`
-- **Acceptance Criteria (`docs/23 §2, §6`, `#42`, Invariant 5):**
-  - In `lib/shareCard.ts`: render the trade's Playbook name/tag cleanly in the Trade Card header/context band across all 3 sizes (`4:5`, `9:16`, `1:1`), respecting Shield mode and `getTheme()` tokens.
-  - In `lib/day-card.ts`: implement pure `buildDayCardData(sessionDate, trades, shield)` and canvas renderer `renderDayCardCanvas(ctx, data, theme, size)` using the shared `CARD_LAYOUT_TABLE` frame (`DAY` type label, session date, trade count `n = X`, net R, process adherence %, Shield hides all `$` amounts and contract sizes, specular 1px gold top edge).
-  - Unit tests in `lib/__tests__/day-card.test.ts` verifying all 3 sizes, Shield privacy, and zero-trade / no-stop edge cases.
-
-#### `MM-W2-08` · Final Pass: Merge, Integration & Full Release Gate
-- **Owner:** Master Agent (Lane 8) | **Status:** `done`
-- **Protocol:**
-  1. Read all 7 worker handoffs in `notes/handoffs/` and inspect each worker's diff.
-  2. Merge `feat/mm-w2-01` through `feat/mm-w2-07` into `main` in dependency order.
-  3. Wire `<StopMovesEditor />` (Lane 5) and `onSelectNeighbour` navigation (Lane 6) into `components/TradeDetail.tsx`.
-  4. Run the authoritative verification gate: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
-  5. Fold handoffs into `NOTES.md`, update `BOARD.md`, clean up worktrees, and publish the final pass report.
+**Never take:** owner-question issues (`#5`–`#9`, `#23`, `#24`, `#39`), parked broker work (`#43`, `D-009`), `#70`, `#123`, or parked roadmap items (`RM-A3`, `RM-A10`, `RM-I2`, `RM-J4`, `RM-K3`, `RM-K4`).
 
 ---
 
-## 1c. 2026-11-24 Five-Agent Swarm Plan (`docs/design-2026-11-24/91-swarm-plan.md`)
+## 1b. Active Wave Ready to Launch: `MM-W6` — Data Truth, Archive Visibility & Agent Write Safety (`7 + 1`)
 
-> **Baseline:** `origin/main` (`22da636`, PR #207).
-> **Full wave schedule, file ownership & acceptance tests:** [`docs/design-2026-11-24/91-swarm-plan.md`](docs/design-2026-11-24/91-swarm-plan.md) · **Machine manifest:** [`docs/design-2026-11-24/swarm-plan.json`](docs/design-2026-11-24/swarm-plan.json) · **Swarm defaults (Chris can override):** [`docs/design-2026-11-24/92-decisions-made-by-swarm.md`](docs/design-2026-11-24/92-decisions-made-by-swarm.md).
-> **All 35 packages are runnable (`ready`, 0 blocked on owner):** 5 agents (`swarm-1`..`swarm-5`) × 7 waves, canonical locks `refs/heads/claim/<PKG-ID>`, branches `swarm/<PKG-ID>`, Codex reviews and merges each wave.
+> **Baseline:** Merged `main` (`4b9b75e` + PR #297 docs).
+> **Wave Target:** ~2,200 total changed lines (~250–400 lines per worker lane).
+> **Worktree Isolation (`boardinit.md`):** Each worker runs in its own isolated git worktree on branch `wave6/lane-1`..`wave6/lane-7` with symlinked/linked `node_modules` (never run `npm install` unless `package-lock.json` changes).
+> **Worker Verification Cap (`AGENTS.md §6b`):** Workers run **only** `nice -n 10 node --test --test-concurrency=2 lib/__tests__/<their-test>.test.ts` + `nice -n 10 npm run typecheck`. Lane 8 (Integrator) runs full `npm test`, `npm run lint`, `npm run check:file-length`, and `npm run build` once after merging.
 
-| Wave | Package | Agent (`Lane`) | Summary | Prompt | Status |
-| :---: | :--- | :--- | :--- | :--- | :--- |
-| 1 | `RS-1` | `swarm-1` (`L1`) | Per-account R size: pure model and stored fields | [RS-1.md](docs/design-2026-11-24/prompts/RS-1.md) | `ready` |
-| 1 | `FB-1` | `swarm-2` (`L2`) | ±5-minute fill-to-bar matching | [FB-1.md](docs/design-2026-11-24/prompts/FB-1.md) | `ready` |
-| 1 | `IN-1` | `swarm-3` (`L3`) | Remember chart choices (`vwapAnchor`, `levelLabels`, `ema200`, `reviewCardOrientation`) | [IN-1.md](docs/design-2026-11-24/prompts/IN-1.md) | `ready` |
-| 1 | `DR-1a` | `swarm-4` (`L4`) | Daily review model, local store, and backup | [DR-1a.md](docs/design-2026-11-24/prompts/DR-1a.md) | `ready` |
-| 1 | `API-1` | `swarm-5` (`L5`) | House rules at discovery, `/guide`, and list defaults fixed | [API-1.md](docs/design-2026-11-24/prompts/API-1.md) | `ready` |
-| 2 | `RS-2` | `swarm-1` (`L1`) | R size in `AccountSheet`, Tune, `RiskChips`, and `TradeDetail` (`RiskLine`) | [RS-2.md](docs/design-2026-11-24/prompts/RS-2.md) | `ready` |
-| 2 | `SM-1` | `swarm-2` (`L2`) | Stop touches and MAE strictly after the entry bar (`D-H`, `D-I`) | [SM-1.md](docs/design-2026-11-24/prompts/SM-1.md) | `ready` |
-| 2 | `UX-E` | `swarm-3` (`L3`) | Modern position zones and chart palette from `08-visual-quality.md` (`D-J`) | [UX-E.md](docs/design-2026-11-24/prompts/UX-E.md) | `ready` |
-| 2 | `NAV-1` | `swarm-4` (`L4`) | Move between trading days on Today/Review; Feed URL filters | [NAV-1.md](docs/design-2026-11-24/prompts/NAV-1.md) | `ready` |
-| 2 | `API-2a` | `swarm-5` (`L5`) | `/api/v1/vocabulary`, `?include=derived`, and list filters | [API-2a.md](docs/design-2026-11-24/prompts/API-2a.md) | `ready` |
-| 3 | `RS-3a` | `swarm-1` (`L1`) | Switch library consumers to account R (`D-A`, `D-C`) | [RS-3a.md](docs/design-2026-11-24/prompts/RS-3a.md) | `ready` |
-| 3 | `SM-2` | `swarm-2` (`L2`) | Untimed stop moves (`"untimed"` basis at exit, dashed step, no false SL touch) | [SM-2.md](docs/design-2026-11-24/prompts/SM-2.md) | `ready` |
-| 3 | `IN-2` | `swarm-3` (`L3`) | Full-session VWAP window and Globex small-gap tolerance (`D-F`) | [IN-2.md](docs/design-2026-11-24/prompts/IN-2.md) | `ready` |
-| 3 | `DR-1b` | `swarm-4` (`L4`) | Daily reviews in Supabase (`mogmine_daily_reviews` migration), sync, and `/api/v1` | [DR-1b.md](docs/design-2026-11-24/prompts/DR-1b.md) | `ready` |
-| 3 | `PL-1` | `swarm-5` (`L5`) | Playbook Lab pure model (`lib/playbook-lab.ts`) | [PL-1.md](docs/design-2026-11-24/prompts/PL-1.md) | `ready` |
-| 4 | `RS-3b` | `swarm-1` (`L1`) | Switch screens, R ruler, and R strip to account R; remove `rMultiple` aliases | [RS-3b.md](docs/design-2026-11-24/prompts/RS-3b.md) | `ready` |
-| 4 | `UX-B` | `swarm-2` (`L2`) | Challenges per account and Drawdown Defender room label | [UX-B.md](docs/design-2026-11-24/prompts/UX-B.md) | `ready` |
-| 4 | `LB-A` | `swarm-3` (`L3`) | Level labels behind candles, `0.95` alpha token, `rightOffset`, quiet right edge (`Q-7`) | [LB-A.md](docs/design-2026-11-24/prompts/LB-A.md) | `ready` |
-| 4 | `PL-2a` | `swarm-4` (`L4`) | Playbook Lab UI: Home, `Binder \| Lab` tabs, Playbooks, and Tags (`Q-1`, `Q-2`) | [PL-2a.md](docs/design-2026-11-24/prompts/PL-2a.md) | `ready` |
-| 4 | `API-2b` | `swarm-5` (`L5`) | Agent API write-time refusals and warnings (`Q-9`, `Q-10`, `Q-11`) | [API-2b.md](docs/design-2026-11-24/prompts/API-2b.md) | `ready` |
-| 5 | `RS-4` | `swarm-1` (`L1`) | Stated risk chips in `AddTradeSheet` and dry-run R-size backfill script | [RS-4.md](docs/design-2026-11-24/prompts/RS-4.md) | `ready` |
-| 5 | `SM-3` | `swarm-2` (`L2`) | Timed stop-move validation, `widestRisk`, `lockedR`, and slippage note | [SM-3.md](docs/design-2026-11-24/prompts/SM-3.md) | `ready` |
-| 5 | `LB-B1` | `swarm-3` (`L3`) | Tap mode: no pills, `≤ 3` price-only axis tags, and `hitLevel` (`D-D`) | [LB-B1.md](docs/design-2026-11-24/prompts/LB-B1.md) | `ready` |
-| 5 | `DR-2` | `swarm-4` (`L4`) | `/review/day/[date]` screen, 14-day Days strip, and 11/23 review dry-run helper (`Q-3`, `Q-4`) | [DR-2.md](docs/design-2026-11-24/prompts/DR-2.md) | `ready` |
-| 5 | `API-3` | `swarm-5` (`L5`) | `/api/v1/candles` and `/api/v1/checks/trade` endpoints | [API-3.md](docs/design-2026-11-24/prompts/API-3.md) | `ready` |
-| 6 | `UX-C` | `swarm-1` (`L1`) | Refuse future trade timestamps and warn on far-off prices (`Q-10`, `Q-11`) | [UX-C.md](docs/design-2026-11-24/prompts/UX-C.md) | `ready` |
-| 6 | `UX-D` | `swarm-2` (`L2`) | `"No setup picked"` chip and commentary-focused notes placeholders | [UX-D.md](docs/design-2026-11-24/prompts/UX-D.md) | `ready` |
-| 6 | `LB-B2` | `swarm-3` (`L3`) | `LevelCard` tap popover, accessible level disclosure, and `≤ 4` export pills (`D-E`) | [LB-B2.md](docs/design-2026-11-24/prompts/LB-B2.md) | `ready` |
-| 6 | `DR-3` | `swarm-4` (`L4`) | Portrait/Landscape `ReviewCard` grid, `16:9` card layout, and `"Share day"` PNG (`Q-5`) | [DR-3.md](docs/design-2026-11-24/prompts/DR-3.md) | `ready` |
-| 6 | `API-4` | `swarm-5` (`L5`) | Point-in-time `/api/v1/levels` endpoint (`Q-8`) | [API-4.md](docs/design-2026-11-24/prompts/API-4.md) | `ready` |
-| 7 | `PL-2b` | `swarm-1` (`L1`) | Playbook Lab UI: Map grid/pairs and Gaps views | [PL-2b.md](docs/design-2026-11-24/prompts/PL-2b.md) | `ready` |
-| 7 | `FB-2` | `swarm-2` (`L2`) | `"Use HH:MM"` matched fill action with Undo and pre-filled `StopMovesEditor` | [FB-2.md](docs/design-2026-11-24/prompts/FB-2.md) | `ready` |
-| 7 | `IN-3` | `swarm-3` (`L3`) | 200 EMA on displayed timeframe across chart, HUD, prefs, and `/levels` (`D-G`, `OD-18`) | [IN-3.md](docs/design-2026-11-24/prompts/IN-3.md) | `ready` |
-| 7 | `UX-A` | `swarm-4` (`L4`) | Session trade-count clarity, Review queue wording, and after-close plan window | [UX-A.md](docs/design-2026-11-24/prompts/UX-A.md) | `ready` |
-| 7 | `PL-3` | `swarm-5` (`L5`) | Editable synced `tag_registry` singleton (`mogmine_tag_registries`), Tune editor, and live vocabulary (`Q-6`) | [PL-3.md](docs/design-2026-11-24/prompts/PL-3.md) | `ready` |
+| Lane | Roadmap IDs | Branch | Writable Files (strict — disjoint across all 7 lanes) | Must Avoid | Target | Status |
+|---|---|---|---|---|---|---|
+| `MM-W6-01` | `RM-A4` | `wave6/lane-1-archive-status` | `lib/market-data/archive.ts`, `app/api/market-data/status/route.ts`, `components/ArchiveStatusCard.tsx`, `lib/__tests__/archive-status.test.ts` | `components/TuneScreen.tsx`, `lib/market-data/top-up.ts`, `lib/__tests__/auth.test.ts`, `app/globals.css`, `BOARD.md` | ~280 lines | `ready` |
+| `MM-W6-02` | `RM-A11` + `RM-A14` | `wave6/lane-2-topup-and-bars1m` | `app/api/v1/market/top-up/route.ts`, `lib/agent/market-topup.ts`, `lib/strategy-lab/bars-cache.ts`, `lib/strategy-lab/bars.ts`, `lib/strategy-lab/use-lab-persistence.ts`, `supabase/migrations/20261127010000_drop_unused_mogmine_bars_1m.sql`, `lib/__tests__/strategy-lab-persistence.test.ts`, `lib/__tests__/agent-market-topup.test.ts` | `lib/agent/openapi.ts`, `lib/agent/handle.ts`, `lib/agent/dispatch.ts`, `lib/market-data/top-up.ts`, `BOARD.md` | ~340 lines | `ready` |
+| `MM-W6-03` | `RM-A7` | `wave6/lane-3-write-safety` | `lib/agent/idempotency.ts`, `lib/agent/handle.ts`, `lib/agent/dispatch.ts`, `lib/agent/server-auth.ts`, `supabase/migrations/20261127010500_mogmine_agent_write_safety.sql`, `lib/__tests__/agent-write-safety.test.ts` | `lib/agent/openapi.ts`, `lib/agent/house-rules.ts`, `lib/agent/strategy-lab.ts`, `BOARD.md` | ~380 lines | `ready` |
+| `MM-W6-04` | `RM-A8` + `RM-K5` | `wave6/lane-4-shield-untrusted` | `lib/agent/strategy-lab.ts`, `lib/agent/untrusted-text.ts`, `lib/agent/house-rules.ts`, `lib/__tests__/agent-shield-and-untrusted.test.ts` | `lib/agent/dispatch.ts`, `lib/agent/openapi.ts`, `lib/agent/handle.ts`, `BOARD.md` | ~240 lines | `ready` |
+| `MM-W6-05` | `RM-A9` | `wave6/lane-5-openapi-schemas` | `lib/agent/openapi-schemas.ts`, `lib/agent/openapi.ts`, `lib/__tests__/agent-openapi-schemas.test.ts` | `lib/agent/dispatch.ts`, `lib/agent/house-rules.ts`, `lib/agent/handle.ts`, `BOARD.md` | ~360 lines | `ready` |
+| `MM-W6-06` | `RM-A12` | `wave6/lane-6-storage-persist` | `lib/storage-persist.ts`, `components/StoragePersistRow.tsx`, `lib/__tests__/storage-persist.test.ts` | `components/TuneScreen.tsx`, `components/AppShell.tsx`, `app/globals.css`, `BOARD.md` | ~220 lines | `ready` |
+| `MM-W6-07` | `RM-E5` + `RM-G4` | `wave6/lane-7-truth-and-replay-suites` | `lib/__tests__/cross-surface-truth.test.ts`, `lib/__tests__/replay-isolation.test.ts` | All production files (`app/**`, `components/**`, `lib/*.ts`), `BOARD.md` | ~380 lines | `ready` |
+| `MM-W6-08` | Final Pass | `main` | Integration wiring (`components/TuneScreen.tsx`, `components/AppShell.tsx`, `lib/agent/dispatch.ts`, `lib/agent/openapi.ts`, `lib/__tests__/auth.test.ts`, `NOTES.md`, `ROADMAP.md`, `BOARD.md`) | Unscoped feature additions | Gate & merge | `ready` (after L1–L7) |
+
+### Wave `MM-W6` Detailed Lane Specifications
+
+#### `MM-W6-01` · Archive Health Endpoint & Card (`RM-A4`)
+- **Writable Files:** `lib/market-data/archive.ts`, `app/api/market-data/status/route.ts`, `components/ArchiveStatusCard.tsx`, `lib/__tests__/archive-status.test.ts`
+- **Deliverables & Acceptance Criteria:**
+  - Add `readArchiveStatus(symbol?: string, nowMs?: number)` inside `lib/market-data/archive.ts` (which is already allowlisted for server-only Supabase archive reads in `auth.test.ts`). Queries `mogmine_market_coverage` (latest `session_date`, `last_ts`, total covered sessions, missing expected regular sessions) and latest row of `mogmine_market_archive_jobs` (`status`, `started_at`, `finished_at`, `bars_written`). Degrades gracefully (`available: false`) when env vars are absent in local mode.
+  - Expose `GET /api/market-data/status` (`Cache-Control: no-store`) returning `{ available, symbol, newestBarIso, coveredSessions, missingRecentSessions, lastJob, warning }` without leaking keys or stack traces.
+  - Build `<ArchiveStatusCard />` following `DS-11` (named states: `Loading archive status…`, `Local mode (archive not configured)`, `Healthy`, and explicit amber warning when >1 completed regular trading day is missing or `lastJob.status` failed) with `tabular-nums` timestamps (`lib/time.ts` Central Time). Lane 8 mounts it in `TuneScreen.tsx` (Tools tab).
+
+#### `MM-W6-02` · Agent Market Top-Up & Retire `mogmine_bars_1m` (`RM-A11` + `RM-A14`)
+- **Writable Files:** `app/api/v1/market/top-up/route.ts`, `lib/agent/market-topup.ts`, `lib/strategy-lab/bars-cache.ts`, `lib/strategy-lab/bars.ts`, `lib/strategy-lab/use-lab-persistence.ts`, `supabase/migrations/20261127010000_drop_unused_mogmine_bars_1m.sql`, `lib/__tests__/strategy-lab-persistence.test.ts`, `lib/__tests__/agent-market-topup.test.ts`
+- **Deliverables & Acceptance Criteria:**
+  - **`RM-A11`:** Add `POST /api/v1/market/top-up` authenticated via `handleAgentRequest` requiring `write` scope. Accepts `{ symbol?: "MES" | "MES=F", days?: number }` (clamped 1..10, refuses any payload containing bars/prices or symbols outside `OD-15`), invokes `runTopUp` from `lib/market-data/top-up.ts` + `lib/market-data/top-up-store.ts`, and records an agent audit row (`record_type: "market_archive"`).
+  - **`RM-A14`:** Repoint `lib/strategy-lab/bars-cache.ts` (`readRemoteSessionBars1m` / `BARS_1M_TABLE`) to read from `mogmine_market_candles` (`symbol = "MES=F"`, `timeframe = "1m"`, `ts` / OHLCV columns) and disable browser/client writes to any bar table (archive writes are server-only via `top-up-store.ts`). Add `supabase/migrations/20261127010000_drop_unused_mogmine_bars_1m.sql` (`drop table if exists public.mogmine_bars_1m;`) without editing historical migration `20261126120000_mogmine_strategy_lab.sql`. Update `lib/__tests__/strategy-lab-persistence.test.ts` accordingly.
+
+#### `MM-W6-03` · Agent Write Safety & Decision Audit (`RM-A7`)
+- **Writable Files:** `lib/agent/idempotency.ts`, `lib/agent/handle.ts`, `lib/agent/dispatch.ts`, `lib/agent/server-auth.ts`, `supabase/migrations/20261127010500_mogmine_agent_write_safety.sql`, `lib/__tests__/agent-write-safety.test.ts`
+- **Deliverables & Acceptance Criteria:**
+  - Migration `20261127010500_mogmine_agent_write_safety.sql`:
+    1. Create `public.mogmine_agent_idempotency` (`user_id uuid`, `endpoint text`, `idempotency_key text`, `payload_hash text`, `state text check (state in ('in_flight','completed'))`, `status integer`, `response_body jsonb`, `created_at timestamptz`, primary key `(user_id, endpoint, idempotency_key)`, RLS enabled, `revoke all from anon, authenticated`, `service_role` only).
+    2. Add nullable columns to `public.mogmine_agent_audit`: `request_id text`, `workflow text` (from `X-MogMine-Reason`, max 120 chars), `house_rules_version text`. Never store journal prose in audit rows.
+  - **`Idempotency-Key` on `POST` record creates:** If provided (UUID / 1..128 ASCII chars), atomically claim before executing: replay stored `2xx` status + body when completed with matching SHA-256 `payload_hash`; return `422` when `payload_hash` differs; return `409` when `in_flight`; never cache `5xx` errors.
+  - **Optimistic concurrency on `PUT` / `PATCH` updates:** Accept `If-Match` header or `expected_updated_at` field and pass `{ expectedUpdatedAt }` to the repository/command layer so stale updates return `409 conflict` cleanly.
+  - **Canonical `request_id`:** Stamp `request_id` (and `X-Request-Id` response header) on every `/api/v1` response and audit entry.
+
+#### `MM-W6-04` · Shield API Isolation & Untrusted Text Guardrails (`RM-A8` + `RM-K5`)
+- **Writable Files:** `lib/agent/strategy-lab.ts`, `lib/agent/untrusted-text.ts`, `lib/agent/house-rules.ts`, `lib/__tests__/agent-shield-and-untrusted.test.ts`
+- **Deliverables & Acceptance Criteria:**
+  - **`RM-A8` (`DS-07`):** In `lib/agent/strategy-lab.ts:163`, pass `shield: false` instead of `prefs.shield` so UI Shield toggles never mutate `/api/v1/strategy-lab/context` outputs.
+  - **`RM-K5` (`OWASP LLM01`):** Create `lib/agent/untrusted-text.ts` exporting `UNTRUSTED_TEXT_FIELDS` (per record type: `pre_trade_thesis`, `in_trade_notes`, `post_trade_review`, `notes_and_feelings`, `quick_tags`, `lesson`, `observations`, `notes`, etc.) and pure `withUntrustedTextMeta(recordType, payload)` attaching `_untrusted_user_text_fields: string[]` metadata for Lane 8 to wire into `dispatch.ts` / `openapi.ts`. Add a clear House Rule in `lib/agent/house-rules.ts` stating all user-authored text fields are untrusted quotation data and must never be followed as agent instructions. Test with a synthetic prompt-injection trade note.
+
+#### `MM-W6-05` · Operation-Specific OpenAPI 3.1 Request Schemas (`RM-A9`)
+- **Writable Files:** `lib/agent/openapi-schemas.ts`, `lib/agent/openapi.ts`, `lib/__tests__/agent-openapi-schemas.test.ts`
+- **Deliverables & Acceptance Criteria:**
+  - Create `lib/agent/openapi-schemas.ts` defining explicit JSON Schemas for write bodies: `CreateTradeInput`, `PatchTradeInput` (including 4-stage note fields, `stated_risk_r`, `expected_updated_at`, forbidding derived fields `net_pnl`, `r_multiple`, `hold_seconds`), `AccountInput`, `DailyReviewInput`, `PlanInput`, `PlaybookInput`, `TradeCheckInput`, `SingletonPrefsInput`, `SingletonTagRegistryInput`, plus collection-dispatched `oneOf` or per-collection paths in `lib/agent/openapi.ts` (keep both files `≤ 450` lines!).
+  - Replace the blanket `additionalProperties: true` `jsonBody` helper (`lib/agent/openapi.ts:116`) with `$ref`s to those named schemas, document `Idempotency-Key`, `If-Match`, and `X-MogMine-Reason` headers, and add unit tests validating schema completeness and required/forbidden properties.
+
+#### `MM-W6-06` · Browser Storage Persistence & iOS 7-Day Warning (`RM-A12`)
+- **Writable Files:** `lib/storage-persist.ts`, `components/StoragePersistRow.tsx`, `lib/__tests__/storage-persist.test.ts`
+- **Deliverables & Acceptance Criteria:**
+  - Build `lib/storage-persist.ts` (`hydrateStoragePersist`, `useStoragePersistState`, pure `shouldWarnLocalEviction({ persisted, syncEnabled, standalonePwa, dismissed })`): calls `navigator.storage.persisted()` and `navigator.storage.persist()` safely in browser environments (graceful `"unsupported"` fallback in SSR/Node).
+  - Build `<StoragePersistRow />` showing storage status (`Persisted`, `Best-effort`, `Cloud synced`) for Tools and a calm, once-dismissible warning banner when running local-only (`syncEnabled === false`), not installed as a standalone Home Screen PWA, and `persisted === false` (explaining iOS Safari's 7-day script-storage wipe and how to sign in or Add to Home Screen).
+
+#### `MM-W6-07` · Cross-Surface Truth & Replay Isolation Suites (`RM-E5` + `RM-G4`)
+- **Writable Files:** `lib/__tests__/cross-surface-truth.test.ts`, `lib/__tests__/replay-isolation.test.ts`
+- **Deliverables & Acceptance Criteria:**
+  - **`cross-surface-truth.test.ts` (`Blueprint §3.2`):** Build deterministic fixtures covering: (1) `$300` fixed 1R with whole-micro `Math.ceil` overshoot (`8 MES` on 8-pt stop = `$320` / `1.07R` risk), (2) fill matched within ±5m to a 1m bar open without counting that bar's pre-fill range as post-entry MAE/MFE, (3) timed + untimed stop moves, (4) multi-lot partial exits, (5) scratch trade within `max(0.1R, 2 ticks)`, and (6) open trade (`OD-38` `null` money/R). Assert agreement across `deriveTrade`, `observeTrade`, `buildMarks`, `excursions`, `selectors` (`dayStats`, `runningStats`), `shareCard`, `day-card`, `describe.ts`, and `dispatchAgentRoute` (`?include=derived`).
+  - **`replay-isolation.test.ts` (`RM-G4`):** Assert that logging closed winning/losing trades on a `mode: "replay"` account has **zero** effect on `runningStats`, Today live `dayStats`, `evaluateChallenge` (Drawdown Defender & Clean Run), `ReviewScreen` real queue counts, and `PlaybookLab` live summaries unless replay is explicitly queried.
+  - *Out-of-lane rule:* Do not edit production files; if a real cross-surface bug is caught, assert/document the exact file and line in `notes/handoffs/2026-11-27-MM-W6-07.md` so Lane 8 fixes it cleanly during integration.
+
+#### `MM-W6-08` · Master Agent / GPT Final Integration Pass
+1. Inspect all 7 worker handoffs in `notes/handoffs/` and merge `wave6/lane-1`..`wave6/lane-7` into `main` in order (`L4 → L3 → L2 → L5 → L1 → L6 → L7`).
+2. Wire `<ArchiveStatusCard />` and `<StoragePersistRow />` into `components/TuneScreen.tsx` (keeping `TuneScreen.tsx ≤ 450` lines) and `hydrateStoragePersist()` in `AppShell.tsx`; wire `withUntrustedTextMeta` into `lib/agent/dispatch.ts` and `/api/v1/market/top-up` into `lib/agent/openapi.ts`; fix any discrepancy uncovered by Lane 7; verify `lib/__tests__/auth.test.ts` service-role allowlist.
+3. Run the full authoritative gate once:
+   - `nice -n 10 npm run typecheck`
+   - `nice -n 10 npm run lint`
+   - `nice -n 10 node --test --test-concurrency=2 "lib/__tests__/*.test.ts"`
+   - `npm run check:file-length`
+   - `nice -n 10 npm run build`
+4. Apply new Supabase migrations (`20261127010000_*`, `20261127010500_*`) only when owner approves or via Supabase CLI/MCP per `D-012`, fold handoffs into `NOTES.md`, mark `RM-*` rows `done (<sha>)` in `ROADMAP.md` and `BOARD.md`, and advance `§1b` to Wave 7 (`ROADMAP.md §4b`).
 
 ---
 
@@ -199,58 +166,75 @@ Status values: `ready` · `claimed` · `review` · `blocked (reason)` · `done`.
 
 | Lane | Job | Takes new items? | Merges? |
 |---|---|---|---|
-| **Planner** | Keeps §1 ordered and sliced into items of about 400 lines or fewer, writes acceptance tests into the issue, takes hard fixes and architecture | Only hard fixes | Yes |
-| **Workers** | Take the top `ready` item, build it, open a PR | Yes, one at a time | Only after 30 min of no review with green CI |
-| **Reviewer** | Reviews PRs oldest first, pushes small fixes, merges, closes duplicates, rolls handoffs into NOTES.md | No | Yes |
-| **Owner (Chris)** | Product calls, real-phone checks, anything in DECISIONS.md marked owner | — | — |
+| **Planner / Integrator** | Keeps §1 ordered and sliced into items `≤ 400` lines, dispatches isolated `git worktree` waves (`boardinit.md`), wires shared UI shells, runs full gate, merges | Integration & hard fixes | Yes |
+| **Workers** | Take assigned worktree lane (or top `ready` item), run targeted tests + `typecheck`, write handoff in `notes/handoffs/` | Yes, one slice at a time | Never directly to `main` in wave mode |
+| **Owner (Chris)** | Product calls (`ROADMAP §5`, `DECISIONS.md`), Vercel env secrets (`CRON_SECRET`), real-phone sign-off | — | — |
 
 ---
 
 ## 3. Claim and lock rules
 
-A claim is only real if it is **atomic**. An issue comment is a note, not a lock.
+A claim is only real if it is **atomic**.
 
-**Local folder with no git (the current setup):** the board is the lock. Re-read BOARD.md, then in one edit change the row's Status from `ready` to `claimed (<lane>)`. Re-read straight after: if another lane's name is there, it won the race; pick the next row. Edit only your own row, and edit files by targeted replacement, never by saving a whole stale copy, since several agents share this folder. Steps 1–5 below apply once there is a git checkout.
-
-1. **Check:** the issue has no assignee, there is no `claim/<issue>` branch on origin, and there is no open PR that references the issue.
-2. **Lock:** push an empty claim branch using the **canonical issue ref** (`claim/<issue>`). Git refuses a second push of the exact same ref, guaranteeing mutual exclusion even if two lanes try to claim simultaneously.
+1. **Multi-lane `boardinit` wave mode (preferred):** The Planner assigns disjoint lanes in `§1b` and creates one isolated `git worktree` per worker (`git worktree add ../mogmine-w<N> -b wave6/lane-<N> <baseline>` with symlinked `node_modules`). Workers stay strictly inside their worktree and writable file list.
+2. **Single-worker / autonomous pull mode:** Push an atomic claim ref before starting:
    ```bash
    git fetch origin
-   git push origin origin/main:refs/heads/claim/<issue>   # fails atomically if someone already pushed the claim
-   gh issue edit <issue> --add-assignee @me
-   gh issue comment <issue> --body "Locked by <lane> via canonical claim/<issue>"
+   git push origin origin/main:refs/heads/claim/<rm-id>   # fails atomically if already claimed
    ```
-   *Note:* Never use lane-suffixed branch names like `claim/<issue>-<lane>`, which can coexist on origin and cause split-brain claims.
-3. **If the push fails, someone else has it.** Pick the next `ready` row. Do not start "just in case".
-4. **Work on a topic branch** (`feat/<id>-<slug>`). Keep the claim branch until the PR merges or you hand off.
-5. **Release:** after merge, or when handing off, delete the claim branch (`git push origin --delete claim/<issue>`) and remove yourself as assignee.
-6. **Stale lock:** a claim with no pushed commits for 2 hours may be broken by the planner or reviewer. They comment on the issue and delete the claim branch.
+   Work on `feat/<rm-id>-<slug>`, open PR, and delete `claim/<rm-id>` on merge or handoff. A claim with no commits for 2 hours is stale and may be broken by the Planner.
 
 ---
 
 ## 4. Handoffs
 
-- Write each handoff in a **new file**: `notes/handoffs/<YYYY-MM-DD>-<issue>-<lane>.md`, or in the PR body. Never append to a shared file in a feature PR.
-- A handoff covers: issue, branch, what is done, what is not, the commands run with their real output, and the next step with a failing test if there is one.
-- The **reviewer** folds merged handoffs into the "Current state" section of NOTES.md, which stays under about 60 lines.
-- **Hand off rather than push through** when the item turns out bigger than one slice, it needs an owner decision, or it touches another lane's open branch. Release the lock, write the handoff, and mark the row `blocked (reason)` in your report so the planner updates §1.
+- Every worker writes a new file: `notes/handoffs/<YYYY-MM-DD>-<lane-or-id>.md` (never edit `NOTES.md`, `BOARD.md`, or `ROADMAP.md` in a worker branch).
+- Include: branch & commit SHA, exact files changed (with before/after line counts if touching a `> 450`-line file), exported signatures for the Integrator, exact commands run + real pass/fail output, and any out-of-lane findings.
+- The Integrator folds merged handoffs into `NOTES.md` ("Current state" stays concise) and updates `ROADMAP.md` + `BOARD.md`.
 
 ---
 
 ## 5. Tactics (the scope guard)
 
-1. **One slice per PR,** about 400 changed lines or fewer (CONTRIBUTING.md §3).
-2. **Rebase on origin/main before opening a PR.** A PR that has conflicted for 2 hours goes back to `ready` with a note.
-3. **No abstraction until the third repetition.**
-4. **Fixtures and local state first**, unless docs/22 says the task needs Supabase.
-5. **A defect fix ships with its regression test.**
-6. **Duplicates lose.** If an item already merged, close the later PR and fold anything useful into a follow-up issue.
-7. **Stay in your own folder.** Never delete, reset, or edit another lane's worktree or branch. The reviewer may push fixes to a PR branch it is reviewing.
-8. **Before you merge, answer in the PR:** What became more true? What became more fragile? Is this product behaviour or scaffold? What did you not verify?
-9. **Only the owner verifies on a real phone,** with real broker data, or by taste. Never claim those checks are done.
+1. **One slice per lane (`~250–450` changed lines)** and **`≤ 450` lines per production file** (`npm run check:file-length`).
+2. **Apply `DS-01`–`DS-12` design nudges** (`ROADMAP.md §1`) to any UI file you touch: APCA-safe tokens, no bare percentages without `n` (`10/12`, `"early"` under 10), `tabular-nums`, true minus `−`, `≥ 44px` touch targets, no hardcoded gold hexes.
+3. **Never run `npm ci` / `npm install`** unless `package-lock.json` changed; prefix heavy commands with `nice -n 10` and cap `node --test` with `--test-concurrency=2`.
+4. **Update specs in the same wave** whenever behavior supersedes older prose so stale docs never reintroduce fixed defects.
+5. **Before merging to `main`, answer:** What became more true? What became more fragile? Is this product behavior or scaffold? What was not verified on a real phone?
 
 ---
 
-## 6. Archive
+## 6. Archive (completed milestones & waves on `main` through `4b9b75e`)
 
-_Done rows move here weekly. Keep only the issue number, item, and merge PR._
+- **Foundation & UI Phases 1–5 (`#1`–`#185b`, `MM-W1`, `MM-W2`):** Price-first entry (`docs/20`), frozen initial stop (`R-10`), open trades (`OD-38`), Trade Document & Canvas marks (`TD-1`–`TD-3`, `69ab1f7`, `1941d79`), partials model (`MM-W2-03`), `StopMovesEditor` (`MM-W2-05`), archived neighbours (`MM-W2-06`), Trade/Playbook/Day Cards (`CD-1`–`CD-4`), Drills (`CD-2a`–`2c`), Challenges (`R-09a`–`09d`), Session levels & planning sessions (`LV-1`–`2`, `PS-1`–`4`), local + Supabase persistence (`#173`–`#176`), magic-link auth (`#182`), Agent API v1 + keys + OpenAPI (`#185a`/`b`).
+- **2026-11-24 / 2026-11-26 Convergence & UX Waves (Waves 1–5, through `3747928`):** Per-account fixed `$300` 1R + whole-micro `Math.ceil` sizing (`RS-1`–`RS-4`), Databento archive read path (`19452b8`), Agent API 4-field notes + write checks + `/vocabulary` + `/candles` + `/levels` + `/checks/trade`, 3-stage `TradeNotesPanel` extraction, Playbook Lab + Strategy Lab workspace & archive bridge, clean label-free chart zones (`W5-01`), Session VWAP ±1σ/±2σ bands (`W5-02`), `AccountMode` `replay` isolation & 2-tap setup (`W5-03`/`04`), real-only `Review` `Queue | Daily` split (`W5-05`), single-row 56px mobile header & `Today | Progress` cockpit (`W5-06`), Feed `Real | Replay | All` (`W5-07`), `Tools | Settings` hub (`W5-08`).
+- **Archive & Design Charter Merges (`b88400b`, `e164930`, `4b9b75e`):** UX/UI Charter + Product/Agent-First Architecture Audit + initial `ROADMAP.md` (PR #295), Databento 90,840-bar `MES=F` 1m archive migrations & scripts (`RM-A1`, PR #282; #71 closed), and daily Vercel Cron Yahoo archive top-up (`RM-A2`, PR #296).
+
+---
+
+## 7. Owner design session — 2026-11-27 (added by Tappy at the owner's request; planner: fold into §0/§1 and delete this section)
+
+### 7.1 Correction to §0 (stale as of tonight)
+
+- The Vercel owner todo in §0.2 is **done**: `CRON_SECRET` was added to Vercel Production on 2026-11-27, and `SUPABASE_SERVICE_ROLE_KEY` was verified present (set 2026-11-22, all environments). PR #296 merged as `4b9b75e`; the daily archive top-up cron (`23:00 UTC`) is live. GPT does not need to chase this.
+
+### 7.2 Owner decisions made 2026-11-27 (bake in, do not re-ask)
+
+- **No hollow candles.** §1 row 9 (`RM-B2` hollow rising / filled falling) is **overruled as written**. `DS-02` (direction never by color alone) keeps its redundancy from `+`/`−` signs, ▲▼ arrows, and luminance separation. If another cue is proposed, it returns as an owner decision — no agent picks one.
+- **`RM-E2` (chart zoom-out floor) — owner direction given.** In the owner's words: zooming out should keep shrinking the candles so more always fit, "an infinite shrink thing going on like TV"; today "they stay the same size and it stops." The current clamp (`MIN_BAR_SPACING_PX = 3`) is the defect. Requirement: candle width/spacing scales continuously with the visible range down to ~1px, TradingView-style. Move `RM-E2` out of owner-gated (§1a) into the design wave planning with this requirement as its spec; the implementation choice (drop the floor vs auto timeframe step) is the planner's, the behavior is not negotiable.
+- **Still open** (already tracked): `DS-12` canvas `#07080c` keep-or-soften, and `RM-B1` `--text-primary` `#e6e8ec` confirmation (§1 row 8).
+
+### 7.3 Design planning input (from the 2026-11-27 owner session)
+
+- Scoreboard against the charter: `DS-01` is the only standard rated **failing** (muted/faint/axis/loss text at APCA Lc 35–50 vs ≥75 required) — `RM-B1` is correctly placed as the first design package. `DS-06` (agent provenance, `RM-K1`) is the only other **not met**.
+- Audit sweep still owed, plan as one small package: `DS-03` denominator rule, `DS-09` keyboard parity beyond Trade Detail, `DS-10` disclosure depth per screen, `DS-05` Strategy Lab "hypothetical" labelling (`RM-J6`).
+- Parked and endorsed as parked: `RM-K3` / `RM-K4` stay gated behind Blueprint convergence.
+
+### 7.4 Tappy's design suggestions (advisory — owner/planner may strike any)
+
+1. **Make `contrast.test.ts` merge-blocking in the Integrator gate**, not advisory. A standard without a gate decays within two waves.
+2. **DS-02 acceptance without hollow candles:** a grayscale render check. Up and down candles must stay distinguishable with color removed (luminance difference alone). It is a visible check a simple agent can run on a screenshot — no taste judgment required.
+3. **Scope the candle-zoom package to include hit-testing at thin widths.** At ~1px spacing, crosshair snapping and level hit-testing (`lib/level-hit-test.ts`) are what break first. Name that file in the package or the zoom fix will quietly degrade level selection.
+4. **Provenance before intelligence.** `RM-K1` ("by agent" markers) should land before any insight-proposal work is even planned in detail; trust markings are cheap now and expensive to retrofit.
+5. **Mark two charter items aspirational, not gating, for a single-user app:** regional candle color polarity (red-up conventions) and APCA checks beyond text tokens. Keep them in the charter as background; do not let them into wave scope.
+6. **Protect `RM-C1` (Today "Next" card).** It is the screen the owner opens daily; if a design-hygiene wave needs to slip, slip hygiene, not the Today card.
