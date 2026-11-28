@@ -25,6 +25,7 @@ import { agentError, agentOk, isIsoTimestamp, statusFor } from "./http.ts";
 import type { AgentErrorCode, AgentResponse, RateLimiter } from "./http.ts";
 import { AGENT_BODY_LIMIT_BYTES } from "./handle.ts";
 import { formatCt, loadAgentCandles, defaultCandleLoader, RANGE_CAP_MS } from "./candles.ts";
+import { equityIndexSessionBounds, sessionDate } from "../session.ts";
 import type { CandleLoader } from "./candles.ts";
 
 const MINUTE_MS = 60_000;
@@ -239,10 +240,38 @@ export interface TradeCheckRun {
   now?: number;
 }
 
-/** The low and high of the loaded bars, for the price_out_of_range warning. Null when no bars were loaded. */
+/** The low and high of a set of bars. Null when the set is empty. */
 function barsPriceRange(bars: readonly Candle[]): { low: number; high: number } | null {
   if (bars.length === 0) return null;
   return { low: Math.min(...bars.map((bar) => bar.low)), high: Math.max(...bars.map((bar) => bar.high)) };
+}
+
+function mergeRanges(a: { low: number; high: number } | null, b: { low: number; high: number } | null): { low: number; high: number } | null {
+  if (!a) return b;
+  if (!b) return a;
+  return { low: Math.min(a.low, b.low), high: Math.max(a.high, b.high) };
+}
+
+/**
+ * The traded range of the trade's whole session day, for the price_out_of_range warning: the Globex session the
+ * entry belongs to (lib/session: the day rolls at 18:00 ET / 17:00 CT), plus the exit's session when a hold crosses
+ * the roll. The fill window's bars must never stand in for this: that slice is only the entry -10m to the exit +10m,
+ * which trades a far narrower range than the session, so genuine fills from earlier or later in the session were
+ * warned as if they fell outside the day. Null when a session load fails or the session has no bars: the warning is
+ * advisory, so it stays silent rather than guess from partial coverage.
+ */
+async function sessionDayPriceRange(run: TradeCheckRun, record: TradeRecord): Promise<{ low: number; high: number } | null> {
+  const entry = Date.parse(record.entry_time);
+  const last = record.exit_time != null ? Date.parse(record.exit_time) : entry;
+  const dates = [...new Set([sessionDate(entry), sessionDate(last)])];
+  let range: { low: number; high: number } | null = null;
+  for (const date of dates) {
+    const bounds = equityIndexSessionBounds(date);
+    const loaded = await loadAgentCandles(run.loader, { symbol: record.symbol, timeframe: "1m", from: bounds.open, to: bounds.close }, run.limitKey);
+    if (!loaded.ok) return null;
+    range = mergeRanges(range, barsPriceRange(loaded.value.bars));
+  }
+  return range;
 }
 
 /** Runs one check. Reads only: the commands here are read calls, and nothing is saved. */
@@ -289,7 +318,7 @@ export async function runTradeCheck(input: TradeCheckInput, run: TradeCheckRun):
   const resolved = resolveRSize(record, vocabulary.value.accounts, vocabulary.value.prefs);
   const checked = checkTradeWrite(record, rawInput, {
     ...vocabulary.value.writeCtx,
-    dayPriceRange: barsPriceRange(bars),
+    dayPriceRange: await sessionDayPriceRange(run, record),
     isCreate: input.kind === "draft",
     writtenFields: new Set(Object.keys(rawInput)),
     nowMs,
