@@ -395,7 +395,7 @@ test("formatting follows docs/08 §13", () => {
   assert.equal(formatMoney(-110), "−$110.00");
   assert.equal(formatMoney(1234.5), "+$1,234.50");
   assert.equal(formatR(2.64), "+2.6R");
-  assert.equal(formatR(-0.01), "+0.0R");
+  assert.equal(formatR(-0.01), "−0.0R");
   assert.equal(formatPoints(13, "MES"), "+13.00 pts");
   assert.equal(formatPoints(-1.25, "MES"), "−1.25 pts");
   assert.equal(formatTicks(52), "+52 ticks");
@@ -408,6 +408,11 @@ test("formatting follows docs/08 §13", () => {
   assert.equal(formatDuration(3 * 3600 + 5 * 60), "3h 05m");
   assert.equal(formatDuration(Number.NaN), "—");
   assert.equal(approx("−1.25 pts"), "≈ −1.25 pts");
+});
+
+test("formatR keeps a negative sign when a small loss rounds to zero", () => {
+  assert.equal(formatR(-0.04), "−0.0R");
+  assert.notEqual(formatR(-0.04), "+0.0R");
 });
 
 test("session date: the Globex evening belongs to the next session, across both DST switches", () => {

@@ -29,7 +29,7 @@ function displayDecimals(symbol: string) {
 export function formatR(r: number | null) {
   if (r == null || !Number.isFinite(r)) return "—R";
   const rounded = Math.round(r * 10) / 10;
-  return `${signOf(rounded)}${Math.abs(rounded).toFixed(1)}R`;
+  return `${signOf(r)}${Math.abs(rounded).toFixed(1)}R`;
 }
 
 /** Price at the contract's tick precision, `—` when missing. */
