@@ -438,6 +438,22 @@ test("display zone formats and parses wall-clock time whatever the device zone",
   assert.equal(fromZonedInput("2026-07-10T09:43", "America/Chicago").toISOString(), "2026-07-10T14:43:00.000Z");
 });
 
+test("fromZonedInput refuses wall times that never happen or happen twice (T-01)", () => {
+  // Spring forward, Sun Mar 8 2026: Chicago jumps 02:00 CST to 03:00 CDT, so 02:30 never occurs.
+  // The old code silently returned 07:30Z, which reads back as 01:30 — a time nobody typed.
+  assert.ok(Number.isNaN(fromZonedInput("2026-03-08T02:30", "America/Chicago").getTime()));
+  // Fall back, Sun Nov 1 2026: 01:30 occurs twice (06:30Z CDT, then 07:30Z CST). With no way to
+  // say which occurrence the user meant, it is refused instead of silently picking the CDT one.
+  assert.ok(Number.isNaN(fromZonedInput("2026-11-01T01:30", "America/Chicago").getTime()));
+  // Ordinary times either side of those transitions still round-trip exactly.
+  assert.equal(fromZonedInput("2026-03-08T01:30", "America/Chicago").toISOString(), "2026-03-08T07:30:00.000Z");
+  assert.equal(fromZonedInput("2026-03-08T03:30", "America/Chicago").toISOString(), "2026-03-08T08:30:00.000Z");
+  assert.equal(fromZonedInput("2026-11-01T00:30", "America/Chicago").toISOString(), "2026-11-01T05:30:00.000Z");
+  assert.equal(fromZonedInput("2026-11-01T02:30", "America/Chicago").toISOString(), "2026-11-01T08:30:00.000Z");
+  const typed = fromZonedInput("2026-11-10T09:43", "America/Chicago");
+  assert.equal(toZonedInput(typed, "America/Chicago"), "2026-11-10T09:43");
+});
+
 test("fill times snap to the bar that contains them (B-23)", () => {
   const minute = 60_000;
   const start = Date.parse("2026-11-10T15:40:00Z");
